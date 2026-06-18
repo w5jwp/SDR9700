@@ -1,0 +1,66 @@
+name: Feature request
+description: Suggest an SDR9700 enhancement or workflow improvement.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        SDR9700 is focused on Linux-native IC-9700 LAN operation. Please describe the operator workflow and how it should behave with the radio.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operator problem
+      description: What problem are you trying to solve?
+      placeholder: "As an IC-9700 operator, I want..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should SDR9700 add or change?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Radio control
+        - Spectrum / waterfall
+        - RX/TX audio
+        - Memories
+        - Preferences / profiles
+        - UI / accessibility
+        - Build / packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: radio_basis
+    attributes:
+      label: Radio/manual basis
+      description: If this maps to an IC-9700 feature, cite the manual section/page or describe observed radio behavior.
+      placeholder: "IC-9700 Advanced Manual page..., CI-V command..., or observed behavior..."
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional, but helpful for UI/workflow proposals.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submit checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: This request is specific to SDR9700 / IC-9700 operation.
+          required: true

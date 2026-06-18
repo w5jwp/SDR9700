@@ -1,0 +1,453 @@
+// The packed LAN packet unions below are byte overlays. Incoming packets are
+// backed by received datagrams, and outgoing packet instances are zeroed before
+// individual protocol fields are written.
+#pragma once
+#include <QObject>
+#include <QtEndian>
+
+// IC-9700 LAN protocol timing and packet-size constants.
+inline constexpr int PURGE_SECONDS = 10;
+inline constexpr int TOKEN_RENEWAL = 60000;
+inline constexpr int PING_PERIOD = 500;
+inline constexpr int IDLE_PERIOD = 100;
+inline constexpr int AREYOUTHERE_PERIOD = 500;
+inline constexpr int WATCHDOG_PERIOD = 500;
+inline constexpr int RETRANSMIT_PERIOD = 100;
+inline constexpr int LOCK_PERIOD = 10;
+inline constexpr int STALE_CONNECTION = 15;
+inline constexpr int BUFSIZE = 500;
+inline constexpr int MAX_MISSING = 50;
+inline constexpr int AUDIO_PERIOD = 20;
+inline constexpr int GUIDLEN = 16;
+
+// Fixed-size packet lengths.
+inline constexpr int CONTROL_SIZE = 0x10;
+inline constexpr int WATCHDOG_SIZE = 0x14;
+inline constexpr int PING_SIZE = 0x15;
+inline constexpr int OPENCLOSE_SIZE = 0x16;
+inline constexpr int RETRANSMIT_RANGE_SIZE = 0x18;
+inline constexpr int TOKEN_SIZE = 0x40;
+inline constexpr int STATUS_SIZE = 0x50;
+inline constexpr int LOGIN_RESPONSE_SIZE = 0x60;
+inline constexpr int LOGIN_SIZE = 0x80;
+inline constexpr int CONNINFO_SIZE = 0x90;
+inline constexpr int CAPABILITIES_SIZE = 0x42;
+inline constexpr int RADIO_CAP_SIZE = 0x66;
+
+// Variable-size packet headers before payload.
+inline constexpr int CIV_SIZE = 0x15;
+inline constexpr int AUDIO_SIZE = 0x18;
+inline constexpr int DATA_SIZE = 0x15;
+
+#pragma pack(push)
+#pragma pack(1)
+
+// 0x10 length control packet (connect/disconnect/idle.)
+typedef union control_packet
+{
+    struct
+    {
+        quint32 len;
+        quint16 type;
+        quint16 seq;
+        quint32 sentid;
+        quint32 rcvdid;
+    };
+    char packet[CONTROL_SIZE];
+}* control_packet_t;
+
+// 0x14 length watchdog packet
+typedef union watchdog_packet
+{
+    struct
+    {
+        quint32 len;      // 0x00
+        quint16 type;     // 0x04
+        quint16 seq;      // 0x06
+        quint32 sentid;   // 0x08
+        quint32 rcvdid;   // 0x0c
+        quint16 secondsa; // 0x10
+        quint16 secondsb; // 0x12
+    };
+    char packet[WATCHDOG_SIZE];
+}* watchdog_packet_t;
+
+// 0x15 length ping packet
+// Also used for the slightly different civ header packet.
+typedef union ping_packet
+{
+    struct
+    {
+        quint32 len;    // 0x00
+        quint16 type;   // 0x04
+        quint16 seq;    // 0x06
+        quint32 sentid; // 0x08
+        quint32 rcvdid; // 0x0c
+        quint8 reply;   // 0x10
+        union
+        {
+            struct
+            {
+                quint32 time; // 0x11 (uptime of device)
+            };
+            struct
+            {
+                quint16 datalen; // 0x11
+                quint16 sendseq; // 0x13
+            };
+        };
+    };
+    char packet[PING_SIZE];
+} *ping_packet_t, *data_packet_t, data_packet;
+
+// 0x16 length open/close packet
+typedef union openclose_packet
+{
+    struct
+    {
+        quint32 len;     // 0x00
+        quint16 type;    // 0x04
+        quint16 seq;     // 0x06
+        quint32 sentid;  // 0x08
+        quint32 rcvdid;  // 0x0c
+        quint16 data;    // 0x10
+        char unused;     // 0x11
+        quint16 sendseq; // 0x13
+        char magic;      // 0x15
+    };
+    char packet[OPENCLOSE_SIZE];
+}* startstop_packet_t;
+
+// 0x18 length audio packet
+typedef union audio_packet
+{
+    struct
+    {
+        quint32 len;     // 0x00
+        quint16 type;    // 0x04
+        quint16 seq;     // 0x06
+        quint32 sentid;  // 0x08
+        quint32 rcvdid;  // 0x0c
+
+        quint16 ident;   // 0x10
+        quint16 sendseq; // 0x12
+        quint16 unused;  // 0x14
+        quint16 datalen; // 0x16
+    };
+    char packet[AUDIO_SIZE];
+}* audio_packet_t;
+
+// 0x18 length retransmit_range packet
+typedef union retransmit_range_packet
+{
+    struct
+    {
+        quint32 len;    // 0x00
+        quint16 type;   // 0x04
+        quint16 seq;    // 0x06
+        quint32 sentid; // 0x08
+        quint32 rcvdid; // 0x0c
+        quint16 first;  // 0x10
+        quint16 second; // 0x12
+        quint16 third;  // 0x14
+        quint16 fourth; // 0x16
+    };
+    char packet[RETRANSMIT_RANGE_SIZE];
+}* retransmit_range_packet_t;
+
+// 0x40 length token packet
+typedef union token_packet
+{
+    struct
+    {
+        quint32 len;         // 0x00
+        quint16 type;        // 0x04
+        quint16 seq;         // 0x06
+        quint32 sentid;      // 0x08
+        quint32 rcvdid;      // 0x0c
+        quint32 payloadsize; // 0x10
+        quint8 requestreply; // 0x14
+        quint8 requesttype;  // 0x15
+        quint16 innerseq;    // 0x16
+        char unusedb[2];     // 0x18
+        quint16 tokrequest;  // 0x1a
+        quint32 token;       // 0x1c
+        union
+        {
+            struct
+            {
+                quint16 authstartid;  // 0x20
+                char unusedg2[2];     // 0x22
+                quint16 resetcap;     // 0x24
+                char unusedg1;        // 0x26
+                quint16 commoncap;    // 0x27
+                char unusedh;         // 0x29
+                quint8 macaddress[6]; // 0x2a
+            };
+            quint8 guid[GUIDLEN];     // 0x20
+        };
+        quint32 response;             // 0x30
+        char unusede[12];             // 0x34
+    };
+    char packet[TOKEN_SIZE];
+}* token_packet_t;
+
+// 0x50 length login status packet
+typedef union status_packet
+{
+    struct
+    {
+        quint32 len;         // 0x00         0
+        quint16 type;        // 0x04         4
+        quint16 seq;         // 0x06         6
+        quint32 sentid;      // 0x08         8
+        quint32 rcvdid;      // 0x0c         12
+        quint32 payloadsize; // 0x10           18
+        quint8 requestreply; // 0x14           19
+        quint8 requesttype;  // 0x15           20
+        quint16 innerseq;    // 0x16           22
+        char unusedb[2];     // 0x18
+        quint16 tokrequest;  // 0x1a
+        quint32 token;       // 0x1c
+        union
+        {
+            struct
+            {
+                quint16 authstartid;  // 0x20
+                char unusedd[5];      // 0x22
+                quint16 commoncap;    // 0x27
+                char unusede;         // 0x29
+                quint8 macaddress[6]; // 0x2a
+            };
+            quint8 guid[GUIDLEN];     // 0x20
+        };
+        quint32 error;                // 0x30
+        char unusedg[12];             // 0x34
+        char disc;                    // 0x40
+        char unusedh;                 // 0x41
+        quint16 civport;              // 0x42 // Sent bigendian
+        quint16 unusedi;              // 0x44 // Sent bigendian
+        quint16 audioport;            // 0x46 // Sent bigendian
+        char unusedj[7];              // 0x49
+    };
+    char packet[STATUS_SIZE];
+}* status_packet_t;
+
+// 0x60 length login status packet
+typedef union login_response_packet
+{
+    struct
+    {
+        quint32 len;         // 0x00
+        quint16 type;        // 0x04
+        quint16 seq;         // 0x06
+        quint32 sentid;      // 0x08
+        quint32 rcvdid;      // 0x0c
+        quint32 payloadsize; // 0x10
+        quint8 requestreply; // 0x14
+        quint8 requesttype;  // 0x15
+        quint16 innerseq;    // 0x16
+        char unusedb[2];     // 0x18
+        quint16 tokrequest;  // 0x1a
+        quint32 token;       // 0x1c
+        quint16 authstartid; // 0x20
+        char unusedd[14];    // 0x22
+        quint32 error;       // 0x30
+        char unusede[12];    // 0x34
+        char connection[16]; // 0x40
+        char unusedf[16];    // 0x50
+    };
+    char packet[LOGIN_RESPONSE_SIZE];
+}* login_response_packet_t;
+
+// 0x80 length login packet
+typedef union login_packet
+{
+    struct
+    {
+        quint32 len;         // 0x00
+        quint16 type;        // 0x04
+        quint16 seq;         // 0x06
+        quint32 sentid;      // 0x08
+        quint32 rcvdid;      // 0x0c
+        quint32 payloadsize; // 0x10
+        quint8 requestreply; // 0x14
+        quint8 requesttype;  // 0x15
+        quint16 innerseq;    // 0x16
+        char unusedb[2];     // 0x18
+        quint16 tokrequest;  // 0x1a
+        quint32 token;       // 0x1c
+        char unusedc[32];    // 0x20
+        char username[16];   // 0x40
+        char password[16];   // 0x50
+        char name[16];       // 0x60
+        char unusedf[16];    // 0x70
+    };
+    char packet[LOGIN_SIZE];
+}* login_packet_t;
+
+// 0x90 length conninfo and stream request packet
+typedef union conninfo_packet
+{
+    struct
+    {
+        quint32 len;         // 0x00
+        quint16 type;        // 0x04
+        quint16 seq;         // 0x06
+        quint32 sentid;      // 0x08
+        quint32 rcvdid;      // 0x0c
+        quint32 payloadsize; // 0x10
+        quint8 requestreply; // 0x14
+        quint8 requesttype;  // 0x15
+        quint16 innerseq;    // 0x16
+        char unusedb[2];     // 0x18
+        quint16 tokrequest;  // 0x1a
+        quint32 token;       // 0x1c
+        union
+        {
+            struct
+            {
+                quint16 authstartid;  // 0x20
+                char unusedg[5];      // 0x22
+                quint16 commoncap;    // 0x27
+                char unusedh;         // 0x29
+                quint8 macaddress[6]; // 0x2a
+            };
+            quint8 guid[GUIDLEN];     // 0x20
+        };
+        char unusedab[16];            // 0x30
+        char name[32];                // 0x40
+        union
+        {
+            struct
+            {
+                quint32 busy;      // 0x60
+                char computer[16]; // 0x64
+                char unusedi[16];  // 0x74
+                quint32 ipaddress; // 0x84
+                char unusedj[8];   // 0x78
+            };
+            struct
+            {
+                char username[16]; // 0x60
+                char rxenable;     // 0x70
+                char txenable;     // 0x71
+                char rxcodec;      // 0x72
+                char txcodec;      // 0x73
+                quint32 rxsample;  // 0x74
+                quint32 txsample;  // 0x78
+                quint32 civport;   // 0x7c
+                quint32 audioport; // 0x80
+                quint32 txbuffer;  // 0x84
+                quint8 convert;    // 0x88
+                char unusedl[7];   // 0x89
+            };
+        };
+    };
+    char packet[CONNINFO_SIZE];
+}* conninfo_packet_t;
+
+// 0x64 length radio capabilities part of cap packet.
+
+typedef union radio_cap_packet
+{
+    struct
+    {
+        union
+        {
+            struct
+            {
+                quint8 unusede[7];    // 0x00
+                quint16 commoncap;    // 0x07
+                quint8 unused;        // 0x09
+                quint8 macaddress[6]; // 0x0a
+            };
+            quint8 guid[GUIDLEN];     // 0x0
+        };
+        char name[32];                // 0x10
+        char audio[32];               // 0x30
+        quint16 conntype;             // 0x50
+        char civ;                     // 0x52
+        quint16 rxsample;             // 0x53
+        quint16 txsample;             // 0x55
+        quint8 enablea;               // 0x57
+        quint8 enableb;               // 0x58
+        quint8 enablec;               // 0x59
+        quint32 baudrate;             // 0x5a
+        quint16 capf;                 // 0x5e
+        char unusedi;                 // 0x60
+        quint16 capg;                 // 0x61
+        char unusedj[3];              // 0x63
+    };
+    char packet[RADIO_CAP_SIZE];
+}* radio_cap_packet_t;
+
+// 0xA8 length capabilities packet
+typedef union capabilities_packet
+{
+    struct
+    {
+        quint32 len;         // 0x00
+        quint16 type;        // 0x04
+        quint16 seq;         // 0x06
+        quint32 sentid;      // 0x08
+        quint32 rcvdid;      // 0x0c
+        quint32 payloadsize; // 0x10
+        quint8 requestreply; // 0x14
+        quint8 requesttype;  // 0x15
+        quint16 innerseq;    // 0x16
+        char unusedb[2];     // 0x18
+        quint16 tokrequest;  // 0x1a
+        quint32 token;       // 0x1c
+        char unusedd[32];    // 0x20
+        quint16 numradios;   // 0x40
+    };
+    char packet[CAPABILITIES_SIZE];
+}* capabilities_packet_t;
+
+typedef union rtp_header
+{
+    struct
+    {
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+        quint8 csrc : 4;
+        quint8 extension : 1;
+        quint8 padding : 1;
+        quint8 version : 2;
+        quint8 payloadType : 7;
+        quint8 marker : 1;
+#elif Q_BYTE_ORDER == Q_BIG_ENDIAN
+        // SDR9700 currently targets Linux/x86-64, but this branch documents the
+        // RTP bitfield layout if the packet code is ever built on big-endian Qt.
+        quint8 version : 2;
+        quint8 padding : 1;
+        quint8 extension : 1;
+        quint8 csrc : 4;
+        quint8 marker : 1;
+        quint8 payloadType : 7;
+#else
+#error "Q_BYTE_ORDER is not defined"
+#endif
+        quint16 seq;
+        quint32 timestamp;
+        quint32 ssrc;
+    };
+    quint8 packet[12];
+}* rtp_header_t;
+
+#pragma pack(pop)
+
+static_assert(sizeof(control_packet) == CONTROL_SIZE);
+static_assert(sizeof(watchdog_packet) == WATCHDOG_SIZE);
+static_assert(sizeof(ping_packet) == PING_SIZE);
+static_assert(sizeof(openclose_packet) == OPENCLOSE_SIZE);
+static_assert(sizeof(audio_packet) == AUDIO_SIZE);
+static_assert(sizeof(retransmit_range_packet) == RETRANSMIT_RANGE_SIZE);
+static_assert(sizeof(token_packet) == TOKEN_SIZE);
+static_assert(sizeof(status_packet) == STATUS_SIZE);
+static_assert(sizeof(login_response_packet) == LOGIN_RESPONSE_SIZE);
+static_assert(sizeof(login_packet) == LOGIN_SIZE);
+static_assert(sizeof(conninfo_packet) == CONNINFO_SIZE);
+static_assert(sizeof(radio_cap_packet) == RADIO_CAP_SIZE);
+static_assert(sizeof(capabilities_packet) == CAPABILITIES_SIZE);
+static_assert(sizeof(rtp_header) == 12);

@@ -1,0 +1,50 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+
+# Braces
+BreakBeforeBraces: Allman
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: MultiLine
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  BeforeElse: false
+
+# Alignment
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 1
+
+# Spacing
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInAngles: Never
+SpaceAfterCStyleCast: false
+
+# Includes
+SortIncludes: false
+
+# Pointer/reference style — keep * with type
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Constructor initializers
+PackConstructorInitializers: NextLine
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+
+# Misc
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+MaxEmptyLinesToKeep: 2
+---

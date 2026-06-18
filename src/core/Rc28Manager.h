@@ -1,0 +1,81 @@
+#pragma once
+#ifdef HAVE_HIDAPI
+
+#include <QObject>
+#include <QTimer>
+#include <QByteArray>
+#include <QString>
+#include <atomic>
+#include <hidapi/hidapi.h>
+
+class Rc28Manager : public QObject
+{
+    Q_OBJECT
+
+  public:
+    explicit Rc28Manager(QObject* parent = nullptr);
+    ~Rc28Manager() override;
+
+    static QString detectDevice();
+    void close();
+
+    bool isOpen() const { return m_device.load(std::memory_order_relaxed) != nullptr; }
+    bool isBlockedByMultiple() const { return m_multipleDetected.load(std::memory_order_acquire); }
+    const QString& blockedDeviceName() const { return m_blockedDeviceName; }
+    const QString& deviceName() const { return m_deviceName; }
+    const QString& devicePath() const { return m_devicePath; }
+    const QString& serialNumber() const { return m_serialNumber; }
+    uint16_t releaseNumber() const { return m_releaseNumber; }
+
+    static QString settingsField(const QString& field, const QString& defaultValue);
+    static void setSettingsField(const QString& field, const QString& value);
+
+    // LED byte is active-low; clearing a bit turns the LED on.
+    static constexpr uint8_t kLedBitTx = 0x01u;
+    static constexpr uint8_t kLedBitF1 = 0x02u;
+    static constexpr uint8_t kLedBitF2 = 0x04u;
+    static constexpr uint8_t kLedBitLink = 0x08u;
+    static constexpr uint8_t kLedsAllOff = 0x0Fu;
+
+  public slots:
+    void loadSettings();
+    void setRC28Leds(uint8_t ledByte);
+
+  signals:
+    void tuneSteps(int steps);
+    void buttonPressed(int button, int action);
+    void connectionChanged(bool connected, const QString& deviceName);
+    void multipleDevicesDetected(const QString& deviceName);
+
+  private slots:
+    void poll();
+    void hotplugCheck();
+
+  private:
+    bool open();
+    void sendLeds(uint8_t ledByte);
+
+    bool parseRc28Report(const uint8_t* buf, size_t len, int* steps, int* button, int* action);
+
+    std::atomic<hid_device*> m_device{nullptr};
+    QString m_deviceName;
+    QString m_devicePath;
+    QString m_serialNumber;
+    uint16_t m_releaseNumber{0};
+    std::atomic<bool> m_multipleDetected{false};
+    QString m_blockedDeviceName;
+    uint8_t m_prevButtons{kRc28ButtonsIdle};
+    QTimer* m_pollTimer{nullptr};
+    QTimer* m_hotplugTimer{nullptr};
+    uint8_t m_buf[64]{};
+
+    static constexpr uint16_t kRc28Vid = 0x0C26;
+    static constexpr uint16_t kRc28Pid = 0x001E;
+    static constexpr uint8_t kRc28ReportGuard = 0x01;
+    static constexpr uint8_t kRc28ButtonsIdle = 0x07;
+    static constexpr uint8_t kRc28LedsOff = 0x0F;
+    static constexpr int kPollIntervalMs = 5;
+    static constexpr int kHotplugIntervalMs = 3000;
+};
+
+#endif

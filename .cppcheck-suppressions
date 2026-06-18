@@ -1,0 +1,15 @@
+unusedFunction:src/core/CachingQueue.cpp
+unusedFunction:src/models/RadioModel.h
+unusedFunction:src/models/VfoModel.h
+unusedFunction:src/models/PanadapterModel.h
+unusedFunction:src/models/PanadapterModel.cpp
+unusedFunction:src/gui/SpectrumWidget.cpp
+unusedFunction:src/gui/VfoWidget.cpp
+unusedFunction:src/gui/DtmfWidget.cpp
+unusedFunction:src/gui/TitleBarWidget.cpp
+// shadowFunction FP: Q_EMIT/emit macros expand to the signal function name,
+// which cppcheck incorrectly flags as a local variable shadowing that function.
+shadowFunction:src/gui/SpectrumWidget.cpp
+shadowFunction:src/models/PanadapterModel.cpp
+syntaxError:src/build/*
+unmatchedSuppression

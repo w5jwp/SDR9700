@@ -1,0 +1,444 @@
+#include "VfoModel.h"
+#include "backend/IRadioBackend.h"
+
+#include <QtGlobal>
+
+VfoModel::VfoModel(IRadioBackend* backend, QObject* parent) : QObject(parent), m_backend(backend) {}
+
+QStringList VfoModel::availableModes()
+{
+    return {"FM", "USB", "LSB", "AM", "CW", "CW-R", "RTTY", "DV", "DD"};
+}
+
+void VfoModel::setFrequencyHz(quint64 hz)
+{
+    if (m_backend)
+    {
+        m_backend->setFrequencyHz(hz);
+    }
+}
+
+void VfoModel::setMode(const QString& mode)
+{
+    if (m_backend)
+    {
+        m_backend->setMode(mode);
+    }
+}
+
+void VfoModel::setFilterWidth(int lowHz, int highHz)
+{
+    if (m_filterLow == lowHz && m_filterHigh == highHz)
+    {
+        return;
+    }
+    m_filterLow = lowHz;
+    m_filterHigh = highHz;
+    emit filterChanged(lowHz, highHz);
+    if (m_backend)
+    {
+        m_backend->setFilterWidth(lowHz, highHz);
+    }
+}
+
+void VfoModel::setRfGain(int level)
+{
+    if (m_backend)
+    {
+        m_backend->setRfGain(level);
+    }
+}
+
+void VfoModel::setAfGain(int level)
+{
+    m_afGain = level;
+    emit afGainChanged(level);
+    if (m_backend)
+    {
+        m_backend->setAfGain(level);
+    }
+}
+
+void VfoModel::setSquelch(bool on, int level)
+{
+    if (m_backend)
+    {
+        m_backend->setSquelch(on, level);
+    }
+}
+
+void VfoModel::setNrEnabled(bool on)
+{
+    if (m_backend)
+    {
+        m_backend->setNrEnabled(on);
+    }
+}
+
+void VfoModel::setNrLevel(int level)
+{
+    m_nrLevel = level;
+    emit nrChanged(m_nrOn, level);
+    if (m_backend)
+    {
+        m_backend->setNrLevel(level);
+    }
+}
+
+void VfoModel::setNbEnabled(bool on)
+{
+    if (m_backend)
+    {
+        m_backend->setNbEnabled(on);
+    }
+}
+
+void VfoModel::setNbLevel(int level)
+{
+    m_nbLevel = level;
+    emit nbChanged(m_nbOn, level);
+    if (m_backend)
+    {
+        m_backend->setNbLevel(level);
+    }
+}
+
+void VfoModel::setPreampEnabled(bool on)
+{
+    if (m_backend)
+    {
+        m_backend->setPreampEnabled(on);
+    }
+}
+
+void VfoModel::setAttenuatorEnabled(bool on)
+{
+    if (m_backend)
+    {
+        m_backend->setAttenuatorEnabled(on);
+    }
+}
+
+void VfoModel::setTxPower(int level)
+{
+    if (m_backend)
+    {
+        m_backend->setTxPower(level);
+    }
+}
+
+void VfoModel::setMicGain(int level)
+{
+    if (m_backend)
+    {
+        m_backend->setMicGain(level);
+    }
+}
+
+void VfoModel::setAgcMode(const QString& mode)
+{
+    m_agcMode = mode;
+    emit agcModeChanged(mode);
+    if (m_backend)
+    {
+        m_backend->setAgcMode(mode);
+    }
+}
+
+void VfoModel::setAutoNotch(bool on)
+{
+    m_autoNotchOn = on;
+    emit autoNotchChanged(on);
+    if (m_backend)
+    {
+        m_backend->setAutoNotch(on);
+    }
+}
+
+void VfoModel::setCompressor(bool on)
+{
+    m_compressorOn = on;
+    emit compressorChanged(on);
+    if (m_backend)
+    {
+        m_backend->setCompressor(on);
+    }
+}
+
+void VfoModel::setRitEnabled(bool on)
+{
+    m_ritOn = on;
+    emit ritChanged(on, m_ritHz);
+    if (m_backend)
+    {
+        m_backend->setRitEnabled(on);
+    }
+}
+
+void VfoModel::setRitOffset(short hz)
+{
+    m_ritHz = hz;
+    emit ritChanged(m_ritOn, hz);
+    if (m_backend)
+    {
+        m_backend->setRitOffset(hz);
+    }
+}
+
+void VfoModel::applyRitEnabled(bool on)
+{
+    if (m_ritOn == on)
+    {
+        return;
+    }
+    m_ritOn = on;
+    emit ritChanged(on, m_ritHz);
+}
+
+void VfoModel::applyRitOffset(short hz)
+{
+    if (m_ritHz == hz)
+    {
+        return;
+    }
+    m_ritHz = hz;
+    emit ritChanged(m_ritOn, hz);
+}
+
+void VfoModel::applyAutoNotch(bool on)
+{
+    m_autoNotchOn = on;
+    emit autoNotchChanged(on);
+}
+
+void VfoModel::applyCompressor(bool on)
+{
+    m_compressorOn = on;
+    emit compressorChanged(on);
+}
+
+void VfoModel::applyAgcMode(const QString& mode)
+{
+    m_agcMode = mode;
+    emit agcModeChanged(mode);
+}
+
+void VfoModel::setDuplexMode(duplexMode_t mode)
+{
+    if (m_backend)
+    {
+        m_backend->setDuplexMode(mode);
+    }
+}
+
+void VfoModel::setRepeaterOffsetHz(quint64 hz)
+{
+    if (m_backend)
+    {
+        m_backend->setRepeaterOffsetHz(hz);
+    }
+}
+
+void VfoModel::setToneAccessMode(rptAccessTxRx_t mode)
+{
+    if (m_backend)
+    {
+        m_backend->setToneAccessMode(mode);
+    }
+}
+
+void VfoModel::setToneFrequency(ushort tone)
+{
+    if (m_backend)
+    {
+        m_backend->setToneFrequency(tone);
+    }
+}
+
+void VfoModel::setDtcsCode(ushort code)
+{
+    if (m_backend)
+    {
+        m_backend->setDtcsCode(code);
+    }
+}
+
+void VfoModel::setPtt(bool on)
+{
+    if (m_backend)
+    {
+        m_backend->setPtt(on);
+    }
+}
+
+void VfoModel::sendDtmf(const QString& digits)
+{
+    if (m_backend)
+    {
+        m_backend->sendDtmf(digits);
+    }
+}
+
+void VfoModel::applyFrequency(quint64 hz)
+{
+    if (m_freqHz.has_value() && *m_freqHz == hz)
+    {
+        return;
+    }
+    m_freqHz = hz;
+    emit frequencyChanged(hz);
+}
+
+void VfoModel::applyMode(const QString& mode)
+{
+    if (m_mode.has_value() && *m_mode == mode)
+    {
+        return;
+    }
+    m_mode = mode;
+    emit modeChanged(mode);
+}
+
+void VfoModel::applyPtt(bool on)
+{
+    if (m_txActive == on)
+    {
+        return;
+    }
+    m_txActive = on;
+    emit txActiveChanged(on);
+}
+
+void VfoModel::applyNrEnabled(bool on)
+{
+    if (m_nrOn == on)
+    {
+        return;
+    }
+    m_nrOn = on;
+    emit nrChanged(on, m_nrLevel);
+}
+
+void VfoModel::applyNbEnabled(bool on)
+{
+    if (m_nbOn == on)
+    {
+        return;
+    }
+    m_nbOn = on;
+    emit nbChanged(on, m_nbLevel);
+}
+
+void VfoModel::applyPreampEnabled(bool on)
+{
+    if (m_preampOn == on)
+    {
+        return;
+    }
+    m_preampOn = on;
+    emit preampChanged(on);
+}
+
+void VfoModel::applyAttenuatorEnabled(bool on)
+{
+    if (m_attenuatorOn == on)
+    {
+        return;
+    }
+    m_attenuatorOn = on;
+    emit attenuatorChanged(on);
+}
+
+void VfoModel::applyRfGain(int level)
+{
+    level = qBound(0, level, 255);
+    if (m_rfGain.has_value() && *m_rfGain == level)
+    {
+        return;
+    }
+    m_rfGain = level;
+    emit rfGainChanged(level);
+}
+
+void VfoModel::applySquelch(bool on, int level)
+{
+    level = qBound(0, level, 255);
+    if (m_squelch.has_value() && m_squelch->on == on && m_squelch->level == level)
+    {
+        return;
+    }
+    m_squelch = {on, level};
+    emit squelchChanged(on, level);
+}
+
+void VfoModel::applyTxPower(int level)
+{
+    level = qBound(0, level, 255);
+    if (m_txPower.has_value() && *m_txPower == level)
+    {
+        return;
+    }
+    m_txPower = level;
+    emit txPowerChanged(level);
+}
+
+void VfoModel::applyMicGain(int level)
+{
+    level = qBound(0, level, 255);
+    if (m_micGain.has_value() && *m_micGain == level)
+    {
+        return;
+    }
+    m_micGain = level;
+    emit micGainChanged(level);
+}
+
+void VfoModel::applyDuplexMode(duplexMode_t mode)
+{
+    if (m_duplexMode == mode)
+    {
+        return;
+    }
+    m_duplexMode = mode;
+    emit duplexModeChanged(mode);
+}
+
+void VfoModel::applyRepeaterOffsetHz(quint64 hz)
+{
+    if (m_repeaterOffsetHz == hz)
+    {
+        return;
+    }
+    m_repeaterOffsetHz = hz;
+    emit repeaterOffsetChanged(hz);
+}
+
+void VfoModel::applyToneAccessMode(rptAccessTxRx_t mode)
+{
+    if (m_toneAccessMode == mode)
+    {
+        return;
+    }
+    m_toneAccessMode = mode;
+    emit toneAccessModeChanged(mode);
+}
+
+void VfoModel::applyToneFrequency(ushort tone)
+{
+    if (m_toneFrequency == tone)
+    {
+        return;
+    }
+    m_toneFrequency = tone;
+    emit toneFrequencyChanged(tone);
+}
+
+void VfoModel::applyDtcsCode(ushort code)
+{
+    if (m_dtcsCode == code)
+    {
+        return;
+    }
+    m_dtcsCode = code;
+    emit dtcsCodeChanged(code);
+}

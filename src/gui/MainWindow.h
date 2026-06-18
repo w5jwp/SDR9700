@@ -1,0 +1,277 @@
+// cppcheck-suppress-file unusedStructMember
+#pragma once
+
+#include <QMainWindow>
+#include <QPointer>
+#include <QCloseEvent>
+#include <QElapsedTimer>
+#include "RadioProfile.h"
+#include "Types.h"
+
+class RadioModel;
+class VfoModel;
+class PanadapterModel;
+class SpectrumWidget;
+class VfoWidget;
+class MemoryWidget;
+class QLabel;
+class QToolBar;
+class QAction;
+class QSlider;
+class QPushButton;
+class QLineEdit;
+class QProgressBar;
+class QStatusBar;
+class QCheckBox;
+class QPixmap;
+class QVBoxLayout;
+class QGroupBox;
+class QWidget;
+class QComboBox;
+class QDialog;
+class QTableWidget;
+class QTimer;
+class DtmfWidget;
+class TitleBarWidget;
+#ifdef HAVE_HIDAPI
+class Rc28Manager;
+class RC28MappingDialog;
+#endif
+
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+
+  public:
+    explicit MainWindow(RadioModel* model, QWidget* parent = nullptr);
+
+  private slots:
+    void onConnectToProfile(const RadioProfile& profile);
+    void onConnectionChanged(bool connected);
+    void onRadioReadyChanged(bool ready);
+    void onFrequencyChanged(quint64 hz);
+    void onModeChanged(const QString& mode);
+    void onSmeterChanged(int s);
+    void onSpectrumReady(const QVector<float>& bins, double start, double end);
+    void onStatusMessage(const QString& msg);
+    void onError(const QString& msg);
+
+    void onAfGainChanged(int value);
+    void onRfGainChanged(int value);
+    void onSwrChanged(double swr);
+    void updateSquelchButton();
+    void showRfGainMenu();
+    void updateRfGainButton();
+    void onTxPowerChanged(int value);
+    void updateTxPowerButton();
+    void showMicGainMenu();
+    void updateMicGainButton();
+    void showCustomMicGainDialog();
+    void onPttPressed();
+    void onPttReleased();
+    void onSpectrumClicked(double freqMhz);
+    void onPttChanged(bool on);
+    void onDuplexModeChanged(duplexMode_t mode);
+    void onRepeaterOffsetChanged(quint64 hz);
+    void onToneAccessModeChanged(rptAccessTxRx_t mode);
+    void onToneFrequencyChanged(ushort tone);
+    void onDtcsCodeChanged(ushort code);
+    void onDtmfSendRequested(const QString& digits);
+
+  protected:
+    void closeEvent(QCloseEvent* event) override;
+
+  private:
+    void buildToolBar();
+    void buildControlPanel(QVBoxLayout* vbox);
+    void buildStatusBar();
+    void updateWindowTitle();
+    void showRadioChooserDialog();
+    void tryAutoConnect();
+    void restoreWindowLayout();
+    void saveWindowLayout() const;
+    void showAgcMenu();
+    void showRitMenu();
+    void showCustomRitDialog();
+    void updateRitButton();
+    void toggleMute();
+    void cycleMode();
+    void toggleRit();
+    void handleRc28Button(int button, int action);
+    void handleRc28Tune(int steps);
+    void showRc28MappingDialog();
+    void dispatchRc28Action(const QString& action);
+    void setRc28Ptt(bool on);
+    void showOffsetMenu();
+    void showCustomOffsetDialog();
+    void applyOffsetSelection(duplexMode_t mode, quint64 offsetHz);
+    void updateOffsetButton();
+    void showToneMenu();
+    void applyToneSelection(rptAccessTxRx_t mode, ushort value);
+    void updateToneButton();
+    void updateStepButton();
+    void updateRc28Leds();
+    void showDtmfWidget();
+    void buildMemoryWindow();
+    void showMemoryWindow();
+    void storeCurrentMemory();
+    void editSelectedMemory();
+    void copySelectedMemory();
+    void removeSelectedMemory();
+    void moveSelectedMemoryUp();
+    void moveSelectedMemoryDown();
+    void moveSelectedMemory(int direction);
+    void selectCheckedMemory();
+    void reloadMemoryTable();
+    void selectMemoryById(const QString& id, bool showDialogOnFailure);
+    QString selectedMemoryId() const;
+    void showMemoryEditor(const QString& memoryId);
+    void setRadioControlsEnabled(bool enabled);
+    void resetRadioOwnedControlsForSync();
+    void applyActiveVfoFromRadio();
+    void updateConnectionTooltip();
+    void checkIfMemorySelectionComplete();
+
+    TitleBarWidget* m_titleBar{nullptr};
+    RadioModel* m_model{nullptr};
+    QUuid m_pendingProfileId;
+    VfoModel* m_vfo{nullptr};
+    PanadapterModel* m_pan{nullptr};
+
+    SpectrumWidget* m_spectrum{nullptr};
+
+    VfoWidget* m_vfoWidget{nullptr};
+    MemoryWidget* m_memoryWidget{nullptr};
+    QPushButton* m_rfGainBtn{nullptr};
+    int m_rfGainValue{128};
+    QPushButton* m_squelchBtn{nullptr};
+    int m_squelchValue{0};
+    QPushButton* m_micGainBtn{nullptr};
+    int m_micGainValue{51};
+    QPushButton* m_txPowerBtn{nullptr};
+    int m_txPowerValue{128};
+    quint64 m_vfoFrequencyHz{0};
+    quint64 m_lastBandFrequencyHz[3]{0, 0, 0};
+    QPushButton* m_muteBtn{nullptr};
+    QPushButton* m_agcBtn{nullptr};
+    QPushButton* m_attBtn{nullptr};
+    QPushButton* m_compBtn{nullptr};
+    QPushButton* m_nbBtn{nullptr};
+    QPushButton* m_notchBtn{nullptr};
+    QPushButton* m_nrBtn{nullptr};
+    QPushButton* m_preBtn{nullptr};
+    QPushButton* m_ritBtn{nullptr};
+    QPushButton* m_offsetBtn{nullptr};
+    QPushButton* m_toneBtn{nullptr};
+    QPushButton* m_pttBtn{nullptr};
+    DtmfWidget* m_dtmfWidget{nullptr};
+    QTimer* m_dtmfPttOffTimer{nullptr};
+    bool m_dtmfSendActive{false};
+
+    QDialog* m_memoryWindow{nullptr};
+    QComboBox* m_memoryBandFilter{nullptr};
+    QTableWidget* m_memoryTable{nullptr};
+    QCheckBox* m_closeMemoryWindowOnSelectCheck{nullptr};
+    QLabel* m_memoryCountLabel{nullptr};
+    int m_savedAfGain{128};
+    int m_lastSMeter{0};
+    bool m_muted{false};
+    bool m_applyingRadioSliderUpdate{false};
+    duplexMode_t m_duplexMode{dmSimplex};
+    quint64 m_repeaterOffsetHz{600000};
+    rptAccessTxRx_t m_toneAccessMode{ratrNN};
+    ushort m_toneFrequency{670};
+    ushort m_dtcsCode{23};
+    QString m_activeMemoryId;
+    QString m_activeMemoryName;
+    quint64 m_activeMemoryFrequencyHz{0};
+    duplexMode_t m_activeMemoryDuplexMode{dmSimplex};
+    quint64 m_activeMemoryOffsetHz{0};
+    rptAccessTxRx_t m_activeMemoryToneMode{ratrNN};
+    ushort m_activeMemoryToneValue{0};
+    bool m_applyingMemorySelection{false};
+    int m_memorySelectionGeneration{0};
+    bool m_activeMemoryFrequencySettled{false};
+    bool m_activeMemoryDuplexSettled{false};
+    bool m_activeMemoryOffsetSettled{false};
+    bool m_activeMemoryToneModeSettled{false};
+    bool m_activeMemoryToneValueSettled{false};
+
+    QWidget* m_lockWidget{nullptr};
+    QLabel* m_lockIndicator{nullptr};
+    QLabel* m_toastLabel{nullptr};
+    QLabel* m_connStateLabel{nullptr};
+    QLabel* m_connDetailLabel{nullptr};
+    QLabel* m_netTitleLabel{nullptr};
+    QLabel* m_netQualLabel{nullptr};
+    QLabel* m_txIndicator{nullptr};
+    QLabel* m_txTimerLabel{nullptr};
+    QLabel* m_dateLabel{nullptr};
+    QLabel* m_timeLabel{nullptr};
+    bool m_statusClockUtc{true};
+    QLabel* m_cpuLabel{nullptr};
+    QLabel* m_memLabel{nullptr};
+    quint64 m_prevCpuTotal{0};
+    quint64 m_prevCpuIdle{0};
+    bool m_controlsLocked{false};
+
+#ifdef HAVE_HIDAPI
+    Rc28Manager* m_rc28Manager{nullptr};
+    QPointer<RC28MappingDialog> m_rc28MappingDialog;
+    QTimer* m_rc28HoldTimers[2]{nullptr, nullptr};
+    bool m_rc28HoldConsumed[2]{false, false};
+    bool m_rc28ButtonDown[2]{false, false};
+    bool m_rc28PttLatched{false};
+#endif
+
+    QLabel* m_statusLabel{nullptr};
+
+    QString m_connStateName;
+    QTimer* m_toastTimer{nullptr};
+
+    QTimer* m_reconnectTimer{nullptr};
+    bool m_reconnecting{false};
+    bool m_userDisconnected{false};
+    bool m_lastErrorWasCredential{false};
+    bool m_allowChooserOnDisconnect{false};
+
+    QTimer* m_txDurationTimer{nullptr};
+    QElapsedTimer m_txElapsed;
+    bool m_txActive{false};
+    QTimer* m_panTuneCommitTimer{nullptr};
+    QTimer* m_panTuneReleaseTimer{nullptr};
+    quint64 m_pendingPanTuneHz{0};
+    quint64 m_displayPanTuneHz{0};
+    quint64 m_panDragTuneBaseHz{0};
+
+    QString m_radioHost;
+    quint16 m_radioPort{0};
+    QString m_radioUsername;
+
+    void updateSpectrumVfoMarker();
+    void updateTxDurationLabel();
+    void showToast(const QString& msg, int durationMs = 4000);
+    void updateNetworkQuality(int rttMs);
+
+    void updateTxIndicator(bool on);
+    void updateTxAudioMeter(int peak, int rms);
+    void updateStatusClock();
+    void toggleStatusClockMode();
+    void updateSystemStats();
+    void toggleControlLock();
+    void updateControlLockIndicator();
+    void updatePanadapterBandLimits(quint64 hz);
+    int tuningStepHz() const;
+    quint64 roundFrequencyToStep(quint64 hz) const;
+    void beginPanadapterDragTune();
+    void tunePanadapterBySteps(int steps);
+    void tunePanadapterByDragDelta(double deltaMhz);
+    quint64 clampPanadapterCenterHz(quint64 hz, double bandwidthMhz) const;
+    quint64 clampFrequencyHzToActiveBand(quint64 hz) const;
+    void schedulePanadapterTune(quint64 hz);
+    void setActiveMemory(const QString& id, const QString& name, quint64 frequencyHz, int duplexMode, quint64 offsetHz,
+                         int toneMode, ushort toneValue);
+    void clearActiveMemory();
+    void updateMemoryNameLabel();
+    void commitFrequencyEdit(VfoWidget* widget);
+};

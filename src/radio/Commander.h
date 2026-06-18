@@ -1,0 +1,141 @@
+#pragma once
+
+#include "RadioCommander.h"
+
+#include <QVector>
+
+class Commander : public RadioCommander
+{
+    Q_OBJECT
+
+  public:
+    explicit Commander(RadioCommander* parent = nullptr);
+    explicit Commander(quint8 guid[GUIDLEN], RadioCommander* parent = nullptr);
+    ~Commander();
+
+  public slots:
+    void process() override;
+    void commSetup(quint16 radioCivAddr, udpPreferences prefs, audioSetup rxSetup, audioSetup txSetup, QString vsp,
+                   quint16 tcp) override;
+    void closeComm() override;
+
+    void setRadioID(quint16 radioID) override;
+    void setCIVAddr(quint16 civAddr) override;
+
+    void handleNewData(const QByteArray& data) override;
+    void receiveBaudRate(quint32 baudrate) override;
+
+    void receiveCommand(Funcs func, QVariant value, uchar receiver) override;
+    void receiveCommandNoReadback(Funcs func, QVariant value, uchar receiver);
+    void setPttActive(bool active);
+    void sendDtmfPcm(const QByteArray& pcm);
+    void enableAudio();
+
+  private:
+    void commonSetup();
+    void shutdownComm();
+
+    void parseData(const QByteArray& dataInput);
+    void parseCommand();
+    quint8 bcdHexToUChar(quint8 in);
+    quint8 bcdHexToUChar(quint8 hundreds, quint8 tensunits);
+    unsigned int bcdHexToUInt(quint8 hundreds, quint8 tensunits);
+    unsigned int bcdHexToUInt(quint8 tenthou, quint8 hundreds, quint8 tensunits);
+
+    QByteArray bcdEncodeChar(quint8 num);
+    QByteArray bcdEncodeInt(quint16 num);
+    QByteArray bcdEncodeInt(unsigned int num);
+    QByteArray setMemory(MemoryType mem);
+    Frequency parseFrequency();
+    Frequency parseFrequency(QByteArray data, quint8 lastPosition);
+
+    Frequency parseFreqData(const QByteArray& data, uchar receiver);
+    quint64 parseFreqDataToInt(QByteArray data);
+    Frequency parseFrequencyRptOffset(QByteArray data);
+    bool parseMemory(QVector<MemParserFormat>* memParser, MemoryType* mem);
+    QByteArray makeFreqPayloadRptOffset(Frequency freq);
+    QByteArray makeFreqPayload(double frequency);
+    QByteArray makeFreqPayload(Frequency freq, uchar numchars = 5);
+    QByteArray encodeTone(quint16 tone, bool tinv, bool rinv);
+    QByteArray encodeTone(quint16 tone);
+
+    ToneInfo decodeTone(const QByteArray& eTone);
+    uchar makeFilterWidth(ushort width, uchar receiver);
+
+    uchar convertNumberToHex(uchar num);
+
+    ModeInfo parseMode(uchar mode, uchar data, uchar filter, uchar receiver = 0, uchar vfo = 0);
+    bool parseSpectrum(ScopeData& d, uchar receiver);
+    FuncType getCommand(Funcs func, QByteArray& payload, int value = INT_MIN, uchar receiver = 0);
+    void rememberPendingReply(Funcs func, uchar receiver);
+    bool takePendingReplyReceiver(Funcs func, uchar* receiver);
+
+    QByteArray getLANAddr();
+    QByteArray getACCAddr(quint8 ab);
+    void sendDataOut();
+    void prepDataAndSend(QByteArray data);
+    void debugMe();
+
+    centerSpanData createScopeCenter(uchar s, QString name);
+
+    UdpHandler* udp = nullptr;
+    QThread* udpHandlerThread = nullptr;
+
+    void determineRadioCaps();
+    QByteArray payloadIn;
+    QByteArray echoPrefix;
+    QByteArray replyPrefix;
+    QByteArray genericReplyPrefix;
+
+    QByteArray payloadPrefix;
+    QByteArray payloadSuffix;
+
+    QByteArray radioData;
+
+    QByteArray spectrumLine;
+    quint16 model = 0;
+    quint8 spectSeqMax{0};
+    quint16 spectAmpMax{0};
+    quint16 spectLenMax{0};
+    uchar oldScopeMode{0};
+
+    bool lookingForRadio{false};
+    bool foundRadio{false};
+
+    bool warnedAboutFA = false;
+    double frequencyMhz{0.0};
+    quint16 civAddr{0};
+    quint16 incomingCIVAddr{0};
+
+    struct PendingReply
+    {
+        Funcs func{funcNone};
+        uchar receiver{0};
+    };
+    QVector<PendingReply> m_pendingReplies;
+    bool m_suppressReadbackForCurrentCommand{false};
+
+    ScopeData mainScopeData;
+    ScopeData subScopeData;
+
+    QString ip;
+    int cport{0};
+    int sport{0};
+    int aport{0};
+    QString username;
+
+    quint8 localVolume = 0;
+
+    // 12 entries cover 10^0–10^11; BCD frequency data is at most 5 bytes (10 nibbles, indices 0–9).
+    static constexpr quint64 kPow10[12] = {1,       10,       100,       1000,       10000,       100000,
+                                           1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000};
+    static_assert(std::size(kPow10) == 12);
+
+#ifdef DEBUG_PARSE
+    quint64 averageParseTime = 0;
+    int numParseSamples = 0;
+    int lowParse = 9999;
+    int highParse = 0;
+    QTime lastParseReport = QTime::currentTime();
+#endif
+};

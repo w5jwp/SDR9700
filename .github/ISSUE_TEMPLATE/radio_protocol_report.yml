@@ -1,0 +1,73 @@
+name: Radio or protocol behavior
+description: Report IC-9700 LAN, CI-V, scope, or audio behavior that needs validation.
+title: "[Radio]: "
+labels: ["radio", "needs-validation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for behavior involving IC-9700 LAN control, CI-V replies, UDP stream setup, scope/waterfall packets, or RX/TX audio.
+
+        Do not post radio passwords, full unredacted packet captures, public IPs, or station-private details.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Radio area
+      options:
+        - LAN login / connection
+        - Disconnect / reconnect
+        - CI-V command / reply
+        - Frequency / mode / VFO
+        - Offset / tone / CTCSS / DCS
+        - Scope / waterfall
+        - RX audio stream
+        - TX audio stream / PTT
+        - Network status / latency
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: What did the radio or SDR9700 do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should the radio or SDR9700 have done?
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add redacted debug logs, command bytes, packet notes, manual references, screenshots, or a short recording.
+      render: text
+
+  - type: textarea
+    id: radio
+    attributes:
+      label: Radio and station setup
+      placeholder: |
+        - IC-9700 firmware:
+        - Band/mode:
+        - LAN/wired or Wi-Fi:
+        - CI-V address:
+        - Audio devices, if relevant:
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submit checks
+      options:
+        - label: I redacted credentials and station-private details.
+          required: true
+        - label: I can help test a fix against a real IC-9700 if needed.
+          required: false
