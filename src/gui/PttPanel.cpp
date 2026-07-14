@@ -11,7 +11,9 @@ namespace
 {
 constexpr int kControlGroupMargin = 8;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
-constexpr QSize kPttButtonSize(kCommandButtonSize.width(), 76);
+constexpr int kReceiveButtonStackSpacing = 8;
+constexpr QSize kPttButtonSize(kCommandButtonSize.width(),
+                               UiTheme::Size::ControlButtonHeight * 2 + kReceiveButtonStackSpacing);
 } // namespace
 
 PttPanel::PttPanel(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* parent) : QGroupBox(parent)
@@ -22,7 +24,7 @@ PttPanel::PttPanel(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* par
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(kControlGroupMargin, 7, kControlGroupMargin, kControlGroupMargin);
+    layout->setContentsMargins(kControlGroupMargin, 7, kControlGroupMargin, 2);
 
     if (pttButton)
     {

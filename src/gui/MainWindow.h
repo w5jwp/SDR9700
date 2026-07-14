@@ -206,7 +206,7 @@ class MainWindow : public QMainWindow
     QLabel* m_netTitleLabel{nullptr};
     QLabel* m_netQualLabel{nullptr};
     QLabel* m_txIndicator{nullptr};
-    QLabel* m_txTimerLabel{nullptr};
+    QLabel* m_txSwrLabel{nullptr};
     QLabel* m_dateLabel{nullptr};
     QLabel* m_timeLabel{nullptr};
     bool m_statusClockUtc{true};
@@ -242,6 +242,8 @@ class MainWindow : public QMainWindow
     QTimer* m_txDurationTimer{nullptr};
     QElapsedTimer m_txElapsed;
     bool m_txActive{false};
+    int m_txAudioPeak{0};
+    int m_txAudioRms{0};
     QTimer* m_panTuneCommitTimer{nullptr};
     QTimer* m_panTuneReleaseTimer{nullptr};
     quint64 m_pendingPanTuneHz{0};

@@ -105,10 +105,12 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
             QStringLiteral("profile connection host port username password auto connect radio lan"),
             []() { return new RadioSetupSettingsPanel; });
     addPage(Page::Audio, QStringLiteral("Audio"),
-            QStringLiteral("audio input output device speaker microphone codec channels lan mod level"),
+            QStringLiteral("audio input output device speaker microphone codec channels lan input mod level transmit"),
             [this]()
             {
                 auto* panel = new AudioSettingsPanel;
+                m_audioPanel = panel;
+                panel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
                 connect(panel, &AudioSettingsPanel::lanModLevelChanged, this, &SettingsDialog::lanModLevelChanged);
                 return panel;
             });
@@ -176,6 +178,16 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
 
     root->addWidget(content, 1);
+}
+
+void SettingsDialog::setTransmitAudioLevel(int peak, int rms)
+{
+    m_txAudioPeak = qBound(0, peak, 255);
+    m_txAudioRms = qBound(0, rms, 255);
+    if (m_audioPanel)
+    {
+        m_audioPanel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
+    }
 }
 
 void SettingsDialog::addPage(Page page, const QString& title, const QString& keywords,

@@ -39,7 +39,6 @@ class SpectrumCanvas : public QWidget
     void tuneStepRequested(int steps);
     void tuneDragStarted();
     void tuneDragRequested(double deltaMhz);
-    void spectrumPaneHeightChanged(int height);
     void zoomInRequested();
     void zoomOutRequested();
 
@@ -65,7 +64,6 @@ class SpectrumCanvas : public QWidget
 
     int defaultSpectrumHeight() const;
     int constrainedSpectrumHeight(int requested) const;
-    bool isOnSplitter(const QPoint& pos) const;
     bool applySpectrumPaneHeight(int requested);
     void updatePanadapterCursor(const QPoint& pos);
     void rebuildWaterfallImage();
@@ -86,12 +84,10 @@ class SpectrumCanvas : public QWidget
     int m_filterLowHz{-1400};
     int m_filterHighHz{1400};
     int m_spectrumHeight{-1};
-    bool m_draggingSplitter{false};
     bool m_draggingPanadapter{false};
     bool m_panButtonPressed{false};
     bool m_interactionLocked{false};
     bool m_invertMouseWheel{false};
-    bool m_splitterHeightDirty{false};
     double m_panDragAnchorFreqMhz{0.0};
     double m_wheelStepAccumulator{0.0};
     QPoint m_panDragStartPos;

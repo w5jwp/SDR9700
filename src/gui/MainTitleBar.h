@@ -25,11 +25,14 @@ class MainTitleBar : public QWidget
     void setMuted(bool muted);
     void setVolumeEnabled(bool enabled);
     void setLocked(bool locked);
+    void setTxDuration(const QString& duration, bool transmitting);
+    void setTxDurationActive(bool transmitting);
 
   signals:
     void volumeChanged(int value);
     void muteToggled();
     void lockToggled();
+    void txDurationResetRequested();
     void minimizeRequested();
     void closeRequested();
 
@@ -39,6 +42,7 @@ class MainTitleBar : public QWidget
   private:
     QHBoxLayout* m_menuLayout{nullptr};
     QLabel* m_titleLabel{nullptr};
+    QPushButton* m_txDurationButton{nullptr};
     QPushButton* m_muteBtn{nullptr};
     QPushButton* m_lockBtn{nullptr};
     QSlider* m_volumeSlider{nullptr};

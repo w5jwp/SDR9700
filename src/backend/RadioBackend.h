@@ -99,6 +99,7 @@ class RadioBackend : public IRadioBackend
     // RX. The early true state covers the pre-ramp window where LAN modulation
     // is still muted but timers are preparing the radio-side TX audio path.
     bool m_pttActive{false};
+    QTimer* m_pttStaleOnGuardTimer{nullptr};
     QTimer* m_txAudioEnableTimer{nullptr};
     QTimer* m_txGainRampTimer{nullptr};
     int m_txGainRampStart{0};

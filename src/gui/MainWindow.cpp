@@ -149,10 +149,11 @@ constexpr QMargins kMemoryToolbarGroupMargins(8, 6, 8, 6);
 constexpr int kMemoryPanelSpacing = 6;
 constexpr int kMemoryToolbarSpacing = 8;
 constexpr int kMemoryToolbarGroupSpacing = 6;
-constexpr QMargins kControlStripMargins(8, 14, 8, 8);
+constexpr QMargins kControlStripMargins(8, 14, 8, 16);
 constexpr int kControlRowSpacing = 8;
 constexpr int kControlGroupMargin = 8;
 constexpr int kControlGroupSpacing = 6;
+constexpr int kPanadapterSpectrumHeightIncrease = 20;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 constexpr QSize kSelectorButtonSize(72, UiTheme::Size::ControlButtonHeight);
 
@@ -587,9 +588,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     spectrumDivider->setObjectName(QStringLiteral("spectrumDivider"));
     spectrumDivider->setFixedHeight(6);
     spectrumDivider->setStyleSheet(
-        QStringLiteral("QWidget#spectrumDivider { background: %1; "
-                       "border-top: 1px solid %2; border-bottom: 1px solid %3; }")
-            .arg(UiTheme::Color::PanelDark, UiTheme::Color::Border, UiTheme::Color::ControlStripBorder));
+        QStringLiteral("QWidget#spectrumDivider { background: %1; }").arg(UiTheme::Color::PanelDark));
     vbox->addWidget(spectrumDivider);
     m_spectrumCanvas = new SpectrumCanvas(central);
     m_spectrumCanvas->setInvertMouseWheel(
@@ -792,8 +791,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_spectrumCanvas, &SpectrumCanvas::tuneStepRequested, this, &MainWindow::tunePanadapterBySteps);
     connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragStarted, this, &MainWindow::beginPanadapterDragTune);
     connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragRequested, this, &MainWindow::tunePanadapterByDragDelta);
-    connect(m_spectrumCanvas, &SpectrumCanvas::spectrumPaneHeightChanged, this,
-            [](int height) { AppSettings::instance().setValue("PanadapterSpectrumHeight", height); });
     connect(m_spectrumCanvas, &SpectrumCanvas::zoomInRequested, this,
             [this]()
             {
@@ -905,6 +902,15 @@ void MainWindow::buildToolBar()
     connect(m_titleBar, &MainTitleBar::closeRequested, this, &QWidget::close);
     connect(m_titleBar, &MainTitleBar::muteToggled, this, &MainWindow::toggleMute);
     connect(m_titleBar, &MainTitleBar::lockToggled, this, &MainWindow::toggleControlLock);
+    connect(m_titleBar, &MainTitleBar::txDurationResetRequested, this,
+            [this]()
+            {
+                if (m_txActive)
+                {
+                    m_txElapsed.restart();
+                }
+                m_titleBar->setTxDuration(QStringLiteral("00:00:00"), m_txActive);
+            });
     connect(m_titleBar, &MainTitleBar::volumeChanged, this,
             [this](int value)
             {
@@ -1175,6 +1181,7 @@ void MainWindow::showSettingsDialog()
     SettingsDialog dlg(this);
 #endif
     connect(&dlg, &SettingsDialog::lanModLevelChanged, m_model, &RadioModel::setLanModLevel);
+    connect(m_model, &RadioModel::txAudioLevelChanged, &dlg, &SettingsDialog::setTransmitAudioLevel);
     connect(&dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_spectrumCanvas,
             &SpectrumCanvas::setInvertMouseWheel);
 #ifdef HAVE_HIDAPI
@@ -1189,6 +1196,7 @@ void MainWindow::showSettingsDialog()
             });
 #endif
     centerPopupWindow(&dlg);
+    dlg.setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
     QTimer::singleShot(0, &dlg, [this, &dlg]() { centerPopupWindow(&dlg); });
     dlg.exec();
     m_model->setLanModLevel(AppSettings::instance().value("LanModLevel", 128).toInt());
@@ -1974,19 +1982,18 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     strip->setObjectName("controlStrip");
     strip->setMinimumWidth(UiTheme::Size::MainWindowMinWidth);
     strip->setFocusPolicy(Qt::StrongFocus);
-    strip->setStyleSheet(QStringLiteral("QWidget#controlStrip { background: %1; border-bottom: 1px solid %2; }"
-                                        "QGroupBox { color: %3; border: 1px solid %4; border-radius: 3px; "
+    strip->setStyleSheet(QStringLiteral("QWidget#controlStrip { background: %1; }"
+                                        "QGroupBox { color: %2; border: 1px solid %3; border-radius: 3px; "
                                         "margin-top: 8px; padding-top: 4px; font-size: 10px; font-weight: bold; }"
                                         "QGroupBox::title { subcontrol-origin: border; subcontrol-position: top left; "
-                                        "left: 8px; top: -6px; padding: 0 4px; color: %5; background: %1; }"
-                                        "QLabel { color: %6; }"
-                                        "QLineEdit { background: %7; border: 1px solid %8; border-radius: 3px; "
-                                        "color: %9; padding: 0 8px; selection-background-color: %10; }")
-                             .arg(UiTheme::Color::Panel, UiTheme::Color::ControlStripBorder,
-                                  UiTheme::Color::TextStatusPrimary, UiTheme::Color::BorderMedium,
-                                  UiTheme::Color::TextStatusSecondary, UiTheme::Color::TextStatusPrimary,
-                                  UiTheme::Color::Field, UiTheme::Color::BorderFocus, UiTheme::Color::TextField,
-                                  UiTheme::Color::AccentDark));
+                                        "left: 8px; top: -6px; padding: 0 4px; color: %4; background: %1; }"
+                                        "QLabel { color: %5; }"
+                                        "QLineEdit { background: %6; border: 1px solid %7; border-radius: 3px; "
+                                        "color: %8; padding: 0 8px; selection-background-color: %9; }")
+                             .arg(UiTheme::Color::Panel, UiTheme::Color::TextStatusPrimary,
+                                  UiTheme::Color::BorderMedium, UiTheme::Color::TextStatusSecondary,
+                                  UiTheme::Color::TextStatusPrimary, UiTheme::Color::Field, UiTheme::Color::BorderFocus,
+                                  UiTheme::Color::TextField, UiTheme::Color::AccentDark));
     auto* root = new QVBoxLayout(strip);
     root->setContentsMargins(kControlStripMargins);
     root->setSpacing(kNoSpacing);
@@ -2358,10 +2365,9 @@ void MainWindow::updateTxIndicator(bool on)
         if (!on && m_txDurationTimer && m_txDurationTimer->isActive())
         {
             m_txDurationTimer->stop();
-            if (m_txTimerLabel)
+            if (m_titleBar)
             {
-                m_txTimerLabel->setText(QStringLiteral("[<span style='color:%1'>00:00:00</span>]")
-                                            .arg(UiTheme::Color::TextStatusSecondary));
+                m_titleBar->setTxDurationActive(false);
             }
         }
         return;
@@ -2376,10 +2382,10 @@ void MainWindow::updateTxIndicator(bool on)
     if (on)
     {
         m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::Danger, true));
-        if (m_txTimerLabel)
+        if (m_txSwrLabel)
         {
-            m_txTimerLabel->setText(
-                QStringLiteral("[<span style='color:%1'>00:00:00</span>]").arg(UiTheme::Color::Danger));
+            m_txSwrLabel->setText(
+                QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusSecondary));
         }
         m_txElapsed.start();
         updateTxDurationLabel();
@@ -2395,17 +2401,22 @@ void MainWindow::updateTxIndicator(bool on)
         {
             m_txDurationTimer->stop();
         }
-        if (m_txTimerLabel)
+        if (m_txSwrLabel)
         {
-            m_txTimerLabel->setText(
-                QStringLiteral("[<span style='color:%1'>00:00:00</span>]").arg(UiTheme::Color::TextStatusLabel));
+            m_txSwrLabel->setText(
+                QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusLabel));
         }
+        if (m_titleBar)
+        {
+            m_titleBar->setTxDurationActive(false);
+        }
+        updateTxAudioMeter(0, 0);
     }
 }
 
 void MainWindow::updateTxDurationLabel()
 {
-    if (!m_txTimerLabel)
+    if (!m_titleBar)
     {
         return;
     }
@@ -2414,11 +2425,11 @@ void MainWindow::updateTxDurationLabel()
     const int h = int(secs / 3600);
     const int m = int((secs % 3600) / 60);
     const int s = int(secs % 60);
-    m_txTimerLabel->setText(QStringLiteral("[<span style='color:%1'>%2:%3:%4</span>]")
-                                .arg(UiTheme::Color::Danger)
-                                .arg(h, 2, 10, QLatin1Char('0'))
-                                .arg(m, 2, 10, QLatin1Char('0'))
-                                .arg(s, 2, 10, QLatin1Char('0')));
+    m_titleBar->setTxDuration(QStringLiteral("%1:%2:%3")
+                                  .arg(h, 2, 10, QLatin1Char('0'))
+                                  .arg(m, 2, 10, QLatin1Char('0'))
+                                  .arg(s, 2, 10, QLatin1Char('0')),
+                              m_txActive);
 }
 
 void MainWindow::updateStatusClock()
@@ -2571,19 +2582,19 @@ void MainWindow::buildStatusBar()
 
         int w = 0;
         // connection stack
-        for (const char* s : {"[Reconnecting]", "[Connected]", "[Disconnected]"})
+        for (const char* s : {"Reconnecting", "Connected", "Disconnected"})
         {
             w = qMax(w, fmR.horizontalAdvance(QString::fromLatin1(s)));
         }
         w = qMax(w, fmB.horizontalAdvance(QStringLiteral("Radio")));
         // network stack
-        for (const char* s : {"[Excellent]", "[Good]", "[Fair]", "[Poor]"})
+        for (const char* s : {"Excellent", "Good", "Fair", "Poor"})
         {
             w = qMax(w, fmR.horizontalAdvance(QString::fromLatin1(s)));
         }
         w = qMax(w, fmB.horizontalAdvance(QStringLiteral("Network")));
         // TX stack
-        w = qMax(w, fmR.horizontalAdvance(QStringLiteral("[00:00:00]")));
+        w = qMax(w, fmR.horizontalAdvance(QStringLiteral("SWR 9.99")));
         w = qMax(w, fmB.horizontalAdvance(QStringLiteral("TX")));
         // time stack
         w = qMax(w, fmR.horizontalAdvance(QStringLiteral("0000-00-00")));
@@ -2592,11 +2603,57 @@ void MainWindow::buildStatusBar()
         return w + 16; // uniform padding buffer
     }();
 
+    const int txStackWidth = [&]()
+    {
+        QFont regular;
+        regular.setPixelSize(12);
+        QFont bold = regular;
+        bold.setBold(true);
+        const QFontMetrics fmR(regular);
+        const QFontMetrics fmB(bold);
+
+        int w = fmR.horizontalAdvance(QStringLiteral("SWR 9.99"));
+        w = qMax(w, fmB.horizontalAdvance(QStringLiteral("TX")));
+        return w + 16;
+    }();
+
     auto applyStatusContainerWidth = [](QWidget* widget, int width)
     {
         widget->setMinimumWidth(width);
         widget->setMaximumWidth(width);
     };
+
+    auto* transmitStatusPanel = new QWidget(this);
+    applyStatusContainerWidth(transmitStatusPanel, txStackWidth);
+    transmitStatusPanel->setAccessibleName("Transmit status");
+    transmitStatusPanel->setAccessibleDescription("Shows transmit state and SWR.");
+    const QString txTooltip = QStringLiteral("Transmit status and SWR.");
+    transmitStatusPanel->setToolTip(txTooltip);
+    auto* transmitStatusLayout = new QVBoxLayout(transmitStatusPanel);
+    transmitStatusLayout->setContentsMargins(0, 0, 0, 0);
+    transmitStatusLayout->setSpacing(0);
+    transmitStatusLayout->setAlignment(Qt::AlignVCenter);
+
+    m_txIndicator = new QLabel("TX", this);
+    m_txIndicator->setAlignment(Qt::AlignCenter);
+    m_txIndicator->setToolTip(txTooltip);
+    updateTxIndicator(false);
+
+    m_txSwrLabel =
+        new QLabel(QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusLabel), this);
+    m_txSwrLabel->setTextFormat(Qt::RichText);
+    m_txSwrLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
+    m_txSwrLabel->setAlignment(Qt::AlignCenter);
+    m_txSwrLabel->setToolTip(QStringLiteral("Transmit SWR from the radio."));
+
+    transmitStatusLayout->addWidget(m_txIndicator);
+    transmitStatusLayout->addWidget(m_txSwrLabel);
+    hbox->addWidget(transmitStatusPanel);
+    hbox->addSpacing(16);
+
+    m_txDurationTimer = new QTimer(this);
+    m_txDurationTimer->setInterval(250);
+    connect(m_txDurationTimer, &QTimer::timeout, this, &MainWindow::updateTxDurationLabel);
 
     m_toastLabel = new QLabel("", this);
     m_toastLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusPrimary));
@@ -2619,7 +2676,7 @@ void MainWindow::buildStatusBar()
 
     m_connStateName = QStringLiteral("Disconnected");
     m_connStateLabel = new QLabel(
-        QStringLiteral("[<span style='color:%1'>Disconnected</span>]").arg(UiTheme::Color::TextStatusLabel), this);
+        QStringLiteral("<span style='color:%1'>Disconnected</span>").arg(UiTheme::Color::TextStatusLabel), this);
     m_connStateLabel->setTextFormat(Qt::RichText);
     m_connStateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
     m_connStateLabel->setAlignment(Qt::AlignCenter);
@@ -2678,47 +2735,6 @@ void MainWindow::buildStatusBar()
         systemStatusLayout->addWidget(m_memLabel);
         hbox->addWidget(systemStatusPanel);
     }
-
-    hbox->addWidget(makeSep());
-
-    auto* transmitStatusPanel = new ClickableStatusPanel(this);
-    applyStatusContainerWidth(transmitStatusPanel, uniformStackWidth);
-    transmitStatusPanel->setCursor(Qt::PointingHandCursor);
-    transmitStatusPanel->setAccessibleName("Emergency transmit off");
-    transmitStatusPanel->setAccessibleDescription("Click to force transmit off.");
-    const QString txTooltip = QStringLiteral("Transmit (TX)\nClick to force transmit off.");
-    transmitStatusPanel->setToolTip(txTooltip);
-    transmitStatusPanel->onClicked = [this]()
-    {
-        if (m_vfo)
-        {
-            m_vfo->setPtt(false);
-        }
-    };
-    auto* transmitStatusLayout = new QVBoxLayout(transmitStatusPanel);
-    transmitStatusLayout->setContentsMargins(0, 0, 0, 0);
-    transmitStatusLayout->setSpacing(0);
-    transmitStatusLayout->setAlignment(Qt::AlignVCenter);
-
-    m_txIndicator = new QLabel("TX", this);
-    m_txIndicator->setAlignment(Qt::AlignCenter);
-    m_txIndicator->setToolTip(txTooltip);
-    updateTxIndicator(false);
-
-    m_txTimerLabel = new QLabel(
-        QStringLiteral("[<span style='color:%1'>00:00:00</span>]").arg(UiTheme::Color::TextStatusSecondary), this);
-    m_txTimerLabel->setTextFormat(Qt::RichText);
-    m_txTimerLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
-    m_txTimerLabel->setAlignment(Qt::AlignCenter);
-    m_txTimerLabel->setToolTip(txTooltip);
-
-    transmitStatusLayout->addWidget(m_txIndicator);
-    transmitStatusLayout->addWidget(m_txTimerLabel);
-    hbox->addWidget(transmitStatusPanel);
-
-    m_txDurationTimer = new QTimer(this);
-    m_txDurationTimer->setInterval(250);
-    connect(m_txDurationTimer, &QTimer::timeout, this, &MainWindow::updateTxDurationLabel);
 
     hbox->addWidget(makeSep());
 
@@ -2804,7 +2820,7 @@ void MainWindow::onConnectToProfile(const RadioProfile& profile)
     {
         m_connStateName = QStringLiteral("Connecting");
         m_connStateLabel->setText(
-            QStringLiteral("[<span style='color:%1'>Connecting</span>]").arg(UiTheme::Color::Accent));
+            QStringLiteral("<span style='color:%1'>Connecting</span>").arg(UiTheme::Color::Accent));
     }
     updateConnectionTooltip();
 }
@@ -2878,10 +2894,20 @@ void MainWindow::restoreWindowLayout()
 
     if (m_spectrumCanvas)
     {
-        const int spectrumHeight = AppSettings::instance().value("PanadapterSpectrumHeight", -1).toInt();
+        int spectrumHeight = AppSettings::instance().value("PanadapterSpectrumHeight", -1).toInt();
+        const QString migrationKey = QStringLiteral("PanadapterSpectrumHeight680Migrated");
+        const bool needsSpectrumHeightMigration = !AppSettings::instance().contains(migrationKey);
         if (spectrumHeight > 0)
         {
+            if (needsSpectrumHeightMigration)
+            {
+                spectrumHeight += kPanadapterSpectrumHeightIncrease;
+            }
             m_spectrumCanvas->setSpectrumPaneHeight(spectrumHeight);
+        }
+        if (needsSpectrumHeightMigration)
+        {
+            AppSettings::instance().setValue(migrationKey, true);
         }
     }
 }
@@ -3714,7 +3740,7 @@ void MainWindow::onConnectionChanged(bool connected)
         {
             m_connStateName = QStringLiteral("Syncing");
             m_connStateLabel->setText(
-                QStringLiteral("[<span style='color:%1'>Syncing</span>]").arg(UiTheme::Color::Warning));
+                QStringLiteral("<span style='color:%1'>Syncing</span>").arg(UiTheme::Color::Warning));
         }
         updateConnectionTooltip();
         if (!m_pendingProfileId.isNull())
@@ -3759,7 +3785,7 @@ void MainWindow::onConnectionChanged(bool connected)
             {
                 m_connStateName = QStringLiteral("Reconnecting");
                 m_connStateLabel->setText(
-                    QStringLiteral("[<span style='color:%1'>Reconnecting</span>]").arg(UiTheme::Color::Danger));
+                    QStringLiteral("<span style='color:%1'>Reconnecting</span>").arg(UiTheme::Color::Danger));
             }
             // Keep the IP in the detail label so the user knows which radio is reconnecting.
             updateConnectionTooltip();
@@ -3797,8 +3823,8 @@ void MainWindow::onConnectionChanged(bool connected)
             if (m_connStateLabel)
             {
                 m_connStateName = QStringLiteral("Disconnected");
-                m_connStateLabel->setText(QStringLiteral("[<span style='color:%1'>Disconnected</span>]")
-                                              .arg(UiTheme::Color::TextStatusLabel));
+                m_connStateLabel->setText(
+                    QStringLiteral("<span style='color:%1'>Disconnected</span>").arg(UiTheme::Color::TextStatusLabel));
             }
             updateConnectionTooltip();
             if (!wasUserDisconnected && m_allowChooserOnDisconnect)
@@ -3831,13 +3857,12 @@ void MainWindow::onRadioReadyChanged(bool ready)
     {
         m_connStateName = QStringLiteral("Connected");
         m_connStateLabel->setText(
-            QStringLiteral("[<span style='color:%1'>Connected</span>]").arg(UiTheme::Color::Success));
+            QStringLiteral("<span style='color:%1'>Connected</span>").arg(UiTheme::Color::Success));
     }
     else
     {
         m_connStateName = QStringLiteral("Syncing");
-        m_connStateLabel->setText(
-            QStringLiteral("[<span style='color:%1'>Syncing</span>]").arg(UiTheme::Color::Warning));
+        m_connStateLabel->setText(QStringLiteral("<span style='color:%1'>Syncing</span>").arg(UiTheme::Color::Warning));
     }
     updateConnectionTooltip();
 }
@@ -3924,16 +3949,25 @@ void MainWindow::onSwrChanged(double swr)
     {
         return;
     }
+    const char* swrColor = swr <= 1.7   ? UiTheme::Color::Success
+                           : swr <= 2.7 ? UiTheme::Color::Warning
+                                        : UiTheme::Color::Danger;
     const QColor fillColor = swr <= 1.7   ? UiTheme::Color::MeterGreen
                              : swr <= 2.7 ? UiTheme::Color::MeterAmber
                                           : UiTheme::Color::MeterRed;
+    if (m_txSwrLabel)
+    {
+        m_txSwrLabel->setText(QStringLiteral("<span style='color:%1'>SWR %2</span>")
+                                  .arg(QString::fromLatin1(swrColor))
+                                  .arg(swr, 0, 'f', 2));
+    }
     m_vfoPanel->setSwr(swr, fillColor);
 }
 
 void MainWindow::updateTxAudioMeter(int peak, int rms)
 {
-    Q_UNUSED(peak)
-    Q_UNUSED(rms)
+    m_txAudioPeak = qBound(0, peak, 255);
+    m_txAudioRms = qBound(0, rms, 255);
 }
 
 void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, double end)
@@ -3993,8 +4027,7 @@ void MainWindow::updateNetworkQuality(int rttMs)
         color = UiTheme::Color::Danger;
     }
 
-    const QString text = (rttMs > 0) ? QString("[<span style='color:%1'>%2</span>]").arg(color, label)
-                                     : QString("<span style='color:%1'>%2</span>").arg(color, label);
+    const QString text = QString("<span style='color:%1'>%2</span>").arg(color, label);
     m_netQualLabel->setText(text);
     const QString tooltip = rttMs > 0 ? QStringLiteral("Network Performance\nRTT: %1 ms").arg(rttMs)
                                       : QStringLiteral("Network Performance\nRTT: unavailable");

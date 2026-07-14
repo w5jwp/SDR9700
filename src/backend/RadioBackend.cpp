@@ -174,6 +174,9 @@ RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThr
     m_workerThread->setObjectName("radio-worker");
     m_workerThread->start();
 
+    m_pttStaleOnGuardTimer = new QTimer(this);
+    m_pttStaleOnGuardTimer->setSingleShot(true);
+
     /*
         IC-9700 LAN TX audio startup sequence
 
@@ -525,6 +528,15 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             case funcTransceiverStatus:
             {
                 const bool on = item.value.toBool();
+                if (on && !m_pttActive && m_pttStaleOnGuardTimer && m_pttStaleOnGuardTimer->isActive())
+                {
+                    qDebug(logRadio()) << "Ignoring stale PTT-on status after PTT-off request";
+                    break;
+                }
+                if (!on && m_pttStaleOnGuardTimer)
+                {
+                    m_pttStaleOnGuardTimer->stop();
+                }
                 m_pttActive = on;
                 emit pttChanged(on);
                 break;
@@ -663,6 +675,10 @@ void RadioBackend::shutdownConnection()
     ++m_sessionId;
     m_txAudioEnableTimer->stop();
     m_txGainRampTimer->stop();
+    if (m_pttStaleOnGuardTimer)
+    {
+        m_pttStaleOnGuardTimer->stop();
+    }
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->stop();
@@ -1060,6 +1076,10 @@ void RadioBackend::setPtt(bool on)
 
         m_txAudioEnableTimer->stop();
         m_txGainRampTimer->stop();
+        if (m_pttStaleOnGuardTimer)
+        {
+            m_pttStaleOnGuardTimer->stop();
+        }
         m_txLanModApplied = 0;
         m_pttActive = true;
         invokeOnCurrentCommander(
@@ -1083,6 +1103,11 @@ void RadioBackend::setPtt(bool on)
         m_txGainRampTimer->stop();
         m_pttActive = false;
         m_txLanModApplied = 0;
+        if (m_pttStaleOnGuardTimer)
+        {
+            m_pttStaleOnGuardTimer->start(1000);
+        }
+        emit pttChanged(false);
         invokeOnCurrentCommander(
             [](Commander* commandSession)
             {

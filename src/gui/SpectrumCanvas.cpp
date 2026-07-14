@@ -134,11 +134,6 @@ int SpectrumCanvas::constrainedSpectrumHeight(int requested) const
     return qBound(qMin(kMinSpectrumHeight, maxSpectrumHeight), requested, maxSpectrumHeight);
 }
 
-bool SpectrumCanvas::isOnSplitter(const QPoint& pos) const
-{
-    return splitterRect().adjusted(0, -3, 0, 3).contains(pos);
-}
-
 bool SpectrumCanvas::applySpectrumPaneHeight(int requested)
 {
     const int constrained = constrainedSpectrumHeight(requested);
@@ -153,14 +148,8 @@ bool SpectrumCanvas::applySpectrumPaneHeight(int requested)
     return true;
 }
 
-void SpectrumCanvas::updatePanadapterCursor(const QPoint& pos)
+void SpectrumCanvas::updatePanadapterCursor(const QPoint&)
 {
-    if (m_draggingSplitter || isOnSplitter(pos))
-    {
-        setCursor(Qt::SplitVCursor);
-        return;
-    }
-
     if (m_interactionLocked)
     {
         setCursor(Qt::ArrowCursor);
@@ -711,14 +700,6 @@ void SpectrumCanvas::mousePressEvent(QMouseEvent* ev)
     {
         return;
     }
-    if (ev->button() == Qt::LeftButton && isOnSplitter(ev->pos()))
-    {
-        m_draggingSplitter = true;
-        m_splitterHeightDirty =
-            applySpectrumPaneHeight(ev->pos().y() - scaleHeight() - splitterHeight() / 2) || m_splitterHeightDirty;
-        setCursor(Qt::SplitVCursor);
-        return;
-    }
     if (ev->button() == Qt::LeftButton)
     {
         m_panDragStartPos = ev->pos();
@@ -732,13 +713,6 @@ void SpectrumCanvas::mousePressEvent(QMouseEvent* ev)
 
 void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
 {
-    if (m_draggingSplitter)
-    {
-        m_splitterHeightDirty =
-            applySpectrumPaneHeight(ev->pos().y() - scaleHeight() - splitterHeight() / 2) || m_splitterHeightDirty;
-        return;
-    }
-
     updatePanadapterCursor(ev->pos());
 
     if (m_interactionLocked)
@@ -773,17 +747,7 @@ void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
 
 void SpectrumCanvas::mouseReleaseEvent(QMouseEvent* ev)
 {
-    if (ev->button() == Qt::LeftButton && m_draggingSplitter)
-    {
-        m_draggingSplitter = false;
-        if (m_splitterHeightDirty)
-        {
-            Q_EMIT this->spectrumPaneHeightChanged(spectrumPaneHeight());
-            m_splitterHeightDirty = false;
-        }
-        updatePanadapterCursor(ev->pos());
-    }
-    else if (ev->button() == Qt::LeftButton && m_draggingPanadapter)
+    if (ev->button() == Qt::LeftButton && m_draggingPanadapter)
     {
         m_draggingPanadapter = false;
         m_panButtonPressed = false;
@@ -854,7 +818,7 @@ void SpectrumCanvas::wheelEvent(QWheelEvent* ev)
 
 void SpectrumCanvas::leaveEvent(QEvent*)
 {
-    if (!m_draggingSplitter && !m_draggingPanadapter && !m_panButtonPressed)
+    if (!m_draggingPanadapter && !m_panButtonPressed)
     {
         unsetCursor();
     }
