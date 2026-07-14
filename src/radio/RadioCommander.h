@@ -35,7 +35,7 @@ class RadioCommander : public QObject
     void setCurrentRadio(quint8 radio);
 
     virtual void process();
-    virtual void commSetup(quint16 radioCivAddr, udpPreferences prefs, audioSetup rxSetup, audioSetup txSetup,
+    virtual void commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup,
                            QString vsp, quint16 tcp);
     virtual void closeComm();
 
@@ -94,7 +94,7 @@ class RadioCommander : public QObject
 
   protected:
     CachingQueue* queue;
-    udpPreferences prefs;
+    UdpConnectionSettings settings;
     audioSetup rxSetup;
     audioSetup txSetup;
 

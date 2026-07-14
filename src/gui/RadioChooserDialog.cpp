@@ -1,6 +1,7 @@
 #include "RadioChooserDialog.h"
 #include "AppSettings.h"
-#include "PreferencesDialog.h"
+#include "DialogPlacement.h"
+#include "SettingsDialog.h"
 #include "RadioProfile.h"
 
 #include <QListWidget>
@@ -30,8 +31,8 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent)
 
     auto* btnRow = new QHBoxLayout;
 
-    auto* prefsBtn = new QPushButton("Radio Setup");
-    btnRow->addWidget(prefsBtn);
+    auto* settingsBtn = new QPushButton("Radio Setup");
+    btnRow->addWidget(settingsBtn);
     btnRow->addStretch(1);
 
     auto* cancelBtn = new QPushButton("Cancel");
@@ -47,7 +48,7 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent)
     connect(m_list, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) { onConnect(); });
     connect(m_connectBtn, &QPushButton::clicked, this, &RadioChooserDialog::onConnect);
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
-    connect(prefsBtn, &QPushButton::clicked, this, &RadioChooserDialog::onOpenPreferences);
+    connect(settingsBtn, &QPushButton::clicked, this, &RadioChooserDialog::onOpenSettings);
 
     m_autoConnectCheck = new QCheckBox("Auto-connect previous radio on startup");
     m_autoConnectCheck->setChecked(AppSettings::instance().value("AutoConnect", "True").toBool());
@@ -113,10 +114,11 @@ void RadioChooserDialog::onConnect()
     accept();
 }
 
-void RadioChooserDialog::onOpenPreferences()
+void RadioChooserDialog::onOpenSettings()
 {
-    PreferencesDialog prefs(this);
-    prefs.exec();
+    SettingsDialog settings(this);
+    sdr9700::ui::centerWindowOn(&settings, parentWidget() ? parentWidget()->window() : this);
+    settings.exec();
     rebuildList();
 }
 

@@ -1,4 +1,4 @@
-#include "RecieveWidget.h"
+#include "ReceivePanel.h"
 
 #include <QGridLayout>
 #include <QPushButton>
@@ -11,9 +11,9 @@ constexpr int kControlGroupMargin = 5;
 constexpr int kControlGroupSpacing = 8;
 } // namespace
 
-RecieveWidget::RecieveWidget(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
+ReceivePanel::ReceivePanel(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
 {
-    setObjectName(QStringLiteral("RecieveWidget"));
+    setObjectName(QStringLiteral("ReceivePanel"));
     setTitle(QStringLiteral("Receive"));
     setAccessibleName(QStringLiteral("Receive"));
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);

@@ -752,7 +752,7 @@ bool CachingQueue::compare(QVariant a, QVariant b)
         }
         else if (valueHolds(qMetaTypeId<ScopeData>()) || valueHolds(qMetaTypeId<MemoryType>()) ||
                  valueHolds(qMetaTypeId<TimeKind>()) || valueHolds(qMetaTypeId<DateKind>()) ||
-                 valueHolds(qMetaTypeId<MeterKind>()) || valueHolds(qMetaTypeId<udpPreferences>()))
+                 valueHolds(qMetaTypeId<MeterKind>()) || valueHolds(qMetaTypeId<UdpConnectionSettings>()))
         {
             changed = true;
         }

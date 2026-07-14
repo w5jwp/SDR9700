@@ -1,4 +1,4 @@
-#include "MemoryWidget.h"
+#include "MemoryPanel.h"
 
 #include "UiTheme.h"
 
@@ -12,7 +12,7 @@
 
 namespace
 {
-constexpr int kMemoryWidgetWidth = 380;
+constexpr int kMemoryPanelWidth = 380;
 constexpr int kControlGroupMargin = 5;
 constexpr int kMemoryItemHeight = 28;
 constexpr int kHeaderHeight = 18;
@@ -47,12 +47,12 @@ QTableWidgetItem* makeCellItem(const QString& text, Qt::Alignment alignment, con
 }
 } // namespace
 
-MemoryWidget::MemoryWidget(QWidget* parent) : QGroupBox(parent)
+MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
 {
-    setObjectName(QStringLiteral("MemoryWidget"));
+    setObjectName(QStringLiteral("MemoryPanel"));
     setTitle(QStringLiteral("Memory"));
     setAccessibleName(QStringLiteral("Memory browser"));
-    setFixedWidth(kMemoryWidgetWidth);
+    setFixedWidth(kMemoryPanelWidth);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(kControlGroupMargin, kControlGroupMargin + 5, kControlGroupMargin, kControlGroupMargin);
@@ -61,7 +61,7 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QGroupBox(parent)
     m_table = new QTableWidget(this);
     m_table->setObjectName(QStringLiteral("memoryBrowserTable"));
     m_table->setAccessibleName(QStringLiteral("Memory browser"));
-    m_table->setAccessibleDescription(QStringLiteral("Select a memory to tune the active VFO."));
+    m_table->setAccessibleDescription(QStringLiteral("Double-click a memory to tune the active VFO."));
     m_table->setColumnCount(kMemoryColumnCount);
     m_table->setHorizontalHeaderLabels({QStringLiteral("CH"), QStringLiteral("Memory"), QStringLiteral("Frequency")});
     m_table->setFrameShape(QFrame::NoFrame);
@@ -94,7 +94,7 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QGroupBox(parent)
                  UiTheme::Color::AccentDark, UiTheme::Color::TextBright, UiTheme::Color::TextStatusSecondary));
     layout->addWidget(m_table);
 
-    connect(m_table, &QTableWidget::cellClicked, this,
+    connect(m_table, &QTableWidget::cellDoubleClicked, this,
             [this](int row, int column)
             {
                 Q_UNUSED(column)
@@ -107,20 +107,20 @@ MemoryWidget::MemoryWidget(QWidget* parent) : QGroupBox(parent)
             });
 }
 
-void MemoryWidget::setMemories(const QVector<MemoryRecord>& memories, const QString& activeMemoryId)
+void MemoryPanel::setMemories(const QVector<MemoryRecord>& memories, const QString& activeMemoryId)
 {
     m_memories = memories;
     m_activeMemoryId = activeMemoryId;
     rebuildList();
 }
 
-void MemoryWidget::setActiveMemoryId(const QString& activeMemoryId)
+void MemoryPanel::setActiveMemoryId(const QString& activeMemoryId)
 {
     m_activeMemoryId = activeMemoryId;
     applyActiveSelection();
 }
 
-void MemoryWidget::rebuildList()
+void MemoryPanel::rebuildList()
 {
     m_table->setRowCount(0);
 
@@ -156,7 +156,7 @@ void MemoryWidget::rebuildList()
     applyActiveSelection();
 }
 
-void MemoryWidget::applyActiveSelection()
+void MemoryPanel::applyActiveSelection()
 {
     if (!m_table)
     {

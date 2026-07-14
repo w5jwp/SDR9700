@@ -11,12 +11,12 @@ class QSlider;
 class QWidget;
 class QColor;
 
-class VfoWidget : public QGroupBox
+class VfoPanel : public QGroupBox
 {
     Q_OBJECT
 
   public:
-    explicit VfoWidget(const QString& title, QWidget* parent = nullptr);
+    explicit VfoPanel(const QString& title, QWidget* parent = nullptr);
 
     QString frequencyText() const;
     bool frequencyHasFocus() const;

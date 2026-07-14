@@ -8,12 +8,12 @@
 
 class QTableWidget;
 
-class MemoryWidget : public QGroupBox
+class MemoryPanel : public QGroupBox
 {
     Q_OBJECT
 
   public:
-    explicit MemoryWidget(QWidget* parent = nullptr);
+    explicit MemoryPanel(QWidget* parent = nullptr);
 
     void setMemories(const QVector<MemoryRecord>& memories, const QString& activeMemoryId);
     void setActiveMemoryId(const QString& activeMemoryId);

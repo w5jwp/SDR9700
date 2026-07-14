@@ -45,9 +45,13 @@ class FramelessTitleBar : public QWidget
     {
         if (event->button() == Qt::LeftButton)
         {
-            if (QWindow* win = window()->windowHandle())
+            QWidget* titleWindow = parentWidget();
+            if (titleWindow && titleWindow->isWindow())
             {
-                win->startSystemMove();
+                if (QWindow* win = titleWindow->windowHandle())
+                {
+                    win->startSystemMove();
+                }
             }
             event->accept();
             return;

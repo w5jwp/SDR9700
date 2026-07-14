@@ -1,4 +1,4 @@
-#include "SpectrumWidget.h"
+#include "SpectrumCanvas.h"
 #include "LogCategories.h"
 
 #include <QPainter>
@@ -50,7 +50,7 @@ double highFrequencyMhz(double startMhz, double endMhz)
 }
 } // namespace
 
-SpectrumWidget::SpectrumWidget(QWidget* parent) : QWidget(parent)
+SpectrumCanvas::SpectrumCanvas(QWidget* parent) : QWidget(parent)
 {
     setMinimumSize(640, 320);
     setMouseTracking(true);
@@ -70,8 +70,8 @@ SpectrumWidget::SpectrumWidget(QWidget* parent) : QWidget(parent)
     }
     m_zoomOutButton->setAccessibleName("Zoom out");
     m_zoomInButton->setAccessibleName("Zoom in");
-    connect(m_zoomOutButton, &QPushButton::clicked, this, &SpectrumWidget::zoomOutRequested);
-    connect(m_zoomInButton, &QPushButton::clicked, this, &SpectrumWidget::zoomInRequested);
+    connect(m_zoomOutButton, &QPushButton::clicked, this, &SpectrumCanvas::zoomOutRequested);
+    connect(m_zoomInButton, &QPushButton::clicked, this, &SpectrumCanvas::zoomInRequested);
     repositionZoomButtons();
 
     m_peakDecayTimer.setInterval(50);
@@ -85,7 +85,7 @@ SpectrumWidget::SpectrumWidget(QWidget* parent) : QWidget(parent)
                 bool changed = false;
                 for (int i = 0; i < m_peakHold.size(); ++i)
                 {
-                    if (!m_spectrum.isEmpty() && i < m_spectrum.size() && m_peakHold[i] > m_spectrum[i])
+                    if (!m_spectrumBins.isEmpty() && i < m_spectrumBins.size() && m_peakHold[i] > m_spectrumBins[i])
                     {
                         m_peakHold[i] -= kPeakDecayPerTickDb;
                         changed = true;
@@ -99,11 +99,11 @@ SpectrumWidget::SpectrumWidget(QWidget* parent) : QWidget(parent)
     m_peakDecayTimer.start();
     m_repaintTimer.setSingleShot(true);
     m_repaintTimer.setInterval(16);
-    connect(&m_repaintTimer, &QTimer::timeout, this, qOverload<>(&SpectrumWidget::update));
+    connect(&m_repaintTimer, &QTimer::timeout, this, qOverload<>(&SpectrumCanvas::update));
     m_lastFrameTimer.start();
 }
 
-int SpectrumWidget::spectrumHeight() const
+int SpectrumCanvas::spectrumHeight() const
 {
     if (m_spectrumHeight < 0)
     {
@@ -112,34 +112,34 @@ int SpectrumWidget::spectrumHeight() const
     return constrainedSpectrumHeight(m_spectrumHeight);
 }
 
-int SpectrumWidget::waterfallTop() const
+int SpectrumCanvas::waterfallTop() const
 {
     return spectrumHeight() + scaleHeight() + splitterHeight();
 }
 
-QRect SpectrumWidget::splitterRect() const
+QRect SpectrumCanvas::splitterRect() const
 {
     return QRect(0, spectrumHeight() + scaleHeight(), width(), splitterHeight());
 }
 
-int SpectrumWidget::defaultSpectrumHeight() const
+int SpectrumCanvas::defaultSpectrumHeight() const
 {
     return constrainedSpectrumHeight((height() - scaleHeight() - splitterHeight()) / 2);
 }
 
-int SpectrumWidget::constrainedSpectrumHeight(int requested) const
+int SpectrumCanvas::constrainedSpectrumHeight(int requested) const
 {
     const int available = qMax(0, height() - scaleHeight() - splitterHeight());
     const int maxSpectrumHeight = qMax(kMinSpectrumHeight, available - kMinWaterfallHeight);
     return qBound(qMin(kMinSpectrumHeight, maxSpectrumHeight), requested, maxSpectrumHeight);
 }
 
-bool SpectrumWidget::isOnSplitter(const QPoint& pos) const
+bool SpectrumCanvas::isOnSplitter(const QPoint& pos) const
 {
     return splitterRect().adjusted(0, -3, 0, 3).contains(pos);
 }
 
-bool SpectrumWidget::applySpectrumPaneHeight(int requested)
+bool SpectrumCanvas::applySpectrumPaneHeight(int requested)
 {
     const int constrained = constrainedSpectrumHeight(requested);
     if (m_spectrumHeight == constrained)
@@ -153,7 +153,7 @@ bool SpectrumWidget::applySpectrumPaneHeight(int requested)
     return true;
 }
 
-void SpectrumWidget::updatePanadapterCursor(const QPoint& pos)
+void SpectrumCanvas::updatePanadapterCursor(const QPoint& pos)
 {
     if (m_draggingSplitter || isOnSplitter(pos))
     {
@@ -170,7 +170,7 @@ void SpectrumWidget::updatePanadapterCursor(const QPoint& pos)
     setCursor((m_panButtonPressed || m_draggingPanadapter) ? Qt::ClosedHandCursor : Qt::ArrowCursor);
 }
 
-double SpectrumWidget::xToFreq(int x) const
+double SpectrumCanvas::xToFreq(int x) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
@@ -181,7 +181,7 @@ double SpectrumWidget::xToFreq(int x) const
     return startMhz + (double(x) / width()) * (endMhz - startMhz);
 }
 
-int SpectrumWidget::freqToX(double mhz) const
+int SpectrumCanvas::freqToX(double mhz) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
@@ -192,7 +192,7 @@ int SpectrumWidget::freqToX(double mhz) const
     return int((mhz - startMhz) / (endMhz - startMhz) * width());
 }
 
-int SpectrumWidget::binForFrequency(double mhz, int binCount) const
+int SpectrumCanvas::binForFrequency(double mhz, int binCount) const
 {
     const double dataStartMhz = lowFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
     const double dataEndMhz = highFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
@@ -205,12 +205,12 @@ int SpectrumWidget::binForFrequency(double mhz, int binCount) const
     return qBound(0, int(normalized * binCount), binCount - 1);
 }
 
-int SpectrumWidget::binForDisplayX(int x, int binCount) const
+int SpectrumCanvas::binForDisplayX(int x, int binCount) const
 {
     return binForFrequency(xToFreq(x), binCount);
 }
 
-int SpectrumWidget::dbmToY(float dbm, int topY, int h) const
+int SpectrumCanvas::dbmToY(float dbm, int topY, int h) const
 {
     float norm = (dbm - m_minDbm) / (m_maxDbm - m_minDbm);
     norm = std::max(0.0f, std::min(1.0f, norm));
@@ -219,7 +219,7 @@ int SpectrumWidget::dbmToY(float dbm, int topY, int h) const
     return topY + pad + int((1.0f - norm) * plotH);
 }
 
-QRgb SpectrumWidget::dbmToColor(float dbm) const
+QRgb SpectrumCanvas::dbmToColor(float dbm) const
 {
     static const struct
     {
@@ -248,7 +248,7 @@ QRgb SpectrumWidget::dbmToColor(float dbm) const
     Q_UNREACHABLE();
 }
 
-void SpectrumWidget::setFrequencyRange(double startMhz, double endMhz)
+void SpectrumCanvas::setFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
     {
@@ -264,7 +264,7 @@ void SpectrumWidget::setFrequencyRange(double startMhz, double endMhz)
     scheduleRepaint();
 }
 
-void SpectrumWidget::setDataFrequencyRange(double startMhz, double endMhz)
+void SpectrumCanvas::setDataFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
     {
@@ -278,20 +278,20 @@ void SpectrumWidget::setDataFrequencyRange(double startMhz, double endMhz)
     m_dataEndMhz = endMhz;
 }
 
-void SpectrumWidget::setVfoFrequency(double freqMhz)
+void SpectrumCanvas::setVfoFrequency(double freqMhz)
 {
     m_vfoMhz = freqMhz;
     scheduleRepaint();
 }
 
-void SpectrumWidget::setFilterWidth(int lowHz, int highHz)
+void SpectrumCanvas::setFilterWidth(int lowHz, int highHz)
 {
     m_filterLowHz = lowHz;
     m_filterHighHz = highHz;
     scheduleRepaint();
 }
 
-void SpectrumWidget::setInteractionLocked(bool locked)
+void SpectrumCanvas::setInteractionLocked(bool locked)
 {
     if (m_interactionLocked == locked)
     {
@@ -313,17 +313,17 @@ void SpectrumWidget::setInteractionLocked(bool locked)
     scheduleRepaint();
 }
 
-void SpectrumWidget::setInvertMouseWheel(bool invert)
+void SpectrumCanvas::setInvertMouseWheel(bool invert)
 {
     m_invertMouseWheel = invert;
 }
 
-int SpectrumWidget::spectrumPaneHeight() const
+int SpectrumCanvas::spectrumPaneHeight() const
 {
     return spectrumHeight();
 }
 
-void SpectrumWidget::setSpectrumPaneHeight(int height)
+void SpectrumCanvas::setSpectrumPaneHeight(int height)
 {
     if (height <= 0 || m_spectrumHeight == height)
     {
@@ -335,9 +335,9 @@ void SpectrumWidget::setSpectrumPaneHeight(int height)
     scheduleRepaint();
 }
 
-void SpectrumWidget::updateSpectrum(const QVector<float>& binsDbm)
+void SpectrumCanvas::updateSpectrum(const QVector<float>& binsDbm)
 {
-    m_spectrum = binsDbm;
+    m_spectrumBins = binsDbm;
 
     if (m_peakHold.size() != binsDbm.size())
     {
@@ -358,15 +358,15 @@ void SpectrumWidget::updateSpectrum(const QVector<float>& binsDbm)
     scheduleRepaint();
 }
 
-void SpectrumWidget::clearDisplay()
+void SpectrumCanvas::clearDisplay()
 {
-    m_spectrum.clear();
+    m_spectrumBins.clear();
     m_peakHold.clear();
     m_waterfall.fill(Qt::black);
     scheduleRepaint();
 }
 
-void SpectrumWidget::scheduleRepaint()
+void SpectrumCanvas::scheduleRepaint()
 {
     if (!m_repaintTimer.isActive())
     {
@@ -374,7 +374,7 @@ void SpectrumWidget::scheduleRepaint()
     }
 }
 
-void SpectrumWidget::rebuildWaterfallImage()
+void SpectrumCanvas::rebuildWaterfallImage()
 {
     const int wfH = height() - waterfallTop();
     if (wfH <= 0 || width() <= 0)
@@ -385,7 +385,7 @@ void SpectrumWidget::rebuildWaterfallImage()
     m_waterfall.fill(Qt::black);
 }
 
-void SpectrumWidget::appendWaterfallRow(const QVector<float>& binsDbm)
+void SpectrumCanvas::appendWaterfallRow(const QVector<float>& binsDbm)
 {
     if (m_waterfall.isNull() || m_waterfall.height() == 0)
     {
@@ -416,7 +416,7 @@ void SpectrumWidget::appendWaterfallRow(const QVector<float>& binsDbm)
     }
 }
 
-void SpectrumWidget::paintEvent(QPaintEvent* event)
+void SpectrumCanvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
@@ -506,7 +506,7 @@ void SpectrumWidget::paintEvent(QPaintEvent* event)
         drawMhzLines(tickStep);
     }
 
-    if (m_spectrum.isEmpty())
+    if (m_spectrumBins.isEmpty())
     {
         p.setPen(QColor(0x4a, 0x60, 0x78));
         QFont f = p.font();
@@ -515,20 +515,20 @@ void SpectrumWidget::paintEvent(QPaintEvent* event)
         p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, "No panadapter data — waiting for radio stream");
     }
 
-    if (!m_spectrum.isEmpty())
+    if (!m_spectrumBins.isEmpty())
     {
         p.setRenderHint(QPainter::Antialiasing, true);
         p.save();
         p.setClipRect(spectrumPlotRect);
         QPainterPath specPath, peakPath;
         bool specFirst = true, peakFirst = true;
-        const int n = m_spectrum.size();
+        const int n = m_spectrumBins.size();
 
         for (int x = 0; x < w; ++x)
         {
             const int bin = binForDisplayX(x, n);
 
-            int sy = dbmToY(m_spectrum[bin], specTop, specDrawH);
+            int sy = dbmToY(m_spectrumBins[bin], specTop, specDrawH);
             if (specFirst)
             {
                 specPath.moveTo(x, sy);
@@ -683,13 +683,13 @@ void SpectrumWidget::paintEvent(QPaintEvent* event)
     }
 }
 
-void SpectrumWidget::resizeEvent(QResizeEvent*)
+void SpectrumCanvas::resizeEvent(QResizeEvent*)
 {
     rebuildWaterfallImage();
     repositionZoomButtons();
 }
 
-void SpectrumWidget::repositionZoomButtons()
+void SpectrumCanvas::repositionZoomButtons()
 {
     if (!m_zoomInButton || !m_zoomOutButton)
     {
@@ -705,7 +705,7 @@ void SpectrumWidget::repositionZoomButtons()
     m_zoomInButton->move(zoomInX, y);
 }
 
-void SpectrumWidget::mousePressEvent(QMouseEvent* ev)
+void SpectrumCanvas::mousePressEvent(QMouseEvent* ev)
 {
     if (m_interactionLocked)
     {
@@ -730,7 +730,7 @@ void SpectrumWidget::mousePressEvent(QMouseEvent* ev)
     }
 }
 
-void SpectrumWidget::mouseMoveEvent(QMouseEvent* ev)
+void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
 {
     if (m_draggingSplitter)
     {
@@ -771,7 +771,7 @@ void SpectrumWidget::mouseMoveEvent(QMouseEvent* ev)
     }
 }
 
-void SpectrumWidget::mouseReleaseEvent(QMouseEvent* ev)
+void SpectrumCanvas::mouseReleaseEvent(QMouseEvent* ev)
 {
     if (ev->button() == Qt::LeftButton && m_draggingSplitter)
     {
@@ -800,7 +800,7 @@ void SpectrumWidget::mouseReleaseEvent(QMouseEvent* ev)
     }
 }
 
-void SpectrumWidget::wheelEvent(QWheelEvent* ev)
+void SpectrumCanvas::wheelEvent(QWheelEvent* ev)
 {
     if (m_interactionLocked)
     {
@@ -852,7 +852,7 @@ void SpectrumWidget::wheelEvent(QWheelEvent* ev)
     ev->accept();
 }
 
-void SpectrumWidget::leaveEvent(QEvent*)
+void SpectrumCanvas::leaveEvent(QEvent*)
 {
     if (!m_draggingSplitter && !m_draggingPanadapter && !m_panButtonPressed)
     {

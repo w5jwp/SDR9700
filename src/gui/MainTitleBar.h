@@ -3,20 +3,23 @@
 
 #include <QWidget>
 
+#include <functional>
+
 class QMenu;
 class QSlider;
 class QPushButton;
 class QLabel;
 class QHBoxLayout;
 
-class TitleBarWidget : public QWidget
+class MainTitleBar : public QWidget
 {
     Q_OBJECT
 
   public:
-    explicit TitleBarWidget(QWidget* parent = nullptr);
+    explicit MainTitleBar(QWidget* parent = nullptr);
 
     void addMenu(const QString& label, QMenu* menu);
+    void addAction(const QString& label, QObject* context, std::function<void()> callback);
     void setTitle(const QString& title);
     void setVolume(int value);
     void setMuted(bool muted);

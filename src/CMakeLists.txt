@@ -57,10 +57,10 @@ set(SDR9700_CORE_SOURCES
 
 if(HIDAPI_FOUND)
     list(APPEND SDR9700_MOC_HEADERS
-        core/Rc28Manager.h
+        core/IcomRC28Manager.h
     )
     list(APPEND SDR9700_CORE_SOURCES
-        core/Rc28Manager.cpp
+        core/IcomRC28Manager.cpp
     )
 endif()
 
@@ -111,45 +111,51 @@ set(SDR9700_SOURCES
     models/PanadapterModel.h
     models/PanadapterModel.cpp
 
-    gui/SpectrumWidget.h
-    gui/SpectrumWidget.cpp
+    gui/SpectrumCanvas.h
+    gui/SpectrumCanvas.cpp
+    gui/DialogPlacement.h
     gui/UiTheme.h
     gui/MemoryStore.h
     gui/MemoryStore.cpp
-    gui/RadioProfileDialog.h
-    gui/RadioProfileDialog.cpp
     gui/RadioChooserDialog.h
     gui/RadioChooserDialog.cpp
-    gui/PreferencesDialog.h
-    gui/PreferencesDialog.cpp
+    gui/SettingsDialog.h
+    gui/SettingsDialog.cpp
+    gui/SettingsPanelStyle.h
+    gui/AudioSettingsPanel.h
+    gui/AudioSettingsPanel.cpp
+    gui/MouseSettingsPanel.h
+    gui/MouseSettingsPanel.cpp
+    gui/RadioSetupSettingsPanel.h
+    gui/RadioSetupSettingsPanel.cpp
     gui/AboutDialog.h
     gui/AboutDialog.cpp
-    gui/DtmfWidget.h
-    gui/DtmfWidget.cpp
-    gui/TitleBarWidget.h
-    gui/TitleBarWidget.cpp
-    gui/MemoryWidget.h
-    gui/MemoryWidget.cpp
-    gui/MuteWidget.h
-    gui/MuteWidget.cpp
-    gui/PttWidget.h
-    gui/PttWidget.cpp
-    gui/RecieveWidget.h
-    gui/RecieveWidget.cpp
-    gui/RepeaterWidget.h
-    gui/RepeaterWidget.cpp
-    gui/TransmitWidget.h
-    gui/TransmitWidget.cpp
-    gui/VfoWidget.h
-    gui/VfoWidget.cpp
+    gui/DtmfDialog.h
+    gui/DtmfDialog.cpp
+    gui/MainTitleBar.h
+    gui/MainTitleBar.cpp
+    gui/MemoryPanel.h
+    gui/MemoryPanel.cpp
+    gui/MutePanel.h
+    gui/MutePanel.cpp
+    gui/PttPanel.h
+    gui/PttPanel.cpp
+    gui/ReceivePanel.h
+    gui/ReceivePanel.cpp
+    gui/RepeaterPanel.h
+    gui/RepeaterPanel.cpp
+    gui/TransmitPanel.h
+    gui/TransmitPanel.cpp
+    gui/VfoPanel.h
+    gui/VfoPanel.cpp
     gui/MainWindow.h
     gui/MainWindow.cpp
 )
 
 if(HIDAPI_FOUND)
     list(APPEND SDR9700_SOURCES
-        gui/RC28MappingDialog.h
-        gui/RC28MappingDialog.cpp
+        gui/IcomRC28SettingsPanel.h
+        gui/IcomRC28SettingsPanel.cpp
     )
 endif()
 

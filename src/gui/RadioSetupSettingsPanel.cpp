@@ -1,36 +1,38 @@
-#include "RadioProfileDialog.h"
+#include "RadioSetupSettingsPanel.h"
+
 #include "UiTheme.h"
 
-#include <QListWidget>
-#include <QLineEdit>
-#include <QSpinBox>
-#include <QPushButton>
-#include <QLabel>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
+#include <QAbstractItemView>
 #include <QFormLayout>
 #include <QFrame>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QMessageBox>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QSpinBox>
+#include <QVBoxLayout>
 
-RadioProfileWidget::RadioProfileWidget(QWidget* parent) : QWidget(parent)
+RadioSetupSettingsPanel::RadioSetupSettingsPanel(QWidget* parent) : QWidget(parent)
 {
     auto* root = new QHBoxLayout(this);
     root->setSpacing(12);
-    root->setContentsMargins(0, 0, 0, 0);
+    root->setContentsMargins(12, 12, 12, 12);
 
-    auto* leftPanel = new QWidget;
+    auto* leftPanel = new QWidget(this);
     auto* leftVbox = new QVBoxLayout(leftPanel);
     leftVbox->setContentsMargins(0, 0, 0, 0);
     leftVbox->setSpacing(4);
     leftPanel->setFixedWidth(170);
 
-    m_list = new QListWidget;
+    m_list = new QListWidget(leftPanel);
     m_list->setSelectionMode(QAbstractItemView::SingleSelection);
     leftVbox->addWidget(m_list, 1);
 
     auto* listBtns = new QHBoxLayout;
-    m_addBtn = new QPushButton("Add");
-    m_removeBtn = new QPushButton("Remove");
+    m_addBtn = new QPushButton("Add", leftPanel);
+    m_removeBtn = new QPushButton("Remove", leftPanel);
     m_removeBtn->setEnabled(false);
     listBtns->addWidget(m_addBtn);
     listBtns->addWidget(m_removeBtn);
@@ -38,7 +40,7 @@ RadioProfileWidget::RadioProfileWidget(QWidget* parent) : QWidget(parent)
 
     root->addWidget(leftPanel);
 
-    auto* line = new QFrame;
+    auto* line = new QFrame(this);
     line->setFrameShape(QFrame::VLine);
     line->setFrameShadow(QFrame::Sunken);
     root->addWidget(line);
@@ -50,26 +52,26 @@ RadioProfileWidget::RadioProfileWidget(QWidget* parent) : QWidget(parent)
     form->setLabelAlignment(Qt::AlignRight);
     form->setSpacing(8);
 
-    m_nameEdit = new QLineEdit;
+    m_nameEdit = new QLineEdit(this);
     m_nameEdit->setPlaceholderText("e.g. Home IC-9700");
     form->addRow("Name:", m_nameEdit);
 
-    m_hostEdit = new QLineEdit;
+    m_hostEdit = new QLineEdit(this);
     m_hostEdit->setPlaceholderText("192.168.1.x");
     form->addRow("Host / IP:", m_hostEdit);
 
-    m_portSpin = new QSpinBox;
+    m_portSpin = new QSpinBox(this);
     m_portSpin->setRange(1, 65535);
     m_portSpin->setValue(50001);
     form->addRow("Control port:", m_portSpin);
 
-    m_userEdit = new QLineEdit;
+    m_userEdit = new QLineEdit(this);
     form->addRow("Username:", m_userEdit);
 
     auto* passRow = new QHBoxLayout;
-    m_passEdit = new QLineEdit;
+    m_passEdit = new QLineEdit(this);
     m_passEdit->setEchoMode(QLineEdit::Password);
-    m_showPassBtn = new QPushButton("Show");
+    m_showPassBtn = new QPushButton("Show", this);
     m_showPassBtn->setFixedWidth(52);
     m_showPassBtn->setCheckable(true);
     passRow->addWidget(m_passEdit);
@@ -78,7 +80,7 @@ RadioProfileWidget::RadioProfileWidget(QWidget* parent) : QWidget(parent)
 
     rightVbox->addLayout(form);
 
-    m_saveBtn = new QPushButton("Save");
+    m_saveBtn = new QPushButton("Save", this);
     m_saveBtn->setEnabled(false);
     m_saveBtn->setStyleSheet(
         QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
@@ -95,19 +97,14 @@ RadioProfileWidget::RadioProfileWidget(QWidget* parent) : QWidget(parent)
     rightVbox->addLayout(saveRow);
 
     rightVbox->addStretch(1);
-
-    auto* closeBtn = new QPushButton("Close");
-    rightVbox->addWidget(closeBtn, 0, Qt::AlignRight);
-    connect(closeBtn, &QPushButton::clicked, this, [this]() { window()->close(); });
-
     root->addLayout(rightVbox, 1);
 
     setFormEnabled(false);
 
-    connect(m_list, &QListWidget::currentRowChanged, this, &RadioProfileWidget::onSelectionChanged);
-    connect(m_addBtn, &QPushButton::clicked, this, &RadioProfileWidget::onAddProfile);
-    connect(m_removeBtn, &QPushButton::clicked, this, &RadioProfileWidget::onRemoveProfile);
-    connect(m_saveBtn, &QPushButton::clicked, this, &RadioProfileWidget::onSaveProfile);
+    connect(m_list, &QListWidget::currentRowChanged, this, &RadioSetupSettingsPanel::onSelectionChanged);
+    connect(m_addBtn, &QPushButton::clicked, this, &RadioSetupSettingsPanel::onAddProfile);
+    connect(m_removeBtn, &QPushButton::clicked, this, &RadioSetupSettingsPanel::onRemoveProfile);
+    connect(m_saveBtn, &QPushButton::clicked, this, &RadioSetupSettingsPanel::onSaveProfile);
 
     connect(m_showPassBtn, &QPushButton::toggled, this,
             [this](bool on)
@@ -130,7 +127,7 @@ RadioProfileWidget::RadioProfileWidget(QWidget* parent) : QWidget(parent)
     rebuildList();
 }
 
-void RadioProfileWidget::rebuildList()
+void RadioSetupSettingsPanel::rebuildList()
 {
     const QUuid selected = m_currentId;
     m_list->blockSignals(true);
@@ -161,7 +158,7 @@ void RadioProfileWidget::rebuildList()
     }
 }
 
-void RadioProfileWidget::loadProfileIntoForm(const RadioProfile& p)
+void RadioSetupSettingsPanel::loadProfileIntoForm(const RadioProfile& p)
 {
     QSignalBlocker b1(m_nameEdit), b2(m_hostEdit), b3(m_portSpin), b4(m_userEdit), b5(m_passEdit);
     m_nameEdit->setText(p.name);
@@ -173,7 +170,7 @@ void RadioProfileWidget::loadProfileIntoForm(const RadioProfile& p)
     m_saveBtn->setEnabled(false);
 }
 
-RadioProfile RadioProfileWidget::profileFromForm() const
+RadioProfile RadioSetupSettingsPanel::profileFromForm() const
 {
     RadioProfile p;
     p.id = m_currentId;
@@ -185,7 +182,7 @@ RadioProfile RadioProfileWidget::profileFromForm() const
     return p;
 }
 
-void RadioProfileWidget::setFormEnabled(bool enabled)
+void RadioSetupSettingsPanel::setFormEnabled(bool enabled)
 {
     m_nameEdit->setEnabled(enabled);
     m_hostEdit->setEnabled(enabled);
@@ -197,7 +194,7 @@ void RadioProfileWidget::setFormEnabled(bool enabled)
     m_removeBtn->setEnabled(enabled);
 }
 
-void RadioProfileWidget::onSelectionChanged()
+void RadioSetupSettingsPanel::onSelectionChanged()
 {
     auto* item = m_list->currentItem();
     if (!item)
@@ -221,7 +218,7 @@ void RadioProfileWidget::onSelectionChanged()
     }
 }
 
-void RadioProfileWidget::onAddProfile()
+void RadioSetupSettingsPanel::onAddProfile()
 {
     RadioProfile p;
     p.id = QUuid::createUuid();
@@ -238,7 +235,7 @@ void RadioProfileWidget::onAddProfile()
     m_nameEdit->selectAll();
 }
 
-void RadioProfileWidget::onRemoveProfile()
+void RadioSetupSettingsPanel::onRemoveProfile()
 {
     if (m_currentId.isNull())
     {
@@ -260,7 +257,7 @@ void RadioProfileWidget::onRemoveProfile()
     rebuildList();
 }
 
-void RadioProfileWidget::onSaveProfile()
+void RadioSetupSettingsPanel::onSaveProfile()
 {
     if (m_currentId.isNull())
     {

@@ -11,12 +11,12 @@
 
 class QPushButton;
 
-class SpectrumWidget : public QWidget
+class SpectrumCanvas : public QWidget
 {
     Q_OBJECT
 
   public:
-    explicit SpectrumWidget(QWidget* parent = nullptr);
+    explicit SpectrumCanvas(QWidget* parent = nullptr);
 
     void setFrequencyRange(double startMhz, double endMhz);
     void setDataFrequencyRange(double startMhz, double endMhz);
@@ -97,7 +97,7 @@ class SpectrumWidget : public QWidget
     QPoint m_panDragStartPos;
     QPoint m_lastPanDragPos;
 
-    QVector<float> m_spectrum;
+    QVector<float> m_spectrumBins;
     QVector<float> m_peakHold;
     QImage m_waterfall;
 

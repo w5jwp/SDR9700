@@ -2,19 +2,23 @@
 
 #ifdef HAVE_HIDAPI
 
-#include <QDialog>
+#include <QWidget>
 
-class Rc28Manager;
+class IcomRC28Manager;
 class QLabel;
-class QPlainTextEdit;
+class QCheckBox;
 class QComboBox;
+class QSlider;
 
-class RC28MappingDialog : public QDialog
+class IcomRC28SettingsPanel : public QWidget
 {
     Q_OBJECT
 
   public:
-    explicit RC28MappingDialog(Rc28Manager* manager, QWidget* parent = nullptr);
+    explicit IcomRC28SettingsPanel(IcomRC28Manager* manager, QWidget* parent = nullptr);
+
+  signals:
+    void encoderSettingsChanged(const QString& field, const QString& value);
 
   private:
     void buildUi();
@@ -23,8 +27,10 @@ class RC28MappingDialog : public QDialog
     void loadSettings();
     void saveActionField(const QString& field, const QString& value);
     void savePttMode(const QString& mode);
+    void saveSensitivity(int value);
+    void saveAutoSnap(bool on);
 
-    Rc28Manager* m_manager{nullptr};
+    IcomRC28Manager* m_manager{nullptr};
     QLabel* m_statusLabel{nullptr};
     QLabel* m_deviceNameLabel{nullptr};
     QLabel* m_devicePathLabel{nullptr};
@@ -35,7 +41,9 @@ class RC28MappingDialog : public QDialog
     QComboBox* m_f2PressCombo{nullptr};
     QComboBox* m_f2HoldCombo{nullptr};
     QComboBox* m_pttModeCombo{nullptr};
-    QPlainTextEdit* m_logView{nullptr};
+    QSlider* m_sensitivitySlider{nullptr};
+    QLabel* m_sensitivityValueLabel{nullptr};
+    QCheckBox* m_autoSnapCheck{nullptr};
 };
 
 #endif

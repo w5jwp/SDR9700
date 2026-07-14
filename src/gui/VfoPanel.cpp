@@ -1,4 +1,4 @@
-#include "VfoWidget.h"
+#include "VfoPanel.h"
 
 #include "UiTheme.h"
 
@@ -45,10 +45,10 @@ QString commandButtonStyle()
              UiTheme::Color::ButtonHover, UiTheme::Color::ButtonHoverBorder, UiTheme::Color::TextBright);
 }
 
-class SMeterBar : public QProgressBar
+class SMeter : public QProgressBar
 {
   public:
-    explicit SMeterBar(QWidget* parent = nullptr) : QProgressBar(parent) {}
+    explicit SMeter(QWidget* parent = nullptr) : QProgressBar(parent) {}
 
     void setSwr(bool on)
     {
@@ -112,10 +112,10 @@ class SMeterBar : public QProgressBar
     QColor m_swrFillColor{UiTheme::Color::MeterGreen};
 };
 
-class SMeterScaleWidget : public QWidget
+class SMeterScaleCanvas : public QWidget
 {
   public:
-    explicit SMeterScaleWidget(QWidget* parent = nullptr) : QWidget(parent)
+    explicit SMeterScaleCanvas(QWidget* parent = nullptr) : QWidget(parent)
     {
         setFixedHeight(14);
         setMinimumWidth(kSignalMeterWidth);
@@ -176,7 +176,7 @@ class SMeterScaleWidget : public QWidget
 };
 } // namespace
 
-VfoWidget::VfoWidget(const QString& title, QWidget* parent) : QGroupBox(parent)
+VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
 {
     setTitle(title);
     setAccessibleName(title);
@@ -227,7 +227,7 @@ VfoWidget::VfoWidget(const QString& title, QWidget* parent) : QGroupBox(parent)
     freqFont.setPixelSize(kFrequencyFontPixelSize);
     freqFont.setBold(true);
     m_frequencyEdit->setFont(freqFont);
-    connect(m_frequencyEdit, &QLineEdit::returnPressed, this, &VfoWidget::frequencyReturnPressed);
+    connect(m_frequencyEdit, &QLineEdit::returnPressed, this, &VfoPanel::frequencyReturnPressed);
 
     m_memoryNameLabel = new QLineEdit(QStringLiteral("-"), frequencyField);
     m_memoryNameLabel->setFixedHeight(kMemoryNameHeight);
@@ -250,7 +250,7 @@ VfoWidget::VfoWidget(const QString& title, QWidget* parent) : QGroupBox(parent)
     auto* signalLayout = new QVBoxLayout(signalBox);
     signalLayout->setContentsMargins(kNoMargins);
     signalLayout->setSpacing(kSignalLayoutSpacing);
-    m_signalMeter = new SMeterBar(signalBox);
+    m_signalMeter = new SMeter(signalBox);
     m_signalMeter->setRange(0, 100);
     m_signalMeter->setValue(0);
     m_signalMeter->setFixedWidth(kSignalMeterWidth);
@@ -258,8 +258,8 @@ VfoWidget::VfoWidget(const QString& title, QWidget* parent) : QGroupBox(parent)
     m_signalMeter->setTextVisible(false);
     m_signalMeter->setAccessibleName(QStringLiteral("%1 signal meter").arg(title));
     m_signalMeter->setAccessibleDescription(QStringLiteral("Received signal strength meter."));
-    m_signalScale = new SMeterScaleWidget(signalBox);
-    static_cast<SMeterScaleWidget*>(m_signalScale)->setFixedWidth(kSignalMeterWidth);
+    m_signalScale = new SMeterScaleCanvas(signalBox);
+    static_cast<SMeterScaleCanvas*>(m_signalScale)->setFixedWidth(kSignalMeterWidth);
     signalLayout->addWidget(m_signalMeter);
     signalLayout->addWidget(m_signalScale);
 
@@ -277,27 +277,27 @@ VfoWidget::VfoWidget(const QString& title, QWidget* parent) : QGroupBox(parent)
     layout->addWidget(signalBox);
     layout->addWidget(sliders);
 
-    connect(m_bandButton, &QPushButton::clicked, this, &VfoWidget::bandClicked);
-    connect(m_modeButton, &QPushButton::clicked, this, &VfoWidget::modeClicked);
-    connect(m_stepButton, &QPushButton::clicked, this, &VfoWidget::stepClicked);
-    connect(m_txPowerSlider, &QSlider::valueChanged, this, &VfoWidget::txPowerChanged);
-    connect(m_volumeSlider, &QSlider::valueChanged, this, &VfoWidget::volumeChanged);
-    connect(m_squelchSlider, &QSlider::valueChanged, this, &VfoWidget::squelchChanged);
+    connect(m_bandButton, &QPushButton::clicked, this, &VfoPanel::bandClicked);
+    connect(m_modeButton, &QPushButton::clicked, this, &VfoPanel::modeClicked);
+    connect(m_stepButton, &QPushButton::clicked, this, &VfoPanel::stepClicked);
+    connect(m_txPowerSlider, &QSlider::valueChanged, this, &VfoPanel::txPowerChanged);
+    connect(m_volumeSlider, &QSlider::valueChanged, this, &VfoPanel::volumeChanged);
+    connect(m_squelchSlider, &QSlider::valueChanged, this, &VfoPanel::squelchChanged);
 
     setMeterEnabled(false);
 }
 
-QString VfoWidget::frequencyText() const
+QString VfoPanel::frequencyText() const
 {
     return m_frequencyEdit ? m_frequencyEdit->text() : QString();
 }
 
-bool VfoWidget::frequencyHasFocus() const
+bool VfoPanel::frequencyHasFocus() const
 {
     return m_frequencyEdit && m_frequencyEdit->hasFocus();
 }
 
-void VfoWidget::clearFrequencyFocus()
+void VfoPanel::clearFrequencyFocus()
 {
     if (m_frequencyEdit)
     {
@@ -305,7 +305,7 @@ void VfoWidget::clearFrequencyFocus()
     }
 }
 
-void VfoWidget::setFrequencyText(const QString& text)
+void VfoPanel::setFrequencyText(const QString& text)
 {
     if (m_frequencyEdit)
     {
@@ -313,7 +313,7 @@ void VfoWidget::setFrequencyText(const QString& text)
     }
 }
 
-void VfoWidget::setFrequencyReadOnly(bool readOnly)
+void VfoPanel::setFrequencyReadOnly(bool readOnly)
 {
     if (m_frequencyEdit)
     {
@@ -322,7 +322,7 @@ void VfoWidget::setFrequencyReadOnly(bool readOnly)
     }
 }
 
-void VfoWidget::setMemoryName(const QString& text, const QString& tooltip)
+void VfoPanel::setMemoryName(const QString& text, const QString& tooltip)
 {
     if (m_memoryNameLabel)
     {
@@ -331,7 +331,7 @@ void VfoWidget::setMemoryName(const QString& text, const QString& tooltip)
     }
 }
 
-void VfoWidget::setBandText(const QString& text)
+void VfoPanel::setBandText(const QString& text)
 {
     if (m_bandButton)
     {
@@ -340,7 +340,7 @@ void VfoWidget::setBandText(const QString& text)
     }
 }
 
-void VfoWidget::setModeText(const QString& text)
+void VfoPanel::setModeText(const QString& text)
 {
     if (m_modeButton)
     {
@@ -349,7 +349,7 @@ void VfoWidget::setModeText(const QString& text)
     }
 }
 
-void VfoWidget::setStepText(const QString& text)
+void VfoPanel::setStepText(const QString& text)
 {
     if (m_stepButton)
     {
@@ -357,7 +357,7 @@ void VfoWidget::setStepText(const QString& text)
     }
 }
 
-void VfoWidget::setControlsEnabled(bool enabled)
+void VfoPanel::setControlsEnabled(bool enabled)
 {
     if (m_frequencyEdit)
     {
@@ -389,7 +389,7 @@ void VfoWidget::setControlsEnabled(bool enabled)
     }
 }
 
-void VfoWidget::setMeterEnabled(bool enabled)
+void VfoPanel::setMeterEnabled(bool enabled)
 {
     m_meterEnabled = enabled;
     if (m_signalMeter)
@@ -407,7 +407,7 @@ void VfoWidget::setMeterEnabled(bool enabled)
     }
 }
 
-void VfoWidget::setSMeterValue(int value)
+void VfoPanel::setSMeterValue(int value)
 {
     if (m_signalMeter)
     {
@@ -421,27 +421,27 @@ void VfoWidget::setSMeterValue(int value)
     }
 }
 
-void VfoWidget::setSwrMode(bool on)
+void VfoPanel::setSwrMode(bool on)
 {
-    if (auto* meter = dynamic_cast<SMeterBar*>(m_signalMeter))
+    if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
     {
         meter->setSwr(on);
         m_signalMeter->setAccessibleDescription(on ? QStringLiteral("SWR meter.")
                                                    : QStringLiteral("Received signal strength meter."));
     }
-    if (auto* scale = dynamic_cast<SMeterScaleWidget*>(m_signalScale))
+    if (auto* scale = dynamic_cast<SMeterScaleCanvas*>(m_signalScale))
     {
         scale->setSwr(on);
     }
 }
 
-void VfoWidget::setSwr(double swr, const QColor& fillColor)
+void VfoPanel::setSwr(double swr, const QColor& fillColor)
 {
     if (!m_signalMeter || !m_meterEnabled)
     {
         return;
     }
-    if (auto* meter = dynamic_cast<SMeterBar*>(m_signalMeter))
+    if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
     {
         meter->setSwrFillColor(fillColor);
     }
@@ -450,17 +450,17 @@ void VfoWidget::setSwr(double swr, const QColor& fillColor)
     m_signalMeter->setAccessibleDescription(QStringLiteral("SWR meter: %1:1").arg(swr, 0, 'f', 2));
 }
 
-void VfoWidget::setTxPower(int value)
+void VfoPanel::setTxPower(int value)
 {
     setSliderValue(m_txPowerSlider, m_txPowerValueLabel, value);
 }
 
-void VfoWidget::setVolume(int value)
+void VfoPanel::setVolume(int value)
 {
     setSliderValue(m_volumeSlider, m_volumeValueLabel, value);
 }
 
-void VfoWidget::setVolumeVisible(bool visible)
+void VfoPanel::setVolumeVisible(bool visible)
 {
     if (m_volumeRow)
     {
@@ -468,33 +468,33 @@ void VfoWidget::setVolumeVisible(bool visible)
     }
 }
 
-void VfoWidget::setSquelch(int value)
+void VfoPanel::setSquelch(int value)
 {
     setSliderValue(m_squelchSlider, m_squelchValueLabel, value);
 }
 
-int VfoWidget::volume() const
+int VfoPanel::volume() const
 {
     return m_volumeSlider ? m_volumeSlider->value() : 0;
 }
 
-QPoint VfoWidget::bandMenuPosition() const
+QPoint VfoPanel::bandMenuPosition() const
 {
     return m_bandButton ? m_bandButton->mapToGlobal(QPoint(0, m_bandButton->height())) : mapToGlobal(QPoint());
 }
 
-QPoint VfoWidget::modeMenuPosition() const
+QPoint VfoPanel::modeMenuPosition() const
 {
     return m_modeButton ? m_modeButton->mapToGlobal(QPoint(0, m_modeButton->height())) : mapToGlobal(QPoint());
 }
 
-QPoint VfoWidget::stepMenuPosition() const
+QPoint VfoPanel::stepMenuPosition() const
 {
     return m_stepButton ? m_stepButton->mapToGlobal(QPoint(0, m_stepButton->height())) : mapToGlobal(QPoint());
 }
 
-QPushButton* VfoWidget::makeSelectorButton(const QString& primary, const QString& secondary, const QString& name,
-                                           const QString& description)
+QPushButton* VfoPanel::makeSelectorButton(const QString& primary, const QString& secondary, const QString& name,
+                                          const QString& description)
 {
     Q_UNUSED(primary)
 
@@ -508,7 +508,7 @@ QPushButton* VfoWidget::makeSelectorButton(const QString& primary, const QString
     return button;
 }
 
-QWidget* VfoWidget::makeSliderRow(const QString& labelText, int value, QSlider** sliderOut, QLabel** valueLabelOut)
+QWidget* VfoPanel::makeSliderRow(const QString& labelText, int value, QSlider** sliderOut, QLabel** valueLabelOut)
 {
     auto* row = new QWidget(this);
     auto* rowLayout = new QHBoxLayout(row);
@@ -550,7 +550,7 @@ QWidget* VfoWidget::makeSliderRow(const QString& labelText, int value, QSlider**
     return row;
 }
 
-void VfoWidget::setSliderValue(QSlider* slider, QLabel* valueLabel, int value)
+void VfoPanel::setSliderValue(QSlider* slider, QLabel* valueLabel, int value)
 {
     if (!slider)
     {
@@ -567,7 +567,7 @@ void VfoWidget::setSliderValue(QSlider* slider, QLabel* valueLabel, int value)
     updateSliderValueLabel(valueLabel, bounded);
 }
 
-void VfoWidget::updateSliderValueLabel(QLabel* label, int value)
+void VfoPanel::updateSliderValueLabel(QLabel* label, int value)
 {
     if (label)
     {

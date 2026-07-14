@@ -15,8 +15,8 @@ class Commander : public RadioCommander
 
   public slots:
     void process() override;
-    void commSetup(quint16 radioCivAddr, udpPreferences prefs, audioSetup rxSetup, audioSetup txSetup, QString vsp,
-                   quint16 tcp) override;
+    void commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup,
+                   QString vsp, quint16 tcp) override;
     void closeComm() override;
 
     void setRadioID(quint16 radioID) override;

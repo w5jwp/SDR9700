@@ -6,12 +6,12 @@
 class QLineEdit;
 class QPushButton;
 
-class DtmfWidget : public QDialog
+class DtmfDialog : public QDialog
 {
     Q_OBJECT
 
   public:
-    explicit DtmfWidget(QWidget* parent = nullptr);
+    explicit DtmfDialog(QWidget* parent = nullptr);
 
     void setSendInProgress(bool inProgress);
 

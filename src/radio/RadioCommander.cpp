@@ -25,11 +25,11 @@ RadioCommander::~RadioCommander()
     qInfo(logRadio()) << "closing instance of RadioCommander()";
 }
 
-void RadioCommander::commSetup(quint16 radioCivAddr, udpPreferences prefs, audioSetup rxSetup, audioSetup txSetup,
-                               QString vsp, quint16 tcp)
+void RadioCommander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup,
+                               audioSetup txSetup, QString vsp, quint16 tcp)
 {
     Q_UNUSED(radioCivAddr)
-    Q_UNUSED(prefs)
+    Q_UNUSED(settings)
     Q_UNUSED(rxSetup)
     Q_UNUSED(txSetup)
     Q_UNUSED(vsp)

@@ -1,5 +1,5 @@
 #ifdef HAVE_HIDAPI
-#include "Rc28Manager.h"
+#include "IcomRC28Manager.h"
 
 #include "AppSettings.h"
 #include "LogCategories.h"
@@ -11,48 +11,74 @@
 #include <QList>
 #include <QStringList>
 
-Rc28Manager::Rc28Manager(QObject* parent) : QObject(parent)
+namespace
+{
+constexpr auto kIcomRC28SettingsKey = "IcomRC28Settings";
+constexpr auto kLegacyRC28SettingsKey = "RC28Settings";
+
+QString readIcomRC28SettingsJson()
+{
+    auto& settings = AppSettings::instance();
+    const QString key = QString::fromLatin1(kIcomRC28SettingsKey);
+    const QString legacyKey = QString::fromLatin1(kLegacyRC28SettingsKey);
+    if (settings.contains(key))
+    {
+        return settings.value(key, QStringLiteral("{}")).toString();
+    }
+
+    const QString legacyValue = settings.value(legacyKey, QStringLiteral("{}")).toString();
+    if (settings.contains(legacyKey))
+    {
+        settings.setValue(key, legacyValue);
+        settings.remove(legacyKey);
+    }
+    return legacyValue;
+}
+} // namespace
+
+IcomRC28Manager::IcomRC28Manager(QObject* parent) : QObject(parent)
 {
     hid_init();
 
     m_pollTimer = new QTimer(this);
     m_pollTimer->setInterval(kPollIntervalMs);
-    connect(m_pollTimer, &QTimer::timeout, this, &Rc28Manager::poll);
+    connect(m_pollTimer, &QTimer::timeout, this, &IcomRC28Manager::poll);
 
     m_hotplugTimer = new QTimer(this);
     m_hotplugTimer->setInterval(kHotplugIntervalMs);
-    connect(m_hotplugTimer, &QTimer::timeout, this, &Rc28Manager::hotplugCheck);
+    connect(m_hotplugTimer, &QTimer::timeout, this, &IcomRC28Manager::hotplugCheck);
 }
 
-Rc28Manager::~Rc28Manager()
+IcomRC28Manager::~IcomRC28Manager()
 {
     close();
     hid_exit();
 }
 
-QString Rc28Manager::settingsField(const QString& field, const QString& defaultValue)
+QString IcomRC28Manager::settingsField(const QString& field, const QString& defaultValue)
 {
-    const QByteArray raw =
-        AppSettings::instance().value(QStringLiteral("RC28Settings"), QStringLiteral("{}")).toString().toUtf8();
+    const QByteArray raw = readIcomRC28SettingsJson().toUtf8();
     const QJsonObject obj = QJsonDocument::fromJson(raw).object();
     const QJsonValue value = obj.value(field);
     return value.isString() ? value.toString() : defaultValue;
 }
 
-void Rc28Manager::setSettingsField(const QString& field, const QString& value)
+void IcomRC28Manager::setSettingsField(const QString& field, const QString& value)
 {
     auto& settings = AppSettings::instance();
-    QJsonObject obj = QJsonDocument::fromJson(
-                          settings.value(QStringLiteral("RC28Settings"), QStringLiteral("{}")).toString().toUtf8())
-                          .object();
+    QJsonObject obj = QJsonDocument::fromJson(readIcomRC28SettingsJson().toUtf8()).object();
     obj.insert(field, value);
-    settings.setValue(QStringLiteral("RC28Settings"),
+    settings.setValue(QString::fromLatin1(kIcomRC28SettingsKey),
                       QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)));
+    if (settings.contains(QString::fromLatin1(kLegacyRC28SettingsKey)))
+    {
+        settings.remove(QString::fromLatin1(kLegacyRC28SettingsKey));
+    }
 }
 
-QString Rc28Manager::detectDevice()
+QString IcomRC28Manager::detectDevice()
 {
-    if (auto* info = hid_enumerate(kRc28Vid, kRc28Pid))
+    if (auto* info = hid_enumerate(kIcomRC28Vid, kIcomRC28Pid))
     {
         hid_free_enumeration(info);
         return QStringLiteral("Icom RC-28 Remote Encoder");
@@ -60,9 +86,9 @@ QString Rc28Manager::detectDevice()
     return {};
 }
 
-bool Rc28Manager::parseRc28Report(const uint8_t* buf, size_t len, int* steps, int* button, int* action)
+bool IcomRC28Manager::parseIcomRC28Report(const uint8_t* buf, size_t len, int* steps, int* button, int* action)
 {
-    if (len < 6 || buf[0] != kRc28ReportGuard)
+    if (len < 6 || buf[0] != kIcomRC28ReportGuard)
     {
         return false;
     }
@@ -76,7 +102,7 @@ bool Rc28Manager::parseRc28Report(const uint8_t* buf, size_t len, int* steps, in
         const uint8_t prev = m_prevButtons;
         m_prevButtons = btns;
 
-        if (btns == kRc28ButtonsIdle)
+        if (btns == kIcomRC28ButtonsIdle)
         {
             if (prev == 0x05)
             {
@@ -120,7 +146,7 @@ bool Rc28Manager::parseRc28Report(const uint8_t* buf, size_t len, int* steps, in
         }
     }
 
-    if (btns == kRc28ButtonsIdle && speed > 0 && (dir == 0x01 || dir == 0x02))
+    if (btns == kIcomRC28ButtonsIdle && speed > 0 && (dir == 0x01 || dir == 0x02))
     {
         *steps = (dir == 0x01) ? static_cast<int>(speed) : -static_cast<int>(speed);
         return true;
@@ -129,7 +155,7 @@ bool Rc28Manager::parseRc28Report(const uint8_t* buf, size_t len, int* steps, in
     return false;
 }
 
-bool Rc28Manager::open()
+bool IcomRC28Manager::open()
 {
     if (m_device.load(std::memory_order_relaxed))
     {
@@ -139,7 +165,7 @@ bool Rc28Manager::open()
     // Block when more than one physical RC-28 is present. Compare serial first,
     // then fall back to hidapi path because the RC-28 exposes no serial on Linux.
     bool multiplePhysical = false;
-    if (auto* info = hid_enumerate(kRc28Vid, kRc28Pid))
+    if (auto* info = hid_enumerate(kIcomRC28Vid, kIcomRC28Pid))
     {
         QString firstKey;
         bool firstSeen = false;
@@ -176,7 +202,7 @@ bool Rc28Manager::open()
     m_blockedDeviceName.clear();
     m_multipleDetected.store(false, std::memory_order_release);
 
-    hid_device* device = hid_open(kRc28Vid, kRc28Pid, nullptr);
+    hid_device* device = hid_open(kIcomRC28Vid, kIcomRC28Pid, nullptr);
     if (!device)
     {
         return false;
@@ -188,7 +214,7 @@ bool Rc28Manager::open()
     m_devicePath.clear();
     m_serialNumber.clear();
     m_releaseNumber = 0;
-    if (auto* info = hid_enumerate(kRc28Vid, kRc28Pid))
+    if (auto* info = hid_enumerate(kIcomRC28Vid, kIcomRC28Pid))
     {
         m_devicePath = QString::fromLatin1(info->path ? info->path : "");
         m_serialNumber = info->serial_number ? QString::fromWCharArray(info->serial_number) : QString{};
@@ -198,22 +224,22 @@ bool Rc28Manager::open()
 
     m_pollTimer->start();
     m_hotplugTimer->stop();
-    m_prevButtons = kRc28ButtonsIdle;
+    m_prevButtons = kIcomRC28ButtonsIdle;
     emit connectionChanged(true, m_deviceName);
-    qInfo(logRadio()) << "RC-28 opened";
+    qInfo(logIcomRC28()) << "RC-28 opened";
     return true;
 }
 
-void Rc28Manager::close()
+void IcomRC28Manager::close()
 {
     m_pollTimer->stop();
     m_hotplugTimer->stop();
-    m_prevButtons = kRc28ButtonsIdle;
+    m_prevButtons = kIcomRC28ButtonsIdle;
 
     hid_device* device = m_device.exchange(nullptr);
     if (device)
     {
-        sendLeds(kRc28LedsOff);
+        sendLeds(kIcomRC28LedsOff);
         hid_close(device);
     }
 
@@ -227,7 +253,7 @@ void Rc28Manager::close()
     }
 }
 
-void Rc28Manager::sendLeds(uint8_t ledByte)
+void IcomRC28Manager::sendLeds(uint8_t ledByte)
 {
     hid_device* device = m_device.load(std::memory_order_relaxed);
     if (!device)
@@ -242,12 +268,12 @@ void Rc28Manager::sendLeds(uint8_t ledByte)
     hid_write(device, report, sizeof(report));
 }
 
-void Rc28Manager::setRC28Leds(uint8_t ledByte)
+void IcomRC28Manager::setIcomRC28Leds(uint8_t ledByte)
 {
     sendLeds(ledByte);
 }
 
-void Rc28Manager::poll()
+void IcomRC28Manager::poll()
 {
     hid_device* device = m_device.load(std::memory_order_relaxed);
     if (!device)
@@ -272,7 +298,7 @@ void Rc28Manager::poll()
         int steps = 0;
         int button = 0;
         int action = 0;
-        if (parseRc28Report(m_buf, static_cast<size_t>(res), &steps, &button, &action))
+        if (parseIcomRC28Report(m_buf, static_cast<size_t>(res), &steps, &button, &action))
         {
             if (steps != 0)
             {
@@ -286,7 +312,7 @@ void Rc28Manager::poll()
     }
 }
 
-void Rc28Manager::hotplugCheck()
+void IcomRC28Manager::hotplugCheck()
 {
     if (!m_device.load(std::memory_order_relaxed))
     {
@@ -297,7 +323,7 @@ void Rc28Manager::hotplugCheck()
     }
 }
 
-void Rc28Manager::loadSettings()
+void IcomRC28Manager::loadSettings()
 {
     if (isOpen())
     {

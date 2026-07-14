@@ -1,4 +1,4 @@
-#include "TitleBarWidget.h"
+#include "MainTitleBar.h"
 #include "UiTheme.h"
 
 #include <QHBoxLayout>
@@ -13,6 +13,7 @@
 #include <QStyleOption>
 #include <QToolButton>
 #include <QWindow>
+#include <memory>
 
 namespace
 {
@@ -88,11 +89,11 @@ QString windowButtonStyle(const char* hoverBg)
 }
 } // namespace
 
-TitleBarWidget::TitleBarWidget(QWidget* parent) : QWidget(parent)
+MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
 {
     setFixedHeight(kTitleBarHeight);
     setAutoFillBackground(false);
-    setStyleSheet(QStringLiteral("TitleBarWidget { background: %1; }").arg(UiTheme::Color::MenuBar));
+    setStyleSheet(QStringLiteral("MainTitleBar { background: %1; }").arg(UiTheme::Color::MenuBar));
 
     auto* root = new QHBoxLayout(this);
     root->setContentsMargins(kNoMargins);
@@ -208,13 +209,13 @@ TitleBarWidget::TitleBarWidget(QWidget* parent) : QWidget(parent)
                 emit volumeChanged(v);
             });
 
-    connect(m_muteBtn, &QPushButton::clicked, this, &TitleBarWidget::muteToggled);
-    connect(m_lockBtn, &QPushButton::clicked, this, &TitleBarWidget::lockToggled);
-    connect(m_minimizeBtn, &QPushButton::clicked, this, &TitleBarWidget::minimizeRequested);
-    connect(m_closeBtn, &QPushButton::clicked, this, &TitleBarWidget::closeRequested);
+    connect(m_muteBtn, &QPushButton::clicked, this, &MainTitleBar::muteToggled);
+    connect(m_lockBtn, &QPushButton::clicked, this, &MainTitleBar::lockToggled);
+    connect(m_minimizeBtn, &QPushButton::clicked, this, &MainTitleBar::minimizeRequested);
+    connect(m_closeBtn, &QPushButton::clicked, this, &MainTitleBar::closeRequested);
 }
 
-void TitleBarWidget::addMenu(const QString& label, QMenu* menu)
+void MainTitleBar::addMenu(const QString& label, QMenu* menu)
 {
     auto* btn = new TitleMenuButton(this);
     btn->setText(label);
@@ -234,7 +235,42 @@ void TitleBarWidget::addMenu(const QString& label, QMenu* menu)
     }
 }
 
-void TitleBarWidget::setTitle(const QString& title)
+void MainTitleBar::addAction(const QString& label, QObject* context, std::function<void()> callback)
+{
+    auto* btn = new TitleMenuButton(this);
+    btn->setText(label);
+    btn->setStyleSheet(menuButtonStyle());
+    btn->setFixedHeight(kTitleBarHeight);
+    btn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_menuLayout->addWidget(btn);
+
+    auto callbackPtr = std::make_shared<std::function<void()>>(std::move(callback));
+    connect(btn, &QToolButton::clicked, context,
+            [callbackPtr]()
+            {
+                if (*callbackPtr)
+                {
+                    (*callbackPtr)();
+                }
+            });
+
+    const QChar mnemonic = mnemonicChar(label);
+    if (!mnemonic.isNull())
+    {
+        auto* sc = new QShortcut(QKeySequence(Qt::ALT | mnemonic.unicode()), this);
+        sc->setContext(Qt::WindowShortcut);
+        connect(sc, &QShortcut::activated, context,
+                [callbackPtr]()
+                {
+                    if (*callbackPtr)
+                    {
+                        (*callbackPtr)();
+                    }
+                });
+    }
+}
+
+void MainTitleBar::setTitle(const QString& title)
 {
     if (m_titleLabel)
     {
@@ -242,7 +278,7 @@ void TitleBarWidget::setTitle(const QString& title)
     }
 }
 
-void TitleBarWidget::setVolume(int value)
+void MainTitleBar::setVolume(int value)
 {
     if (!m_volumeSlider)
     {
@@ -257,7 +293,7 @@ void TitleBarWidget::setVolume(int value)
     }
 }
 
-void TitleBarWidget::setMuted(bool muted)
+void MainTitleBar::setMuted(bool muted)
 {
     if (m_muteBtn)
     {
@@ -265,7 +301,7 @@ void TitleBarWidget::setMuted(bool muted)
     }
 }
 
-void TitleBarWidget::setLocked(bool locked)
+void MainTitleBar::setLocked(bool locked)
 {
     if (m_lockBtn)
     {
@@ -273,7 +309,7 @@ void TitleBarWidget::setLocked(bool locked)
     }
 }
 
-void TitleBarWidget::setVolumeEnabled(bool enabled)
+void MainTitleBar::setVolumeEnabled(bool enabled)
 {
     if (m_volumeSlider)
     {
@@ -289,7 +325,7 @@ void TitleBarWidget::setVolumeEnabled(bool enabled)
     }
 }
 
-void TitleBarWidget::mousePressEvent(QMouseEvent* event)
+void MainTitleBar::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton)
     {

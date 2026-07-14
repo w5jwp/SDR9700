@@ -21,7 +21,7 @@ namespace
 bool settingStoresJson(const QString& key)
 {
     static const QStringList kJsonSettings = {QStringLiteral("Memories"), QStringLiteral("RadioProfiles"),
-                                              QStringLiteral("RC28Settings")};
+                                              QStringLiteral("IcomRC28Settings"), QStringLiteral("RC28Settings")};
     return kJsonSettings.contains(key);
 }
 } // namespace

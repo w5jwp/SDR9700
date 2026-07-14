@@ -4,7 +4,7 @@
 
 class QPushButton;
 
-class RepeaterWidget : public QGroupBox
+class RepeaterPanel : public QGroupBox
 {
     Q_OBJECT
 
@@ -15,5 +15,5 @@ class RepeaterWidget : public QGroupBox
         QPushButton* tone{nullptr};
     };
 
-    explicit RepeaterWidget(const Buttons& buttons, QWidget* parent = nullptr);
+    explicit RepeaterPanel(const Buttons& buttons, QWidget* parent = nullptr);
 };

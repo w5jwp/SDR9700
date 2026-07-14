@@ -1,4 +1,4 @@
-#include "MuteWidget.h"
+#include "MutePanel.h"
 
 #include "UiTheme.h"
 
@@ -14,7 +14,7 @@ constexpr int kLowerControlGroupMinHeight = 76;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 } // namespace
 
-MuteWidget::MuteWidget(QPushButton* muteButton, QWidget* parent) : QGroupBox(parent)
+MutePanel::MutePanel(QPushButton* muteButton, QWidget* parent) : QGroupBox(parent)
 {
     setTitle(QStringLiteral("Mute"));
     setAccessibleName(QStringLiteral("Mute"));

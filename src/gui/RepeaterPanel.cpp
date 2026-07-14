@@ -1,4 +1,4 @@
-#include "RepeaterWidget.h"
+#include "RepeaterPanel.h"
 
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -12,9 +12,9 @@ constexpr int kControlGroupSpacing = 12;
 constexpr int kLowerControlGroupMinHeight = 76;
 } // namespace
 
-RepeaterWidget::RepeaterWidget(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
+RepeaterPanel::RepeaterPanel(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
 {
-    setObjectName(QStringLiteral("RepeaterWidget"));
+    setObjectName(QStringLiteral("RepeaterPanel"));
     setTitle(QStringLiteral("Repeater"));
     setAccessibleName(QStringLiteral("Repeater"));
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);

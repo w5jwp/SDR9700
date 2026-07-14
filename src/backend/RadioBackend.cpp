@@ -144,22 +144,14 @@ QByteArray generateDtmfPcm(const QString& digits)
     for (QChar qch : digits)
     {
         const char ch = qch.toUpper().toLatin1();
-        double f1 = 0.0, f2 = 0.0;
-        bool found = false;
-        for (const auto& entry : kDtmfTable)
-        {
-            if (entry.digit == ch)
-            {
-                f1 = entry.f1;
-                f2 = entry.f2;
-                found = true;
-                break;
-            }
-        }
-        if (!found)
+        const auto entryIt = std::find_if(std::begin(kDtmfTable), std::end(kDtmfTable),
+                                          [ch](const auto& entry) { return entry.digit == ch; });
+        if (entryIt == std::end(kDtmfTable))
         {
             continue;
         }
+        const double f1 = entryIt->f1;
+        const double f2 = entryIt->f2;
 
         for (int i = 0; i < toneSamples; ++i)
         {
@@ -206,7 +198,7 @@ RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThr
         sequence unless it is re-tested on real IC-9700 hardware while monitoring
         a second receiver/waterfall for startup noise.
 
-        The control connection later sets udpPreferences::waterfallFormat to 2
+        The control connection later sets UdpConnectionSettings::waterfallFormat to 2
         because IC-9700 scope packets can carry paired spectrum/waterfall
         payloads. UdpCivData splits that format before Commander parses scope
         data; this is independent from the TX audio startup sequence above.
@@ -558,20 +550,20 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
         Qt::AutoConnection);
 
     // IC-9700 default LAN ports: control=50001, serial=50002, audio=50003
-    udpPreferences udpPrefs;
-    udpPrefs.ipAddress = host;
-    udpPrefs.controlLANPort = port;   // typically 50001
-    udpPrefs.civLANPort = port + 1;   // 50002
-    udpPrefs.audioLANPort = port + 2; // 50003
-    udpPrefs.scopeLANPort = port + 3; // 50004
-    udpPrefs.username = user;
+    UdpConnectionSettings udpSettings;
+    udpSettings.ipAddress = host;
+    udpSettings.controlLANPort = port;   // typically 50001
+    udpSettings.civLANPort = port + 1;   // 50002
+    udpSettings.audioLANPort = port + 2; // 50003
+    udpSettings.scopeLANPort = port + 3; // 50004
+    udpSettings.username = user;
     // passcode() applies the IC-9700 LAN proprietary XOR encoding (not encryption).
-    passcode(pass, udpPrefs.passwordEncoded);
-    udpPrefs.halfDuplex = false;
-    udpPrefs.adminLogin = false;
+    passcode(pass, udpSettings.passwordEncoded);
+    udpSettings.halfDuplex = false;
+    udpSettings.adminLogin = false;
     // IC-9700 LAN bundles all 11 scope packets into one UDP datagram.
     // waterfallFormat=2 tells UdpCivData to split them before Commander parses.
-    udpPrefs.waterfallFormat = 2;
+    udpSettings.waterfallFormat = 2;
 
     // Load the saved audio device if no device was explicitly set via setRxAudioDevice().
     if (m_rxDevice.isNull())
@@ -636,13 +628,13 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     // commSetup must be invoked on the worker thread
     QMetaObject::invokeMethod(
         m_commander,
-        [this, session, commandSession, udpPrefs, rxSetup, txSetup]()
+        [this, session, commandSession, udpSettings, rxSetup, txSetup]()
         {
             if (!isCurrentSession(session, commandSession))
             {
                 return;
             }
-            m_commander->commSetup(kIc9700CivAddress, udpPrefs, rxSetup, txSetup, QString(), kUnusedTcpPort);
+            m_commander->commSetup(kIc9700CivAddress, udpSettings, rxSetup, txSetup, QString(), kUnusedTcpPort);
             m_commander->process();
         },
         Qt::QueuedConnection);

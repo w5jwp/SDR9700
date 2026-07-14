@@ -303,7 +303,7 @@ struct radioCapabilities
 
 Q_DECLARE_METATYPE(manufacturersType_t)
 Q_DECLARE_METATYPE(connectionType_t)
-Q_DECLARE_METATYPE(udpPreferences)
+Q_DECLARE_METATYPE(UdpConnectionSettings)
 Q_DECLARE_METATYPE(radioCapabilities)
 Q_DECLARE_METATYPE(ModeInfo)
 Q_DECLARE_METATYPE(radioInput)

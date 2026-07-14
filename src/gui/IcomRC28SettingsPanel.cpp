@@ -1,19 +1,20 @@
 #ifdef HAVE_HIDAPI
-#include "RC28MappingDialog.h"
+#include "IcomRC28SettingsPanel.h"
 
-#include "core/Rc28Manager.h"
-#include "FramelessTitleBar.h"
+#include "SettingsPanelStyle.h"
+#include "core/LogCategories.h"
+#include "core/IcomRC28Manager.h"
 
 #include <algorithm>
+#include <QCheckBox>
 #include <QComboBox>
-#include <QDateTime>
+#include <QDebug>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QPlainTextEdit>
-#include <QPushButton>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QVBoxLayout>
 #include <iterator>
 
@@ -54,62 +55,38 @@ QString actionLabel(const QString& actionId)
                                  [&actionId](const ActionItem& item) { return actionId == QLatin1String(item.id); });
     return it != std::end(kActions) ? QString::fromLatin1(it->label) : actionId;
 }
+
 } // namespace
 
-RC28MappingDialog::RC28MappingDialog(Rc28Manager* manager, QWidget* parent) : QDialog(parent), m_manager(manager)
+IcomRC28SettingsPanel::IcomRC28SettingsPanel(IcomRC28Manager* manager, QWidget* parent)
+    : QWidget(parent), m_manager(manager)
 {
-    setWindowTitle(QStringLiteral("Icom RC-28 Remote Encoder"));
-    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
-    setStyleSheet(QStringLiteral("RC28MappingDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-    setMinimumWidth(640);
     buildUi();
     loadSettings();
     refreshDeviceInfo();
 
     if (m_manager)
     {
-        connect(m_manager, &Rc28Manager::connectionChanged, this,
+        connect(m_manager, &IcomRC28Manager::connectionChanged, this,
                 [this](bool connected, const QString& deviceName)
                 {
+                    Q_UNUSED(connected)
                     Q_UNUSED(deviceName)
                     refreshDeviceInfo();
-                    appendLog(connected ? QStringLiteral("Connected") : QStringLiteral("Disconnected"));
                 });
-        connect(m_manager, &Rc28Manager::multipleDevicesDetected, this,
-                [this](const QString& deviceName)
-                {
-                    appendLog(QStringLiteral("Multiple devices detected: %1").arg(deviceName));
-                    refreshDeviceInfo();
-                });
-        connect(m_manager, &Rc28Manager::tuneSteps, this,
-                [this](int steps) { appendLog(QStringLiteral("Tune steps: %1").arg(steps)); });
-        connect(m_manager, &Rc28Manager::buttonPressed, this,
-                [this](int button, int action)
-                {
-                    const QString actionName = action == 0 ? QStringLiteral("press") : QStringLiteral("release");
-                    appendLog(QStringLiteral("Button %1 %2").arg(button).arg(actionName));
-                });
+        connect(m_manager, &IcomRC28Manager::multipleDevicesDetected, this,
+                [this](const QString&) { refreshDeviceInfo(); });
     }
 }
 
-void RC28MappingDialog::buildUi()
+void IcomRC28SettingsPanel::buildUi()
 {
-    auto* titleBar = new FramelessTitleBar(windowTitle(), this);
-    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QDialog::reject);
-
-    auto* content = new QWidget(this);
-    auto* root = new QVBoxLayout(content);
+    auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
     root->setSpacing(10);
 
-    auto* outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->setSpacing(0);
-    outerLayout->addWidget(titleBar);
-    outerLayout->addWidget(content, 1);
-
-    auto* deviceGroup = new QGroupBox(QStringLiteral("Device"), content);
+    auto* deviceGroup = new QGroupBox(QStringLiteral("Device"), this);
+    deviceGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* deviceForm = new QFormLayout(deviceGroup);
     deviceForm->setLabelAlignment(Qt::AlignRight);
 
@@ -130,7 +107,8 @@ void RC28MappingDialog::buildUi()
     deviceForm->addRow(QStringLiteral("Release:\t"), m_releaseLabel);
     root->addWidget(deviceGroup);
 
-    auto* mapGroup = new QGroupBox(QStringLiteral("Button Mapping"), content);
+    auto* mapGroup = new QGroupBox(QStringLiteral("Button Mapping"), this);
+    mapGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* mapForm = new QFormLayout(mapGroup);
     m_f1PressCombo = new QComboBox(mapGroup);
     m_f1HoldCombo = new QComboBox(mapGroup);
@@ -157,13 +135,30 @@ void RC28MappingDialog::buildUi()
     mapForm->addRow(QStringLiteral("Transmit:\t"), m_pttModeCombo);
     root->addWidget(mapGroup);
 
-    auto* logGroup = new QGroupBox(QStringLiteral("Activity Log"), content);
-    auto* logLayout = new QVBoxLayout(logGroup);
-    m_logView = new QPlainTextEdit(logGroup);
-    m_logView->setReadOnly(true);
-    m_logView->setMaximumBlockCount(200);
-    logLayout->addWidget(m_logView);
-    root->addWidget(logGroup, 1);
+    auto* encoderGroup = new QGroupBox(QStringLiteral("Encoder"), this);
+    encoderGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
+    auto* encoderLayout = new QVBoxLayout(encoderGroup);
+    encoderLayout->setContentsMargins(10, 10, 10, 10);
+    encoderLayout->setSpacing(8);
+
+    auto* sensitivityRow = new QHBoxLayout;
+    auto* sensitivityLabel = new QLabel(QStringLiteral("Pulses per step:"), encoderGroup);
+    m_sensitivitySlider = new QSlider(Qt::Horizontal, encoderGroup);
+    m_sensitivitySlider->setRange(1, 10);
+    m_sensitivitySlider->setTickInterval(1);
+    m_sensitivitySlider->setTickPosition(QSlider::TicksBelow);
+    m_sensitivityValueLabel = new QLabel(QStringLiteral("1"), encoderGroup);
+    m_sensitivityValueLabel->setFixedWidth(24);
+    m_sensitivityValueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    sensitivityRow->addWidget(sensitivityLabel);
+    sensitivityRow->addWidget(m_sensitivitySlider, 1);
+    sensitivityRow->addWidget(m_sensitivityValueLabel);
+    encoderLayout->addLayout(sensitivityRow);
+
+    m_autoSnapCheck = new QCheckBox(QStringLiteral("Auto-snap to nearest 1 kHz after rotation stops"), encoderGroup);
+    encoderLayout->addWidget(m_autoSnapCheck);
+    root->addWidget(encoderGroup);
+    root->addStretch(1);
 
     connect(m_f1PressCombo, &QComboBox::currentIndexChanged, this,
             [this](int) { saveActionField(QStringLiteral("f1Press"), m_f1PressCombo->currentData().toString()); });
@@ -175,9 +170,11 @@ void RC28MappingDialog::buildUi()
             [this](int) { saveActionField(QStringLiteral("f2Hold"), m_f2HoldCombo->currentData().toString()); });
     connect(m_pttModeCombo, &QComboBox::currentIndexChanged, this,
             [this](int) { savePttMode(m_pttModeCombo->currentData().toString()); });
+    connect(m_sensitivitySlider, &QSlider::valueChanged, this, &IcomRC28SettingsPanel::saveSensitivity);
+    connect(m_autoSnapCheck, &QCheckBox::toggled, this, &IcomRC28SettingsPanel::saveAutoSnap);
 }
 
-void RC28MappingDialog::refreshDeviceInfo()
+void IcomRC28SettingsPanel::refreshDeviceInfo()
 {
     if (!m_manager)
     {
@@ -186,7 +183,7 @@ void RC28MappingDialog::refreshDeviceInfo()
 
     const bool open = m_manager->isOpen();
     const bool blocked = m_manager->isBlockedByMultiple();
-    const bool detected = !open && !blocked && !Rc28Manager::detectDevice().isEmpty();
+    const bool detected = !open && !blocked && !IcomRC28Manager::detectDevice().isEmpty();
     if (m_statusLabel)
     {
         m_statusLabel->setText(blocked ? QStringLiteral("Multiple devices detected")
@@ -215,46 +212,72 @@ void RC28MappingDialog::refreshDeviceInfo()
     }
 }
 
-void RC28MappingDialog::appendLog(const QString& text)
+void IcomRC28SettingsPanel::appendLog(const QString& text)
 {
-    if (!m_logView)
-    {
-        return;
-    }
-
-    const QString line =
-        QStringLiteral("[%1] %2").arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")), text);
-    m_logView->appendPlainText(line);
+    qInfo(logIcomRC28()) << text;
 }
 
-void RC28MappingDialog::loadSettings()
+void IcomRC28SettingsPanel::loadSettings()
 {
     const QSignalBlocker blockF1Press(m_f1PressCombo);
     const QSignalBlocker blockF1Hold(m_f1HoldCombo);
     const QSignalBlocker blockF2Press(m_f2PressCombo);
     const QSignalBlocker blockF2Hold(m_f2HoldCombo);
     const QSignalBlocker blockPtt(m_pttModeCombo);
+    const QSignalBlocker blockSensitivity(m_sensitivitySlider);
+    const QSignalBlocker blockAutoSnap(m_autoSnapCheck);
 
-    populateActionCombo(m_f1PressCombo, Rc28Manager::settingsField(QStringLiteral("f1Press"), QStringLiteral("None")));
-    populateActionCombo(m_f1HoldCombo, Rc28Manager::settingsField(QStringLiteral("f1Hold"), QStringLiteral("None")));
-    populateActionCombo(m_f2PressCombo, Rc28Manager::settingsField(QStringLiteral("f2Press"), QStringLiteral("None")));
-    populateActionCombo(m_f2HoldCombo, Rc28Manager::settingsField(QStringLiteral("f2Hold"), QStringLiteral("None")));
+    populateActionCombo(m_f1PressCombo,
+                        IcomRC28Manager::settingsField(QStringLiteral("f1Press"), QStringLiteral("None")));
+    populateActionCombo(m_f1HoldCombo,
+                        IcomRC28Manager::settingsField(QStringLiteral("f1Hold"), QStringLiteral("None")));
+    populateActionCombo(m_f2PressCombo,
+                        IcomRC28Manager::settingsField(QStringLiteral("f2Press"), QStringLiteral("None")));
+    populateActionCombo(m_f2HoldCombo,
+                        IcomRC28Manager::settingsField(QStringLiteral("f2Hold"), QStringLiteral("None")));
 
-    const QString pttMode = Rc28Manager::settingsField(QStringLiteral("pttMode"), QStringLiteral("Disabled"));
+    const QString pttMode = IcomRC28Manager::settingsField(QStringLiteral("pttMode"), QStringLiteral("Disabled"));
     const int pttIndex = m_pttModeCombo->findData(pttMode);
     m_pttModeCombo->setCurrentIndex(pttIndex >= 0 ? pttIndex : 0);
+
+    const int sensitivity =
+        qBound(1, IcomRC28Manager::settingsField(QStringLiteral("sensitivity"), QStringLiteral("1")).toInt(), 10);
+    m_sensitivitySlider->setValue(sensitivity);
+    m_sensitivityValueLabel->setText(QString::number(sensitivity));
+    m_autoSnapCheck->setChecked(IcomRC28Manager::settingsField(QStringLiteral("autoSnap"), QStringLiteral("False")) ==
+                                QLatin1String("True"));
 }
 
-void RC28MappingDialog::saveActionField(const QString& field, const QString& value)
+void IcomRC28SettingsPanel::saveActionField(const QString& field, const QString& value)
 {
-    Rc28Manager::setSettingsField(field, value);
+    IcomRC28Manager::setSettingsField(field, value);
     appendLog(QStringLiteral("%1 -> %2").arg(field, actionLabel(value)));
 }
 
-void RC28MappingDialog::savePttMode(const QString& mode)
+void IcomRC28SettingsPanel::savePttMode(const QString& mode)
 {
-    Rc28Manager::setSettingsField(QStringLiteral("pttMode"), mode);
+    IcomRC28Manager::setSettingsField(QStringLiteral("pttMode"), mode);
     appendLog(QStringLiteral("pttMode -> %1").arg(mode));
+}
+
+void IcomRC28SettingsPanel::saveSensitivity(int value)
+{
+    const QString text = QString::number(qBound(1, value, 10));
+    if (m_sensitivityValueLabel)
+    {
+        m_sensitivityValueLabel->setText(text);
+    }
+    IcomRC28Manager::setSettingsField(QStringLiteral("sensitivity"), text);
+    emit encoderSettingsChanged(QStringLiteral("sensitivity"), text);
+    appendLog(QStringLiteral("sensitivity -> %1").arg(text));
+}
+
+void IcomRC28SettingsPanel::saveAutoSnap(bool on)
+{
+    const QString value = on ? QStringLiteral("True") : QStringLiteral("False");
+    IcomRC28Manager::setSettingsField(QStringLiteral("autoSnap"), value);
+    emit encoderSettingsChanged(QStringLiteral("autoSnap"), value);
+    appendLog(QStringLiteral("autoSnap -> %1").arg(value));
 }
 
 #endif

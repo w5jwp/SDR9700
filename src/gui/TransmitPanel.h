@@ -4,7 +4,7 @@
 
 class QPushButton;
 
-class TransmitWidget : public QGroupBox
+class TransmitPanel : public QGroupBox
 {
     Q_OBJECT
 
@@ -15,5 +15,5 @@ class TransmitWidget : public QGroupBox
         QPushButton* micGain{nullptr};
     };
 
-    explicit TransmitWidget(const Buttons& buttons, QWidget* parent = nullptr);
+    explicit TransmitPanel(const Buttons& buttons, QWidget* parent = nullptr);
 };

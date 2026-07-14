@@ -38,13 +38,13 @@ Commander::~Commander()
     qDebug(logRadio()) << "[SHUTDOWN] ~Commander complete";
 }
 
-void Commander::commSetup(quint16 radioCivAddr, udpPreferences prefs, audioSetup rxSetup, audioSetup txSetup,
+void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup,
                           QString vsp, quint16 tcp)
 {
     Q_UNUSED(vsp)
     Q_UNUSED(tcp)
 
-    this->prefs = prefs;
+    this->settings = settings;
     civAddr = radioCivAddr;
 
     if (udp != nullptr)
@@ -52,7 +52,7 @@ void Commander::commSetup(quint16 radioCivAddr, udpPreferences prefs, audioSetup
         closeComm();
     }
 
-    udp = new UdpHandler(prefs, rxSetup, txSetup);
+    udp = new UdpHandler(settings, rxSetup, txSetup);
 
     udpHandlerThread = new QThread(this);
     udpHandlerThread->setObjectName("UdpHandler()");

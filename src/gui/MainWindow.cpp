@@ -1,17 +1,18 @@
 #include "MainWindow.h"
-#include "SpectrumWidget.h"
+#include "SpectrumCanvas.h"
 #include "RadioChooserDialog.h"
-#include "PreferencesDialog.h"
+#include "SettingsDialog.h"
 #include "AboutDialog.h"
-#include "DtmfWidget.h"
+#include "DialogPlacement.h"
+#include "DtmfDialog.h"
 #include "FramelessTitleBar.h"
-#include "TitleBarWidget.h"
-#include "MemoryWidget.h"
-#include "PttWidget.h"
-#include "RecieveWidget.h"
-#include "RepeaterWidget.h"
-#include "TransmitWidget.h"
-#include "VfoWidget.h"
+#include "MainTitleBar.h"
+#include "MemoryPanel.h"
+#include "PttPanel.h"
+#include "ReceivePanel.h"
+#include "RepeaterPanel.h"
+#include "TransmitPanel.h"
+#include "VfoPanel.h"
 #include "UiTheme.h"
 #include "MemoryStore.h"
 #include "AppBuildConfig.h"
@@ -21,8 +22,7 @@
 #include "RadioCapabilities.h"
 #include "backend/IRadioBackend.h"
 #ifdef HAVE_HIDAPI
-#include "core/Rc28Manager.h"
-#include "RC28MappingDialog.h"
+#include "core/IcomRC28Manager.h"
 #endif
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
@@ -33,7 +33,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
-#include <QProgressBar>
 #include <QSlider>
 #include <QSpinBox>
 #include <QPushButton>
@@ -80,6 +79,7 @@
 #include <algorithm>
 #include <functional>
 #include <iterator>
+#include <numeric>
 
 namespace
 {
@@ -549,75 +549,10 @@ bool parseFrequencyText(const QString& input, quint64* hz)
     return true;
 }
 
-class SMeterBar : public QProgressBar
+class ClickableStatusPanel : public QWidget
 {
   public:
-    explicit SMeterBar(QWidget* parent = nullptr) : QProgressBar(parent) {}
-    void setSwr(bool on)
-    {
-        m_swrMode = on;
-        update();
-    }
-    void setSwrFillColor(const QColor& color)
-    {
-        m_swrFillColor = color;
-        update();
-    }
-
-  private:
-    bool m_swrMode{false};
-    QColor m_swrFillColor{UiTheme::Color::MeterGreen};
-
-  protected:
-    void paintEvent(QPaintEvent* event) override
-    {
-        Q_UNUSED(event)
-
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-
-        const QRect barRect = rect().adjusted(0, 0, -1, -1);
-        painter.setPen(UiTheme::Color::MeterFrame);
-        painter.setBrush(UiTheme::Color::MeterTroughQColor);
-        painter.drawRoundedRect(barRect, 3, 3);
-
-        const int span = maximum() - minimum();
-        if (span <= 0)
-        {
-            return;
-        }
-
-        const double fraction = qBound(0.0, double(value() - minimum()) / double(span), 1.0);
-        const int fillWidth = static_cast<int>((barRect.width() - 2) * fraction + 0.5);
-        if (fillWidth <= 0)
-        {
-            return;
-        }
-
-        const QRect fillRect = barRect.adjusted(1, 1, -1, -1);
-        painter.setPen(Qt::NoPen);
-        if (m_swrMode)
-        {
-            painter.setBrush(m_swrFillColor);
-        }
-        else
-        {
-            QLinearGradient gradient(fillRect.left(), 0, fillRect.right(), 0);
-            gradient.setColorAt(0.00, UiTheme::Color::MeterBlue);
-            gradient.setColorAt(0.35, UiTheme::Color::MeterCyan);
-            gradient.setColorAt(0.60, UiTheme::Color::MeterGreen); // S9
-            gradient.setColorAt(0.80, UiTheme::Color::MeterAmber); // S9+20
-            gradient.setColorAt(1.00, UiTheme::Color::MeterRed);   // S9+40
-            painter.setBrush(gradient);
-        }
-        painter.drawRoundedRect(QRect(fillRect.left(), fillRect.top(), fillWidth, fillRect.height()), 2, 2);
-    }
-};
-
-class ClickableWidget : public QWidget
-{
-  public:
-    explicit ClickableWidget(QWidget* parent = nullptr) : QWidget(parent) {}
+    explicit ClickableStatusPanel(QWidget* parent = nullptr) : QWidget(parent) {}
 
     std::function<void()> onClicked;
 
@@ -628,76 +563,6 @@ class ClickableWidget : public QWidget
         if (event->button() == Qt::LeftButton && rect().contains(event->pos()) && onClicked)
         {
             onClicked();
-        }
-    }
-};
-
-class SMeterScaleWidget : public QWidget
-{
-  public:
-    explicit SMeterScaleWidget(QWidget* parent = nullptr) : QWidget(parent)
-    {
-        setFixedHeight(14);
-        setMinimumWidth(220);
-    }
-    void setSwr(bool on)
-    {
-        m_swrMode = on;
-        update();
-    }
-
-  private:
-    bool m_swrMode{false};
-
-  protected:
-    void paintEvent(QPaintEvent* event) override
-    {
-        Q_UNUSED(event)
-
-        struct ScaleMark
-        {
-            QString label;
-            double fraction;
-        };
-
-        static const ScaleMark kSMarks[] = {{QStringLiteral("1"), 0.0667},  {QStringLiteral("3"), 0.2000},
-                                            {QStringLiteral("5"), 0.3333},  {QStringLiteral("7"), 0.4667},
-                                            {QStringLiteral("9"), 0.6000},  {QStringLiteral("+20"), 0.8000},
-                                            {QStringLiteral("+40"), 1.0000}};
-
-        static const ScaleMark kSwrMarks[] = {{QStringLiteral("1.0"), 0.000},
-                                              {QStringLiteral("1.5"), 0.250},
-                                              {QStringLiteral("2.0"), 0.500},
-                                              {QStringLiteral("2.5"), 0.750},
-                                              {QStringLiteral("3.0"), 1.000}};
-
-        const ScaleMark* marks = m_swrMode ? kSwrMarks : kSMarks;
-        const int maxIndex =
-            (m_swrMode ? static_cast<int>(std::size(kSwrMarks)) : static_cast<int>(std::size(kSMarks))) - 1;
-
-        QPainter painter(this);
-        QFont scaleFont = font();
-        scaleFont.setPixelSize(9);
-        scaleFont.setBold(true);
-        painter.setFont(scaleFont);
-        painter.setPen(UiTheme::Color::MeterScaleText);
-
-        const int baselineY = height() - 3;
-        for (int i = 0; i <= maxIndex; ++i)
-        {
-            const QString& mark = marks[i].label;
-            const int textWidth = painter.fontMetrics().horizontalAdvance(mark);
-            const int anchorX = static_cast<int>(marks[i].fraction * (width() - 1) + 0.5);
-            int textX = anchorX - textWidth / 2;
-            if (i == 0)
-            {
-                textX = qMax(0, textX);
-            }
-            else if (i == maxIndex)
-            {
-                textX = width() - textWidth;
-            }
-            painter.drawText(textX, baselineY, mark);
         }
     }
 };
@@ -726,10 +591,10 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                        "border-top: 1px solid %2; border-bottom: 1px solid %3; }")
             .arg(UiTheme::Color::PanelDark, UiTheme::Color::Border, UiTheme::Color::ControlStripBorder));
     vbox->addWidget(spectrumDivider);
-    m_spectrum = new SpectrumWidget(central);
-    m_spectrum->setInvertMouseWheel(
+    m_spectrumCanvas = new SpectrumCanvas(central);
+    m_spectrumCanvas->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
-    vbox->addWidget(m_spectrum, 1);
+    vbox->addWidget(m_spectrumCanvas, 1);
     m_panTuneCommitTimer = new QTimer(this);
     m_panTuneCommitTimer->setSingleShot(true);
     m_panTuneCommitTimer->setInterval(kPanTuneCommitDelayMs);
@@ -773,7 +638,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_vfo, &VfoModel::frequencyChanged, this, &MainWindow::onFrequencyChanged);
     connect(m_vfo, &VfoModel::modeChanged, this, &MainWindow::onModeChanged);
     connect(m_vfo, &VfoModel::filterChanged, this,
-            [this](int low, int high) { m_spectrum->setFilterWidth(low, high); });
+            [this](int low, int high) { m_spectrumCanvas->setFilterWidth(low, high); });
     connect(m_vfo, &VfoModel::duplexModeChanged, this, &MainWindow::onDuplexModeChanged);
     connect(m_vfo, &VfoModel::repeaterOffsetChanged, this, &MainWindow::onRepeaterOffsetChanged);
     connect(m_vfo, &VfoModel::toneAccessModeChanged, this, &MainWindow::onToneAccessModeChanged);
@@ -793,9 +658,9 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             [this](bool, int level)
             {
                 m_squelchValue = level;
-                if (m_vfoWidget)
+                if (m_vfoPanel)
                 {
-                    m_vfoWidget->setSquelch(level);
+                    m_vfoPanel->setSquelch(level);
                 }
                 updateSquelchButton();
             });
@@ -816,7 +681,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                     {
                         return;
                     }
-                    auto* receiverWidget = m_vfoWidget;
+                    auto* receiverPanel = m_vfoPanel;
                     switch (func)
                     {
                     case funcVFOBandMS:
@@ -826,7 +691,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                     case funcFreqSet:
                     case funcSelectedFreq:
                     {
-                        if (!receiverWidget)
+                        if (!receiverPanel)
                         {
                             break;
                         }
@@ -835,12 +700,12 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         {
                             m_vfoFrequencyHz = f.Hz;
                             qInfo(logGui()) << "VFO route: MAIN frequency to VFO" << f.Hz;
-                            receiverWidget->setFrequencyText(formatFrequency(f.Hz));
-                            receiverWidget->setBandText(bandLabelForHz(f.Hz));
+                            receiverPanel->setFrequencyText(formatFrequency(f.Hz));
+                            receiverPanel->setBandText(bandLabelForHz(f.Hz));
                         }
                         else
                         {
-                            receiverWidget->setFrequencyText(QStringLiteral("---.---.---"));
+                            receiverPanel->setFrequencyText(QStringLiteral("---.---.---"));
                         }
                         break;
                     }
@@ -848,13 +713,13 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                     case funcModeSet:
                     case funcSelectedMode:
                     {
-                        if (!receiverWidget)
+                        if (!receiverPanel)
                         {
                             break;
                         }
                         const auto mi = value.value<ModeInfo>();
                         qInfo(logGui()) << "VFO route: MAIN mode to VFO" << mi.name.toUpper();
-                        receiverWidget->setModeText(mi.name.toUpper());
+                        receiverPanel->setModeText(mi.name.toUpper());
                         break;
                     }
                     case funcUnselectedFreq:
@@ -864,18 +729,18 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         break;
                     case funcSMeter:
                     {
-                        if (receiverWidget && !m_txActive && m_model->isReady())
+                        if (receiverPanel && !m_txActive && m_model->isReady())
                         {
-                            receiverWidget->setSMeterValue(qBound(0, value.toInt(), 255) * 100 / 255);
+                            receiverPanel->setSMeterValue(qBound(0, value.toInt(), 255) * 100 / 255);
                         }
                         break;
                     }
                     case funcRFPower:
                     {
                         const int level = qBound(0, value.toInt(), 255);
-                        if (receiverWidget)
+                        if (receiverPanel)
                         {
-                            receiverWidget->setTxPower(level);
+                            receiverPanel->setTxPower(level);
                         }
                         m_txPowerValue = level;
                         updateTxPowerButton();
@@ -884,9 +749,9 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                     case funcSquelch:
                     {
                         const int level = qBound(0, value.toInt(), 255);
-                        if (receiverWidget)
+                        if (receiverPanel)
                         {
-                            receiverWidget->setSquelch(level);
+                            receiverPanel->setSquelch(level);
                         }
                         m_squelchValue = level;
                         updateSquelchButton();
@@ -894,7 +759,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                     }
                     case funcSWRMeter:
                     {
-                        if (!receiverWidget || !m_txActive)
+                        if (!receiverPanel || !m_txActive)
                         {
                             break;
                         }
@@ -902,7 +767,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         const QColor fillColor = swr <= 1.7   ? UiTheme::Color::MeterGreen
                                                  : swr <= 2.7 ? UiTheme::Color::MeterAmber
                                                               : UiTheme::Color::MeterRed;
-                        receiverWidget->setSwr(swr, fillColor);
+                        receiverPanel->setSwr(swr, fillColor);
                         break;
                     }
                     default:
@@ -912,24 +777,24 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     }
 
     resetRadioOwnedControlsForSync();
-    m_spectrum->setFilterWidth(m_vfo->filterLow(), m_vfo->filterHigh());
+    m_spectrumCanvas->setFilterWidth(m_vfo->filterLow(), m_vfo->filterHigh());
     updateSpectrumVfoMarker();
 
     connect(m_pan, &PanadapterModel::spectrumReady, this, &MainWindow::onSpectrumReady);
     connect(m_pan, &PanadapterModel::rangeChanged, this,
             [this](double center, double bw)
             {
-                m_spectrum->setFrequencyRange(center - bw / 2, center + bw / 2);
+                m_spectrumCanvas->setFrequencyRange(center - bw / 2, center + bw / 2);
                 updateSpectrumVfoMarker();
             });
 
-    connect(m_spectrum, &SpectrumWidget::frequencyClicked, this, &MainWindow::onSpectrumClicked);
-    connect(m_spectrum, &SpectrumWidget::tuneStepRequested, this, &MainWindow::tunePanadapterBySteps);
-    connect(m_spectrum, &SpectrumWidget::tuneDragStarted, this, &MainWindow::beginPanadapterDragTune);
-    connect(m_spectrum, &SpectrumWidget::tuneDragRequested, this, &MainWindow::tunePanadapterByDragDelta);
-    connect(m_spectrum, &SpectrumWidget::spectrumPaneHeightChanged, this,
+    connect(m_spectrumCanvas, &SpectrumCanvas::frequencyClicked, this, &MainWindow::onSpectrumClicked);
+    connect(m_spectrumCanvas, &SpectrumCanvas::tuneStepRequested, this, &MainWindow::tunePanadapterBySteps);
+    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragStarted, this, &MainWindow::beginPanadapterDragTune);
+    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragRequested, this, &MainWindow::tunePanadapterByDragDelta);
+    connect(m_spectrumCanvas, &SpectrumCanvas::spectrumPaneHeightChanged, this,
             [](int height) { AppSettings::instance().setValue("PanadapterSpectrumHeight", height); });
-    connect(m_spectrum, &SpectrumWidget::zoomInRequested, this,
+    connect(m_spectrumCanvas, &SpectrumCanvas::zoomInRequested, this,
             [this]()
             {
                 if (!m_controlsLocked)
@@ -937,7 +802,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                     m_pan->zoomInAt(m_vfo->frequencyHz() / 1e6);
                 }
             });
-    connect(m_spectrum, &SpectrumWidget::zoomOutRequested, this,
+    connect(m_spectrumCanvas, &SpectrumCanvas::zoomOutRequested, this,
             [this]()
             {
                 if (!m_controlsLocked)
@@ -949,39 +814,49 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     onConnectionChanged(false);
 
 #ifdef HAVE_HIDAPI
-    m_rc28Manager = new Rc28Manager(this);
+    m_icomRC28Manager = new IcomRC28Manager(this);
+    refreshIcomRC28EncoderSettings();
+    m_icomRC28SnapTimer = new QTimer(this);
+    m_icomRC28SnapTimer->setSingleShot(true);
+    m_icomRC28SnapTimer->setInterval(600);
+    connect(m_icomRC28SnapTimer, &QTimer::timeout, this, &MainWindow::snapIcomRC28FrequencyToKhz);
     for (int i = 0; i < 2; ++i)
     {
-        m_rc28HoldTimers[i] = new QTimer(this);
-        m_rc28HoldTimers[i]->setSingleShot(true);
-        connect(m_rc28HoldTimers[i], &QTimer::timeout, this,
+        m_icomRC28HoldTimers[i] = new QTimer(this);
+        m_icomRC28HoldTimers[i]->setSingleShot(true);
+        connect(m_icomRC28HoldTimers[i], &QTimer::timeout, this,
                 [this, i]()
                 {
-                    if (!m_rc28ButtonDown[i] || m_rc28HoldConsumed[i])
+                    if (!m_icomRC28ButtonDown[i] || m_icomRC28HoldConsumed[i])
                     {
                         return;
                     }
-                    m_rc28HoldConsumed[i] = true;
+                    m_icomRC28HoldConsumed[i] = true;
                     const QString field = i == 0 ? QStringLiteral("f1Hold") : QStringLiteral("f2Hold");
-                    dispatchRc28Action(Rc28Manager::settingsField(field, QStringLiteral("None")));
+                    dispatchIcomRC28Action(IcomRC28Manager::settingsField(field, QStringLiteral("None")));
                 });
     }
-    connect(m_rc28Manager, &Rc28Manager::buttonPressed, this, &MainWindow::handleRc28Button);
-    connect(m_rc28Manager, &Rc28Manager::tuneSteps, this, &MainWindow::handleRc28Tune);
-    connect(m_rc28Manager, &Rc28Manager::multipleDevicesDetected, this, [this](const QString& deviceName)
-            { showToast(QStringLiteral("Duplicate accessory blocked (%1)").arg(deviceName), 8000); });
-    connect(m_rc28Manager, &Rc28Manager::connectionChanged, this,
+    connect(m_icomRC28Manager, &IcomRC28Manager::buttonPressed, this, &MainWindow::handleIcomRC28Button);
+    connect(m_icomRC28Manager, &IcomRC28Manager::tuneSteps, this, &MainWindow::handleIcomRC28Tune);
+    connect(m_icomRC28Manager, &IcomRC28Manager::multipleDevicesDetected, this,
+            [this](const QString& deviceName)
+            {
+                qInfo(logIcomRC28()) << "Multiple devices detected:" << deviceName;
+                showToast(QStringLiteral("Duplicate accessory blocked (%1)").arg(deviceName), 8000);
+            });
+    connect(m_icomRC28Manager, &IcomRC28Manager::connectionChanged, this,
             [this](bool connected, const QString& deviceName)
             {
+                qInfo(logIcomRC28()) << (connected ? "Connected" : "Disconnected") << deviceName;
                 if (connected)
                 {
-                    updateRc28Leds();
+                    updateIcomRC28Leds();
                 }
                 showToast(connected ? QStringLiteral("Accessory connected (%1)").arg(deviceName)
                                     : QStringLiteral("Accessory disconnected (%1)").arg(deviceName),
                           4000);
             });
-    m_rc28Manager->loadSettings();
+    m_icomRC28Manager->loadSettings();
 #endif
 
     QTimer::singleShot(0, this, &MainWindow::tryAutoConnect);
@@ -997,7 +872,7 @@ void MainWindow::buildToolBar()
             .arg(UiTheme::Color::MenuPanel, UiTheme::Color::BorderMedium, UiTheme::Color::TextPrimary,
                  UiTheme::Color::AccentDark, UiTheme::Color::White, UiTheme::Color::Border);
 
-    m_titleBar = new TitleBarWidget(this);
+    m_titleBar = new MainTitleBar(this);
     m_titleBar->setTitle(
         QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 v%2</span>")
             .arg(QString::fromLatin1(APP_NAME).toHtmlEscaped(), QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
@@ -1008,41 +883,11 @@ void MainWindow::buildToolBar()
     quitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Q")));
     m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
 
-    auto* settingsMenu = new QMenu(this);
-    settingsMenu->setStyleSheet(menuStyle);
-    settingsMenu->addAction("Audio", this,
-                            [this]()
-                            {
-                                PreferencesDialog dlg(PreferencesDialog::Page::Audio, this);
-                                dlg.exec();
-                                m_model->setLanModLevel(AppSettings::instance().value("LanModLevel", 128).toInt());
-                            });
-    settingsMenu->addAction("Application", this,
-                            [this]()
-                            {
-                                PreferencesDialog dlg(PreferencesDialog::Page::Application, this);
-                                dlg.exec();
-                                m_spectrum->setInvertMouseWheel(
-                                    AppSettings::instance()
-                                        .value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False")
-                                        .toBool());
-                            });
-    settingsMenu->addAction("Memory", this, &MainWindow::showMemoryWindow);
-    settingsMenu->addAction("Radio Setup", this,
-                            [this]()
-                            {
-                                PreferencesDialog dlg(this);
-                                dlg.exec();
-                            });
-    settingsMenu->addSeparator();
-#ifdef HAVE_HIDAPI
-    settingsMenu->addAction("Icom RC-28 Remote Encoder", this, [this]() { showRc28MappingDialog(); });
-#endif
-    m_titleBar->addMenu(QStringLiteral("&Settings"), settingsMenu);
+    m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
 
     auto* viewMenu = new QMenu(this);
     viewMenu->setStyleSheet(menuStyle);
-    viewMenu->addAction("DTMF", this, &MainWindow::showDtmfWidget);
+    viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 
     auto* helpMenu = new QMenu(this);
@@ -1051,15 +896,16 @@ void MainWindow::buildToolBar()
                         [this]()
                         {
                             AboutDialog dlg(this);
+                            centerPopupWindow(&dlg);
                             dlg.exec();
                         });
     m_titleBar->addMenu(QStringLiteral("&Help"), helpMenu);
 
-    connect(m_titleBar, &TitleBarWidget::minimizeRequested, this, &QWidget::showMinimized);
-    connect(m_titleBar, &TitleBarWidget::closeRequested, this, &QWidget::close);
-    connect(m_titleBar, &TitleBarWidget::muteToggled, this, &MainWindow::toggleMute);
-    connect(m_titleBar, &TitleBarWidget::lockToggled, this, &MainWindow::toggleControlLock);
-    connect(m_titleBar, &TitleBarWidget::volumeChanged, this,
+    connect(m_titleBar, &MainTitleBar::minimizeRequested, this, &QWidget::showMinimized);
+    connect(m_titleBar, &MainTitleBar::closeRequested, this, &QWidget::close);
+    connect(m_titleBar, &MainTitleBar::muteToggled, this, &MainWindow::toggleMute);
+    connect(m_titleBar, &MainTitleBar::lockToggled, this, &MainWindow::toggleControlLock);
+    connect(m_titleBar, &MainTitleBar::volumeChanged, this,
             [this](int value)
             {
                 if (!m_model || !m_model->isReady() || m_controlsLocked)
@@ -1068,9 +914,9 @@ void MainWindow::buildToolBar()
                 }
                 const int bounded = qBound(0, value, 255);
                 AppSettings::instance().setValue(QStringLiteral("VolumeLevel"), bounded);
-                if (m_vfoWidget)
+                if (m_vfoPanel)
                 {
-                    m_vfoWidget->setVolume(bounded);
+                    m_vfoPanel->setVolume(bounded);
                 }
                 if (auto* backend = m_model->backend())
                 {
@@ -1085,7 +931,7 @@ void MainWindow::buildToolBar()
 void MainWindow::buildMemoryWindow()
 {
     m_memoryWindow = new QDialog(this);
-    m_memoryWindow->setWindowTitle("Memories");
+    m_memoryWindow->setWindowTitle("Memory");
     m_memoryWindow->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     m_memoryWindow->setStyleSheet(
         QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
@@ -1205,13 +1051,16 @@ void MainWindow::buildMemoryWindow()
     m_memoryCountLabel = new QLabel(panel);
     m_memoryCountLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
+    auto* closeButton = new QPushButton("Close", panel);
     footer->addWidget(localNote, 1);
     footer->addWidget(m_closeMemoryWindowOnSelectCheck);
     footer->addWidget(m_memoryCountLabel);
+    footer->addWidget(closeButton);
     root->addLayout(footer);
 
-    auto* memTitleBar = new FramelessTitleBar(QStringLiteral("Memories"), m_memoryWindow);
+    auto* memTitleBar = new FramelessTitleBar(QStringLiteral("Memory"), m_memoryWindow);
     connect(memTitleBar->closeButton(), &QPushButton::clicked, m_memoryWindow, &QWidget::hide);
+    connect(closeButton, &QPushButton::clicked, m_memoryWindow, &QWidget::hide);
 
     auto* windowLayout = new QVBoxLayout(m_memoryWindow);
     windowLayout->setContentsMargins(kNoMargins);
@@ -1313,6 +1162,43 @@ void MainWindow::buildMemoryWindow()
     reloadMemoryTable();
 }
 
+void MainWindow::centerPopupWindow(QWidget* popup) const
+{
+    sdr9700::ui::centerWindowOn(popup, this);
+}
+
+void MainWindow::showSettingsDialog()
+{
+#ifdef HAVE_HIDAPI
+    SettingsDialog dlg(SettingsDialog::Page::RadioSetup, this, m_icomRC28Manager);
+#else
+    SettingsDialog dlg(this);
+#endif
+    connect(&dlg, &SettingsDialog::lanModLevelChanged, m_model, &RadioModel::setLanModLevel);
+    connect(&dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_spectrumCanvas,
+            &SpectrumCanvas::setInvertMouseWheel);
+#ifdef HAVE_HIDAPI
+    connect(&dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
+            [this](const QString&, const QString&)
+            {
+                refreshIcomRC28EncoderSettings();
+                if (!m_icomRC28AutoSnap && m_icomRC28SnapTimer)
+                {
+                    m_icomRC28SnapTimer->stop();
+                }
+            });
+#endif
+    centerPopupWindow(&dlg);
+    QTimer::singleShot(0, &dlg, [this, &dlg]() { centerPopupWindow(&dlg); });
+    dlg.exec();
+    m_model->setLanModLevel(AppSettings::instance().value("LanModLevel", 128).toInt());
+    m_spectrumCanvas->setInvertMouseWheel(
+        AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
+#ifdef HAVE_HIDAPI
+    refreshIcomRC28EncoderSettings();
+#endif
+}
+
 void MainWindow::showMemoryWindow()
 {
     if (!m_memoryWindow)
@@ -1320,6 +1206,7 @@ void MainWindow::showMemoryWindow()
         return;
     }
     reloadMemoryTable();
+    centerPopupWindow(m_memoryWindow);
     m_memoryWindow->show();
     m_memoryWindow->raise();
     m_memoryWindow->activateWindow();
@@ -1985,6 +1872,7 @@ void MainWindow::showMemoryEditor(const QString& memoryId)
                 dialog.accept();
             });
 
+    centerPopupWindow(&dialog);
     if (dialog.exec() != QDialog::Accepted || !submitted)
     {
         return;
@@ -2018,9 +1906,9 @@ void MainWindow::reloadMemoryTable()
 {
     const QString bandFilter = m_memoryBandFilter ? m_memoryBandFilter->currentData().toString() : QString();
     const QVector<MemoryRecord> memories = loadMemories();
-    if (m_memoryWidget)
+    if (m_memoryPanel)
     {
-        m_memoryWidget->setMemories(memories, m_activeMemoryId);
+        m_memoryPanel->setMemories(memories, m_activeMemoryId);
     }
 
     if (!m_memoryTable)
@@ -2123,22 +2011,22 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_squelchValue = 0;
     m_rfGainValue = 0;
     m_micGainValue = 0;
-    m_vfoWidget = new VfoWidget(QStringLiteral("VFO"), strip);
-    m_vfoWidget->setFrequencyReadOnly(false);
-    m_vfoWidget->setFrequencyText(QStringLiteral("---.---.---"));
-    m_vfoWidget->setBandText(QStringLiteral("--"));
-    m_vfoWidget->setModeText(QStringLiteral("--"));
-    m_vfoWidget->setMemoryName(QString::fromLatin1(kNoActiveMemoryLabel), QStringLiteral("No active memory"));
-    m_vfoWidget->setTxPower(0);
+    m_vfoPanel = new VfoPanel(QStringLiteral("VFO"), strip);
+    m_vfoPanel->setFrequencyReadOnly(false);
+    m_vfoPanel->setFrequencyText(QStringLiteral("---.---.---"));
+    m_vfoPanel->setBandText(QStringLiteral("--"));
+    m_vfoPanel->setModeText(QStringLiteral("--"));
+    m_vfoPanel->setMemoryName(QString::fromLatin1(kNoActiveMemoryLabel), QStringLiteral("No active memory"));
+    m_vfoPanel->setTxPower(0);
     const int appVolume = appVolumeSettingValue();
-    m_vfoWidget->setVolume(appVolume);
-    m_vfoWidget->setVolumeVisible(false);
+    m_vfoPanel->setVolume(appVolume);
+    m_vfoPanel->setVolumeVisible(false);
     if (m_titleBar)
     {
         m_titleBar->setVolume(appVolume);
     }
-    m_vfoWidget->setSquelch(0);
-    m_memoryWidget = new MemoryWidget(strip);
+    m_vfoPanel->setSquelch(0);
+    m_memoryPanel = new MemoryPanel(strip);
 
     m_agcBtn = makeSelectorButton("AGC", QStringLiteral("OFF"), "AGC mode", "Select AGC time constant.");
     m_attBtn = makeSelectorButton("ATT", QStringLiteral("OFF"), "Attenuator", "Toggle receiver attenuator.");
@@ -2192,20 +2080,20 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_toneBtn = makeSelectorButton("TONE", QStringLiteral("OFF"), "Tone settings", "Select tone, CTCSS, or DTCS.");
     m_toneBtn->setToolTip("Select tone, CTCSS, or DTCS.");
 
-    const RecieveWidget::Buttons receiveButtons{
+    const ReceivePanel::Buttons receiveButtons{
         m_agcBtn, m_attBtn, m_nbBtn, m_notchBtn, m_nrBtn, m_preBtn, m_rfGainBtn, m_ritBtn,
     };
-    const RepeaterWidget::Buttons repeaterButtons{
+    const RepeaterPanel::Buttons repeaterButtons{
         m_offsetBtn,
         m_toneBtn,
     };
-    const TransmitWidget::Buttons transmitButtons{
+    const TransmitPanel::Buttons transmitButtons{
         m_compBtn,
         m_micGainBtn,
     };
-    auto* receiveGroup = new RecieveWidget(receiveButtons, strip);
-    auto* repeaterGroup = new RepeaterWidget(repeaterButtons, strip);
-    auto* transmitGroup = new TransmitWidget(transmitButtons, strip);
+    auto* receiveGroup = new ReceivePanel(receiveButtons, strip);
+    auto* repeaterGroup = new RepeaterPanel(repeaterButtons, strip);
+    auto* transmitGroup = new TransmitPanel(transmitButtons, strip);
     auto* receiveStack = new QWidget(strip);
     auto* receiveStackLayout = new QVBoxLayout(receiveStack);
     receiveStackLayout->setContentsMargins(0, 0, 0, 0);
@@ -2215,7 +2103,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     receiveBottomLayout->setSpacing(kControlRowSpacing);
     receiveBottomLayout->addWidget(repeaterGroup, 1);
     receiveBottomLayout->addWidget(transmitGroup, 1);
-    auto* pttGroup = new PttWidget(m_pttBtn, nullptr, strip);
+    auto* pttGroup = new PttPanel(m_pttBtn, nullptr, strip);
 
     auto* receiveTopRow = new QHBoxLayout;
     receiveTopRow->setContentsMargins(0, 0, 0, 0);
@@ -2248,14 +2136,14 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     connect(m_offsetBtn, &QPushButton::clicked, this, &MainWindow::showOffsetMenu);
     connect(m_toneBtn, &QPushButton::clicked, this, &MainWindow::showToneMenu);
     connect(m_micGainBtn, &QPushButton::clicked, this, &MainWindow::showMicGainMenu);
-    connect(m_memoryWidget, &MemoryWidget::memoryActivated, this,
+    connect(m_memoryPanel, &MemoryPanel::memoryActivated, this,
             [this](const QString& memoryId) { selectMemoryById(memoryId, false); });
 
-    controlRow->addWidget(m_vfoWidget);
-    controlRow->addWidget(m_memoryWidget);
+    controlRow->addWidget(m_vfoPanel);
+    controlRow->addWidget(m_memoryPanel);
     controlRow->addWidget(receiveStack, 1);
 
-    m_dtmfWidget = new DtmfWidget(this);
+    m_dtmfDialog = new DtmfDialog(this);
 
     m_dtmfPttOffTimer = new QTimer(this);
     m_dtmfPttOffTimer->setSingleShot(true);
@@ -2264,9 +2152,9 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
             {
                 m_vfo->setPtt(false);
                 m_dtmfSendActive = false;
-                if (m_dtmfWidget)
+                if (m_dtmfDialog)
                 {
-                    m_dtmfWidget->setSendInProgress(false);
+                    m_dtmfDialog->setSendInProgress(false);
                 }
                 // CI-V echo timing can cause the radio's TX-active acknowledgement to
                 // arrive after the unkey command is queued, leaving pttChanged(true)
@@ -2279,13 +2167,13 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     vbox->addWidget(strip);
     strip->setFocus();
 
-    connect(m_vfoWidget, &VfoWidget::frequencyReturnPressed, this, [this]() { commitFrequencyEdit(m_vfoWidget); });
+    connect(m_vfoPanel, &VfoPanel::frequencyReturnPressed, this, [this]() { commitFrequencyEdit(m_vfoPanel); });
     connect(m_pttBtn, &QPushButton::pressed, this, &MainWindow::onPttPressed);
     connect(m_pttBtn, &QPushButton::released, this, &MainWindow::onPttReleased);
-    connect(m_dtmfWidget, &DtmfWidget::sendRequested, this, &MainWindow::onDtmfSendRequested);
-    auto connectVolumeSlider = [this](VfoWidget* widget)
+    connect(m_dtmfDialog, &DtmfDialog::sendRequested, this, &MainWindow::onDtmfSendRequested);
+    auto connectVolumeSlider = [this](VfoPanel* widget)
     {
-        connect(widget, &VfoWidget::volumeChanged, this,
+        connect(widget, &VfoPanel::volumeChanged, this,
                 [this](int value)
                 {
                     if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
@@ -2294,9 +2182,9 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     }
                     const int bounded = qBound(0, value, 255);
                     AppSettings::instance().setValue(QStringLiteral("VolumeLevel"), bounded);
-                    if (m_vfoWidget)
+                    if (m_vfoPanel)
                     {
-                        m_vfoWidget->setVolume(bounded);
+                        m_vfoPanel->setVolume(bounded);
                     }
                     if (auto* backend = m_model ? m_model->backend() : nullptr)
                     {
@@ -2304,10 +2192,10 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     }
                 });
     };
-    connectVolumeSlider(m_vfoWidget);
-    auto connectTxPowerSlider = [this](VfoWidget* widget)
+    connectVolumeSlider(m_vfoPanel);
+    auto connectTxPowerSlider = [this](VfoPanel* widget)
     {
-        connect(widget, &VfoWidget::txPowerChanged, this,
+        connect(widget, &VfoPanel::txPowerChanged, this,
                 [this](int value)
                 {
                     if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
@@ -2321,10 +2209,10 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     }
                 });
     };
-    connectTxPowerSlider(m_vfoWidget);
-    auto connectSquelchSlider = [this](VfoWidget* widget)
+    connectTxPowerSlider(m_vfoPanel);
+    auto connectSquelchSlider = [this](VfoPanel* widget)
     {
-        connect(widget, &VfoWidget::squelchChanged, this,
+        connect(widget, &VfoPanel::squelchChanged, this,
                 [this](int value)
                 {
                     if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
@@ -2337,9 +2225,9 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     }
                 });
     };
-    connectSquelchSlider(m_vfoWidget);
+    connectSquelchSlider(m_vfoPanel);
     connect(m_rfGainBtn, &QPushButton::clicked, this, &MainWindow::showRfGainMenu);
-    auto showModeMenuFor = [this](const VfoWidget* widget)
+    auto showModeMenuFor = [this](const VfoPanel* widget)
     {
         if (!widget || !m_vfo)
         {
@@ -2357,8 +2245,8 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
             m_vfo->setMode(chosen->text());
         }
     };
-    connect(m_vfoWidget, &VfoWidget::modeClicked, this, [showModeMenuFor, this]() { showModeMenuFor(m_vfoWidget); });
-    auto showBandMenuFor = [this](const VfoWidget* widget)
+    connect(m_vfoPanel, &VfoPanel::modeClicked, this, [showModeMenuFor, this]() { showModeMenuFor(m_vfoPanel); });
+    auto showBandMenuFor = [this](const VfoPanel* widget)
     {
         if (!widget || !m_vfo)
         {
@@ -2391,11 +2279,11 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
             m_vfo->setFrequencyHz(hz);
         }
     };
-    connect(m_vfoWidget, &VfoWidget::bandClicked, this, [showBandMenuFor, this]() { showBandMenuFor(m_vfoWidget); });
-    connect(m_vfoWidget, &VfoWidget::stepClicked, this,
+    connect(m_vfoPanel, &VfoPanel::bandClicked, this, [showBandMenuFor, this]() { showBandMenuFor(m_vfoPanel); });
+    connect(m_vfoPanel, &VfoPanel::stepClicked, this,
             [this]()
             {
-                if (!m_vfoWidget)
+                if (!m_vfoPanel)
                 {
                     return;
                 }
@@ -2409,7 +2297,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     action->setCheckable(true);
                     action->setChecked(preset.hz == currentStep);
                 }
-                const QAction* chosen = menu.exec(m_vfoWidget->stepMenuPosition());
+                const QAction* chosen = menu.exec(m_vfoPanel->stepMenuPosition());
                 if (chosen)
                 {
                     AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHzSettingsKey),
@@ -2479,11 +2367,11 @@ void MainWindow::updateTxIndicator(bool on)
         return;
     }
     m_txActive = on;
-    updateRc28Leds();
-    if (m_vfoWidget)
+    updateIcomRC28Leds();
+    if (m_vfoPanel)
     {
-        m_vfoWidget->setSwrMode(on);
-        m_vfoWidget->setSMeterValue(on ? 0 : qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
+        m_vfoPanel->setSwrMode(on);
+        m_vfoPanel->setSMeterValue(on ? 0 : qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
     }
     if (on)
     {
@@ -2598,11 +2486,7 @@ void MainWindow::updateSystemStats()
             if (vals.size() >= 4)
             {
                 const quint64 idle = vals[3] + (vals.size() > 4 ? vals[4] : 0); // idle + iowait
-                quint64 total = 0;
-                for (quint64 v : vals)
-                {
-                    total += v;
-                }
+                const quint64 total = std::accumulate(vals.cbegin(), vals.cend(), quint64{0});
 
                 double cpuPct = 0.0;
                 if (m_prevCpuTotal > 0 && total > m_prevCpuTotal)
@@ -2630,22 +2514,21 @@ void MainWindow::updateSystemStats()
         if (f.open(QIODevice::ReadOnly))
         {
             const QString content = QString::fromLatin1(f.readAll());
-            for (const QString& line : content.split('\n'))
+            const QStringList lines = content.split('\n');
+            const auto lineIt = std::find_if(lines.cbegin(), lines.cend(), [](const QString& line)
+                                             { return line.startsWith(QLatin1String("VmRSS:")); });
+            if (lineIt != lines.cend())
             {
-                if (line.startsWith(QLatin1String("VmRSS:")))
+                const QStringList parts = lineIt->simplified().split(' ', Qt::SkipEmptyParts);
+                if (parts.size() >= 2)
                 {
-                    const QStringList parts = line.simplified().split(' ', Qt::SkipEmptyParts);
-                    if (parts.size() >= 2)
-                    {
-                        const double rssGb = parts[1].toDouble() / (1024.0 * 1024.0);
-                        const QString rssStr = rssGb >= 1.0 ? QStringLiteral("%1G").arg(rssGb, 0, 'f', 1)
-                                                            : QStringLiteral("%1M").arg(static_cast<int>(rssGb * 1024));
-                        m_memLabel->setText(QStringLiteral("<span style='color:%1; font-weight:bold'>Mem:</span>"
-                                                           "&nbsp;<span style='color:%2'>%3</span>")
-                                                .arg(QLatin1String(UiTheme::Color::TextStatusSecondary),
-                                                     QLatin1String(UiTheme::Color::TextStatusSecondary), rssStr));
-                    }
-                    break;
+                    const double rssGb = parts[1].toDouble() / (1024.0 * 1024.0);
+                    const QString rssStr = rssGb >= 1.0 ? QStringLiteral("%1G").arg(rssGb, 0, 'f', 1)
+                                                        : QStringLiteral("%1M").arg(static_cast<int>(rssGb * 1024));
+                    m_memLabel->setText(QStringLiteral("<span style='color:%1; font-weight:bold'>Mem:</span>"
+                                                       "&nbsp;<span style='color:%2'>%3</span>")
+                                            .arg(QLatin1String(UiTheme::Color::TextStatusSecondary),
+                                                 QLatin1String(UiTheme::Color::TextStatusSecondary), rssStr));
                 }
             }
         }
@@ -2723,12 +2606,12 @@ void MainWindow::buildStatusBar()
 
     hbox->addStretch(1);
 
-    auto* connStack = new ClickableWidget(this);
-    applyStatusContainerWidth(connStack, uniformStackWidth);
-    auto* connVbox = new QVBoxLayout(connStack);
-    connVbox->setContentsMargins(0, 0, 0, 0);
-    connVbox->setSpacing(0);
-    connVbox->setAlignment(Qt::AlignVCenter);
+    auto* connectionStatusPanel = new ClickableStatusPanel(this);
+    applyStatusContainerWidth(connectionStatusPanel, uniformStackWidth);
+    auto* connectionStatusLayout = new QVBoxLayout(connectionStatusPanel);
+    connectionStatusLayout->setContentsMargins(0, 0, 0, 0);
+    connectionStatusLayout->setSpacing(0);
+    connectionStatusLayout->setAlignment(Qt::AlignVCenter);
 
     m_connDetailLabel = new QLabel("Radio", this);
     m_connDetailLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
@@ -2741,24 +2624,24 @@ void MainWindow::buildStatusBar()
     m_connStateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
     m_connStateLabel->setAlignment(Qt::AlignCenter);
 
-    connStack->setCursor(Qt::PointingHandCursor);
-    connStack->setAccessibleName("Radio connection");
-    connStack->setAccessibleDescription("Click to open the radio chooser.");
-    connStack->onClicked = [this]() { showRadioChooserDialog(); };
+    connectionStatusPanel->setCursor(Qt::PointingHandCursor);
+    connectionStatusPanel->setAccessibleName("Radio connection");
+    connectionStatusPanel->setAccessibleDescription("Click to open the radio chooser.");
+    connectionStatusPanel->onClicked = [this]() { showRadioChooserDialog(); };
 
-    connVbox->addWidget(m_connDetailLabel);
-    connVbox->addWidget(m_connStateLabel);
-    hbox->addWidget(connStack);
+    connectionStatusLayout->addWidget(m_connDetailLabel);
+    connectionStatusLayout->addWidget(m_connStateLabel);
+    hbox->addWidget(connectionStatusPanel);
     updateConnectionTooltip();
 
     hbox->addWidget(makeSep());
 
-    auto* netStack = new QWidget(this);
-    applyStatusContainerWidth(netStack, uniformStackWidth);
-    auto* netVbox = new QVBoxLayout(netStack);
-    netVbox->setContentsMargins(0, 0, 0, 0);
-    netVbox->setSpacing(0);
-    netVbox->setAlignment(Qt::AlignVCenter);
+    auto* networkStatusPanel = new QWidget(this);
+    applyStatusContainerWidth(networkStatusPanel, uniformStackWidth);
+    auto* networkStatusLayout = new QVBoxLayout(networkStatusPanel);
+    networkStatusLayout->setContentsMargins(0, 0, 0, 0);
+    networkStatusLayout->setSpacing(0);
+    networkStatusLayout->setAlignment(Qt::AlignVCenter);
     m_netTitleLabel = new QLabel("Network", this);
     m_netTitleLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
     m_netTitleLabel->setAlignment(Qt::AlignCenter);
@@ -2766,20 +2649,20 @@ void MainWindow::buildStatusBar()
     m_netQualLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
     m_netQualLabel->setAlignment(Qt::AlignCenter);
     m_netQualLabel->setTextFormat(Qt::RichText);
-    netVbox->addWidget(m_netTitleLabel);
-    netVbox->addWidget(m_netQualLabel);
-    hbox->addWidget(netStack);
+    networkStatusLayout->addWidget(m_netTitleLabel);
+    networkStatusLayout->addWidget(m_netQualLabel);
+    hbox->addWidget(networkStatusPanel);
 
     hbox->addWidget(makeSep());
 
     // System stats stack (CPU / MEM)
     {
-        auto* sysStack = new QWidget(this);
-        applyStatusContainerWidth(sysStack, uniformStackWidth);
-        auto* sysVbox = new QVBoxLayout(sysStack);
-        sysVbox->setContentsMargins(0, 0, 0, 0);
-        sysVbox->setSpacing(0);
-        sysVbox->setAlignment(Qt::AlignVCenter);
+        auto* systemStatusPanel = new QWidget(this);
+        applyStatusContainerWidth(systemStatusPanel, uniformStackWidth);
+        auto* systemStatusLayout = new QVBoxLayout(systemStatusPanel);
+        systemStatusLayout->setContentsMargins(0, 0, 0, 0);
+        systemStatusLayout->setSpacing(0);
+        systemStatusLayout->setAlignment(Qt::AlignVCenter);
 
         m_cpuLabel = new QLabel(this);
         m_cpuLabel->setAlignment(Qt::AlignCenter);
@@ -2791,31 +2674,31 @@ void MainWindow::buildStatusBar()
         m_memLabel->setTextFormat(Qt::RichText);
         m_memLabel->setStyleSheet(QStringLiteral("QLabel { font-size: 12px; background: transparent; }"));
 
-        sysVbox->addWidget(m_cpuLabel);
-        sysVbox->addWidget(m_memLabel);
-        hbox->addWidget(sysStack);
+        systemStatusLayout->addWidget(m_cpuLabel);
+        systemStatusLayout->addWidget(m_memLabel);
+        hbox->addWidget(systemStatusPanel);
     }
 
     hbox->addWidget(makeSep());
 
-    auto* txStack = new ClickableWidget(this);
-    applyStatusContainerWidth(txStack, uniformStackWidth);
-    txStack->setCursor(Qt::PointingHandCursor);
-    txStack->setAccessibleName("Emergency transmit off");
-    txStack->setAccessibleDescription("Click to force transmit off.");
+    auto* transmitStatusPanel = new ClickableStatusPanel(this);
+    applyStatusContainerWidth(transmitStatusPanel, uniformStackWidth);
+    transmitStatusPanel->setCursor(Qt::PointingHandCursor);
+    transmitStatusPanel->setAccessibleName("Emergency transmit off");
+    transmitStatusPanel->setAccessibleDescription("Click to force transmit off.");
     const QString txTooltip = QStringLiteral("Transmit (TX)\nClick to force transmit off.");
-    txStack->setToolTip(txTooltip);
-    txStack->onClicked = [this]()
+    transmitStatusPanel->setToolTip(txTooltip);
+    transmitStatusPanel->onClicked = [this]()
     {
         if (m_vfo)
         {
             m_vfo->setPtt(false);
         }
     };
-    auto* txVbox = new QVBoxLayout(txStack);
-    txVbox->setContentsMargins(0, 0, 0, 0);
-    txVbox->setSpacing(0);
-    txVbox->setAlignment(Qt::AlignVCenter);
+    auto* transmitStatusLayout = new QVBoxLayout(transmitStatusPanel);
+    transmitStatusLayout->setContentsMargins(0, 0, 0, 0);
+    transmitStatusLayout->setSpacing(0);
+    transmitStatusLayout->setAlignment(Qt::AlignVCenter);
 
     m_txIndicator = new QLabel("TX", this);
     m_txIndicator->setAlignment(Qt::AlignCenter);
@@ -2829,9 +2712,9 @@ void MainWindow::buildStatusBar()
     m_txTimerLabel->setAlignment(Qt::AlignCenter);
     m_txTimerLabel->setToolTip(txTooltip);
 
-    txVbox->addWidget(m_txIndicator);
-    txVbox->addWidget(m_txTimerLabel);
-    hbox->addWidget(txStack);
+    transmitStatusLayout->addWidget(m_txIndicator);
+    transmitStatusLayout->addWidget(m_txTimerLabel);
+    hbox->addWidget(transmitStatusPanel);
 
     m_txDurationTimer = new QTimer(this);
     m_txDurationTimer->setInterval(250);
@@ -2839,16 +2722,16 @@ void MainWindow::buildStatusBar()
 
     hbox->addWidget(makeSep());
 
-    auto* timeStack = new ClickableWidget(this);
-    applyStatusContainerWidth(timeStack, uniformStackWidth);
-    timeStack->setCursor(Qt::PointingHandCursor);
-    timeStack->setAccessibleName("Status bar clock");
-    timeStack->setAccessibleDescription("Click to switch between UTC and local time.");
-    timeStack->onClicked = [this]() { toggleStatusClockMode(); };
-    auto* timeVbox = new QVBoxLayout(timeStack);
-    timeVbox->setContentsMargins(0, 0, 0, 0);
-    timeVbox->setSpacing(0);
-    timeVbox->setAlignment(Qt::AlignVCenter);
+    auto* clockStatusPanel = new ClickableStatusPanel(this);
+    applyStatusContainerWidth(clockStatusPanel, uniformStackWidth);
+    clockStatusPanel->setCursor(Qt::PointingHandCursor);
+    clockStatusPanel->setAccessibleName("Status bar clock");
+    clockStatusPanel->setAccessibleDescription("Click to switch between UTC and local time.");
+    clockStatusPanel->onClicked = [this]() { toggleStatusClockMode(); };
+    auto* clockStatusLayout = new QVBoxLayout(clockStatusPanel);
+    clockStatusLayout->setContentsMargins(0, 0, 0, 0);
+    clockStatusLayout->setSpacing(0);
+    clockStatusLayout->setAlignment(Qt::AlignVCenter);
 
     m_dateLabel = new QLabel("", this);
     m_dateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
@@ -2857,9 +2740,9 @@ void MainWindow::buildStatusBar()
     m_timeLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
     m_timeLabel->setAlignment(Qt::AlignCenter);
 
-    timeVbox->addWidget(m_dateLabel);
-    timeVbox->addWidget(m_timeLabel);
-    hbox->addWidget(timeStack);
+    clockStatusLayout->addWidget(m_dateLabel);
+    clockStatusLayout->addWidget(m_timeLabel);
+    hbox->addWidget(clockStatusPanel);
 
     // Never use showMessage(); it hides permanent widgets. All transient
     // messages go through showToast() which overlays m_statusLabel directly.
@@ -2905,6 +2788,7 @@ void MainWindow::showRadioChooserDialog()
                     onConnectToProfile(*p);
                 }
             });
+    centerPopupWindow(dlg);
     dlg->exec();
 }
 
@@ -2953,9 +2837,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
 {
     saveWindowLayout();
 #ifdef HAVE_HIDAPI
-    if (m_rc28Manager)
+    if (m_icomRC28Manager)
     {
-        m_rc28Manager->close();
+        m_icomRC28Manager->close();
     }
 #endif
     m_userDisconnected = true;
@@ -2992,12 +2876,12 @@ void MainWindow::restoreWindowLayout()
         }
     }
 
-    if (m_spectrum)
+    if (m_spectrumCanvas)
     {
         const int spectrumHeight = AppSettings::instance().value("PanadapterSpectrumHeight", -1).toInt();
         if (spectrumHeight > 0)
         {
-            m_spectrum->setSpectrumPaneHeight(spectrumHeight);
+            m_spectrumCanvas->setSpectrumPaneHeight(spectrumHeight);
         }
     }
 }
@@ -3006,15 +2890,15 @@ void MainWindow::saveWindowLayout() const
 {
     AppSettings::instance().setValue("MainWindowX", normalGeometry().x());
     AppSettings::instance().setValue("MainWindowY", normalGeometry().y());
-    if (m_spectrum)
+    if (m_spectrumCanvas)
     {
-        AppSettings::instance().setValue("PanadapterSpectrumHeight", m_spectrum->spectrumPaneHeight());
+        AppSettings::instance().setValue("PanadapterSpectrumHeight", m_spectrumCanvas->spectrumPaneHeight());
     }
 }
 
 void MainWindow::updateSpectrumVfoMarker()
 {
-    if (!m_spectrum || !m_vfo || !m_pan)
+    if (!m_spectrumCanvas || !m_vfo || !m_pan)
     {
         return;
     }
@@ -3023,20 +2907,20 @@ void MainWindow::updateSpectrumVfoMarker()
         m_displayPanTuneHz > 0 ? m_displayPanTuneHz : (m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : m_vfo->frequencyHz());
     const double vfoMhz = displayedHz / 1e6;
     const bool vfoInPanadapter = vfoMhz >= m_pan->startMhz() && vfoMhz <= m_pan->endMhz();
-    m_spectrum->setVfoFrequency(vfoInPanadapter ? vfoMhz : m_pan->centerMhz());
+    m_spectrumCanvas->setVfoFrequency(vfoInPanadapter ? vfoMhz : m_pan->centerMhz());
 }
 
 void MainWindow::setRadioControlsEnabled(bool enabled)
 {
     const bool controlsEnabled = enabled && !m_controlsLocked;
-    if (m_vfoWidget)
+    if (m_vfoPanel)
     {
-        m_vfoWidget->setEnabled(controlsEnabled);
-        m_vfoWidget->setControlsEnabled(controlsEnabled);
+        m_vfoPanel->setEnabled(controlsEnabled);
+        m_vfoPanel->setControlsEnabled(controlsEnabled);
     }
-    if (m_memoryWidget)
+    if (m_memoryPanel)
     {
-        m_memoryWidget->setEnabled(controlsEnabled);
+        m_memoryPanel->setEnabled(controlsEnabled);
     }
     if (m_titleBar)
     {
@@ -3064,9 +2948,9 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
         m_rfGainBtn->setEnabled(controlsEnabled);
     }
 
-    if (m_spectrum)
+    if (m_spectrumCanvas)
     {
-        m_spectrum->setInteractionLocked(m_controlsLocked);
+        m_spectrumCanvas->setInteractionLocked(m_controlsLocked);
     }
 }
 
@@ -3083,19 +2967,19 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_toneFrequency = 670;
     m_dtcsCode = 23;
 
-    if (m_vfoWidget)
+    if (m_vfoPanel)
     {
-        if (!m_vfoWidget->frequencyHasFocus())
+        if (!m_vfoPanel->frequencyHasFocus())
         {
-            m_vfoWidget->setFrequencyText(QStringLiteral("---.---.---"));
+            m_vfoPanel->setFrequencyText(QStringLiteral("---.---.---"));
         }
-        m_vfoWidget->setBandText(QStringLiteral("--"));
-        m_vfoWidget->setModeText(QStringLiteral("--"));
-        m_vfoWidget->setMeterEnabled(false);
-        m_vfoWidget->setSwrMode(false);
-        m_vfoWidget->setSMeterValue(0);
-        m_vfoWidget->setTxPower(0);
-        m_vfoWidget->setSquelch(0);
+        m_vfoPanel->setBandText(QStringLiteral("--"));
+        m_vfoPanel->setModeText(QStringLiteral("--"));
+        m_vfoPanel->setMeterEnabled(false);
+        m_vfoPanel->setSwrMode(false);
+        m_vfoPanel->setSMeterValue(0);
+        m_vfoPanel->setTxPower(0);
+        m_vfoPanel->setSquelch(0);
     }
 
     setCommandButtonActive(m_nrBtn, false);
@@ -3127,7 +3011,7 @@ void MainWindow::toggleControlLock()
     m_controlsLocked = !m_controlsLocked;
     updateControlLockIndicator();
     setRadioControlsEnabled(m_model && m_model->isConnected() && m_model->isReady());
-    updateRc28Leds();
+    updateIcomRC28Leds();
 }
 
 void MainWindow::toggleMute()
@@ -3135,10 +3019,10 @@ void MainWindow::toggleMute()
     m_muted = !m_muted;
     if (m_muted)
     {
-        m_savedAfGain = m_vfoWidget ? m_vfoWidget->volume() : appVolumeSettingValue();
-        if (m_vfoWidget)
+        m_savedAfGain = m_vfoPanel ? m_vfoPanel->volume() : appVolumeSettingValue();
+        if (m_vfoPanel)
         {
-            m_vfoWidget->setVolume(0);
+            m_vfoPanel->setVolume(0);
         }
         if (m_titleBar)
         {
@@ -3150,9 +3034,9 @@ void MainWindow::toggleMute()
     else
     {
         const int restored = qBound(0, m_savedAfGain, 255);
-        if (m_vfoWidget)
+        if (m_vfoPanel)
         {
-            m_vfoWidget->setVolume(restored);
+            m_vfoPanel->setVolume(restored);
         }
         if (m_titleBar)
         {
@@ -3162,7 +3046,7 @@ void MainWindow::toggleMute()
         onAfGainChanged(restored);
     }
     setCommandButtonActive(m_muteBtn, m_muted);
-    updateRc28Leds();
+    updateIcomRC28Leds();
 }
 
 void MainWindow::cycleMode()
@@ -3200,11 +3084,11 @@ void MainWindow::toggleRit()
         m_vfo->setRitOffset(m_vfo->ritHz());
         m_vfo->setRitEnabled(true);
     }
-    updateRc28Leds();
+    updateIcomRC28Leds();
 }
 
 #ifdef HAVE_HIDAPI
-void MainWindow::dispatchRc28Action(const QString& action)
+void MainWindow::dispatchIcomRC28Action(const QString& action)
 {
     if (action.isEmpty() || action == QLatin1String("None"))
     {
@@ -3254,7 +3138,7 @@ void MainWindow::dispatchRc28Action(const QString& action)
     }
 }
 
-void MainWindow::setRc28Ptt(bool on)
+void MainWindow::setIcomRC28Ptt(bool on)
 {
     if (!m_vfo || !m_model->isReady())
     {
@@ -3263,21 +3147,21 @@ void MainWindow::setRc28Ptt(bool on)
     m_vfo->setPtt(on);
 }
 
-void MainWindow::updateRc28Leds()
+void MainWindow::updateIcomRC28Leds()
 {
 #ifdef HAVE_HIDAPI
-    if (!m_rc28Manager || !m_rc28Manager->isOpen())
+    if (!m_icomRC28Manager || !m_icomRC28Manager->isOpen())
     {
         return;
     }
 
     // Active-low: clearing a bit turns the LED on.
-    uint8_t b = Rc28Manager::kLedsAllOff;
-    b &= ~Rc28Manager::kLedBitLink; // LINK always on while connected
+    uint8_t b = IcomRC28Manager::kLedsAllOff;
+    b &= ~IcomRC28Manager::kLedBitLink; // LINK always on while connected
 
     if (m_txActive)
     {
-        b &= ~Rc28Manager::kLedBitTx;
+        b &= ~IcomRC28Manager::kLedBitTx;
     }
 
     // F-key LEDs reflect their hold action's active/toggled state
@@ -3298,21 +3182,23 @@ void MainWindow::updateRc28Leds()
         return false;
     };
 
-    if (holdActionActive(Rc28Manager::settingsField(QStringLiteral("f1Hold"), QStringLiteral("None"))))
+    if (holdActionActive(IcomRC28Manager::settingsField(QStringLiteral("f1Hold"), QStringLiteral("None"))))
     {
-        b &= ~Rc28Manager::kLedBitF1;
+        b &= ~IcomRC28Manager::kLedBitF1;
     }
-    if (holdActionActive(Rc28Manager::settingsField(QStringLiteral("f2Hold"), QStringLiteral("None"))))
+    if (holdActionActive(IcomRC28Manager::settingsField(QStringLiteral("f2Hold"), QStringLiteral("None"))))
     {
-        b &= ~Rc28Manager::kLedBitF2;
+        b &= ~IcomRC28Manager::kLedBitF2;
     }
 
-    m_rc28Manager->setRC28Leds(b);
+    m_icomRC28Manager->setIcomRC28Leds(b);
 #endif
 }
 
-void MainWindow::handleRc28Tune(int steps)
+void MainWindow::handleIcomRC28Tune(int steps)
 {
+    qInfo(logIcomRC28()) << "Tune steps:" << steps;
+
     if (!m_vfo || !m_model->isReady())
     {
         return;
@@ -3323,6 +3209,31 @@ void MainWindow::handleRc28Tune(int steps)
         return;
     }
 
+    refreshIcomRC28EncoderSettings();
+    if (m_icomRC28Sensitivity > 1)
+    {
+        if (m_icomRC28PulseAccum != 0 && ((steps > 0) != (m_icomRC28PulseAccum > 0)))
+        {
+            m_icomRC28PulseAccum = 0;
+        }
+        m_icomRC28PulseAccum += steps;
+        const int dividedSteps = m_icomRC28PulseAccum / m_icomRC28Sensitivity;
+        m_icomRC28PulseAccum -= dividedSteps * m_icomRC28Sensitivity;
+        if (dividedSteps == 0)
+        {
+            if (m_icomRC28AutoSnap && m_icomRC28SnapTimer)
+            {
+                m_icomRC28SnapTimer->start();
+            }
+            return;
+        }
+        steps = dividedSteps;
+    }
+    if (m_icomRC28AutoSnap && m_icomRC28SnapTimer)
+    {
+        m_icomRC28SnapTimer->start();
+    }
+
     const int stepHz = tuningStepHz();
     const qint64 currentHz = static_cast<qint64>(m_displayPanTuneHz > 0 ? m_displayPanTuneHz : m_vfo->frequencyHz());
     const qint64 targetHz = currentHz + static_cast<qint64>(steps) * stepHz;
@@ -3330,9 +3241,58 @@ void MainWindow::handleRc28Tune(int steps)
         static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
 }
 
-void MainWindow::handleRc28Button(int button, int action)
+void MainWindow::refreshIcomRC28EncoderSettings()
 {
-    if (!m_rc28Manager)
+    const int sensitivity =
+        qBound(1, IcomRC28Manager::settingsField(QStringLiteral("sensitivity"), QStringLiteral("1")).toInt(), 10);
+    if (sensitivity != m_icomRC28Sensitivity)
+    {
+        m_icomRC28PulseAccum = 0;
+    }
+    m_icomRC28Sensitivity = sensitivity;
+    m_icomRC28AutoSnap =
+        IcomRC28Manager::settingsField(QStringLiteral("autoSnap"), QStringLiteral("False")) == QLatin1String("True");
+}
+
+void MainWindow::snapIcomRC28FrequencyToKhz()
+{
+    if (!m_vfo || !m_model->isReady() || m_controlsLocked)
+    {
+        return;
+    }
+
+    const quint64 currentHz = m_displayPanTuneHz > 0 ? m_displayPanTuneHz : m_vfo->frequencyHz();
+    const quint64 snappedHz =
+        clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(currentHz / 1000.0)) * 1000ULL);
+    if (snappedHz == currentHz)
+    {
+        return;
+    }
+
+    if (m_panTuneCommitTimer)
+    {
+        m_panTuneCommitTimer->stop();
+    }
+    if (m_panTuneReleaseTimer)
+    {
+        m_panTuneReleaseTimer->stop();
+    }
+    m_pendingPanTuneHz = 0;
+    m_displayPanTuneHz = 0;
+    m_panDragTuneBaseHz = 0;
+    if (m_pan)
+    {
+        m_pan->clearDisplayCenterHold();
+    }
+    clearActiveMemory();
+    m_vfo->setFrequencyHz(snappedHz);
+}
+
+void MainWindow::handleIcomRC28Button(int button, int action)
+{
+    qInfo(logIcomRC28()) << "Button" << button << (action == 0 ? "press" : "release");
+
+    if (!m_icomRC28Manager)
     {
         return;
     }
@@ -3342,23 +3302,23 @@ void MainWindow::handleRc28Button(int button, int action)
         const int index = button - 1;
         if (action == 0)
         {
-            m_rc28ButtonDown[index] = true;
-            m_rc28HoldConsumed[index] = false;
-            if (m_rc28HoldTimers[index])
+            m_icomRC28ButtonDown[index] = true;
+            m_icomRC28HoldConsumed[index] = false;
+            if (m_icomRC28HoldTimers[index])
             {
-                m_rc28HoldTimers[index]->start(600);
+                m_icomRC28HoldTimers[index]->start(600);
             }
             return;
         }
 
-        m_rc28ButtonDown[index] = false;
-        if (m_rc28HoldTimers[index] && m_rc28HoldTimers[index]->isActive() && !m_rc28HoldConsumed[index])
+        m_icomRC28ButtonDown[index] = false;
+        if (m_icomRC28HoldTimers[index] && m_icomRC28HoldTimers[index]->isActive() && !m_icomRC28HoldConsumed[index])
         {
-            m_rc28HoldTimers[index]->stop();
+            m_icomRC28HoldTimers[index]->stop();
             const QString field = index == 0 ? QStringLiteral("f1Press") : QStringLiteral("f2Press");
-            dispatchRc28Action(Rc28Manager::settingsField(field, QStringLiteral("None")));
+            dispatchIcomRC28Action(IcomRC28Manager::settingsField(field, QStringLiteral("None")));
         }
-        m_rc28HoldConsumed[index] = false;
+        m_icomRC28HoldConsumed[index] = false;
         return;
     }
 
@@ -3367,7 +3327,7 @@ void MainWindow::handleRc28Button(int button, int action)
         return;
     }
 
-    const QString mode = Rc28Manager::settingsField(QStringLiteral("pttMode"), QStringLiteral("Disabled"));
+    const QString mode = IcomRC28Manager::settingsField(QStringLiteral("pttMode"), QStringLiteral("Disabled"));
     if (mode == QLatin1String("Disabled"))
     {
         return;
@@ -3382,39 +3342,22 @@ void MainWindow::handleRc28Button(int button, int action)
     {
         if (mode == QLatin1String("Latched"))
         {
-            m_rc28PttLatched = !m_rc28PttLatched;
-            setRc28Ptt(m_rc28PttLatched);
+            m_icomRC28PttLatched = !m_icomRC28PttLatched;
+            setIcomRC28Ptt(m_icomRC28PttLatched);
         }
         else
         {
-            m_rc28PttLatched = true;
-            setRc28Ptt(true);
+            m_icomRC28PttLatched = true;
+            setIcomRC28Ptt(true);
         }
     }
     else if (mode == QLatin1String("Momentary"))
     {
-        m_rc28PttLatched = false;
-        setRc28Ptt(false);
+        m_icomRC28PttLatched = false;
+        setIcomRC28Ptt(false);
     }
 }
 
-void MainWindow::showRc28MappingDialog()
-{
-    if (!m_rc28Manager)
-    {
-        return;
-    }
-
-    if (!m_rc28MappingDialog)
-    {
-        m_rc28MappingDialog = new RC28MappingDialog(m_rc28Manager, this);
-        m_rc28MappingDialog->setAttribute(Qt::WA_DeleteOnClose, false);
-    }
-
-    m_rc28MappingDialog->show();
-    m_rc28MappingDialog->raise();
-    m_rc28MappingDialog->activateWindow();
-}
 #endif
 
 void MainWindow::updateControlLockIndicator()
@@ -3475,31 +3418,30 @@ int MainWindow::tuningStepHz() const
 
 void MainWindow::updateStepButton()
 {
-    if (!m_vfoWidget)
+    if (!m_vfoPanel)
     {
         return;
     }
     const int hz = tuningStepHz();
-    for (const auto& preset : kStepPresets)
+    const auto presetIt = std::find_if(std::begin(kStepPresets), std::end(kStepPresets),
+                                       [hz](const StepPreset& preset) { return preset.hz == hz; });
+    if (presetIt != std::end(kStepPresets))
     {
-        if (preset.hz == hz)
-        {
-            m_vfoWidget->setStepText(QString::fromLatin1(preset.label));
-            return;
-        }
+        m_vfoPanel->setStepText(QString::fromLatin1(presetIt->label));
+        return;
     }
     // Custom value not in the preset list — format with units
     if (hz >= 1000000)
     {
-        m_vfoWidget->setStepText(QStringLiteral("%1 MHz").arg(hz / 1000000));
+        m_vfoPanel->setStepText(QStringLiteral("%1 MHz").arg(hz / 1000000));
     }
     else if (hz >= 1000)
     {
-        m_vfoWidget->setStepText(QStringLiteral("%1 kHz").arg(hz / 1000.0, 0, 'f', hz % 1000 == 0 ? 0 : 3));
+        m_vfoPanel->setStepText(QStringLiteral("%1 kHz").arg(hz / 1000.0, 0, 'f', hz % 1000 == 0 ? 0 : 3));
     }
     else
     {
-        m_vfoWidget->setStepText(QStringLiteral("%1 Hz").arg(hz));
+        m_vfoPanel->setStepText(QStringLiteral("%1 Hz").arg(hz));
     }
 }
 
@@ -3613,10 +3555,10 @@ void MainWindow::schedulePanadapterTune(quint64 hz)
         m_pan->holdDisplayCenter(displayCenterHz / 1e6);
     }
 
-    if (m_vfoWidget && !m_vfoWidget->frequencyHasFocus())
+    if (m_vfoPanel && !m_vfoPanel->frequencyHasFocus())
     {
-        m_vfoWidget->setFrequencyText(formatFrequency(hz));
-        m_vfoWidget->setBandText(bandLabelForHz(hz));
+        m_vfoPanel->setFrequencyText(formatFrequency(hz));
+        m_vfoPanel->setBandText(bandLabelForHz(hz));
     }
     if (m_pan)
     {
@@ -3652,9 +3594,9 @@ void MainWindow::setActiveMemory(const QString& id, const QString& name, quint64
     m_activeMemoryToneValueSettled = toneMode == ratrNN || (isDtcs && m_dtcsCode == toneValue) ||
                                      (!isDtcs && toneMode != ratrNN && m_toneFrequency == toneValue);
     updateMemoryNameLabel();
-    if (m_memoryWidget)
+    if (m_memoryPanel)
     {
-        m_memoryWidget->setActiveMemoryId(m_activeMemoryId);
+        m_memoryPanel->setActiveMemoryId(m_activeMemoryId);
     }
 }
 
@@ -3679,9 +3621,9 @@ void MainWindow::clearActiveMemory()
     m_activeMemoryToneMode = ratrNN;
     m_activeMemoryToneValue = 0;
     updateMemoryNameLabel();
-    if (m_memoryWidget)
+    if (m_memoryPanel)
     {
-        m_memoryWidget->setActiveMemoryId(QString());
+        m_memoryPanel->setActiveMemoryId(QString());
     }
 }
 
@@ -3700,14 +3642,14 @@ void MainWindow::checkIfMemorySelectionComplete()
 
 void MainWindow::updateMemoryNameLabel()
 {
-    if (!m_vfoWidget)
+    if (!m_vfoPanel)
     {
         return;
     }
 
     const QString text = m_activeMemoryId.isEmpty() ? QString::fromLatin1(kNoActiveMemoryLabel) : m_activeMemoryName;
-    m_vfoWidget->setMemoryName(text, m_activeMemoryId.isEmpty() ? QStringLiteral("No active memory")
-                                                                : QStringLiteral("Active memory: %1").arg(text));
+    m_vfoPanel->setMemoryName(text, m_activeMemoryId.isEmpty() ? QStringLiteral("No active memory")
+                                                               : QStringLiteral("Active memory: %1").arg(text));
 }
 
 void MainWindow::updateConnectionTooltip()
@@ -3755,9 +3697,9 @@ void MainWindow::onConnectionChanged(bool connected)
         }
 
         const int appVolume = appVolumeSettingValue();
-        if (m_vfoWidget)
+        if (m_vfoPanel)
         {
-            m_vfoWidget->setVolume(appVolume);
+            m_vfoPanel->setVolume(appVolume);
         }
         if (m_titleBar)
         {
@@ -3801,9 +3743,9 @@ void MainWindow::onConnectionChanged(bool connected)
             m_pan->clearDisplayCenterHold();
         }
         clearActiveMemory();
-        m_spectrum->clearDisplay();
+        m_spectrumCanvas->clearDisplay();
 #ifdef HAVE_HIDAPI
-        m_rc28PttLatched = false;
+        m_icomRC28PttLatched = false;
 #endif
         updateNetworkQuality(0);
 
@@ -3871,13 +3813,13 @@ void MainWindow::onRadioReadyChanged(bool ready)
 {
     const bool connected = m_model->isConnected();
     setRadioControlsEnabled(connected && ready);
-    if (m_vfoWidget)
+    if (m_vfoPanel)
     {
-        m_vfoWidget->setMeterEnabled(ready);
+        m_vfoPanel->setMeterEnabled(ready);
         if (!ready)
         {
-            m_vfoWidget->setSwrMode(false);
-            m_vfoWidget->setSMeterValue(0);
+            m_vfoPanel->setSwrMode(false);
+            m_vfoPanel->setSMeterValue(0);
         }
     }
     if (!m_connStateLabel || !connected)
@@ -3940,22 +3882,22 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         m_lastBandFrequencyHz[bandIndex] = hz;
     }
     qInfo(logGui()) << "VFO route: selected MAIN frequency" << hz;
-    if (m_vfoWidget && !m_vfoWidget->frequencyHasFocus())
+    if (m_vfoPanel && !m_vfoPanel->frequencyHasFocus())
     {
-        m_vfoWidget->setFrequencyText(formatFrequency(hz));
+        m_vfoPanel->setFrequencyText(formatFrequency(hz));
     }
-    if (m_vfoWidget)
+    if (m_vfoPanel)
     {
-        m_vfoWidget->setBandText(bandLabelForHz(hz));
+        m_vfoPanel->setBandText(bandLabelForHz(hz));
     }
     updateSpectrumVfoMarker();
 }
 
 void MainWindow::onModeChanged(const QString& mode)
 {
-    if (m_vfoWidget)
+    if (m_vfoPanel)
     {
-        m_vfoWidget->setModeText(mode);
+        m_vfoPanel->setModeText(mode);
     }
 }
 
@@ -3969,23 +3911,23 @@ void MainWindow::onSmeterChanged(int s)
     m_lastSMeter = qBound(0, s, 255);
     if (!m_txActive)
     {
-        if (m_vfoWidget)
+        if (m_vfoPanel)
         {
-            m_vfoWidget->setSMeterValue(qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
+            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
         }
     }
 }
 
 void MainWindow::onSwrChanged(double swr)
 {
-    if (!m_vfoWidget || !m_txActive)
+    if (!m_vfoPanel || !m_txActive)
     {
         return;
     }
     const QColor fillColor = swr <= 1.7   ? UiTheme::Color::MeterGreen
                              : swr <= 2.7 ? UiTheme::Color::MeterAmber
                                           : UiTheme::Color::MeterRed;
-    m_vfoWidget->setSwr(swr, fillColor);
+    m_vfoPanel->setSwr(swr, fillColor);
 }
 
 void MainWindow::updateTxAudioMeter(int peak, int rms)
@@ -4001,9 +3943,9 @@ void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, doubl
     {
         updatePanadapterBandLimits(referenceHz);
     }
-    m_spectrum->setDataFrequencyRange(start, end);
+    m_spectrumCanvas->setDataFrequencyRange(start, end);
     updateSpectrumVfoMarker();
-    m_spectrum->updateSpectrum(bins);
+    m_spectrumCanvas->updateSpectrum(bins);
 }
 
 void MainWindow::showToast(const QString& msg, int durationMs)
@@ -4088,9 +4030,9 @@ void MainWindow::onRfGainChanged(int value)
 void MainWindow::onTxPowerChanged(int value)
 {
     m_txPowerValue = qBound(0, value, 255);
-    if (m_vfoWidget)
+    if (m_vfoPanel)
     {
-        m_vfoWidget->setTxPower(m_txPowerValue);
+        m_vfoPanel->setTxPower(m_txPowerValue);
     }
     updateTxPowerButton();
 }
@@ -4173,6 +4115,7 @@ void MainWindow::showCustomMicGainDialog()
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
+    centerPopupWindow(&dialog);
     if (dialog.exec() != QDialog::Accepted)
     {
         return;
@@ -4183,16 +4126,17 @@ void MainWindow::showCustomMicGainDialog()
     m_vfo->setMicGain(m_micGainValue);
 }
 
-void MainWindow::showDtmfWidget()
+void MainWindow::showDtmfDialog()
 {
-    if (!m_dtmfWidget)
+    if (!m_dtmfDialog)
     {
         return;
     }
 
-    m_dtmfWidget->show();
-    m_dtmfWidget->raise();
-    m_dtmfWidget->activateWindow();
+    centerPopupWindow(m_dtmfDialog);
+    m_dtmfDialog->show();
+    m_dtmfDialog->raise();
+    m_dtmfDialog->activateWindow();
 }
 
 void MainWindow::onDtmfSendRequested(const QString& digits)
@@ -4203,9 +4147,9 @@ void MainWindow::onDtmfSendRequested(const QString& digits)
     }
 
     m_dtmfSendActive = true;
-    if (m_dtmfWidget)
+    if (m_dtmfDialog)
     {
-        m_dtmfWidget->setSendInProgress(true);
+        m_dtmfDialog->setSendInProgress(true);
     }
 
     m_vfo->setPtt(true);
@@ -4251,7 +4195,7 @@ void MainWindow::onPttReleased()
 void MainWindow::onPttChanged(bool on)
 {
 #ifdef HAVE_HIDAPI
-    m_rc28PttLatched = on;
+    m_icomRC28PttLatched = on;
 #endif
     updateTxIndicator(on);
     m_pttBtn->setProperty("pttActive", on);
@@ -4362,35 +4306,35 @@ void MainWindow::onSpectrumClicked(double freqMhz)
     schedulePanadapterTune(clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(freqMhz * 1e6))));
 }
 
-void MainWindow::commitFrequencyEdit(VfoWidget* widget)
+void MainWindow::commitFrequencyEdit(VfoPanel* panel)
 {
     auto* backend = m_model ? m_model->backend() : nullptr;
-    if (!widget || !m_vfo || !backend || !m_model->isReady() || m_controlsLocked)
+    if (!panel || !m_vfo || !backend || !m_model->isReady() || m_controlsLocked)
     {
         return;
     }
-    if (widget != m_vfoWidget)
+    if (panel != m_vfoPanel)
     {
-        widget->setFrequencyText(QStringLiteral("---.---.---"));
-        widget->clearFrequencyFocus();
+        panel->setFrequencyText(QStringLiteral("---.---.---"));
+        panel->clearFrequencyFocus();
         return;
     }
 
     const quint64 currentHz = m_vfoFrequencyHz;
-    const auto restoreFrequencyText = [this, widget, currentHz]()
+    const auto restoreFrequencyText = [this, panel, currentHz]()
     {
         if (currentHz > 0)
         {
-            widget->setFrequencyText(formatFrequency(currentHz));
+            panel->setFrequencyText(formatFrequency(currentHz));
         }
         else
         {
-            widget->setFrequencyText(QStringLiteral("---.---.---"));
+            panel->setFrequencyText(QStringLiteral("---.---.---"));
         }
     };
 
     quint64 hz = 0;
-    if (!parseFrequencyText(widget->frequencyText(), &hz))
+    if (!parseFrequencyText(panel->frequencyText(), &hz))
     {
         restoreFrequencyText();
         return;
@@ -4398,7 +4342,7 @@ void MainWindow::commitFrequencyEdit(VfoWidget* widget)
 
     clearActiveMemory();
     backend->setFrequencyHz(hz);
-    widget->clearFrequencyFocus();
+    panel->clearFrequencyFocus();
 }
 
 void MainWindow::showAgcMenu()
@@ -4493,6 +4437,7 @@ void MainWindow::showCustomRitDialog()
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
+    centerPopupWindow(&dialog);
     if (dialog.exec() != QDialog::Accepted)
     {
         return;
@@ -4593,6 +4538,7 @@ void MainWindow::showCustomOffsetDialog()
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
+    centerPopupWindow(&dialog);
     if (dialog.exec() != QDialog::Accepted)
     {
         return;

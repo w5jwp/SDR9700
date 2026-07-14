@@ -1,4 +1,4 @@
-#include "PttWidget.h"
+#include "PttPanel.h"
 
 #include "UiTheme.h"
 
@@ -14,7 +14,7 @@ constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 constexpr QSize kPttButtonSize(kCommandButtonSize.width(), 76);
 } // namespace
 
-PttWidget::PttWidget(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* parent) : QGroupBox(parent)
+PttPanel::PttPanel(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* parent) : QGroupBox(parent)
 {
     setTitle(QStringLiteral("PTT"));
     setAccessibleName(QStringLiteral("PTT"));

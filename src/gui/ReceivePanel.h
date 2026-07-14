@@ -4,7 +4,7 @@
 
 class QPushButton;
 
-class RecieveWidget : public QGroupBox
+class ReceivePanel : public QGroupBox
 {
     Q_OBJECT
 
@@ -21,5 +21,5 @@ class RecieveWidget : public QGroupBox
         QPushButton* rit{nullptr};
     };
 
-    explicit RecieveWidget(const Buttons& buttons, QWidget* parent = nullptr);
+    explicit ReceivePanel(const Buttons& buttons, QWidget* parent = nullptr);
 };

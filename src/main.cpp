@@ -31,6 +31,7 @@ namespace
 int signalPipe[2] = {-1, -1};
 QMutex logOutputMutex;
 std::unique_ptr<QFile> logFile;
+bool consoleLogEnabled{false};
 
 struct LoggingOptions
 {
@@ -67,8 +68,11 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext& context, co
     const QByteArray encoded = line.toLocal8Bit();
 
     QMutexLocker lock(&logOutputMutex);
-    std::fprintf(stderr, "%s\n", encoded.constData());
-    std::fflush(stderr);
+    if (consoleLogEnabled)
+    {
+        std::fprintf(stderr, "%s\n", encoded.constData());
+        std::fflush(stderr);
+    }
     if (logFile && logFile->isOpen())
     {
         logFile->write(encoded);
@@ -288,6 +292,7 @@ int main(int argc, char* argv[])
     {
         return 1;
     }
+    consoleLogEnabled = loggingOptions.logEnabled;
     QLoggingCategory::setFilterRules(loggingRulesForOptions(loggingOptions));
 
     app.setStyle("Fusion");

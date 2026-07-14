@@ -20,7 +20,7 @@ class RadioChooserDialog : public QDialog
 
   private slots:
     void onConnect();
-    void onOpenPreferences();
+    void onOpenSettings();
     void onSelectionChanged();
     void onAutoConnectToggled(bool on);
 

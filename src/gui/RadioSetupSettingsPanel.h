@@ -1,20 +1,20 @@
-// cppcheck-suppress-file unusedStructMember
 #pragma once
 
 #include "RadioProfile.h"
+
 #include <QWidget>
 
 class QListWidget;
 class QLineEdit;
-class QSpinBox;
 class QPushButton;
+class QSpinBox;
 
-class RadioProfileWidget : public QWidget
+class RadioSetupSettingsPanel : public QWidget
 {
     Q_OBJECT
 
   public:
-    explicit RadioProfileWidget(QWidget* parent = nullptr);
+    explicit RadioSetupSettingsPanel(QWidget* parent = nullptr);
 
   private slots:
     void onSelectionChanged();

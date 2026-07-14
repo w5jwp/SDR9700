@@ -1,4 +1,4 @@
-#include "DtmfWidget.h"
+#include "DtmfDialog.h"
 #include "UiTheme.h"
 
 #include <QGridLayout>
@@ -51,14 +51,14 @@ constexpr DtmfKey kKeys[4][4] = {
 };
 } // namespace
 
-DtmfWidget::DtmfWidget(QWidget* parent) : QDialog(parent)
+DtmfDialog::DtmfDialog(QWidget* parent) : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("DTMF"));
     setWindowModality(Qt::NonModal);
     setAttribute(Qt::WA_DeleteOnClose, false);
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setFixedWidth(260);
-    setStyleSheet(QStringLiteral("DtmfWidget { background: %1; border: 1px solid %2; }")
+    setStyleSheet(QStringLiteral("DtmfDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
     auto* root = new QVBoxLayout(this);
@@ -229,7 +229,7 @@ DtmfWidget::DtmfWidget(QWidget* parent) : QDialog(parent)
             });
 }
 
-void DtmfWidget::appendDigit(const QString& digit)
+void DtmfDialog::appendDigit(const QString& digit)
 {
     if (m_display->text().length() < kMaxDtmfDigits)
     {
@@ -238,7 +238,7 @@ void DtmfWidget::appendDigit(const QString& digit)
     }
 }
 
-void DtmfWidget::setSendInProgress(bool inProgress)
+void DtmfDialog::setSendInProgress(bool inProgress)
 {
     m_display->setReadOnly(inProgress);
     m_sendButton->setEnabled(!inProgress && !m_display->text().isEmpty());

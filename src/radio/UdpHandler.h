@@ -32,7 +32,7 @@ class UdpHandler : public UdpBase
   public:
     static constexpr int audioLevelBufferSize = 4;
 
-    UdpHandler(udpPreferences prefs, audioSetup rxAudio, audioSetup txAudio);
+    UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audioSetup txAudio);
     ~UdpHandler();
 
     bool streamOpened = false;

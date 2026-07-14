@@ -1,4 +1,4 @@
-#include "TransmitWidget.h"
+#include "TransmitPanel.h"
 
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -12,9 +12,9 @@ constexpr int kControlGroupSpacing = 12;
 constexpr int kLowerControlGroupMinHeight = 76;
 } // namespace
 
-TransmitWidget::TransmitWidget(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
+TransmitPanel::TransmitPanel(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
 {
-    setObjectName(QStringLiteral("TransmitWidget"));
+    setObjectName(QStringLiteral("TransmitPanel"));
     setTitle(QStringLiteral("Transmit"));
     setAccessibleName(QStringLiteral("Transmit"));
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);

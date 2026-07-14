@@ -2,7 +2,6 @@
 #pragma once
 
 #include <QMainWindow>
-#include <QPointer>
 #include <QCloseEvent>
 #include <QElapsedTimer>
 #include "RadioProfile.h"
@@ -11,9 +10,9 @@
 class RadioModel;
 class VfoModel;
 class PanadapterModel;
-class SpectrumWidget;
-class VfoWidget;
-class MemoryWidget;
+class SpectrumCanvas;
+class VfoPanel;
+class MemoryPanel;
 class QLabel;
 class QToolBar;
 class QAction;
@@ -31,11 +30,10 @@ class QComboBox;
 class QDialog;
 class QTableWidget;
 class QTimer;
-class DtmfWidget;
-class TitleBarWidget;
+class DtmfDialog;
+class MainTitleBar;
 #ifdef HAVE_HIDAPI
-class Rc28Manager;
-class RC28MappingDialog;
+class IcomRC28Manager;
 #endif
 
 class MainWindow : public QMainWindow
@@ -85,7 +83,9 @@ class MainWindow : public QMainWindow
     void buildToolBar();
     void buildControlPanel(QVBoxLayout* vbox);
     void buildStatusBar();
+    void centerPopupWindow(QWidget* popup) const;
     void updateWindowTitle();
+    void showSettingsDialog();
     void showRadioChooserDialog();
     void tryAutoConnect();
     void restoreWindowLayout();
@@ -97,11 +97,12 @@ class MainWindow : public QMainWindow
     void toggleMute();
     void cycleMode();
     void toggleRit();
-    void handleRc28Button(int button, int action);
-    void handleRc28Tune(int steps);
-    void showRc28MappingDialog();
-    void dispatchRc28Action(const QString& action);
-    void setRc28Ptt(bool on);
+    void handleIcomRC28Button(int button, int action);
+    void handleIcomRC28Tune(int steps);
+    void dispatchIcomRC28Action(const QString& action);
+    void setIcomRC28Ptt(bool on);
+    void refreshIcomRC28EncoderSettings();
+    void snapIcomRC28FrequencyToKhz();
     void showOffsetMenu();
     void showCustomOffsetDialog();
     void applyOffsetSelection(duplexMode_t mode, quint64 offsetHz);
@@ -110,8 +111,8 @@ class MainWindow : public QMainWindow
     void applyToneSelection(rptAccessTxRx_t mode, ushort value);
     void updateToneButton();
     void updateStepButton();
-    void updateRc28Leds();
-    void showDtmfWidget();
+    void updateIcomRC28Leds();
+    void showDtmfDialog();
     void buildMemoryWindow();
     void showMemoryWindow();
     void storeCurrentMemory();
@@ -132,16 +133,16 @@ class MainWindow : public QMainWindow
     void updateConnectionTooltip();
     void checkIfMemorySelectionComplete();
 
-    TitleBarWidget* m_titleBar{nullptr};
+    MainTitleBar* m_titleBar{nullptr};
     RadioModel* m_model{nullptr};
     QUuid m_pendingProfileId;
     VfoModel* m_vfo{nullptr};
     PanadapterModel* m_pan{nullptr};
 
-    SpectrumWidget* m_spectrum{nullptr};
+    SpectrumCanvas* m_spectrumCanvas{nullptr};
 
-    VfoWidget* m_vfoWidget{nullptr};
-    MemoryWidget* m_memoryWidget{nullptr};
+    VfoPanel* m_vfoPanel{nullptr};
+    MemoryPanel* m_memoryPanel{nullptr};
     QPushButton* m_rfGainBtn{nullptr};
     int m_rfGainValue{128};
     QPushButton* m_squelchBtn{nullptr};
@@ -164,7 +165,7 @@ class MainWindow : public QMainWindow
     QPushButton* m_offsetBtn{nullptr};
     QPushButton* m_toneBtn{nullptr};
     QPushButton* m_pttBtn{nullptr};
-    DtmfWidget* m_dtmfWidget{nullptr};
+    DtmfDialog* m_dtmfDialog{nullptr};
     QTimer* m_dtmfPttOffTimer{nullptr};
     bool m_dtmfSendActive{false};
 
@@ -216,12 +217,15 @@ class MainWindow : public QMainWindow
     bool m_controlsLocked{false};
 
 #ifdef HAVE_HIDAPI
-    Rc28Manager* m_rc28Manager{nullptr};
-    QPointer<RC28MappingDialog> m_rc28MappingDialog;
-    QTimer* m_rc28HoldTimers[2]{nullptr, nullptr};
-    bool m_rc28HoldConsumed[2]{false, false};
-    bool m_rc28ButtonDown[2]{false, false};
-    bool m_rc28PttLatched{false};
+    IcomRC28Manager* m_icomRC28Manager{nullptr};
+    QTimer* m_icomRC28HoldTimers[2]{nullptr, nullptr};
+    bool m_icomRC28HoldConsumed[2]{false, false};
+    bool m_icomRC28ButtonDown[2]{false, false};
+    bool m_icomRC28PttLatched{false};
+    QTimer* m_icomRC28SnapTimer{nullptr};
+    int m_icomRC28PulseAccum{0};
+    int m_icomRC28Sensitivity{1};
+    bool m_icomRC28AutoSnap{false};
 #endif
 
     QLabel* m_statusLabel{nullptr};
@@ -273,5 +277,5 @@ class MainWindow : public QMainWindow
                          int toneMode, ushort toneValue);
     void clearActiveMemory();
     void updateMemoryNameLabel();
-    void commitFrequencyEdit(VfoWidget* widget);
+    void commitFrequencyEdit(VfoPanel* panel);
 };

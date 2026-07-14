@@ -22,7 +22,7 @@
 #include "PacketTypes.h"
 #include "Types.h"
 
-struct udpPreferences
+struct UdpConnectionSettings
 {
     connectionType_t connectionType{};
     QString ipAddress;
@@ -31,8 +31,8 @@ struct udpPreferences
     quint16 audioLANPort{0};
     quint16 scopeLANPort{0};
     QString username;
-    // Encoded for the IC-9700 LAN login exchange. The caller-owned
-    // udpPreferences object and UdpHandler both retain this byte array for the
+    // Encoded for the IC-9700 LAN login exchange. The caller-owned settings
+    // object and UdpHandler both retain this byte array for the
     // connection lifetime; UdpHandler clears its copy during shutdown.
     QByteArray passwordEncoded;
     QString clientName;

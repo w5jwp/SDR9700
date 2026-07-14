@@ -31,8 +31,8 @@ QString boundedLatin1(const char* s, int maxLen)
 }
 } // namespace
 
-UdpHandler::UdpHandler(udpPreferences prefs, audioSetup rxAudio, audioSetup txAudio)
-    : controlPort(prefs.controlLANPort),
+UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audioSetup txAudio)
+    : controlPort(settings.controlLANPort),
       civPort(0),
       audioPort(0),
       civLocalPort(0),
@@ -41,16 +41,16 @@ UdpHandler::UdpHandler(udpPreferences prefs, audioSetup rxAudio, audioSetup txAu
       txSetup(txAudio)
 {
     this->port = this->controlPort;
-    this->username = prefs.username;
-    passcode(prefs.username, usernameEncoded);
-    passwordEncoded = prefs.passwordEncoded;
-    this->compName = prefs.clientName.isEmpty() ? APP_NAME : (prefs.clientName.mid(0, 8) + "-" + APP_NAME);
+    this->username = settings.username;
+    passcode(settings.username, usernameEncoded);
+    passwordEncoded = settings.passwordEncoded;
+    this->compName = settings.clientName.isEmpty() ? APP_NAME : (settings.clientName.mid(0, 8) + "-" + APP_NAME);
     std::fill(std::begin(audioLevelsTxPeak), std::end(audioLevelsTxPeak), 0);
     std::fill(std::begin(audioLevelsRxPeak), std::end(audioLevelsRxPeak), 0);
     std::fill(std::begin(audioLevelsTxRMS), std::end(audioLevelsTxRMS), 0);
     std::fill(std::begin(audioLevelsRxRMS), std::end(audioLevelsRxRMS), 0);
 
-    if (prefs.waterfallFormat == 2)
+    if (settings.waterfallFormat == 2)
     {
         splitWf = true;
     }
@@ -66,9 +66,9 @@ UdpHandler::UdpHandler(udpPreferences prefs, audioSetup rxAudio, audioSetup txAu
     // Use numeric IPv4 addresses only here. Synchronous DNS lookup can stall
     // connection setup; if hostname support is needed later, resolve it before
     // constructing UdpHandler with QHostInfo::lookupHost().
-    if (!radioIP.setAddress(prefs.ipAddress))
+    if (!radioIP.setAddress(settings.ipAddress))
     {
-        qWarning(logUdp()) << "Invalid radio IPv4 address:" << prefs.ipAddress;
+        qWarning(logUdp()) << "Invalid radio IPv4 address:" << settings.ipAddress;
         return;
     }
 
