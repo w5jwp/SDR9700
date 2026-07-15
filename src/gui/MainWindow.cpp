@@ -171,6 +171,7 @@ constexpr int kControlRowSpacing = 8;
 constexpr int kControlGroupMargin = 8;
 constexpr int kControlGroupSpacing = 6;
 constexpr int kBandscopeSpectrumHeightIncrease = 20;
+constexpr int kBandscopeSpectrumHeight760Increase = 40;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 constexpr QSize kSelectorButtonSize(72, UiTheme::Size::ControlButtonHeight);
 
@@ -2961,18 +2962,28 @@ void MainWindow::restoreWindowLayout()
     {
         int spectrumHeight = AppSettings::instance().value("BandscopeSpectrumHeight", -1).toInt();
         const QString migrationKey = QStringLiteral("BandscopeSpectrumHeight680Migrated");
+        const QString height760MigrationKey = QStringLiteral("BandscopeSpectrumHeight760Migrated");
         const bool needsSpectrumHeightMigration = !AppSettings::instance().contains(migrationKey);
+        const bool needsHeight760Migration = !AppSettings::instance().contains(height760MigrationKey);
         if (spectrumHeight > 0)
         {
             if (needsSpectrumHeightMigration)
             {
                 spectrumHeight += kBandscopeSpectrumHeightIncrease;
             }
+            if (needsHeight760Migration)
+            {
+                spectrumHeight += kBandscopeSpectrumHeight760Increase;
+            }
             m_spectrumCanvas->setSpectrumPaneHeight(spectrumHeight);
         }
         if (needsSpectrumHeightMigration)
         {
             AppSettings::instance().setValue(migrationKey, true);
+        }
+        if (needsHeight760Migration)
+        {
+            AppSettings::instance().setValue(height760MigrationKey, true);
         }
     }
 }

@@ -78,8 +78,8 @@ class SpectrumCanvas : public QWidget
     double m_dataStartMhz{144.0};
     double m_dataEndMhz{146.0};
     double m_vfoMhz{145.0};
-    float m_minDbm{-125.0f};
-    float m_maxDbm{-15.0f};
+    float m_minDbm{-140.0f};
+    float m_maxDbm{-10.0f};
 
     int m_filterLowHz{-1400};
     int m_filterHighHz{1400};

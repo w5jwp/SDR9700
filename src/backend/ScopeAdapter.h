@@ -12,7 +12,7 @@
 namespace ScopeAdapter
 {
 
-inline QVector<float> toDbm(const QByteArray& raw, float minDbm = -130.0f, float maxDbm = -10.0f)
+inline QVector<float> toDbm(const QByteArray& raw, float minDbm = -140.0f, float maxDbm = -10.0f)
 {
     QVector<float> bins;
     bins.reserve(raw.size());
