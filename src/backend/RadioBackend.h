@@ -79,6 +79,10 @@ class RadioBackend : public IRadioBackend
     void handleReportedFrequency(quint64 hz);
     void sendLanModLevel(int level);
     void sendPttOffNow();
+    void armTransmitSafety();
+    void disarmTransmitSafety();
+    void forcePttOffForSafety(const QString& message);
+    void handleTransmitSwr(double swr);
     void selectMainVfoForCommand(Commander* commandSession) const;
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;
     void invokeOnCurrentCommander(const std::function<void(Commander*)>& command);
@@ -104,6 +108,7 @@ class RadioBackend : public IRadioBackend
     bool m_pttActive{false};
     QTimer* m_pttStaleOnGuardTimer{nullptr};
     QTimer* m_pttReleaseDelayTimer{nullptr};
+    QTimer* m_pttMaxDurationTimer{nullptr};
     QTimer* m_scopeRetryTimer{nullptr};
     QTimer* m_initialStateRetryTimer{nullptr};
     QTimer* m_syncWatchdogTimer{nullptr};
@@ -118,4 +123,5 @@ class RadioBackend : public IRadioBackend
     QTimer* m_bandStateRefreshTimer{nullptr};
     int m_currentBandKey{-1};
     int m_currentMainFilter{1};
+    int m_highSwrReadingCount{0};
 };

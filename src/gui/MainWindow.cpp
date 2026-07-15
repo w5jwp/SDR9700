@@ -4361,6 +4361,18 @@ void MainWindow::onPttChanged(bool on)
 #ifdef HAVE_HIDAPI
     m_icomRC28PttLatched = on;
 #endif
+    if (!on && m_dtmfSendActive)
+    {
+        m_dtmfSendActive = false;
+        if (m_dtmfPttOffTimer)
+        {
+            m_dtmfPttOffTimer->stop();
+        }
+        if (m_dtmfDialog)
+        {
+            m_dtmfDialog->setSendInProgress(false);
+        }
+    }
     updateTxIndicator(on);
     m_pttBtn->setProperty("pttActive", on);
     m_pttBtn->style()->unpolish(m_pttBtn);

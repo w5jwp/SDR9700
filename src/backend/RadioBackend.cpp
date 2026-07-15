@@ -27,9 +27,12 @@ namespace
 constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 500;
 constexpr int kPttReleaseTailMs = 150;
+constexpr int kMaxTransmitDurationMs = 180000;
+constexpr int kHighSwrConsecutiveReadings = 3;
 constexpr uchar kHardwareTxTimeoutTimer = 1; // 3 minutes, the IC-9700's shortest non-off value.
 constexpr uchar kMainReceiver = 0;
 constexpr quint32 kTxAudioSampleRate = 16000;
+constexpr double kHighSwrCutoff = 3.0;
 
 bool populateModeInfo(const QString& mode, ModeInfo* info)
 {
@@ -208,6 +211,16 @@ RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThr
     m_pttReleaseDelayTimer->setSingleShot(true);
     m_pttReleaseDelayTimer->setInterval(kPttReleaseTailMs);
     connect(m_pttReleaseDelayTimer, &QTimer::timeout, this, &RadioBackend::sendPttOffNow);
+
+    m_pttMaxDurationTimer = new QTimer(this);
+    m_pttMaxDurationTimer->setSingleShot(true);
+    m_pttMaxDurationTimer->setInterval(kMaxTransmitDurationMs);
+    connect(m_pttMaxDurationTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                forcePttOffForSafety(
+                    QStringLiteral("TX stopped: %1 second transmit safety timeout").arg(kMaxTransmitDurationMs / 1000));
+            });
 
     /*
         IC-9700 LAN TX audio startup sequence
@@ -526,7 +539,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             }
             case funcSWRMeter:
                 emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit swrChanged(item.value.toDouble());
+                handleTransmitSwr(item.value.toDouble());
                 break;
             case funcALCMeter:
                 emit radioValueUpdated(item.command, item.value, item.receiver);
@@ -547,6 +560,14 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 if (!on && m_pttReleaseDelayTimer)
                 {
                     m_pttReleaseDelayTimer->stop();
+                }
+                if (on)
+                {
+                    armTransmitSafety();
+                }
+                else
+                {
+                    disarmTransmitSafety();
                 }
                 m_pttActive = on;
                 emit pttChanged(on);
@@ -716,6 +737,7 @@ void RadioBackend::shutdownConnection()
     {
         m_pttReleaseDelayTimer->stop();
     }
+    disarmTransmitSafety();
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->stop();
@@ -1127,6 +1149,7 @@ void RadioBackend::setPtt(bool on)
             m_pttStaleOnGuardTimer->stop();
         }
         m_pttActive = true;
+        armTransmitSafety();
         invokeOnCurrentCommander(
             [](Commander* commandSession)
             {
@@ -1177,6 +1200,7 @@ void RadioBackend::sendPttOffNow()
     // Always send an unkey request. If local state ever gets stale, suppressing
     // this command can leave the radio transmitting until disconnect.
     m_pttActive = false;
+    disarmTransmitSafety();
     if (m_pttStaleOnGuardTimer)
     {
         m_pttStaleOnGuardTimer->start(1000);
@@ -1188,6 +1212,67 @@ void RadioBackend::sendPttOffNow()
             commandSession->setPttActive(false);
             commandSession->receiveCommand(funcTransceiverStatus, QVariant::fromValue<bool>(false), 0);
         });
+}
+
+void RadioBackend::armTransmitSafety()
+{
+    if (!m_pttMaxDurationTimer)
+    {
+        return;
+    }
+
+    if (!m_pttMaxDurationTimer->isActive())
+    {
+        m_highSwrReadingCount = 0;
+        m_pttMaxDurationTimer->start();
+    }
+}
+
+void RadioBackend::disarmTransmitSafety()
+{
+    if (m_pttMaxDurationTimer)
+    {
+        m_pttMaxDurationTimer->stop();
+    }
+    m_highSwrReadingCount = 0;
+}
+
+void RadioBackend::forcePttOffForSafety(const QString& message)
+{
+    if (!m_commander || !m_pttActive)
+    {
+        disarmTransmitSafety();
+        return;
+    }
+
+    qWarning(logRadio()).noquote() << message;
+    emit statusMessage(message);
+    sendPttOffNow();
+}
+
+void RadioBackend::handleTransmitSwr(double swr)
+{
+    emit swrChanged(swr);
+
+    if (!m_pttActive)
+    {
+        m_highSwrReadingCount = 0;
+        return;
+    }
+
+    if (swr < kHighSwrCutoff)
+    {
+        m_highSwrReadingCount = 0;
+        return;
+    }
+
+    ++m_highSwrReadingCount;
+    if (m_highSwrReadingCount < kHighSwrConsecutiveReadings)
+    {
+        return;
+    }
+
+    forcePttOffForSafety(QStringLiteral("TX stopped: SWR %1 exceeded safety cutoff").arg(swr, 0, 'f', 2));
 }
 
 void RadioBackend::sendDtmf(const QString& digits)
