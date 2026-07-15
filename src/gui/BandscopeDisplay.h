@@ -32,6 +32,9 @@ class BandscopeDisplay : public QWidget
     void setDataFrequencyRange(double startMhz, double endMhz);
     void setVfoFrequency(double freqMhz);
     void setVfoMarkerColor(const QColor& color);
+    void setBackgroundColor(const QColor& color);
+    void setGridLineColor(const QColor& color);
+    void setGridDensity(int density);
     void setInteractionLocked(bool locked);
     void setInvertMouseWheel(bool invert);
     int spectrumPaneHeight() const;
@@ -49,6 +52,7 @@ class BandscopeDisplay : public QWidget
     void spanSelected(quint64 hz);
 
   protected:
+    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
   private:

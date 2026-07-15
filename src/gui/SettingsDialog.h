@@ -46,6 +46,9 @@ class SettingsDialog : public QDialog
 
   signals:
     void bandscopeCenterLineColorChanged(const QColor& color);
+    void bandscopeBackgroundColorChanged(const QColor& color);
+    void bandscopeGridLineColorChanged(const QColor& color);
+    void bandscopeGridDensityChanged(int density);
     void reverseMouseWheelTuningChanged(bool reversed);
 #ifdef HAVE_HIDAPI
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);

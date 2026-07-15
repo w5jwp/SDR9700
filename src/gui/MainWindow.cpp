@@ -113,9 +113,15 @@ constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
 constexpr auto kTuningStepHzSettingsKey = "TuningStepHz";
 constexpr auto kBandscopeSpanHzSettingsKey = "BandscopeSpanHz";
 constexpr auto kBandscopeCenterLineColorSettingsKey = "BandscopeCenterLineColor";
+constexpr auto kBandscopeBackgroundColorSettingsKey = "BandscopeBackgroundColor";
+constexpr auto kBandscopeGridLineColorSettingsKey = "BandscopeGridLineColor";
+constexpr auto kBandscopeGridDensitySettingsKey = "BandscopeGridDensity";
 constexpr int kDefaultTuningStepHz = 100;
 constexpr quint64 kDefaultBandscopeSpanHz = 500000;
 const QColor kDefaultBandscopeCenterLineColor(0xf5, 0xf7, 0xf8);
+const QColor kDefaultBandscopeBackgroundColor(0x0b, 0x3f, 0x55);
+const QColor kDefaultBandscopeGridLineColor(0xc8, 0xf1, 0xf5);
+constexpr int kDefaultBandscopeGridDensity = 1;
 
 struct StepPreset
 {
@@ -190,13 +196,20 @@ QString statusLabelStyle(const char* color, bool bold = false)
         .arg(QString::fromLatin1(color), bold ? QStringLiteral(" font-weight: bold;") : QString());
 }
 
-QColor bandscopeCenterLineColorSetting()
+QColor colorSetting(const char* key, const QColor& defaultColor)
 {
-    const QColor color(AppSettings::instance()
-                           .value(QString::fromLatin1(kBandscopeCenterLineColorSettingsKey),
-                                  kDefaultBandscopeCenterLineColor.name(QColor::HexRgb))
-                           .toString());
-    return color.isValid() ? color : kDefaultBandscopeCenterLineColor;
+    const QColor color(
+        AppSettings::instance().value(QString::fromLatin1(key), defaultColor.name(QColor::HexRgb)).toString());
+    return color.isValid() ? color : defaultColor;
+}
+
+int bandscopeGridDensitySetting()
+{
+    return qBound(0,
+                  AppSettings::instance()
+                      .value(QString::fromLatin1(kBandscopeGridDensitySettingsKey), kDefaultBandscopeGridDensity)
+                      .toInt(),
+                  2);
 }
 
 bool availableScreenContains(const QRect& rect)
@@ -643,7 +656,13 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     m_bandscopeDisplay = new BandscopeDisplay(central);
     m_bandscopeDisplay->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
-    m_bandscopeDisplay->setVfoMarkerColor(bandscopeCenterLineColorSetting());
+    m_bandscopeDisplay->setVfoMarkerColor(
+        colorSetting(kBandscopeCenterLineColorSettingsKey, kDefaultBandscopeCenterLineColor));
+    m_bandscopeDisplay->setBackgroundColor(
+        colorSetting(kBandscopeBackgroundColorSettingsKey, kDefaultBandscopeBackgroundColor));
+    m_bandscopeDisplay->setGridLineColor(
+        colorSetting(kBandscopeGridLineColorSettingsKey, kDefaultBandscopeGridLineColor));
+    m_bandscopeDisplay->setGridDensity(bandscopeGridDensitySetting());
     QVector<BandscopeDisplay::SpanChoice> spanChoices;
     spanChoices.reserve(static_cast<int>(std::size(kBandscopeSpanPresets)));
     for (const BandscopeSpanPreset& preset : kBandscopeSpanPresets)
@@ -1267,6 +1286,11 @@ void MainWindow::showSettingsDialog()
             &BandscopeDisplay::setInvertMouseWheel);
     connect(dlg, &SettingsDialog::bandscopeCenterLineColorChanged, m_bandscopeDisplay,
             &BandscopeDisplay::setVfoMarkerColor);
+    connect(dlg, &SettingsDialog::bandscopeBackgroundColorChanged, m_bandscopeDisplay,
+            &BandscopeDisplay::setBackgroundColor);
+    connect(dlg, &SettingsDialog::bandscopeGridLineColorChanged, m_bandscopeDisplay,
+            &BandscopeDisplay::setGridLineColor);
+    connect(dlg, &SettingsDialog::bandscopeGridDensityChanged, m_bandscopeDisplay, &BandscopeDisplay::setGridDensity);
 #ifdef HAVE_HIDAPI
     connect(dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
             [this](const QString&, const QString&)
@@ -1282,26 +1306,35 @@ void MainWindow::showSettingsDialog()
     dlg->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
     QTimer::singleShot(0, dlg, [this, dlg]() { centerPopupWindow(dlg); });
     QPointer<SettingsDialog> dlgGuard = dlg;
-    dlg->exec();
-    if (m_settingsDialog == dlgGuard)
-    {
-        m_settingsDialog = nullptr;
-    }
-    if (dlgGuard)
-    {
-        dlgGuard->deleteLater();
-    }
-    m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
-    if (m_vfoPanel)
-    {
-        m_vfoPanel->setLanMod(m_lanModValue);
-    }
-    m_model->setLanModLevel(m_lanModValue);
-    m_bandscopeDisplay->setInvertMouseWheel(
-        AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
+    connect(dlg, &QDialog::finished, this,
+            [this, dlgGuard]()
+            {
+                if (m_settingsDialog == dlgGuard)
+                {
+                    m_settingsDialog = nullptr;
+                }
+
+                m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
+                if (m_vfoPanel)
+                {
+                    m_vfoPanel->setLanMod(m_lanModValue);
+                }
+                m_model->setLanModLevel(m_lanModValue);
+                m_bandscopeDisplay->setInvertMouseWheel(
+                    AppSettings::instance()
+                        .value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False")
+                        .toBool());
 #ifdef HAVE_HIDAPI
-    refreshIcomRC28EncoderSettings();
+                refreshIcomRC28EncoderSettings();
 #endif
+                if (dlgGuard)
+                {
+                    dlgGuard->deleteLater();
+                }
+            });
+    dlg->setWindowModality(Qt::NonModal);
+    dlg->show();
+    bringDialogToFront(dlg);
 }
 
 void MainWindow::showMemoryWindow()

@@ -47,6 +47,7 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     setWindowTitle(title);
     setMinimumSize(780, 520);
     setWindowFlags(Qt::FramelessWindowHint);
+    setWindowModality(Qt::NonModal);
     setStyleSheet(QStringLiteral("SettingsDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
@@ -141,12 +142,19 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     QTreeWidgetItem* appearanceCategory =
         addCategory(QStringLiteral("APPEARANCE"), QStringLiteral("appearance display visual band scope bandscope"));
     addPage(appearanceCategory, Page::BandScope, QStringLiteral("Band Scope"),
-            QStringLiteral("appearance display visual bandscope band scope center line color vfo marker"),
+            QStringLiteral("appearance display visual bandscope band scope center line color vfo marker background "
+                           "gridlines grid density fewer normal more"),
             [this]()
             {
                 auto* panel = new BandScopeSettingsPanel;
                 connect(panel, &BandScopeSettingsPanel::centerLineColorChanged, this,
                         &SettingsDialog::bandscopeCenterLineColorChanged);
+                connect(panel, &BandScopeSettingsPanel::backgroundColorChanged, this,
+                        &SettingsDialog::bandscopeBackgroundColorChanged);
+                connect(panel, &BandScopeSettingsPanel::gridLineColorChanged, this,
+                        &SettingsDialog::bandscopeGridLineColorChanged);
+                connect(panel, &BandScopeSettingsPanel::gridDensityChanged, this,
+                        &SettingsDialog::bandscopeGridDensityChanged);
                 return panel;
             });
 

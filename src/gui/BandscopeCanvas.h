@@ -16,11 +16,15 @@ class BandscopeCanvas : public QWidget
     explicit BandscopeCanvas(QWidget* parent = nullptr);
 
     static int scaleHeight() { return 26; }
+    static int levelScalePanelWidth() { return 30; }
 
     void setFrequencyRange(double startMhz, double endMhz);
     void setDataFrequencyRange(double startMhz, double endMhz);
     void setVfoFrequency(double freqMhz);
     void setVfoMarkerColor(const QColor& color);
+    void setBackgroundColor(const QColor& color);
+    void setGridLineColor(const QColor& color);
+    void setGridDensity(int density);
     void setInteractionLocked(bool locked);
     void setInvertMouseWheel(bool invert);
     void setFilterWidth(int lowHz, int highHz);
@@ -54,11 +58,14 @@ class BandscopeCanvas : public QWidget
     double m_dataEndMhz{146.0};
     double m_vfoMhz{145.0};
     QColor m_vfoMarkerColor{0xf5, 0xf7, 0xf8, 230};
+    QColor m_backgroundColor{0x0b, 0x3f, 0x55};
+    QColor m_gridLineColor{0xc8, 0xf1, 0xf5};
     float m_minLevel{0.0f};
     float m_maxLevel{160.0f};
 
     int m_filterLowHz{-1400};
     int m_filterHighHz{1400};
+    int m_gridDensity{1};
     bool m_clickPressed{false};
     bool m_interactionLocked{false};
     bool m_invertMouseWheel{false};

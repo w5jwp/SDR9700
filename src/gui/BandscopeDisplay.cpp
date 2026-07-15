@@ -3,6 +3,7 @@
 #include "WaterfallCanvas.h"
 
 #include <QComboBox>
+#include <QPainter>
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -72,13 +73,13 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
     m_panScrollBar->setToolTip(QStringLiteral("Pan bandscope"));
     m_panScrollBar->setAccessibleName(QStringLiteral("Bandscope pan"));
     m_panScrollBar->setStyleSheet(QStringLiteral(
-        "QScrollBar:horizontal { background: #061116; border-top: 1px solid #9a2424; border-bottom: 1px solid #12313d; "
-        "height: 16px; margin: 2px 8px; }"
-        "QScrollBar::groove:horizontal { background: #071a22; border: 1px solid #1b4656; border-radius: 5px; }"
-        "QScrollBar::handle:horizontal { background: #3a93aa; border: 1px solid #a7dced; border-radius: 5px; "
-        "min-width: 34px; margin: 1px; }"
-        "QScrollBar::handle:horizontal:hover { background: #48b4cf; border-color: #d2f6ff; }"
-        "QScrollBar::handle:horizontal:pressed { background: #5fd0ec; border-color: #ffffff; }"
+        "QScrollBar:horizontal { background: #061116; border-top: 1px solid #0d2630; border-bottom: 1px solid #9a2424; "
+        "height: 16px; margin: 0px; }"
+        "QScrollBar::groove:horizontal { background: #061116; border: 1px solid #173542; border-radius: 4px; }"
+        "QScrollBar::handle:horizontal { background: #2c8195; border: 1px solid #6fb5c8; border-radius: 4px; "
+        "min-width: 34px; margin: 2px 1px; }"
+        "QScrollBar::handle:horizontal:hover { background: #3b9eb5; border-color: #9bd8e9; }"
+        "QScrollBar::handle:horizontal:pressed { background: #4bb9d2; border-color: #d6f5ff; }"
         "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { background: transparent; border: none; "
         "width: 0px; }"
         "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
@@ -254,11 +255,20 @@ void BandscopeDisplay::updateChildGeometry()
     const int splitTop = bandscopeHeight;
     const int waterfallTop = splitTop + panScrollBarHeight();
     const int waterfallHeight = qMax(0, height() - waterfallTop);
+    const int plotLeft = BandscopeCanvas::levelScalePanelWidth();
 
     m_bandscopeCanvas->setGeometry(0, 0, width(), bandscopeHeight);
-    m_panScrollBar->setGeometry(0, splitTop, width(), panScrollBarHeight());
+    m_panScrollBar->setGeometry(plotLeft, splitTop, qMax(0, width() - plotLeft), panScrollBarHeight());
     m_waterfallCanvas->setGeometry(0, waterfallTop, width(), waterfallHeight);
     updateSpanComboGeometry();
+}
+
+void BandscopeDisplay::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event)
+
+    QPainter painter(this);
+    painter.fillRect(rect(), Qt::black);
 }
 
 void BandscopeDisplay::setFrequencyRange(double startMhz, double endMhz)
@@ -316,6 +326,21 @@ void BandscopeDisplay::setVfoFrequency(double freqMhz)
 void BandscopeDisplay::setVfoMarkerColor(const QColor& color)
 {
     m_bandscopeCanvas->setVfoMarkerColor(color);
+}
+
+void BandscopeDisplay::setBackgroundColor(const QColor& color)
+{
+    m_bandscopeCanvas->setBackgroundColor(color);
+}
+
+void BandscopeDisplay::setGridLineColor(const QColor& color)
+{
+    m_bandscopeCanvas->setGridLineColor(color);
+}
+
+void BandscopeDisplay::setGridDensity(int density)
+{
+    m_bandscopeCanvas->setGridDensity(density);
 }
 
 void BandscopeDisplay::setInteractionLocked(bool locked)
