@@ -135,8 +135,17 @@ void WaterfallCanvas::setDataFrequencyRange(double startMhz, double endMhz)
     m_dataEndMhz = endMhz;
 }
 
+void WaterfallCanvas::setPaused(bool paused)
+{
+    m_paused = paused;
+}
+
 void WaterfallCanvas::updateSpectrum(const QVector<float>& levels)
 {
+    if (m_paused)
+    {
+        return;
+    }
     if (m_waterfall.isNull() || m_waterfall.height() == 0)
     {
         return;

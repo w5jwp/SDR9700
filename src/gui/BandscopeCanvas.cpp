@@ -193,8 +193,13 @@ void BandscopeCanvas::setInteractionLocked(bool locked)
     }
 
     m_interactionLocked = locked;
+    const bool wasInteracting = m_draggingBandscope || m_bandscopeButtonPressed;
     m_draggingBandscope = false;
     m_bandscopeButtonPressed = false;
+    if (wasInteracting)
+    {
+        Q_EMIT pointerInteractionFinished();
+    }
     updateBandscopeCursor(mapFromGlobal(QCursor::pos()));
     scheduleRepaint();
 }
@@ -529,6 +534,7 @@ void BandscopeCanvas::mousePressEvent(QMouseEvent* ev)
         m_bandscopeDragAnchorFreqMhz = xToFreq(ev->pos().x());
         m_bandscopeButtonPressed = true;
         m_draggingBandscope = false;
+        Q_EMIT pointerInteractionStarted();
         setCursor(Qt::ClosedHandCursor);
     }
 }
@@ -573,6 +579,7 @@ void BandscopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
     {
         m_draggingBandscope = false;
         m_bandscopeButtonPressed = false;
+        Q_EMIT pointerInteractionFinished();
         updateBandscopeCursor(ev->pos());
     }
     else if (ev->button() == Qt::LeftButton)
@@ -582,6 +589,7 @@ void BandscopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
             Q_EMIT frequencyClicked(xToFreq(ev->pos().x()));
         }
         m_bandscopeButtonPressed = false;
+        Q_EMIT pointerInteractionFinished();
         updateBandscopeCursor(ev->pos());
     }
 }

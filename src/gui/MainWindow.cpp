@@ -30,7 +30,6 @@
 
 #include <QToolBar>
 #include <QAction>
-#include <QActionGroup>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -111,10 +110,8 @@ QString levelButtonStyle(bool active)
 constexpr auto kCloseMemoryWindowOnSelectSettingsKey = "CloseMemoryWindowOnSelect";
 constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
 constexpr auto kTuningStepHzSettingsKey = "TuningStepHz";
-constexpr auto kBandscopeModeSettingsKey = "BandscopeMode";
 constexpr auto kBandscopeSpanHzSettingsKey = "BandscopeSpanHz";
 constexpr int kDefaultTuningStepHz = 100;
-constexpr int kDefaultBandscopeMode = 0;
 constexpr quint64 kDefaultBandscopeSpanHz = 500000;
 
 struct StepPreset
@@ -633,6 +630,24 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     m_bandscopeDisplay = new BandscopeDisplay(central);
     m_bandscopeDisplay->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
+    QVector<BandscopeDisplay::SpanChoice> spanChoices;
+    spanChoices.reserve(static_cast<int>(std::size(kBandscopeSpanPresets)));
+    for (const BandscopeSpanPreset& preset : kBandscopeSpanPresets)
+    {
+        spanChoices.append({preset.hz, QString::fromLatin1(preset.label)});
+    }
+    m_bandscopeDisplay->setSpanChoices(spanChoices);
+    m_bandscopeDisplay->setCurrentSpanHz(AppSettings::instance()
+                                             .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                                                    QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                                             .toULongLong());
+    connect(m_bandscopeDisplay, &BandscopeDisplay::spanSelected, this,
+            [this](quint64 hz)
+            {
+                AppSettings::instance().setValue(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                                                 QVariant::fromValue<qulonglong>(hz));
+                applyBandscopeSettings();
+            });
     vbox->addWidget(m_bandscopeDisplay, 1);
     m_bandscopeTuneCommitTimer = new QTimer(this);
     m_bandscopeTuneCommitTimer->setSingleShot(true);
@@ -900,56 +915,6 @@ void MainWindow::buildToolBar()
 
     auto* viewMenu = new QMenu(this);
     viewMenu->setStyleSheet(menuStyle);
-    auto* bandscopeMenu = viewMenu->addMenu(QStringLiteral("Bandscope"));
-    bandscopeMenu->setStyleSheet(menuStyle);
-
-    const int savedBandscopeMode = qBound(
-        0, AppSettings::instance().value(QString::fromLatin1(kBandscopeModeSettingsKey), kDefaultBandscopeMode).toInt(),
-        1);
-    const quint64 savedBandscopeSpanHz = AppSettings::instance()
-                                             .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
-                                                    QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
-                                             .toULongLong();
-    auto* modeGroup = new QActionGroup(bandscopeMenu);
-    modeGroup->setExclusive(true);
-    auto* centerModeAction = bandscopeMenu->addAction(QStringLiteral("Center mode"));
-    centerModeAction->setCheckable(true);
-    centerModeAction->setChecked(savedBandscopeMode == 0);
-    modeGroup->addAction(centerModeAction);
-    connect(centerModeAction, &QAction::triggered, this,
-            [this]()
-            {
-                AppSettings::instance().setValue(QString::fromLatin1(kBandscopeModeSettingsKey), 0);
-                applyBandscopeSettings();
-            });
-    auto* fixedModeAction = bandscopeMenu->addAction(QStringLiteral("Fixed mode"));
-    fixedModeAction->setCheckable(true);
-    fixedModeAction->setChecked(savedBandscopeMode == 1);
-    modeGroup->addAction(fixedModeAction);
-    connect(fixedModeAction, &QAction::triggered, this,
-            [this]()
-            {
-                AppSettings::instance().setValue(QString::fromLatin1(kBandscopeModeSettingsKey), 1);
-                applyBandscopeSettings();
-            });
-
-    bandscopeMenu->addSeparator();
-    auto* spanGroup = new QActionGroup(bandscopeMenu);
-    spanGroup->setExclusive(true);
-    for (const BandscopeSpanPreset& preset : kBandscopeSpanPresets)
-    {
-        auto* spanAction = bandscopeMenu->addAction(QString::fromLatin1(preset.label));
-        spanAction->setCheckable(true);
-        spanAction->setChecked(savedBandscopeSpanHz == preset.hz);
-        spanGroup->addAction(spanAction);
-        connect(spanAction, &QAction::triggered, this,
-                [this, preset]()
-                {
-                    AppSettings::instance().setValue(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
-                                                     QVariant::fromValue<qulonglong>(preset.hz));
-                    applyBandscopeSettings();
-                });
-    }
     viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 
@@ -3546,16 +3511,17 @@ void MainWindow::applyBandscopeSettings()
         return;
     }
 
-    const int mode = qBound(
-        0, AppSettings::instance().value(QString::fromLatin1(kBandscopeModeSettingsKey), kDefaultBandscopeMode).toInt(),
-        1);
     const quint64 spanHz = AppSettings::instance()
                                .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
                                       QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
                                .toULongLong();
 
-    backend->setScopeMode(mode);
+    backend->setScopeMode(0);
     backend->setScopeSpanHz(spanHz);
+    if (m_bandscopeDisplay)
+    {
+        m_bandscopeDisplay->setCurrentSpanHz(spanHz);
+    }
 }
 
 void MainWindow::updateStepButton()

@@ -14,6 +14,7 @@ class WaterfallCanvas : public QWidget
 
     void setFrequencyRange(double startMhz, double endMhz);
     void setDataFrequencyRange(double startMhz, double endMhz);
+    void setPaused(bool paused);
     void updateSpectrum(const QVector<float>& levels);
     void clearDisplay();
 
@@ -34,5 +35,6 @@ class WaterfallCanvas : public QWidget
     double m_dataEndMhz{146.0};
     float m_minLevel{0.0f};
     float m_maxLevel{160.0f};
+    bool m_paused{false};
     QImage m_waterfall;
 };

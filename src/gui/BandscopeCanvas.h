@@ -33,6 +33,8 @@ class BandscopeCanvas : public QWidget
     void tuneStepRequested(int steps);
     void tuneDragStarted();
     void tuneDragRequested(double deltaMhz);
+    void pointerInteractionStarted();
+    void pointerInteractionFinished();
 
   protected:
     void paintEvent(QPaintEvent* event) override;
