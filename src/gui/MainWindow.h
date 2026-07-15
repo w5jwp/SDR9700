@@ -251,7 +251,8 @@ class MainWindow : public QMainWindow
     QTimer* m_bandscopeTuneReleaseTimer{nullptr};
     quint64 m_pendingBandscopeTuneHz{0};
     quint64 m_displayBandscopeTuneHz{0};
-    quint64 m_bandscopeDragTuneBaseHz{0};
+    quint64 m_bandscopeDisplayCenterHz{0};
+    quint64 m_bandscopeDragCenterBaseHz{0};
 
     QString m_radioHost;
     quint16 m_radioPort{0};
@@ -274,9 +275,9 @@ class MainWindow : public QMainWindow
     void applyRadioTuningStep();
     void applyBandscopeSettings();
     quint64 roundFrequencyToStep(quint64 hz) const;
-    void beginBandscopeDragTune();
+    void beginBandscopeDragPan();
     void tuneBandscopeBySteps(int steps);
-    void tuneBandscopeByDragDelta(double deltaMhz);
+    void panBandscopeByDragDelta(double deltaMhz);
     quint64 clampBandscopeCenterHz(quint64 hz, double bandwidthMhz) const;
     quint64 clampFrequencyHzToActiveBand(quint64 hz) const;
     void scheduleBandscopeTune(quint64 hz);

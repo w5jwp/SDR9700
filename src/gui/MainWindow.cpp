@@ -669,7 +669,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             {
                 m_pendingBandscopeTuneHz = 0;
                 m_displayBandscopeTuneHz = 0;
-                m_bandscopeDragTuneBaseHz = 0;
+                m_bandscopeDisplayCenterHz = 0;
+                m_bandscopeDragCenterBaseHz = 0;
                 if (m_bandscope)
                 {
                     m_bandscope->clearDisplayCenterHold();
@@ -830,14 +831,15 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_bandscope, &BandscopeModel::rangeChanged, this,
             [this](double center, double bw)
             {
+                m_bandscopeDisplayCenterHz = static_cast<quint64>(std::llround(center * 1e6));
                 m_bandscopeDisplay->setFrequencyRange(center - bw / 2, center + bw / 2);
                 updateSpectrumVfoMarker();
             });
 
     connect(m_bandscopeDisplay, &BandscopeDisplay::frequencyClicked, this, &MainWindow::onSpectrumClicked);
     connect(m_bandscopeDisplay, &BandscopeDisplay::tuneStepRequested, this, &MainWindow::tuneBandscopeBySteps);
-    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragStarted, this, &MainWindow::beginBandscopeDragTune);
-    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragRequested, this, &MainWindow::tuneBandscopeByDragDelta);
+    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragStarted, this, &MainWindow::beginBandscopeDragPan);
+    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragRequested, this, &MainWindow::panBandscopeByDragDelta);
 
     onConnectionChanged(false);
 
@@ -2967,7 +2969,7 @@ void MainWindow::saveWindowLayout() const
 
 void MainWindow::updateSpectrumVfoMarker()
 {
-    if (!m_bandscopeDisplay || !m_vfo || !m_bandscope)
+    if (!m_bandscopeDisplay || !m_vfo)
     {
         return;
     }
@@ -2975,9 +2977,7 @@ void MainWindow::updateSpectrumVfoMarker()
     const quint64 displayedHz = m_displayBandscopeTuneHz > 0
                                     ? m_displayBandscopeTuneHz
                                     : (m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : m_vfo->frequencyHz());
-    const double vfoMhz = displayedHz / 1e6;
-    const bool vfoInBandscope = vfoMhz >= m_bandscope->startMhz() && vfoMhz <= m_bandscope->endMhz();
-    m_bandscopeDisplay->setVfoFrequency(vfoInBandscope ? vfoMhz : m_bandscope->centerMhz());
+    m_bandscopeDisplay->setVfoFrequency(displayedHz / 1e6);
 }
 
 void MainWindow::setRadioControlsEnabled(bool enabled)
@@ -3347,7 +3347,8 @@ void MainWindow::snapIcomRC28FrequencyToKhz()
     }
     m_pendingBandscopeTuneHz = 0;
     m_displayBandscopeTuneHz = 0;
-    m_bandscopeDragTuneBaseHz = 0;
+    m_bandscopeDisplayCenterHz = 0;
+    m_bandscopeDragCenterBaseHz = 0;
     if (m_bandscope)
     {
         m_bandscope->clearDisplayCenterHold();
@@ -3563,14 +3564,16 @@ quint64 MainWindow::roundFrequencyToStep(quint64 hz) const
     return ((hz + stepHz / 2) / stepHz) * stepHz;
 }
 
-void MainWindow::beginBandscopeDragTune()
+void MainWindow::beginBandscopeDragPan()
 {
-    if (!m_vfo)
+    if (!m_bandscope)
     {
-        m_bandscopeDragTuneBaseHz = 0;
+        m_bandscopeDragCenterBaseHz = 0;
         return;
     }
-    m_bandscopeDragTuneBaseHz = m_displayBandscopeTuneHz > 0 ? m_displayBandscopeTuneHz : m_vfo->frequencyHz();
+    m_bandscopeDragCenterBaseHz = m_bandscopeDisplayCenterHz > 0
+                                      ? m_bandscopeDisplayCenterHz
+                                      : static_cast<quint64>(std::llround(m_bandscope->centerMhz() * 1e6));
 }
 
 void MainWindow::tuneBandscopeBySteps(int steps)
@@ -3587,21 +3590,27 @@ void MainWindow::tuneBandscopeBySteps(int steps)
         static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
 }
 
-void MainWindow::tuneBandscopeByDragDelta(double deltaMhz)
+void MainWindow::panBandscopeByDragDelta(double deltaMhz)
 {
-    if (!m_vfo || !m_model->isReady() || m_controlsLocked)
+    if (!m_bandscopeDisplay || !m_bandscope || !m_model->isReady() || m_controlsLocked)
     {
         return;
     }
-    if (m_bandscopeDragTuneBaseHz == 0)
+    if (m_bandscopeDragCenterBaseHz == 0)
     {
-        beginBandscopeDragTune();
+        beginBandscopeDragPan();
     }
 
-    const qint64 targetHz =
-        static_cast<qint64>(m_bandscopeDragTuneBaseHz) + static_cast<qint64>(std::llround(deltaMhz * 1e6));
-    scheduleBandscopeTune(
-        static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
+    const qint64 requestedCenterHz =
+        static_cast<qint64>(m_bandscopeDragCenterBaseHz) - static_cast<qint64>(std::llround(deltaMhz * 1e6));
+    const quint64 centerHz = clampBandscopeCenterHz(
+        static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), requestedCenterHz)),
+        m_bandscope->bandwidthMhz());
+    const double bandwidthMhz = m_bandscope->bandwidthMhz();
+    const double centerMhz = centerHz / 1e6;
+    m_bandscopeDisplayCenterHz = centerHz;
+    m_bandscopeDisplay->setFrequencyRange(centerMhz - bandwidthMhz / 2.0, centerMhz + bandwidthMhz / 2.0);
+    updateSpectrumVfoMarker();
 }
 
 quint64 MainWindow::clampBandscopeCenterHz(quint64 hz, double bandwidthMhz) const
@@ -3843,7 +3852,8 @@ void MainWindow::onConnectionChanged(bool connected)
         }
         m_pendingBandscopeTuneHz = 0;
         m_displayBandscopeTuneHz = 0;
-        m_bandscopeDragTuneBaseHz = 0;
+        m_bandscopeDisplayCenterHz = 0;
+        m_bandscopeDragCenterBaseHz = 0;
         if (m_bandscope)
         {
             m_bandscope->clearDisplayCenterHold();
@@ -3974,7 +3984,8 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         }
         m_pendingBandscopeTuneHz = 0;
         m_displayBandscopeTuneHz = 0;
-        m_bandscopeDragTuneBaseHz = 0;
+        m_bandscopeDisplayCenterHz = 0;
+        m_bandscopeDragCenterBaseHz = 0;
         m_bandscopeTuneReleaseTimer->stop();
         if (m_bandscope)
         {
