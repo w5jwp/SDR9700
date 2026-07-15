@@ -900,7 +900,6 @@ void MainWindow::buildToolBar()
 
     auto* viewMenu = new QMenu(this);
     viewMenu->setStyleSheet(menuStyle);
-    viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
     auto* bandscopeMenu = viewMenu->addMenu(QStringLiteral("Bandscope"));
     bandscopeMenu->setStyleSheet(menuStyle);
 
@@ -951,6 +950,7 @@ void MainWindow::buildToolBar()
                     applyBandscopeSettings();
                 });
     }
+    viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 
     auto* helpMenu = new QMenu(this);
