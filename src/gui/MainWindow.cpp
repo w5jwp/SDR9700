@@ -1014,6 +1014,7 @@ void MainWindow::buildToolBar()
     auto* viewMenu = new QMenu(this);
     viewMenu->setStyleSheet(menuStyle);
     viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
+    viewMenu->addAction("Memories", this, &MainWindow::showMemoryWindow);
     viewMenu->addAction("Meters", this, &MainWindow::showMetersDialog);
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 

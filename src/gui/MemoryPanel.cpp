@@ -50,7 +50,7 @@ QTableWidgetItem* makeCellItem(const QString& text, Qt::Alignment alignment, con
 MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
 {
     setObjectName(QStringLiteral("MemoryPanel"));
-    setTitle(QStringLiteral("Memory"));
+    setTitle(QStringLiteral("Memories"));
     setAccessibleName(QStringLiteral("Memory browser"));
     setFixedWidth(kMemoryPanelWidth);
 
