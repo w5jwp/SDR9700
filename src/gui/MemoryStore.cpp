@@ -41,22 +41,29 @@ QJsonObject memoryToJson(const MemoryRecord& memory)
     return object;
 }
 
+int intFromJson(const QJsonObject& object, const QString& key, int defaultValue = 0)
+{
+    bool ok = false;
+    const int value = object.value(key).toVariant().toInt(&ok);
+    return ok ? value : defaultValue;
+}
+
 MemoryRecord memoryFromJson(const QJsonObject& object)
 {
     MemoryRecord memory;
     memory.id = object.value(QStringLiteral("ID")).toString();
-    memory.number = object.value(QStringLiteral("number")).toInt(0);
+    memory.number = intFromJson(object, QStringLiteral("number"));
     memory.name = object.value(QStringLiteral("name")).toString();
     memory.band = object.value(QStringLiteral("band")).toString();
-    memory.bandKey = object.value(QStringLiteral("bandKey")).toInt(-1);
+    memory.bandKey = intFromJson(object, QStringLiteral("bandKey"), -1);
     memory.receiveHz = object.value(QStringLiteral("receiveHZ")).toVariant().toULongLong();
     memory.shift = object.value(QStringLiteral("shift")).toString();
-    memory.duplexMode = object.value(QStringLiteral("duplexMode")).toInt(dmSimplex);
+    memory.duplexMode = intFromJson(object, QStringLiteral("duplexMode"), dmSimplex);
     memory.offsetHz = object.value(QStringLiteral("offsetHZ")).toVariant().toULongLong();
     memory.toneOption = object.value(QStringLiteral("toneOption")).toString();
     memory.toneFrequency = object.value(QStringLiteral("toneFrequency")).toString();
-    memory.toneMode = object.value(QStringLiteral("toneMode")).toInt(ratrNN);
-    memory.toneValue = static_cast<ushort>(object.value(QStringLiteral("toneValue")).toInt());
+    memory.toneMode = intFromJson(object, QStringLiteral("toneMode"), ratrNN);
+    memory.toneValue = static_cast<ushort>(intFromJson(object, QStringLiteral("toneValue")));
     memory.notes = object.value(QStringLiteral("notes")).toString();
     return memory;
 }
@@ -92,12 +99,7 @@ QJsonArray memoriesArrayFromValue(const QJsonValue& value)
     if (value.isObject())
     {
         const QJsonObject object = value.toObject();
-        QJsonArray array = memoriesArrayFromValue(object.value(QStringLiteral("memories")));
-        if (!array.isEmpty())
-        {
-            return array;
-        }
-        return memoriesArrayFromValue(object.value(QStringLiteral("settings")));
+        return memoriesArrayFromValue(object.value(QStringLiteral("memories")));
     }
     return {};
 }

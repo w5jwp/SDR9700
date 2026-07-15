@@ -394,12 +394,28 @@ quint8 UdpHandler::findMax(quint8* d)
     return max;
 }
 
+bool UdpHandler::acceptDatagramFrom(const QNetworkDatagram& datagram)
+{
+    if (!datagram.senderAddress().isEqual(radioIP, QHostAddress::ConvertV4MappedToIPv4))
+    {
+        qWarning(logUdp()) << "Ignoring UDP datagram from unexpected address" << datagram.senderAddress().toString()
+                           << "expected" << radioIP.toString();
+        return false;
+    }
+
+    return true;
+}
+
 void UdpHandler::dataReceived()
 {
     while (udp->hasPendingDatagrams())
     {
-        markPacketReceived();
         QNetworkDatagram datagram = udp->receiveDatagram();
+        if (!acceptDatagramFrom(datagram))
+        {
+            continue;
+        }
+        markPacketReceived();
         QByteArray r = datagram.data();
 
         switch (r.length())

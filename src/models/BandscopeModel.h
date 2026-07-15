@@ -8,13 +8,11 @@ class BandscopeModel : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(double centerMhz READ centerMhz NOTIFY rangeChanged)
     Q_PROPERTY(double bandwidthMhz READ bandwidthMhz NOTIFY rangeChanged)
 
   public:
     explicit BandscopeModel(QObject* parent = nullptr);
 
-    double centerMhz() const { return m_centerMhz; }
     double bandwidthMhz() const { return m_bandwidthMhz; }
     double startMhz() const { return m_centerMhz - m_bandwidthMhz / 2.0; }
     double endMhz() const { return m_centerMhz + m_bandwidthMhz / 2.0; }

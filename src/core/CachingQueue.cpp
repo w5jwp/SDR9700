@@ -72,7 +72,7 @@ void CachingQueue::shutdownInstance()
 
 void CachingQueue::stopThread()
 {
-    aborted = true;
+    aborted.store(true, std::memory_order_relaxed);
     {
         QMutexLocker locker(&mutex);
         waiting.wakeAll();
@@ -95,7 +95,7 @@ void CachingQueue::run()
 
     quint64 counter = kPriorityImmediate;
 
-    while (!aborted)
+    while (!aborted.load(std::memory_order_relaxed))
     {
         if (!waiting.wait(&mutex, deadline.remainingTime()))
         {
@@ -175,7 +175,7 @@ void CachingQueue::run()
                 locker.relock();
             }
         }
-        else if (!aborted)
+        else if (!aborted.load(std::memory_order_relaxed))
         {
             QQueue<CacheItem> pendingItems;
             QQueue<QString> pendingMessages;

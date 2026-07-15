@@ -158,6 +158,13 @@ int BandscopeCanvas::binForDisplayX(int x, int binCount) const
     return binForFrequency(xToFreq(x), binCount);
 }
 
+bool BandscopeCanvas::isSpectrumClickArea(const QPoint& pos) const
+{
+    const QRect plotRect(levelScalePanelWidth(), 0, qMax(0, width() - levelScalePanelWidth()),
+                         qMax(0, plotHeight() - 1));
+    return plotRect.contains(pos);
+}
+
 void BandscopeCanvas::invalidateStaticLayer()
 {
     m_staticLayerDirty = true;
@@ -695,7 +702,7 @@ void BandscopeCanvas::mousePressEvent(QMouseEvent* ev)
     }
     if (ev->button() == Qt::LeftButton)
     {
-        m_clickPressed = true;
+        m_clickPressed = isSpectrumClickArea(ev->pos());
         m_clickPressPos = ev->pos();
         ev->accept();
     }
@@ -705,7 +712,7 @@ void BandscopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
 {
     if (ev->button() == Qt::LeftButton)
     {
-        const bool isClick = m_clickPressed && rect().contains(ev->pos()) &&
+        const bool isClick = m_clickPressed && isSpectrumClickArea(ev->pos()) &&
                              (ev->pos() - m_clickPressPos).manhattanLength() <= kClickMoveTolerancePx;
         m_clickPressed = false;
         if (!m_interactionLocked && isClick)

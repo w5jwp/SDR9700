@@ -17,7 +17,7 @@ constexpr auto kICOMRC28ButtonMappingKey = "ICOMRC28ButtonMapping";
 
 QString readIcomRC28SettingsJson()
 {
-    auto& settings = AppSettings::instance();
+    const auto& settings = AppSettings::instance();
     return settings.value(QString::fromLatin1(kICOMRC28ButtonMappingKey), QStringLiteral("{}")).toString();
 }
 } // namespace

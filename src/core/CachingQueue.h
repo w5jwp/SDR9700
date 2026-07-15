@@ -136,7 +136,7 @@ class CachingQueue : public QThread
     QueuePriority isRecurring(Funcs func, uchar receiver = 0);
     bool compare(QVariant a, QVariant b);
 
-    bool aborted = false;
+    std::atomic_bool aborted{false};
     qint64 queueInterval = -1;              // Queue worker is stopped while negative.
 
     radioCapabilities* radioCaps = nullptr; // Set after IC-9700 capabilities are loaded.

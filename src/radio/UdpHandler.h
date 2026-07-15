@@ -83,6 +83,7 @@ class UdpHandler : public UdpBase
     void sendLogin();
     void sendToken(uint8_t magic);
     void waitForDisconnectStatus(int timeoutMs);
+    bool acceptDatagramFrom(const QNetworkDatagram& datagram);
 
     bool gotA8ReplyID = false;
     bool gotAuthOK = false;

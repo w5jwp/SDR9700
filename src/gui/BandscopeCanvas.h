@@ -52,6 +52,7 @@ class BandscopeCanvas : public QWidget
     int levelToY(float level, int topY, int h) const;
     int binForFrequency(double mhz, int binCount) const;
     int binForDisplayX(int x, int binCount) const;
+    bool isSpectrumClickArea(const QPoint& pos) const;
     void invalidateStaticLayer();
     void ensureStaticLayer();
     void renderStaticLayer(QPainter* painter) const;

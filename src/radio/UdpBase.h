@@ -22,6 +22,8 @@
 #include "PacketTypes.h"
 #include "Types.h"
 
+inline constexpr quint16 kIcomLanControlPortMax = 65532;
+
 struct UdpConnectionSettings
 {
     connectionType_t connectionType{};

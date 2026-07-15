@@ -3,6 +3,7 @@
 #include "DialogPlacement.h"
 #include "FramelessTitleBar.h"
 #include "RadioProfile.h"
+#include "UdpBase.h"
 #include "UiTheme.h"
 
 #include <QAbstractItemView>
@@ -100,7 +101,7 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     form->addRow("Host / IP:", m_hostEdit);
 
     m_portSpin = new QSpinBox(content);
-    m_portSpin->setRange(1, 65535);
+    m_portSpin->setRange(1, kIcomLanControlPortMax);
     m_portSpin->setValue(50001);
     form->addRow("Control port:", m_portSpin);
 

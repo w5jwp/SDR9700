@@ -2909,9 +2909,12 @@ void MainWindow::showRadioChooserDialog()
                     onConnectToProfile(*p);
                 }
             });
-    centerPopupWindow(dlg);
     QPointer<RadioChooserDialog> dlgGuard = dlg;
-    dlg->exec();
+    centerPopupWindow(dlg);
+    if (dlgGuard)
+    {
+        dlgGuard->exec();
+    }
     if (m_radioChooserDialog == dlgGuard)
     {
         m_radioChooserDialog = nullptr;

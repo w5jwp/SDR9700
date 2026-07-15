@@ -2,6 +2,7 @@
 
 #include "AppSettings.h"
 #include "MemoryStore.h"
+#include "UdpBase.h"
 
 #include <QCoreApplication>
 #include <QColor>
@@ -206,15 +207,15 @@ QJsonObject cleanRadioProfiles(const QJsonObject& source)
         for (const QString& key : {QStringLiteral("ID"), QStringLiteral("name"), QStringLiteral("host"),
                                    QStringLiteral("username"), QStringLiteral("password")})
         {
-            QJsonValue normalized;
-            if (stringValue(profile.value(key), &normalized))
+            QJsonValue normalizedField;
+            if (stringValue(profile.value(key), &normalizedField))
             {
-                cleanedProfile.insert(key, normalized);
+                cleanedProfile.insert(key, normalizedField);
             }
         }
 
         QJsonValue port;
-        if (intStringValue(profile.value(QStringLiteral("port")), 1, 65535, &port))
+        if (intStringValue(profile.value(QStringLiteral("port")), 1, kIcomLanControlPortMax, &port))
         {
             cleanedProfile.insert(QStringLiteral("port"), port.toString().toInt());
         }

@@ -31,8 +31,6 @@ class MeterController : public QObject
   public:
     explicit MeterController(QObject* parent = nullptr);
 
-    MeterSnapshot snapshot() const { return m_snapshot; }
-
   public slots:
     void reset();
     void resetTransmitMeters();

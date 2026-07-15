@@ -8,10 +8,12 @@
 #include <QThread>
 #include <QPointer>
 #include <QTimer>
+#include <QVector>
 #include <atomic>
 #include <functional>
 #include <optional>
 
+struct CacheItem;
 class Commander;
 class ScopeController;
 class RadioRouter;
@@ -88,6 +90,7 @@ class RadioBackend : public IRadioBackend
     void handleTransmitSwr(double swr);
     void selectMainVfoForCommand(Commander* commandSession) const;
     void resetScopeController();
+    void routeRadioItemsForSession(quint64 session, const QVector<CacheItem>& items);
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;
     void invokeOnCurrentCommander(const std::function<void(Commander*)>& command);
     void restartAfterSyncTimeout();
@@ -97,6 +100,7 @@ class RadioBackend : public IRadioBackend
     Commander* m_commander{nullptr};
     ScopeController* m_scopeController{nullptr};
     RadioRouter* m_radioRouter{nullptr};
+    QMetaObject::Connection m_queueSendValuesConnection;
     std::atomic<quint64> m_sessionId{0};
     QString m_connectionHost;
     quint16 m_connectionPort{0};

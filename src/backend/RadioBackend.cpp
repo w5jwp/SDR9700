@@ -11,6 +11,7 @@
 #include "RadioIdentities.h"
 
 #include <QMediaDevices>
+#include <QHostAddress>
 #include <QSemaphore>
 #include <QThread>
 #include <QTimer>
@@ -428,6 +429,22 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
         shutdownConnection();
     }
 
+    QHostAddress radioAddress;
+    if (radioAddress.setAddress(host) && radioAddress.protocol() != QAbstractSocket::IPv4Protocol)
+    {
+        radioAddress.clear();
+    }
+    if (radioAddress.isNull())
+    {
+        emit errorOccurred(QStringLiteral("Unable to connect to radio (invalid IPv4 address)"));
+        return;
+    }
+    if (port == 0 || port > kIcomLanControlPortMax)
+    {
+        emit errorOccurred(QStringLiteral("Unable to connect to radio (invalid LAN control port)"));
+        return;
+    }
+
     m_connectionHost = host;
     m_connectionPort = port;
     m_connectionUser = user;
@@ -490,10 +507,15 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
 
     // All radio-to-UI data (frequency, mode, S-meter, scope) flows through the
     // CachingQueue's batched sendValues signal.  Connect once per connectToRadio()
-    // call; the connection is torn down automatically when the queue is destroyed
-    // with the Commander on disconnect.
+    // call; disconnect the previous session's queue connection first because
+    // CachingQueue is a process-wide singleton.
     CachingQueue* q = CachingQueue::getInstance(m_commander);
-    connect(
+    if (m_queueSendValuesConnection)
+    {
+        QObject::disconnect(m_queueSendValuesConnection);
+        m_queueSendValuesConnection = {};
+    }
+    m_queueSendValuesConnection = connect(
         q, &CachingQueue::sendValues, this,
         [this, session, commandSession](const QVector<CacheItem>& items)
         {
@@ -504,7 +526,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             if (m_radioRouter)
             {
                 QMetaObject::invokeMethod(
-                    m_radioRouter, [router = m_radioRouter, items]() { router->routeBatch(items); },
+                    m_radioRouter, [this, session, items]() { routeRadioItemsForSession(session, items); },
                     Qt::QueuedConnection);
             }
         },
@@ -618,6 +640,11 @@ void RadioBackend::shutdownConnection()
     }
 
     ++m_sessionId;
+    if (m_queueSendValuesConnection)
+    {
+        QObject::disconnect(m_queueSendValuesConnection);
+        m_queueSendValuesConnection = {};
+    }
     if (m_pttStaleOnGuardTimer)
     {
         m_pttStaleOnGuardTimer->stop();
@@ -1166,6 +1193,15 @@ void RadioBackend::resetScopeController()
     }
 
     QMetaObject::invokeMethod(m_scopeController, &ScopeController::reset, Qt::QueuedConnection);
+}
+
+void RadioBackend::routeRadioItemsForSession(quint64 session, const QVector<CacheItem>& items)
+{
+    if (m_sessionId.load(std::memory_order_relaxed) != session || !m_radioRouter)
+    {
+        return;
+    }
+    m_radioRouter->routeBatch(items);
 }
 
 void RadioBackend::forcePttOffForSafety(const QString& message)
