@@ -31,8 +31,8 @@ class VfoPanel : public QGroupBox
     void setStepText(const QString& text);
     QPoint stepMenuPosition() const;
     void setSMeterValue(int value);
-    void setAlcMode(bool on);
-    void setAlc(double alc);
+    void setTransmitPowerMode(bool on);
+    void setTransmitPowerMeter(double watts);
     void setTxPower(int value);
     void setLanMod(int value);
     void setSquelch(int value);

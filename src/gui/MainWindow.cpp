@@ -738,6 +738,10 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             {
                 m_txPowerMeterWatts = qBound(0.0, watts, 120.0);
                 m_txPowerMeterValid = true;
+                if (m_vfoPanel && m_txActive)
+                {
+                    m_vfoPanel->setTransmitPowerMeter(m_txPowerMeterWatts);
+                }
                 if (m_metersDialog)
                 {
                     m_metersDialog->setPowerMeter(m_txPowerMeterWatts);
@@ -888,6 +892,15 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         updateTxPowerButton();
                         break;
                     }
+                    case funcPowerMeter:
+                    {
+                        if (!receiverPanel || !m_txActive)
+                        {
+                            break;
+                        }
+                        receiverPanel->setTransmitPowerMeter(value.toDouble());
+                        break;
+                    }
                     case funcSquelch:
                     {
                         const int level = qBound(0, value.toInt(), 255);
@@ -897,15 +910,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         }
                         m_squelchValue = level;
                         updateSquelchButton();
-                        break;
-                    }
-                    case funcALCMeter:
-                    {
-                        if (!receiverPanel || !m_txActive)
-                        {
-                            break;
-                        }
-                        receiverPanel->setAlc(value.toDouble());
                         break;
                     }
                     default:
@@ -2535,8 +2539,15 @@ void MainWindow::updateTxIndicator(bool on)
     updateIcomRC28Leds();
     if (m_vfoPanel)
     {
-        m_vfoPanel->setAlcMode(on);
-        m_vfoPanel->setSMeterValue(on ? 0 : qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
+        m_vfoPanel->setTransmitPowerMode(on);
+        if (on)
+        {
+            m_vfoPanel->setTransmitPowerMeter(0.0);
+        }
+        else
+        {
+            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
+        }
     }
     if (on)
     {
@@ -3255,7 +3266,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
         m_vfoPanel->setBandText(QStringLiteral("--"));
         m_vfoPanel->setModeText(QStringLiteral("--"));
         m_vfoPanel->setMeterEnabled(false);
-        m_vfoPanel->setAlcMode(false);
+        m_vfoPanel->setTransmitPowerMode(false);
         m_vfoPanel->setSMeterValue(0);
         m_vfoPanel->setTxPower(0);
         m_vfoPanel->setLanMod(m_lanModValue);
@@ -4159,7 +4170,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
         m_vfoPanel->setMeterEnabled(ready);
         if (!ready)
         {
-            m_vfoPanel->setAlcMode(false);
+            m_vfoPanel->setTransmitPowerMode(false);
             m_vfoPanel->setSMeterValue(0);
         }
     }
@@ -4297,11 +4308,6 @@ void MainWindow::onAlcChanged(double alc)
     {
         m_metersDialog->setAlc(m_txAlc);
     }
-    if (!m_vfoPanel || !m_txActive)
-    {
-        return;
-    }
-    m_vfoPanel->setAlc(m_txAlc);
 }
 
 void MainWindow::updateTxAudioMeter(int peak, int rms)

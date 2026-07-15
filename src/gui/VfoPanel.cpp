@@ -38,6 +38,58 @@ constexpr int kSignalScaleHeight = 11;
 constexpr double kSignalScaleTextTopGap = 0.5;
 constexpr QSize kSignalBoxSize(kSignalMeterWidth, kSignalMeterHeight + kSignalScaleHeight);
 constexpr QSize kHeaderBadgeSize(54, 18);
+constexpr double kRfPowerMeterMaxWatts = 100.0;
+
+enum class SignalMeterMode
+{
+    Signal,
+    RfPower,
+};
+
+struct ScaleMark
+{
+    QString label;
+    double fraction;
+};
+
+double rfPowerMeterFraction(double watts)
+{
+    static const ScaleMark kPowerMarks[] = {{QStringLiteral("1"), 0.060},  {QStringLiteral("5"), 0.180},
+                                            {QStringLiteral("25"), 0.400}, {QStringLiteral("50"), 0.620},
+                                            {QStringLiteral("75"), 0.820}, {QStringLiteral("100W"), 1.000}};
+
+    const double bounded = qBound(0.0, watts, kRfPowerMeterMaxWatts);
+    if (bounded <= 0.0)
+    {
+        return 0.0;
+    }
+
+    double previousWatts = 0.0;
+    double previousFraction = 0.0;
+    for (const ScaleMark& mark : kPowerMarks)
+    {
+        const QString numericLabel = mark.label;
+        bool ok = false;
+        const double markWatts = numericLabel.endsWith(QLatin1Char('W'))
+                                     ? numericLabel.left(numericLabel.size() - 1).toDouble(&ok)
+                                     : numericLabel.toDouble(&ok);
+        if (!ok)
+        {
+            continue;
+        }
+        if (bounded <= markWatts)
+        {
+            const double spanWatts = qMax(0.001, markWatts - previousWatts);
+            const double fraction =
+                previousFraction + ((bounded - previousWatts) / spanWatts) * (mark.fraction - previousFraction);
+            return qBound(0.0, fraction, 1.0);
+        }
+        previousWatts = markWatts;
+        previousFraction = mark.fraction;
+    }
+
+    return 1.0;
+}
 
 QString commandButtonStyle()
 {
@@ -53,9 +105,13 @@ class SMeter : public QProgressBar
   public:
     explicit SMeter(QWidget* parent = nullptr) : QProgressBar(parent) {}
 
-    void setAlc(bool on)
+    void setMeterMode(SignalMeterMode mode)
     {
-        m_alcMode = on;
+        if (m_meterMode == mode)
+        {
+            return;
+        }
+        m_meterMode = mode;
         resetBallistics();
         update();
     }
@@ -65,7 +121,6 @@ class SMeter : public QProgressBar
         m_samples.fill(0);
         m_sampleCount = 0;
         m_samplePosition = 0;
-        m_averageValue = 0.0;
         m_peakValue = 0;
         setValue(0);
     }
@@ -79,15 +134,12 @@ class SMeter : public QProgressBar
         m_samplePosition = (m_samplePosition + 1) % static_cast<int>(m_samples.size());
         m_sampleCount = qMin(m_sampleCount + 1, static_cast<int>(m_samples.size()));
 
-        int sum = 0;
         int peak = 0;
         for (int i = 0; i < m_sampleCount; ++i)
         {
-            sum += m_samples[i];
             peak = qMax(peak, m_samples[i]);
         }
 
-        m_averageValue = m_sampleCount > 0 ? static_cast<double>(sum) / static_cast<double>(m_sampleCount) : 0.0;
         m_peakValue = peak;
         update();
     }
@@ -120,12 +172,13 @@ class SMeter : public QProgressBar
 
         const QRect fillRect = barRect.adjusted(1, 1, -1, -1);
         painter.setPen(Qt::NoPen);
-        if (m_alcMode)
+        if (m_meterMode == SignalMeterMode::RfPower)
         {
             QLinearGradient gradient(fillRect.left(), 0, fillRect.right(), 0);
-            gradient.setColorAt(0.00, UiTheme::Color::MeterGreen);
-            gradient.setColorAt(0.40, UiTheme::Color::MeterGreen);
-            gradient.setColorAt(0.50, UiTheme::Color::MeterAmber);
+            gradient.setColorAt(0.00, UiTheme::Color::MeterBlue);
+            gradient.setColorAt(0.20, UiTheme::Color::MeterCyan);
+            gradient.setColorAt(0.48, UiTheme::Color::MeterGreen);
+            gradient.setColorAt(0.76, UiTheme::Color::MeterAmber);
             gradient.setColorAt(1.00, UiTheme::Color::MeterRed);
             painter.setBrush(gradient);
         }
@@ -141,30 +194,13 @@ class SMeter : public QProgressBar
         }
         painter.drawRoundedRect(QRect(fillRect.left(), fillRect.top(), fillWidth, fillRect.height()), 2, 2);
 
-        if (m_alcMode)
-        {
-            const int redlineX = fillRect.left() + static_cast<int>((fillRect.width() - 1) * 0.5 + 0.5);
-            painter.setPen(QPen(UiTheme::Color::MeterRed, 1));
-            painter.drawLine(redlineX, fillRect.top(), redlineX, fillRect.bottom());
-        }
-
         if (m_sampleCount > 0)
         {
-            if (m_alcMode)
-            {
-                const int averageX =
-                    fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_averageValue / maximum()) + 0.5);
-                painter.setPen(QPen(UiTheme::Color::MeterCyan, 1));
-                painter.drawLine(averageX, fillRect.top(), averageX, fillRect.bottom());
-            }
-
             const int peakX =
                 fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_peakValue / double(maximum())) + 0.5);
-            const QColor peakColor = m_alcMode ? (m_peakValue >= 50 ? UiTheme::Color::MeterRed : UiTheme::Color::White)
-                                               : UiTheme::Color::MeterCyan;
             painter.save();
             painter.setRenderHint(QPainter::Antialiasing, false);
-            painter.setPen(QPen(peakColor, 1));
+            painter.setPen(QPen(UiTheme::Color::MeterCyan, 1));
             painter.drawLine(peakX, fillRect.top() + 1, peakX, fillRect.bottom() - 1);
             painter.restore();
         }
@@ -172,11 +208,10 @@ class SMeter : public QProgressBar
 
   private:
     static constexpr int kBallisticSamples = 30;
-    bool m_alcMode{false};
+    SignalMeterMode m_meterMode{SignalMeterMode::Signal};
     std::array<int, kBallisticSamples> m_samples{};
     int m_sampleCount{0};
     int m_samplePosition{0};
-    double m_averageValue{0.0};
     int m_peakValue{0};
 };
 
@@ -189,9 +224,13 @@ class SMeterScaleCanvas : public QWidget
         setMinimumWidth(kSignalMeterWidth);
     }
 
-    void setAlc(bool on)
+    void setMeterMode(SignalMeterMode mode)
     {
-        m_alcMode = on;
+        if (m_meterMode == mode)
+        {
+            return;
+        }
+        m_meterMode = mode;
         update();
     }
 
@@ -200,26 +239,19 @@ class SMeterScaleCanvas : public QWidget
     {
         Q_UNUSED(event)
 
-        struct ScaleMark
-        {
-            QString label;
-            double fraction;
-        };
-
         static const ScaleMark kSMarks[] = {{QStringLiteral("1"), 0.0635},   {QStringLiteral("3"), 0.1905},
                                             {QStringLiteral("5"), 0.3175},   {QStringLiteral("7"), 0.4444},
                                             {QStringLiteral("9"), 0.5714},   {QStringLiteral("+20"), 0.7143},
                                             {QStringLiteral("+40"), 0.8571}, {QStringLiteral("+60"), 1.0000}};
 
-        static const ScaleMark kAlcMarks[] = {{QStringLiteral("0"), 0.000},
-                                              {QStringLiteral(".5"), 0.250},
-                                              {QStringLiteral("1"), 0.500},
-                                              {QStringLiteral("1.5"), 0.750},
-                                              {QStringLiteral("2"), 1.000}};
+        static const ScaleMark kPowerMarks[] = {{QStringLiteral("1"), 0.060},  {QStringLiteral("5"), 0.180},
+                                                {QStringLiteral("25"), 0.400}, {QStringLiteral("50"), 0.620},
+                                                {QStringLiteral("75"), 0.820}, {QStringLiteral("100W"), 1.000}};
 
-        const ScaleMark* marks = m_alcMode ? kAlcMarks : kSMarks;
-        const int maxIndex =
-            (m_alcMode ? static_cast<int>(std::size(kAlcMarks)) : static_cast<int>(std::size(kSMarks))) - 1;
+        const ScaleMark* marks = m_meterMode == SignalMeterMode::RfPower ? kPowerMarks : kSMarks;
+        const int maxIndex = (m_meterMode == SignalMeterMode::RfPower ? static_cast<int>(std::size(kPowerMarks))
+                                                                      : static_cast<int>(std::size(kSMarks))) -
+                             1;
 
         QPainter painter(this);
         QFont scaleFont = font();
@@ -251,7 +283,7 @@ class SMeterScaleCanvas : public QWidget
     }
 
   private:
-    bool m_alcMode{false};
+    SignalMeterMode m_meterMode{SignalMeterMode::Signal};
 };
 } // namespace
 
@@ -518,27 +550,28 @@ void VfoPanel::setSMeterValue(int value)
     }
 }
 
-void VfoPanel::setAlcMode(bool on)
+void VfoPanel::setTransmitPowerMode(bool on)
 {
     if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
     {
-        meter->setAlc(on);
-        m_signalMeter->setAccessibleDescription(on ? QStringLiteral("ALC meter.")
+        meter->setMeterMode(on ? SignalMeterMode::RfPower : SignalMeterMode::Signal);
+        m_signalMeter->setAccessibleDescription(on ? QStringLiteral("RF power meter.")
                                                    : QStringLiteral("Received signal strength meter."));
     }
     if (auto* scale = dynamic_cast<SMeterScaleCanvas*>(m_signalScale))
     {
-        scale->setAlc(on);
+        scale->setMeterMode(on ? SignalMeterMode::RfPower : SignalMeterMode::Signal);
     }
 }
 
-void VfoPanel::setAlc(double alc)
+void VfoPanel::setTransmitPowerMeter(double watts)
 {
     if (!m_signalMeter || !m_meterEnabled)
     {
         return;
     }
-    const int barValue = qBound(0, static_cast<int>(alc / 2.0 * 100.0 + 0.5), 100);
+    const double boundedWatts = qBound(0.0, watts, kRfPowerMeterMaxWatts);
+    const int barValue = qBound(0, static_cast<int>(rfPowerMeterFraction(boundedWatts) * 100.0 + 0.5), 100);
     if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
     {
         meter->setMeterValue(barValue);
@@ -547,7 +580,7 @@ void VfoPanel::setAlc(double alc)
     {
         m_signalMeter->setValue(barValue);
     }
-    m_signalMeter->setAccessibleDescription(QStringLiteral("ALC meter: %1").arg(alc, 0, 'f', 2));
+    m_signalMeter->setAccessibleDescription(QStringLiteral("RF power meter: %1 watts").arg(boundedWatts, 0, 'f', 1));
 }
 
 void VfoPanel::setTxPower(int value)
