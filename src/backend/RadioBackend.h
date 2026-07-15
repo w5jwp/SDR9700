@@ -55,6 +55,7 @@ class RadioBackend : public IRadioBackend
     void setScopeEnabled(bool on) override;
     void setScopeSpanHz(quint64 hz) override;
     void setScopeMode(int mode) override;
+    void setScopeFixedRangeHz(quint64 startHz, quint64 endHz) override;
 
     void setPtt(bool on) override;
     void setTxPower(int level) override;

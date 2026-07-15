@@ -1127,6 +1127,24 @@ void RadioBackend::setScopeMode(int mode)
         { commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(bounded), 0); });
 }
 
+void RadioBackend::setScopeFixedRangeHz(quint64 startHz, quint64 endHz)
+{
+    if (endHz <= startHz)
+    {
+        return;
+    }
+
+    static constexpr uchar kPanScopeEdge = 1;
+    SpectrumBounds bounds(startHz / 1e6, endHz / 1e6, kPanScopeEdge);
+    invokeOnCurrentCommander(
+        [bounds](Commander* commandSession)
+        {
+            commandSession->receiveCommand(funcScopeFixedEdgeFreq, QVariant::fromValue<SpectrumBounds>(bounds), 0);
+            commandSession->receiveCommand(funcScopeEdge, QVariant::fromValue<uchar>(bounds.edge), 0);
+            commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(1), 0);
+        });
+}
+
 void RadioBackend::setPtt(bool on)
 {
     if (!m_commander)

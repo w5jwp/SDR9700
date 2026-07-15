@@ -253,6 +253,8 @@ class MainWindow : public QMainWindow
     quint64 m_displayBandscopeTuneHz{0};
     quint64 m_bandscopeDisplayCenterHz{0};
     quint64 m_bandscopeDragCenterBaseHz{0};
+    quint64 m_bandscopeFixedPanStartHz{0};
+    quint64 m_bandscopeFixedPanEndHz{0};
 
     QString m_radioHost;
     quint16 m_radioPort{0};

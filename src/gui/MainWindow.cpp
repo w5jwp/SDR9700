@@ -139,6 +139,7 @@ constexpr BandscopeSpanPreset kBandscopeSpanPresets[] = {
 constexpr quint64 kMinimumTuneFrequencyHz = 100000;
 constexpr int kBandscopeTuneCommitDelayMs = 70;
 constexpr int kBandscopeTuneReleaseDelayMs = 650;
+constexpr quint64 kBandscopeFixedPanMinDeltaHz = 1000;
 constexpr int kMemoryOffsetCustom = -1;
 constexpr auto kNoActiveMemoryLabel = "-";
 constexpr int kMemoryTableColumnCount = 8;
@@ -671,6 +672,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                 m_displayBandscopeTuneHz = 0;
                 m_bandscopeDisplayCenterHz = 0;
                 m_bandscopeDragCenterBaseHz = 0;
+                m_bandscopeFixedPanStartHz = 0;
+                m_bandscopeFixedPanEndHz = 0;
                 if (m_bandscope)
                 {
                     m_bandscope->clearDisplayCenterHold();
@@ -3349,6 +3352,8 @@ void MainWindow::snapIcomRC28FrequencyToKhz()
     m_displayBandscopeTuneHz = 0;
     m_bandscopeDisplayCenterHz = 0;
     m_bandscopeDragCenterBaseHz = 0;
+    m_bandscopeFixedPanStartHz = 0;
+    m_bandscopeFixedPanEndHz = 0;
     if (m_bandscope)
     {
         m_bandscope->clearDisplayCenterHold();
@@ -3519,6 +3524,8 @@ void MainWindow::applyBandscopeSettings()
 
     backend->setScopeMode(0);
     backend->setScopeSpanHz(spanHz);
+    m_bandscopeFixedPanStartHz = 0;
+    m_bandscopeFixedPanEndHz = 0;
     if (m_bandscopeDisplay)
     {
         m_bandscopeDisplay->setCurrentSpanHz(spanHz);
@@ -3607,9 +3614,27 @@ void MainWindow::panBandscopeByDragDelta(double deltaMhz)
         static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), requestedCenterHz)),
         m_bandscope->bandwidthMhz());
     const double bandwidthMhz = m_bandscope->bandwidthMhz();
+    const quint64 bandwidthHz = static_cast<quint64>(std::llround(bandwidthMhz * 1e6));
+    const quint64 startHz = centerHz - bandwidthHz / 2;
+    const quint64 endHz = startHz + bandwidthHz;
     const double centerMhz = centerHz / 1e6;
     m_bandscopeDisplayCenterHz = centerHz;
     m_bandscopeDisplay->setFrequencyRange(centerMhz - bandwidthMhz / 2.0, centerMhz + bandwidthMhz / 2.0);
+    if (auto* backend = m_model ? m_model->backend() : nullptr)
+    {
+        const auto changedEnough = [](quint64 current, quint64 previous)
+        {
+            return current > previous ? current - previous >= kBandscopeFixedPanMinDeltaHz
+                                      : previous - current >= kBandscopeFixedPanMinDeltaHz;
+        };
+        if (m_bandscopeFixedPanStartHz == 0 || m_bandscopeFixedPanEndHz == 0 ||
+            changedEnough(startHz, m_bandscopeFixedPanStartHz) || changedEnough(endHz, m_bandscopeFixedPanEndHz))
+        {
+            backend->setScopeFixedRangeHz(startHz, endHz);
+            m_bandscopeFixedPanStartHz = startHz;
+            m_bandscopeFixedPanEndHz = endHz;
+        }
+    }
     updateSpectrumVfoMarker();
 }
 
@@ -3668,6 +3693,20 @@ void MainWindow::scheduleBandscopeTune(quint64 hz)
     m_displayBandscopeTuneHz = hz;
     m_vfoFrequencyHz = hz;
     updateBandscopeBandLimits(hz);
+    if (m_bandscopeFixedPanStartHz > 0 || m_bandscopeFixedPanEndHz > 0)
+    {
+        if (auto* backend = m_model ? m_model->backend() : nullptr)
+        {
+            const quint64 spanHz = AppSettings::instance()
+                                       .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                                              QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                                       .toULongLong();
+            backend->setScopeMode(0);
+            backend->setScopeSpanHz(spanHz);
+        }
+        m_bandscopeFixedPanStartHz = 0;
+        m_bandscopeFixedPanEndHz = 0;
+    }
     if (m_bandscope)
     {
         m_bandscope->holdDisplayCenter(displayCenterHz / 1e6);
@@ -3854,6 +3893,8 @@ void MainWindow::onConnectionChanged(bool connected)
         m_displayBandscopeTuneHz = 0;
         m_bandscopeDisplayCenterHz = 0;
         m_bandscopeDragCenterBaseHz = 0;
+        m_bandscopeFixedPanStartHz = 0;
+        m_bandscopeFixedPanEndHz = 0;
         if (m_bandscope)
         {
             m_bandscope->clearDisplayCenterHold();
@@ -3986,6 +4027,8 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         m_displayBandscopeTuneHz = 0;
         m_bandscopeDisplayCenterHz = 0;
         m_bandscopeDragCenterBaseHz = 0;
+        m_bandscopeFixedPanStartHz = 0;
+        m_bandscopeFixedPanEndHz = 0;
         m_bandscopeTuneReleaseTimer->stop();
         if (m_bandscope)
         {
