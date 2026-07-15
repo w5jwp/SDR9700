@@ -2577,10 +2577,8 @@ void MainWindow::updateSystemStats()
                 m_prevCpuIdle = idle;
 
                 const int cpuPctInt = static_cast<int>(cpuPct);
-                m_cpuLabel->setText(QStringLiteral("<span style='color:%1; font-weight:bold'>CPU:</span>"
-                                                   "&nbsp;<span style='color:%2'>%3%</span>")
-                                        .arg(QLatin1String(UiTheme::Color::TextStatusSecondary),
-                                             QLatin1String(cpuColor(cpuPctInt)), QString::number(cpuPct, 'f', 1)));
+                m_cpuLabel->setText(QStringLiteral("<span style='color:%1'>%2%</span>")
+                                        .arg(QLatin1String(cpuColor(cpuPctInt)), QString::number(cpuPct, 'f', 1)));
             }
         }
     }
@@ -2602,10 +2600,8 @@ void MainWindow::updateSystemStats()
                     const double rssGb = parts[1].toDouble() / (1024.0 * 1024.0);
                     const QString rssStr = rssGb >= 1.0 ? QStringLiteral("%1G").arg(rssGb, 0, 'f', 1)
                                                         : QStringLiteral("%1M").arg(static_cast<int>(rssGb * 1024));
-                    m_memLabel->setText(QStringLiteral("<span style='color:%1; font-weight:bold'>Mem:</span>"
-                                                       "&nbsp;<span style='color:%2'>%3</span>")
-                                            .arg(QLatin1String(UiTheme::Color::TextStatusSecondary),
-                                                 QLatin1String(UiTheme::Color::TextStatusSecondary), rssStr));
+                    m_memLabel->setText(QStringLiteral("<span style='color:%1'>%2</span>")
+                                            .arg(QLatin1String(UiTheme::Color::TextStatusSecondary), rssStr));
                 }
             }
         }
@@ -2659,6 +2655,13 @@ void MainWindow::buildStatusBar()
             w = qMax(w, fmR.horizontalAdvance(QString::fromLatin1(s)));
         }
         w = qMax(w, fmB.horizontalAdvance(QStringLiteral("Network")));
+        // processor stack
+        w = qMax(w, fmR.horizontalAdvance(QStringLiteral("100.0%")));
+        w = qMax(w, fmB.horizontalAdvance(QStringLiteral("Processor")));
+        // memory stack
+        w = qMax(w, fmR.horizontalAdvance(QStringLiteral("999M")));
+        w = qMax(w, fmR.horizontalAdvance(QStringLiteral("1.0G")));
+        w = qMax(w, fmB.horizontalAdvance(QStringLiteral("Memory")));
         // TX stack
         w = qMax(w, fmR.horizontalAdvance(QStringLiteral("SWR 9.99")));
         w = qMax(w, fmB.horizontalAdvance(QStringLiteral("TX")));
@@ -2778,28 +2781,55 @@ void MainWindow::buildStatusBar()
 
     hbox->addWidget(makeSep());
 
-    // System stats stack (CPU / MEM)
+    auto makeStatusTitle = [this](const QString& title) -> QLabel*
     {
-        auto* systemStatusPanel = new QWidget(this);
-        applyStatusContainerWidth(systemStatusPanel, uniformStackWidth);
-        auto* systemStatusLayout = new QVBoxLayout(systemStatusPanel);
-        systemStatusLayout->setContentsMargins(0, 0, 0, 0);
-        systemStatusLayout->setSpacing(0);
-        systemStatusLayout->setAlignment(Qt::AlignVCenter);
+        auto* label = new QLabel(title, this);
+        label->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
+        label->setAlignment(Qt::AlignCenter);
+        return label;
+    };
 
-        m_cpuLabel = new QLabel(this);
-        m_cpuLabel->setAlignment(Qt::AlignCenter);
-        m_cpuLabel->setTextFormat(Qt::RichText);
-        m_cpuLabel->setStyleSheet(QStringLiteral("QLabel { font-size: 12px; background: transparent; }"));
+    auto makeStatusValue = [this]() -> QLabel*
+    {
+        auto* label = new QLabel(QStringLiteral("—"), this);
+        label->setAlignment(Qt::AlignCenter);
+        label->setTextFormat(Qt::RichText);
+        label->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
+        return label;
+    };
 
-        m_memLabel = new QLabel(this);
-        m_memLabel->setAlignment(Qt::AlignCenter);
-        m_memLabel->setTextFormat(Qt::RichText);
-        m_memLabel->setStyleSheet(QStringLiteral("QLabel { font-size: 12px; background: transparent; }"));
+    // Processor stack
+    {
+        auto* cpuStatusPanel = new QWidget(this);
+        applyStatusContainerWidth(cpuStatusPanel, uniformStackWidth);
+        auto* cpuStatusLayout = new QVBoxLayout(cpuStatusPanel);
+        cpuStatusLayout->setContentsMargins(0, 0, 0, 0);
+        cpuStatusLayout->setSpacing(0);
+        cpuStatusLayout->setAlignment(Qt::AlignVCenter);
 
-        systemStatusLayout->addWidget(m_cpuLabel);
-        systemStatusLayout->addWidget(m_memLabel);
-        hbox->addWidget(systemStatusPanel);
+        auto* cpuTitleLabel = makeStatusTitle(QStringLiteral("Processor"));
+        m_cpuLabel = makeStatusValue();
+        cpuStatusLayout->addWidget(cpuTitleLabel);
+        cpuStatusLayout->addWidget(m_cpuLabel);
+        hbox->addWidget(cpuStatusPanel);
+    }
+
+    hbox->addWidget(makeSep());
+
+    // Memory stack
+    {
+        auto* memoryStatusPanel = new QWidget(this);
+        applyStatusContainerWidth(memoryStatusPanel, uniformStackWidth);
+        auto* memoryStatusLayout = new QVBoxLayout(memoryStatusPanel);
+        memoryStatusLayout->setContentsMargins(0, 0, 0, 0);
+        memoryStatusLayout->setSpacing(0);
+        memoryStatusLayout->setAlignment(Qt::AlignVCenter);
+
+        auto* memoryTitleLabel = makeStatusTitle(QStringLiteral("Memory"));
+        m_memLabel = makeStatusValue();
+        memoryStatusLayout->addWidget(memoryTitleLabel);
+        memoryStatusLayout->addWidget(m_memLabel);
+        hbox->addWidget(memoryStatusPanel);
     }
 
     hbox->addWidget(makeSep());
