@@ -109,7 +109,7 @@ BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
     auto* wheelLayout = new QVBoxLayout(wheelGroup);
     wheelLayout->setContentsMargins(10, 12, 10, 10);
     wheelLayout->setSpacing(6);
-    m_invertMouseWheelCheck = new QCheckBox("Reverse wheel pan direction", wheelGroup);
+    m_invertMouseWheelCheck = new QCheckBox("Reverse wheel tuning direction", wheelGroup);
     m_invertMouseWheelCheck->setChecked(
         AppSettings::instance().value(QString::fromLatin1(kBandScopeInvertMouseWheelSettingsKey), "False").toBool());
     wheelLayout->addWidget(m_invertMouseWheelCheck);

@@ -112,7 +112,7 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
     m_spanCombo->raise();
 
     connect(m_bandscopeCanvas, &BandscopeCanvas::frequencyClicked, this, &BandscopeDisplay::frequencyClicked);
-    connect(m_bandscopeCanvas, &BandscopeCanvas::wheelStepRequested, this, &BandscopeDisplay::panScrollBarBySteps);
+    connect(m_bandscopeCanvas, &BandscopeCanvas::wheelStepRequested, this, &BandscopeDisplay::wheelStepRequested);
     connect(m_waterfallController, &WaterfallController::imageChanged, m_waterfallCanvas,
             &WaterfallCanvas::setWaterfallImage);
     connect(m_panScrollBar, &QScrollBar::sliderPressed, m_waterfallController,

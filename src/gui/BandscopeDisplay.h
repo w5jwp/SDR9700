@@ -49,6 +49,7 @@ class BandscopeDisplay : public QWidget
 
   signals:
     void frequencyClicked(double freqMhz);
+    void wheelStepRequested(int steps);
     void panCenterRequested(double centerMhz);
     void spanSelected(quint64 hz);
 

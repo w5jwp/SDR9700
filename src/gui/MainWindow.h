@@ -12,6 +12,7 @@
 class RadioModel;
 class VfoModel;
 class BandscopeModel;
+class BandscopeController;
 class BandscopeDisplay;
 class VfoPanel;
 class MemoryPanel;
@@ -33,10 +34,14 @@ class QDialog;
 class QTableWidget;
 class QTimer;
 class DtmfDialog;
+class IcomRC28Controller;
 class MainTitleBar;
+class MemoryController;
 class MetersDialog;
+class RadioCommandController;
 class RadioChooserDialog;
 class SettingsDialog;
+class StatusBarController;
 #ifdef HAVE_HIDAPI
 class IcomRC28Manager;
 #endif
@@ -44,6 +49,11 @@ class IcomRC28Manager;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+    friend class BandscopeController;
+    friend class IcomRC28Controller;
+    friend class MemoryController;
+    friend class RadioCommandController;
+    friend class StatusBarController;
 
   public:
     explicit MainWindow(RadioModel* model, QWidget* parent = nullptr);
@@ -141,6 +151,11 @@ class MainWindow : public QMainWindow
     void checkIfMemorySelectionComplete();
 
     MainTitleBar* m_titleBar{nullptr};
+    BandscopeController* m_bandscopeController{nullptr};
+    IcomRC28Controller* m_icomRC28Controller{nullptr};
+    MemoryController* m_memoryController{nullptr};
+    RadioCommandController* m_radioCommandController{nullptr};
+    StatusBarController* m_statusBarController{nullptr};
     RadioModel* m_model{nullptr};
     QUuid m_pendingProfileId;
     VfoModel* m_vfo{nullptr};

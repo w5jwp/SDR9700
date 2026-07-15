@@ -129,6 +129,18 @@ set(SDR9700_SOURCES
     gui/UiTheme.h
     gui/MemoryStore.h
     gui/MemoryStore.cpp
+    gui/MainWindowHelpers.h
+    gui/MainWindowHelpers.cpp
+    gui/BandscopeController.h
+    gui/BandscopeController.cpp
+    gui/IcomRC28Controller.h
+    gui/IcomRC28Controller.cpp
+    gui/MemoryController.h
+    gui/MemoryController.cpp
+    gui/RadioCommandController.h
+    gui/RadioCommandController.cpp
+    gui/StatusBarController.h
+    gui/StatusBarController.cpp
     gui/ConfigurationManager.h
     gui/ConfigurationManager.cpp
     gui/RadioChooserDialog.h
