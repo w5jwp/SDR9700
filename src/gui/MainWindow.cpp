@@ -197,6 +197,16 @@ QString statusLabelStyle(const char* color, bool bold = false)
         .arg(QString::fromLatin1(color), bold ? QStringLiteral(" font-weight: bold;") : QString());
 }
 
+QString errorStatusMessage(const QString& message)
+{
+    QString text = message.trimmed();
+    if (text.startsWith(QStringLiteral("error:"), Qt::CaseInsensitive))
+    {
+        text = text.mid(QStringLiteral("error:").size()).trimmed();
+    }
+    return text.isEmpty() ? QStringLiteral("Error") : QStringLiteral("Error: %1").arg(text);
+}
+
 QColor colorSetting(const char* key, const QColor& defaultColor)
 {
     const QColor color(
@@ -946,7 +956,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             [this](const QString& deviceName)
             {
                 qInfo(logIcomRC28()) << "Multiple devices detected:" << deviceName;
-                showToast(QStringLiteral("Duplicate accessory blocked (%1)").arg(deviceName), 8000);
+                showToast(QStringLiteral("Duplicate accessory blocked (%1)").arg(deviceName), 8000, ToastKind::Warning);
             });
     connect(m_icomRC28Manager, &IcomRC28Manager::connectionChanged, this,
             [this](bool connected, const QString& deviceName)
@@ -958,7 +968,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                 }
                 showToast(connected ? QStringLiteral("Accessory connected (%1)").arg(deviceName)
                                     : QStringLiteral("Accessory disconnected (%1)").arg(deviceName),
-                          4000);
+                          4000, connected ? ToastKind::Info : ToastKind::Warning);
             });
     m_icomRC28Manager->loadSettings();
 #endif
@@ -1433,7 +1443,7 @@ void MainWindow::selectMemoryById(const QString& id, bool showDialogOnFailure)
         }
         else
         {
-            showToast("Controls are locked");
+            showToast("Controls are locked", 4000, ToastKind::Warning);
         }
         return;
     }
@@ -1454,7 +1464,7 @@ void MainWindow::selectMemoryById(const QString& id, bool showDialogOnFailure)
         }
         else
         {
-            showToast("Connect to the radio before selecting a memory");
+            showToast("Connect to the radio before selecting a memory", 4000, ToastKind::Warning);
         }
         return;
     }
@@ -4042,7 +4052,7 @@ void MainWindow::onConnectionChanged(bool connected)
         {
             if (!RadioProfileStore::instance().setLastProfileId(m_pendingProfileId))
             {
-                showToast("Could not save last selected radio profile", 8000);
+                showToast("Could not save last selected radio profile", 8000, ToastKind::Warning);
             }
         }
     }
@@ -4309,15 +4319,29 @@ void MainWindow::onSpectrumReady(const QVector<float>& levels, double start, dou
     m_bandscopeDisplay->updateSpectrum(levels, outOfRange);
 }
 
-void MainWindow::showToast(const QString& msg, int durationMs)
+void MainWindow::showToast(const QString& msg, int durationMs, ToastKind kind)
 {
     if (!m_toastLabel || !m_toastTimer)
     {
         return;
     }
+
+    const char* color = UiTheme::Color::TextStatusPrimary;
+    bool bold = false;
+    if (kind == ToastKind::Warning)
+    {
+        color = UiTheme::Color::Warning;
+        bold = true;
+    }
+    else if (kind == ToastKind::Error)
+    {
+        color = UiTheme::Color::Danger;
+        bold = true;
+    }
+
     m_toastTimer->stop();
     m_toastLabel->setText(msg);
-    m_toastLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusPrimary));
+    m_toastLabel->setStyleSheet(statusLabelStyle(color, bold));
     m_toastTimer->start(durationMs);
 }
 
@@ -4367,12 +4391,21 @@ void MainWindow::updateNetworkQuality(int rttMs)
 
 void MainWindow::onStatusMessage(const QString& msg)
 {
-    showToast(msg, 5000);
+    ToastKind kind = ToastKind::Info;
+    const QString lower = msg.toLower();
+    if (lower.contains(QStringLiteral("timed out")) || lower.contains(QStringLiteral("stopped")) ||
+        lower.contains(QStringLiteral("blocked")) || lower.contains(QStringLiteral("locked")) ||
+        lower.contains(QStringLiteral("disconnected")) || lower.contains(QStringLiteral("could not")) ||
+        lower.contains(QStringLiteral("failed")))
+    {
+        kind = ToastKind::Warning;
+    }
+    showToast(msg, 5000, kind);
 }
 
 void MainWindow::onError(const QString& msg)
 {
-    showToast(QString("Error: %1").arg(msg), 8000);
+    showToast(errorStatusMessage(msg), 8000, ToastKind::Error);
     m_lastErrorWasCredential = msg.startsWith(QStringLiteral("Login denied"), Qt::CaseInsensitive);
 }
 

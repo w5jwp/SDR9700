@@ -281,7 +281,13 @@ class MainWindow : public QMainWindow
 
     void updateSpectrumVfoMarker();
     void updateTxDurationLabel();
-    void showToast(const QString& msg, int durationMs = 4000);
+    enum class ToastKind
+    {
+        Info,
+        Warning,
+        Error,
+    };
+    void showToast(const QString& msg, int durationMs = 4000, ToastKind kind = ToastKind::Info);
     void updateNetworkQuality(int rttMs);
 
     void updateTxIndicator(bool on);
