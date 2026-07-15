@@ -15,5 +15,5 @@ class MouseSettingsPanel : public QWidget
     void reverseMouseWheelTuningChanged(bool reversed);
 
   private:
-    QCheckBox* m_invertPanadapterMouseWheelCheck{nullptr};
+    QCheckBox* m_invertBandscopeMouseWheelCheck{nullptr};
 };

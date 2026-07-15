@@ -16,7 +16,7 @@ validated with live CI-V logs before being treated as final behavior.
 | RF gain | `14 02` | Inferred selected-side/VFO-specific | Should live under each VFO if confirmed independent. |
 | SQL | `14 03` | Inferred selected-side/VFO-specific | Should be target-VFO aware if confirmed independent. |
 | S-meter | `15 02` | Selected/active receiver read | Display on active/selected VFO unless SDR9700 adds alternating MAIN/SUB polling. |
-| Scope / panadapter | `27 xx`, especially `27 12` | Receiver-selectable, currently active-side UX | Current plan: panadapter follows TX/active VFO only. |
+| Scope / bandscope | `27 xx`, especially `27 12` | Receiver-selectable, currently active-side UX | Current plan: bandscope follows TX/active VFO only. |
 | TX PWR | `14 0A` | Unconfirmed: likely transmitter/global or per-band radio state | Current code treats it global. Validate before making it VFO-specific. |
 | MIC gain | `14 0B` | Global TX audio path | Keep global. |
 | PTT | transceiver status | Global transmitter state | GUI PTT is momentary. TX side determines which VFO transmits. |

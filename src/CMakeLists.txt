@@ -108,8 +108,8 @@ set(SDR9700_SOURCES
     models/RadioModel.cpp
     models/VfoModel.h
     models/VfoModel.cpp
-    models/PanadapterModel.h
-    models/PanadapterModel.cpp
+    models/BandscopeModel.h
+    models/BandscopeModel.cpp
 
     gui/SpectrumCanvas.h
     gui/SpectrumCanvas.cpp

@@ -1,4 +1,4 @@
-#include "PanadapterModel.h"
+#include "BandscopeModel.h"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -24,9 +24,9 @@ bool normalizeRange(double* startMhz, double* endMhz)
 }
 } // namespace
 
-PanadapterModel::PanadapterModel(QObject* parent) : QObject(parent) {}
+BandscopeModel::BandscopeModel(QObject* parent) : QObject(parent) {}
 
-double PanadapterModel::constrainedBandwidth(double bandwidthMhz) const
+double BandscopeModel::constrainedBandwidth(double bandwidthMhz) const
 {
     double displayStartMhz = sourceStartMhz();
     double displayEndMhz = sourceEndMhz();
@@ -40,7 +40,7 @@ double PanadapterModel::constrainedBandwidth(double bandwidthMhz) const
     return qBound(kMinSourceBandwidthMhz, bandwidthMhz, maximumBandwidth);
 }
 
-double PanadapterModel::constrainedCenter(double centerMhz, double bandwidthMhz) const
+double BandscopeModel::constrainedCenter(double centerMhz, double bandwidthMhz) const
 {
     double displayStartMhz = sourceStartMhz();
     double displayEndMhz = sourceEndMhz();
@@ -61,7 +61,7 @@ double PanadapterModel::constrainedCenter(double centerMhz, double bandwidthMhz)
     return qBound(qMin(minCenter, maxCenter), centerMhz, qMax(minCenter, maxCenter));
 }
 
-void PanadapterModel::constrainDisplayRange()
+void BandscopeModel::constrainDisplayRange()
 {
     const double nextBandwidth = constrainedBandwidth(m_bandwidthMhz);
     const double nextCenter = constrainedCenter(m_centerMhz, nextBandwidth);
@@ -75,7 +75,7 @@ void PanadapterModel::constrainDisplayRange()
     emit rangeChanged(m_centerMhz, m_bandwidthMhz);
 }
 
-void PanadapterModel::centerOnFrequency(double freqMhz)
+void BandscopeModel::centerOnFrequency(double freqMhz)
 {
     const double nextBandwidth = constrainedBandwidth(m_bandwidthMhz);
     const double nextCenter = constrainedCenter(freqMhz, nextBandwidth);
@@ -89,7 +89,7 @@ void PanadapterModel::centerOnFrequency(double freqMhz)
     emit rangeChanged(m_centerMhz, m_bandwidthMhz);
 }
 
-void PanadapterModel::holdDisplayCenter(double centerMhz)
+void BandscopeModel::holdDisplayCenter(double centerMhz)
 {
     if (!std::isfinite(centerMhz))
     {
@@ -100,13 +100,13 @@ void PanadapterModel::holdDisplayCenter(double centerMhz)
     m_hasDisplayCenterHold = true;
 }
 
-void PanadapterModel::clearDisplayCenterHold()
+void BandscopeModel::clearDisplayCenterHold()
 {
     m_hasDisplayCenterHold = false;
     m_heldCenterMhz = 0.0;
 }
 
-void PanadapterModel::zoomInAt(double focusMhz)
+void BandscopeModel::zoomInAt(double focusMhz)
 {
     static constexpr double kMinBandwidthMhz = 0.010;
     const double sourceBandwidth = constrainedBandwidth(m_sourceBandwidthMhz);
@@ -123,7 +123,7 @@ void PanadapterModel::zoomInAt(double focusMhz)
     emit rangeChanged(m_centerMhz, m_bandwidthMhz);
 }
 
-void PanadapterModel::zoomOut()
+void BandscopeModel::zoomOut()
 {
     const double sourceBandwidth = constrainedBandwidth(m_sourceBandwidthMhz);
     const double nextBandwidth = qMin(sourceBandwidth, m_bandwidthMhz * kZoomFactor);
@@ -145,7 +145,7 @@ void PanadapterModel::zoomOut()
     emit rangeChanged(m_centerMhz, m_bandwidthMhz);
 }
 
-void PanadapterModel::setFrequencyLimits(double startMhz, double endMhz)
+void BandscopeModel::setFrequencyLimits(double startMhz, double endMhz)
 {
     if (!normalizeRange(&startMhz, &endMhz))
     {
@@ -163,7 +163,7 @@ void PanadapterModel::setFrequencyLimits(double startMhz, double endMhz)
     constrainDisplayRange();
 }
 
-void PanadapterModel::clearFrequencyLimits()
+void BandscopeModel::clearFrequencyLimits()
 {
     if (!m_hasFrequencyLimits)
     {
@@ -176,7 +176,7 @@ void PanadapterModel::clearFrequencyLimits()
     constrainDisplayRange();
 }
 
-void PanadapterModel::ingestSpectrum(const QVector<float>& binsDbm, double startMhz, double endMhz)
+void BandscopeModel::ingestSpectrum(const QVector<float>& binsDbm, double startMhz, double endMhz)
 {
     // Minimum change in MHz that warrants a rangeChanged emission.
     static constexpr double kRangeChangeTolerance = 0.0001;

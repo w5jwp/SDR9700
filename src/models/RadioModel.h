@@ -7,7 +7,7 @@
 
 class IRadioBackend;
 class VfoModel;
-class PanadapterModel;
+class BandscopeModel;
 
 class RadioModel : public QObject
 {
@@ -30,7 +30,7 @@ class RadioModel : public QObject
     int smeter() const { return m_smeter; }
 
     VfoModel* vfo() const { return m_vfo; }
-    PanadapterModel* panadapter() const { return m_pan; }
+    BandscopeModel* bandscope() const { return m_bandscope; }
     IRadioBackend* backend() const { return m_backend; }
 
   public slots:
@@ -71,7 +71,7 @@ class RadioModel : public QObject
   private:
     IRadioBackend* m_backend{nullptr};
     VfoModel* m_vfo{nullptr};
-    PanadapterModel* m_pan{nullptr};
+    BandscopeModel* m_bandscope{nullptr};
 
     bool m_connected{false};
     bool m_ready{false};

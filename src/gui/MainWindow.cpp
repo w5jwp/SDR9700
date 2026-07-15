@@ -26,7 +26,7 @@
 #endif
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
-#include "models/PanadapterModel.h"
+#include "models/BandscopeModel.h"
 
 #include <QToolBar>
 #include <QAction>
@@ -124,8 +124,8 @@ constexpr StepPreset kStepPresets[] = {
 };
 
 constexpr quint64 kMinimumTuneFrequencyHz = 100000;
-constexpr int kPanTuneCommitDelayMs = 70;
-constexpr int kPanTuneReleaseDelayMs = 650;
+constexpr int kBandscopeTuneCommitDelayMs = 70;
+constexpr int kBandscopeTuneReleaseDelayMs = 650;
 constexpr int kMemoryOffsetCustom = -1;
 constexpr auto kNoActiveMemoryLabel = "-";
 constexpr int kMemoryTableColumnCount = 8;
@@ -154,7 +154,7 @@ constexpr QMargins kControlStripMargins(8, 14, 8, 16);
 constexpr int kControlRowSpacing = 8;
 constexpr int kControlGroupMargin = 8;
 constexpr int kControlGroupSpacing = 6;
-constexpr int kPanadapterSpectrumHeightIncrease = 20;
+constexpr int kBandscopeSpectrumHeightIncrease = 20;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 constexpr QSize kSelectorButtonSize(72, UiTheme::Size::ControlButtonHeight);
 
@@ -593,7 +593,7 @@ class ClickableStatusPanel : public QWidget
 } // namespace
 
 MainWindow::MainWindow(RadioModel* model, QWidget* parent)
-    : QMainWindow(parent), m_model(model), m_vfo(model->vfo()), m_pan(model->panadapter())
+    : QMainWindow(parent), m_model(model), m_vfo(model->vfo()), m_bandscope(model->bandscope())
 {
     setWindowFlag(Qt::FramelessWindowHint);
     updateWindowTitle();
@@ -617,30 +617,30 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     m_spectrumCanvas->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
     vbox->addWidget(m_spectrumCanvas, 1);
-    m_panTuneCommitTimer = new QTimer(this);
-    m_panTuneCommitTimer->setSingleShot(true);
-    m_panTuneCommitTimer->setInterval(kPanTuneCommitDelayMs);
-    connect(m_panTuneCommitTimer, &QTimer::timeout, this,
+    m_bandscopeTuneCommitTimer = new QTimer(this);
+    m_bandscopeTuneCommitTimer->setSingleShot(true);
+    m_bandscopeTuneCommitTimer->setInterval(kBandscopeTuneCommitDelayMs);
+    connect(m_bandscopeTuneCommitTimer, &QTimer::timeout, this,
             [this]()
             {
-                if (m_pendingPanTuneHz == 0 || !m_model->isReady() || m_controlsLocked)
+                if (m_pendingBandscopeTuneHz == 0 || !m_model->isReady() || m_controlsLocked)
                 {
                     return;
                 }
-                m_vfo->setFrequencyHz(m_pendingPanTuneHz);
+                m_vfo->setFrequencyHz(m_pendingBandscopeTuneHz);
             });
-    m_panTuneReleaseTimer = new QTimer(this);
-    m_panTuneReleaseTimer->setSingleShot(true);
-    m_panTuneReleaseTimer->setInterval(kPanTuneReleaseDelayMs);
-    connect(m_panTuneReleaseTimer, &QTimer::timeout, this,
+    m_bandscopeTuneReleaseTimer = new QTimer(this);
+    m_bandscopeTuneReleaseTimer->setSingleShot(true);
+    m_bandscopeTuneReleaseTimer->setInterval(kBandscopeTuneReleaseDelayMs);
+    connect(m_bandscopeTuneReleaseTimer, &QTimer::timeout, this,
             [this]()
             {
-                m_pendingPanTuneHz = 0;
-                m_displayPanTuneHz = 0;
-                m_panDragTuneBaseHz = 0;
-                if (m_pan)
+                m_pendingBandscopeTuneHz = 0;
+                m_displayBandscopeTuneHz = 0;
+                m_bandscopeDragTuneBaseHz = 0;
+                if (m_bandscope)
                 {
-                    m_pan->clearDisplayCenterHold();
+                    m_bandscope->clearDisplayCenterHold();
                 }
             });
     buildMemoryWindow();
@@ -794,8 +794,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     m_spectrumCanvas->setFilterWidth(m_vfo->filterLow(), m_vfo->filterHigh());
     updateSpectrumVfoMarker();
 
-    connect(m_pan, &PanadapterModel::spectrumReady, this, &MainWindow::onSpectrumReady);
-    connect(m_pan, &PanadapterModel::rangeChanged, this,
+    connect(m_bandscope, &BandscopeModel::spectrumReady, this, &MainWindow::onSpectrumReady);
+    connect(m_bandscope, &BandscopeModel::rangeChanged, this,
             [this](double center, double bw)
             {
                 m_spectrumCanvas->setFrequencyRange(center - bw / 2, center + bw / 2);
@@ -803,15 +803,15 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             });
 
     connect(m_spectrumCanvas, &SpectrumCanvas::frequencyClicked, this, &MainWindow::onSpectrumClicked);
-    connect(m_spectrumCanvas, &SpectrumCanvas::tuneStepRequested, this, &MainWindow::tunePanadapterBySteps);
-    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragStarted, this, &MainWindow::beginPanadapterDragTune);
-    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragRequested, this, &MainWindow::tunePanadapterByDragDelta);
+    connect(m_spectrumCanvas, &SpectrumCanvas::tuneStepRequested, this, &MainWindow::tuneBandscopeBySteps);
+    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragStarted, this, &MainWindow::beginBandscopeDragTune);
+    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragRequested, this, &MainWindow::tuneBandscopeByDragDelta);
     connect(m_spectrumCanvas, &SpectrumCanvas::zoomInRequested, this,
             [this]()
             {
                 if (!m_controlsLocked)
                 {
-                    m_pan->zoomInAt(m_vfo->frequencyHz() / 1e6);
+                    m_bandscope->zoomInAt(m_vfo->frequencyHz() / 1e6);
                 }
             });
     connect(m_spectrumCanvas, &SpectrumCanvas::zoomOutRequested, this,
@@ -819,7 +819,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             {
                 if (!m_controlsLocked)
                 {
-                    m_pan->zoomOut();
+                    m_bandscope->zoomOut();
                 }
             });
 
@@ -2893,14 +2893,14 @@ void MainWindow::restoreWindowLayout()
 
     if (m_spectrumCanvas)
     {
-        int spectrumHeight = AppSettings::instance().value("PanadapterSpectrumHeight", -1).toInt();
-        const QString migrationKey = QStringLiteral("PanadapterSpectrumHeight680Migrated");
+        int spectrumHeight = AppSettings::instance().value("BandscopeSpectrumHeight", -1).toInt();
+        const QString migrationKey = QStringLiteral("BandscopeSpectrumHeight680Migrated");
         const bool needsSpectrumHeightMigration = !AppSettings::instance().contains(migrationKey);
         if (spectrumHeight > 0)
         {
             if (needsSpectrumHeightMigration)
             {
-                spectrumHeight += kPanadapterSpectrumHeightIncrease;
+                spectrumHeight += kBandscopeSpectrumHeightIncrease;
             }
             m_spectrumCanvas->setSpectrumPaneHeight(spectrumHeight);
         }
@@ -2917,22 +2917,23 @@ void MainWindow::saveWindowLayout() const
     AppSettings::instance().setValue("MainWindowY", normalGeometry().y());
     if (m_spectrumCanvas)
     {
-        AppSettings::instance().setValue("PanadapterSpectrumHeight", m_spectrumCanvas->spectrumPaneHeight());
+        AppSettings::instance().setValue("BandscopeSpectrumHeight", m_spectrumCanvas->spectrumPaneHeight());
     }
 }
 
 void MainWindow::updateSpectrumVfoMarker()
 {
-    if (!m_spectrumCanvas || !m_vfo || !m_pan)
+    if (!m_spectrumCanvas || !m_vfo || !m_bandscope)
     {
         return;
     }
 
-    const quint64 displayedHz =
-        m_displayPanTuneHz > 0 ? m_displayPanTuneHz : (m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : m_vfo->frequencyHz());
+    const quint64 displayedHz = m_displayBandscopeTuneHz > 0
+                                    ? m_displayBandscopeTuneHz
+                                    : (m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : m_vfo->frequencyHz());
     const double vfoMhz = displayedHz / 1e6;
-    const bool vfoInPanadapter = vfoMhz >= m_pan->startMhz() && vfoMhz <= m_pan->endMhz();
-    m_spectrumCanvas->setVfoFrequency(vfoInPanadapter ? vfoMhz : m_pan->centerMhz());
+    const bool vfoInBandscope = vfoMhz >= m_bandscope->startMhz() && vfoMhz <= m_bandscope->endMhz();
+    m_spectrumCanvas->setVfoFrequency(vfoInBandscope ? vfoMhz : m_bandscope->centerMhz());
 }
 
 void MainWindow::setRadioControlsEnabled(bool enabled)
@@ -3263,9 +3264,10 @@ void MainWindow::handleIcomRC28Tune(int steps)
     }
 
     const int stepHz = tuningStepHz();
-    const qint64 currentHz = static_cast<qint64>(m_displayPanTuneHz > 0 ? m_displayPanTuneHz : m_vfo->frequencyHz());
+    const qint64 currentHz =
+        static_cast<qint64>(m_displayBandscopeTuneHz > 0 ? m_displayBandscopeTuneHz : m_vfo->frequencyHz());
     const qint64 targetHz = currentHz + static_cast<qint64>(steps) * stepHz;
-    schedulePanadapterTune(
+    scheduleBandscopeTune(
         static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
 }
 
@@ -3289,7 +3291,7 @@ void MainWindow::snapIcomRC28FrequencyToKhz()
         return;
     }
 
-    const quint64 currentHz = m_displayPanTuneHz > 0 ? m_displayPanTuneHz : m_vfo->frequencyHz();
+    const quint64 currentHz = m_displayBandscopeTuneHz > 0 ? m_displayBandscopeTuneHz : m_vfo->frequencyHz();
     const quint64 snappedHz =
         clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(currentHz / 1000.0)) * 1000ULL);
     if (snappedHz == currentHz)
@@ -3297,20 +3299,20 @@ void MainWindow::snapIcomRC28FrequencyToKhz()
         return;
     }
 
-    if (m_panTuneCommitTimer)
+    if (m_bandscopeTuneCommitTimer)
     {
-        m_panTuneCommitTimer->stop();
+        m_bandscopeTuneCommitTimer->stop();
     }
-    if (m_panTuneReleaseTimer)
+    if (m_bandscopeTuneReleaseTimer)
     {
-        m_panTuneReleaseTimer->stop();
+        m_bandscopeTuneReleaseTimer->stop();
     }
-    m_pendingPanTuneHz = 0;
-    m_displayPanTuneHz = 0;
-    m_panDragTuneBaseHz = 0;
-    if (m_pan)
+    m_pendingBandscopeTuneHz = 0;
+    m_displayBandscopeTuneHz = 0;
+    m_bandscopeDragTuneBaseHz = 0;
+    if (m_bandscope)
     {
-        m_pan->clearDisplayCenterHold();
+        m_bandscope->clearDisplayCenterHold();
     }
     clearActiveMemory();
     m_vfo->setFrequencyHz(snappedHz);
@@ -3418,9 +3420,9 @@ void MainWindow::updateControlLockIndicator()
     }
 }
 
-void MainWindow::updatePanadapterBandLimits(quint64 hz)
+void MainWindow::updateBandscopeBandLimits(quint64 hz)
 {
-    if (!m_pan)
+    if (!m_bandscope)
     {
         return;
     }
@@ -3430,11 +3432,11 @@ void MainWindow::updatePanadapterBandLimits(quint64 hz)
     const availableBands band = sdr9700::radioBandForFrequency(hz);
     if (band == bandUnknown || !sdr9700::radioBandEdges(band, &startHz, &endHz))
     {
-        m_pan->clearFrequencyLimits();
+        m_bandscope->clearFrequencyLimits();
         return;
     }
 
-    m_pan->setFrequencyLimits(startHz / 1e6, endHz / 1e6);
+    m_bandscope->setFrequencyLimits(startHz / 1e6, endHz / 1e6);
 }
 
 int MainWindow::tuningStepHz() const
@@ -3497,47 +3499,48 @@ quint64 MainWindow::roundFrequencyToStep(quint64 hz) const
     return ((hz + stepHz / 2) / stepHz) * stepHz;
 }
 
-void MainWindow::beginPanadapterDragTune()
+void MainWindow::beginBandscopeDragTune()
 {
     if (!m_vfo)
     {
-        m_panDragTuneBaseHz = 0;
+        m_bandscopeDragTuneBaseHz = 0;
         return;
     }
-    m_panDragTuneBaseHz = m_displayPanTuneHz > 0 ? m_displayPanTuneHz : m_vfo->frequencyHz();
+    m_bandscopeDragTuneBaseHz = m_displayBandscopeTuneHz > 0 ? m_displayBandscopeTuneHz : m_vfo->frequencyHz();
 }
 
-void MainWindow::tunePanadapterBySteps(int steps)
+void MainWindow::tuneBandscopeBySteps(int steps)
 {
     if (steps == 0 || !m_vfo || !m_model->isReady() || m_controlsLocked)
     {
         return;
     }
 
-    const qint64 currentHz = static_cast<qint64>(m_displayPanTuneHz > 0 ? m_displayPanTuneHz : m_vfo->frequencyHz());
+    const qint64 currentHz =
+        static_cast<qint64>(m_displayBandscopeTuneHz > 0 ? m_displayBandscopeTuneHz : m_vfo->frequencyHz());
     const qint64 targetHz = currentHz + static_cast<qint64>(steps) * tuningStepHz();
-    schedulePanadapterTune(
+    scheduleBandscopeTune(
         static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
 }
 
-void MainWindow::tunePanadapterByDragDelta(double deltaMhz)
+void MainWindow::tuneBandscopeByDragDelta(double deltaMhz)
 {
     if (!m_vfo || !m_model->isReady() || m_controlsLocked)
     {
         return;
     }
-    if (m_panDragTuneBaseHz == 0)
+    if (m_bandscopeDragTuneBaseHz == 0)
     {
-        beginPanadapterDragTune();
+        beginBandscopeDragTune();
     }
 
     const qint64 targetHz =
-        static_cast<qint64>(m_panDragTuneBaseHz) + static_cast<qint64>(std::llround(deltaMhz * 1e6));
-    schedulePanadapterTune(
+        static_cast<qint64>(m_bandscopeDragTuneBaseHz) + static_cast<qint64>(std::llround(deltaMhz * 1e6));
+    scheduleBandscopeTune(
         static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
 }
 
-quint64 MainWindow::clampPanadapterCenterHz(quint64 hz, double bandwidthMhz) const
+quint64 MainWindow::clampBandscopeCenterHz(quint64 hz, double bandwidthMhz) const
 {
     const quint64 referenceHz = m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : (m_vfo ? m_vfo->frequencyHz() : 0);
     availableBands band = sdr9700::radioBandForFrequency(referenceHz);
@@ -3583,18 +3586,18 @@ quint64 MainWindow::clampFrequencyHzToActiveBand(quint64 hz) const
     return std::clamp(hz, startHz, endHz);
 }
 
-void MainWindow::schedulePanadapterTune(quint64 hz)
+void MainWindow::scheduleBandscopeTune(quint64 hz)
 {
     hz = clampFrequencyHzToActiveBand(roundFrequencyToStep(hz));
-    const quint64 displayCenterHz = clampPanadapterCenterHz(hz, m_pan ? m_pan->bandwidthMhz() : 0.0);
+    const quint64 displayCenterHz = clampBandscopeCenterHz(hz, m_bandscope ? m_bandscope->bandwidthMhz() : 0.0);
     clearActiveMemory();
-    m_pendingPanTuneHz = hz;
-    m_displayPanTuneHz = hz;
+    m_pendingBandscopeTuneHz = hz;
+    m_displayBandscopeTuneHz = hz;
     m_vfoFrequencyHz = hz;
-    updatePanadapterBandLimits(hz);
-    if (m_pan)
+    updateBandscopeBandLimits(hz);
+    if (m_bandscope)
     {
-        m_pan->holdDisplayCenter(displayCenterHz / 1e6);
+        m_bandscope->holdDisplayCenter(displayCenterHz / 1e6);
     }
 
     if (m_vfoPanel && !m_vfoPanel->frequencyHasFocus())
@@ -3602,19 +3605,19 @@ void MainWindow::schedulePanadapterTune(quint64 hz)
         m_vfoPanel->setFrequencyText(formatFrequency(hz));
         m_vfoPanel->setBandText(bandLabelForHz(hz));
     }
-    if (m_pan)
+    if (m_bandscope)
     {
-        m_pan->centerOnFrequency(displayCenterHz / 1e6);
+        m_bandscope->centerOnFrequency(displayCenterHz / 1e6);
     }
     updateSpectrumVfoMarker();
 
-    if (m_panTuneCommitTimer)
+    if (m_bandscopeTuneCommitTimer)
     {
-        m_panTuneCommitTimer->start();
+        m_bandscopeTuneCommitTimer->start();
     }
-    if (m_panTuneReleaseTimer)
+    if (m_bandscopeTuneReleaseTimer)
     {
-        m_panTuneReleaseTimer->start();
+        m_bandscopeTuneReleaseTimer->start();
     }
 }
 
@@ -3769,20 +3772,20 @@ void MainWindow::onConnectionChanged(bool connected)
     }
     else
     {
-        if (m_panTuneCommitTimer)
+        if (m_bandscopeTuneCommitTimer)
         {
-            m_panTuneCommitTimer->stop();
+            m_bandscopeTuneCommitTimer->stop();
         }
-        if (m_panTuneReleaseTimer)
+        if (m_bandscopeTuneReleaseTimer)
         {
-            m_panTuneReleaseTimer->stop();
+            m_bandscopeTuneReleaseTimer->stop();
         }
-        m_pendingPanTuneHz = 0;
-        m_displayPanTuneHz = 0;
-        m_panDragTuneBaseHz = 0;
-        if (m_pan)
+        m_pendingBandscopeTuneHz = 0;
+        m_displayBandscopeTuneHz = 0;
+        m_bandscopeDragTuneBaseHz = 0;
+        if (m_bandscope)
         {
-            m_pan->clearDisplayCenterHold();
+            m_bandscope->clearDisplayCenterHold();
         }
         clearActiveMemory();
         m_spectrumCanvas->clearDisplay();
@@ -3899,26 +3902,26 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         }
     }
 
-    if (m_displayPanTuneHz > 0 && m_panTuneReleaseTimer && m_panTuneReleaseTimer->isActive())
+    if (m_displayBandscopeTuneHz > 0 && m_bandscopeTuneReleaseTimer && m_bandscopeTuneReleaseTimer->isActive())
     {
-        if (hz != m_displayPanTuneHz)
+        if (hz != m_displayBandscopeTuneHz)
         {
-            qDebug(logGui()) << "Ignoring transient pan tune confirmation"
-                             << "confirmedHz=" << hz << "displayHz=" << m_displayPanTuneHz;
+            qDebug(logGui()) << "Ignoring transient bandscope tune confirmation"
+                             << "confirmedHz=" << hz << "displayHz=" << m_displayBandscopeTuneHz;
             return;
         }
-        m_pendingPanTuneHz = 0;
-        m_displayPanTuneHz = 0;
-        m_panDragTuneBaseHz = 0;
-        m_panTuneReleaseTimer->stop();
-        if (m_pan)
+        m_pendingBandscopeTuneHz = 0;
+        m_displayBandscopeTuneHz = 0;
+        m_bandscopeDragTuneBaseHz = 0;
+        m_bandscopeTuneReleaseTimer->stop();
+        if (m_bandscope)
         {
-            m_pan->clearDisplayCenterHold();
+            m_bandscope->clearDisplayCenterHold();
         }
     }
 
     m_vfoFrequencyHz = hz;
-    updatePanadapterBandLimits(hz);
+    updateBandscopeBandLimits(hz);
     if (const int bandIndex = vfoBandIndexForHz(hz); bandIndex >= 0)
     {
         m_lastBandFrequencyHz[bandIndex] = hz;
@@ -3998,7 +4001,7 @@ void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, doubl
     const quint64 referenceHz = m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : (m_vfo ? m_vfo->frequencyHz() : 0);
     if (referenceHz > 0)
     {
-        updatePanadapterBandLimits(referenceHz);
+        updateBandscopeBandLimits(referenceHz);
     }
     m_spectrumCanvas->setDataFrequencyRange(start, end);
     updateSpectrumVfoMarker();
@@ -4361,7 +4364,7 @@ void MainWindow::onSpectrumClicked(double freqMhz)
     }
 
     clearActiveMemory();
-    schedulePanadapterTune(clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(freqMhz * 1e6))));
+    scheduleBandscopeTune(clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(freqMhz * 1e6))));
 }
 
 void MainWindow::commitFrequencyEdit(VfoPanel* panel)

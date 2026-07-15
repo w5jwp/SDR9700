@@ -15,7 +15,7 @@ src/radio/        IC-9700 UDP, CI-V, audio, and scope protocol handling
 src/backend/      RadioBackend adapts radio events to app-facing signals
     |
     v
-src/models/       RadioModel, VfoModel, and PanadapterModel hold UI state
+src/models/       RadioModel, VfoModel, and BandscopeModel hold UI state
     |
     v
 src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
@@ -33,7 +33,7 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
   calibrated dBm float values.
 - `RadioModel`: app-level connection and radio state.
 - `VfoModel`: active VFO state exposed to the UI.
-- `PanadapterModel`: spectrum range and waterfall/scope data exposed to the UI.
+- `BandscopeModel`: spectrum range and waterfall/scope data exposed to the UI.
 - `SpectrumWidget`: displays FFT/scope and waterfall data.
 - `TitleBarWidget`: custom frameless window title bar housing the menu bar,
   volume/mute/lock controls, and window management buttons.

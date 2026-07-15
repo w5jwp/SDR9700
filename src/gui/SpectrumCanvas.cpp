@@ -20,7 +20,7 @@ static constexpr int kDbScalePanelWidth = 38;
 static constexpr int kMinSpectrumHeight = 150;
 static constexpr int kMinWaterfallHeight = 180;
 static constexpr int kSpectrumVerticalPadding = 10;
-static constexpr int kPanDragThresholdPx = 6;
+static constexpr int kBandscopeDragThresholdPx = 6;
 static constexpr double kWheelStepAngleDelta = 120.0;
 static constexpr double kMinFrequencyRangeMhz = 0.001;
 
@@ -148,7 +148,7 @@ bool SpectrumCanvas::applySpectrumPaneHeight(int requested)
     return true;
 }
 
-void SpectrumCanvas::updatePanadapterCursor(const QPoint&)
+void SpectrumCanvas::updateBandscopeCursor(const QPoint&)
 {
     if (m_interactionLocked)
     {
@@ -156,7 +156,7 @@ void SpectrumCanvas::updatePanadapterCursor(const QPoint&)
         return;
     }
 
-    setCursor((m_panButtonPressed || m_draggingPanadapter) ? Qt::ClosedHandCursor : Qt::ArrowCursor);
+    setCursor((m_bandscopeButtonPressed || m_draggingBandscope) ? Qt::ClosedHandCursor : Qt::ArrowCursor);
 }
 
 double SpectrumCanvas::xToFreq(int x) const
@@ -288,8 +288,8 @@ void SpectrumCanvas::setInteractionLocked(bool locked)
     }
 
     m_interactionLocked = locked;
-    m_draggingPanadapter = false;
-    m_panButtonPressed = false;
+    m_draggingBandscope = false;
+    m_bandscopeButtonPressed = false;
     if (m_zoomInButton)
     {
         m_zoomInButton->setEnabled(!locked);
@@ -298,7 +298,7 @@ void SpectrumCanvas::setInteractionLocked(bool locked)
     {
         m_zoomOutButton->setEnabled(!locked);
     }
-    updatePanadapterCursor(mapFromGlobal(QCursor::pos()));
+    updateBandscopeCursor(mapFromGlobal(QCursor::pos()));
     scheduleRepaint();
 }
 
@@ -501,7 +501,7 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
         QFont f = p.font();
         f.setPointSize(9);
         p.setFont(f);
-        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, "No panadapter data — waiting for radio stream");
+        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, "No bandscope data — waiting for radio stream");
     }
 
     if (!m_spectrumBins.isEmpty())
@@ -702,18 +702,18 @@ void SpectrumCanvas::mousePressEvent(QMouseEvent* ev)
     }
     if (ev->button() == Qt::LeftButton)
     {
-        m_panDragStartPos = ev->pos();
-        m_lastPanDragPos = ev->pos();
-        m_panDragAnchorFreqMhz = xToFreq(ev->pos().x());
-        m_panButtonPressed = true;
-        m_draggingPanadapter = false;
+        m_bandscopeDragStartPos = ev->pos();
+        m_lastBandscopeDragPos = ev->pos();
+        m_bandscopeDragAnchorFreqMhz = xToFreq(ev->pos().x());
+        m_bandscopeButtonPressed = true;
+        m_draggingBandscope = false;
         setCursor(Qt::ClosedHandCursor);
     }
 }
 
 void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
 {
-    updatePanadapterCursor(ev->pos());
+    updateBandscopeCursor(ev->pos());
 
     if (m_interactionLocked)
     {
@@ -722,14 +722,14 @@ void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
 
     if (ev->buttons() & Qt::LeftButton)
     {
-        if (!m_draggingPanadapter)
+        if (!m_draggingBandscope)
         {
-            if ((ev->pos() - m_panDragStartPos).manhattanLength() < kPanDragThresholdPx)
+            if ((ev->pos() - m_bandscopeDragStartPos).manhattanLength() < kBandscopeDragThresholdPx)
             {
                 return;
             }
-            m_draggingPanadapter = true;
-            m_lastPanDragPos = m_panDragStartPos;
+            m_draggingBandscope = true;
+            m_lastBandscopeDragPos = m_bandscopeDragStartPos;
             setCursor(Qt::ClosedHandCursor);
             Q_EMIT tuneDragStarted();
         }
@@ -739,19 +739,19 @@ void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
             return;
         }
 
-        const double deltaMhz = xToFreq(ev->pos().x()) - m_panDragAnchorFreqMhz;
+        const double deltaMhz = xToFreq(ev->pos().x()) - m_bandscopeDragAnchorFreqMhz;
         Q_EMIT tuneDragRequested(deltaMhz);
-        m_lastPanDragPos = ev->pos();
+        m_lastBandscopeDragPos = ev->pos();
     }
 }
 
 void SpectrumCanvas::mouseReleaseEvent(QMouseEvent* ev)
 {
-    if (ev->button() == Qt::LeftButton && m_draggingPanadapter)
+    if (ev->button() == Qt::LeftButton && m_draggingBandscope)
     {
-        m_draggingPanadapter = false;
-        m_panButtonPressed = false;
-        updatePanadapterCursor(ev->pos());
+        m_draggingBandscope = false;
+        m_bandscopeButtonPressed = false;
+        updateBandscopeCursor(ev->pos());
     }
     else if (ev->button() == Qt::LeftButton)
     {
@@ -759,8 +759,8 @@ void SpectrumCanvas::mouseReleaseEvent(QMouseEvent* ev)
         {
             Q_EMIT frequencyClicked(xToFreq(ev->pos().x()));
         }
-        m_panButtonPressed = false;
-        updatePanadapterCursor(ev->pos());
+        m_bandscopeButtonPressed = false;
+        updateBandscopeCursor(ev->pos());
     }
 }
 
@@ -807,7 +807,7 @@ void SpectrumCanvas::wheelEvent(QWheelEvent* ev)
     }
 
     m_wheelStepAccumulator -= acceptedSteps;
-    qDebug(logGui()) << "Panadapter wheel"
+    qDebug(logGui()) << "Bandscope wheel"
                      << "angle=" << angle << "pixel=" << ev->pixelDelta() << "qtInverted=" << ev->inverted()
                      << "physicalSteps=" << physicalSteps << "reversePref=" << m_invertMouseWheel
                      << "acceptedSteps=" << acceptedSteps << "accumulator=" << m_wheelStepAccumulator;
@@ -818,7 +818,7 @@ void SpectrumCanvas::wheelEvent(QWheelEvent* ev)
 
 void SpectrumCanvas::leaveEvent(QEvent*)
 {
-    if (!m_draggingPanadapter && !m_panButtonPressed)
+    if (!m_draggingBandscope && !m_bandscopeButtonPressed)
     {
         unsetCursor();
     }

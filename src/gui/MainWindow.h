@@ -9,7 +9,7 @@
 
 class RadioModel;
 class VfoModel;
-class PanadapterModel;
+class BandscopeModel;
 class SpectrumCanvas;
 class VfoPanel;
 class MemoryPanel;
@@ -142,7 +142,7 @@ class MainWindow : public QMainWindow
     RadioModel* m_model{nullptr};
     QUuid m_pendingProfileId;
     VfoModel* m_vfo{nullptr};
-    PanadapterModel* m_pan{nullptr};
+    BandscopeModel* m_bandscope{nullptr};
 
     SpectrumCanvas* m_spectrumCanvas{nullptr};
 
@@ -250,11 +250,11 @@ class MainWindow : public QMainWindow
     int m_txAudioPeak{0};
     int m_txAudioRms{0};
     double m_txAlc{0.0};
-    QTimer* m_panTuneCommitTimer{nullptr};
-    QTimer* m_panTuneReleaseTimer{nullptr};
-    quint64 m_pendingPanTuneHz{0};
-    quint64 m_displayPanTuneHz{0};
-    quint64 m_panDragTuneBaseHz{0};
+    QTimer* m_bandscopeTuneCommitTimer{nullptr};
+    QTimer* m_bandscopeTuneReleaseTimer{nullptr};
+    quint64 m_pendingBandscopeTuneHz{0};
+    quint64 m_displayBandscopeTuneHz{0};
+    quint64 m_bandscopeDragTuneBaseHz{0};
 
     QString m_radioHost;
     quint16 m_radioPort{0};
@@ -272,16 +272,16 @@ class MainWindow : public QMainWindow
     void updateSystemStats();
     void toggleControlLock();
     void updateControlLockIndicator();
-    void updatePanadapterBandLimits(quint64 hz);
+    void updateBandscopeBandLimits(quint64 hz);
     int tuningStepHz() const;
     void applyRadioTuningStep();
     quint64 roundFrequencyToStep(quint64 hz) const;
-    void beginPanadapterDragTune();
-    void tunePanadapterBySteps(int steps);
-    void tunePanadapterByDragDelta(double deltaMhz);
-    quint64 clampPanadapterCenterHz(quint64 hz, double bandwidthMhz) const;
+    void beginBandscopeDragTune();
+    void tuneBandscopeBySteps(int steps);
+    void tuneBandscopeByDragDelta(double deltaMhz);
+    quint64 clampBandscopeCenterHz(quint64 hz, double bandwidthMhz) const;
     quint64 clampFrequencyHzToActiveBand(quint64 hz) const;
-    void schedulePanadapterTune(quint64 hz);
+    void scheduleBandscopeTune(quint64 hz);
     void setActiveMemory(const QString& id, const QString& name, quint64 frequencyHz, int duplexMode, quint64 offsetHz,
                          int toneMode, ushort toneValue);
     void clearActiveMemory();

@@ -65,7 +65,7 @@ class SpectrumCanvas : public QWidget
     int defaultSpectrumHeight() const;
     int constrainedSpectrumHeight(int requested) const;
     bool applySpectrumPaneHeight(int requested);
-    void updatePanadapterCursor(const QPoint& pos);
+    void updateBandscopeCursor(const QPoint& pos);
     void rebuildWaterfallImage();
     void appendWaterfallRow(const QVector<float>& binsDbm);
     int binForFrequency(double mhz, int binCount) const;
@@ -84,14 +84,14 @@ class SpectrumCanvas : public QWidget
     int m_filterLowHz{-1400};
     int m_filterHighHz{1400};
     int m_spectrumHeight{-1};
-    bool m_draggingPanadapter{false};
-    bool m_panButtonPressed{false};
+    bool m_draggingBandscope{false};
+    bool m_bandscopeButtonPressed{false};
     bool m_interactionLocked{false};
     bool m_invertMouseWheel{false};
-    double m_panDragAnchorFreqMhz{0.0};
+    double m_bandscopeDragAnchorFreqMhz{0.0};
     double m_wheelStepAccumulator{0.0};
-    QPoint m_panDragStartPos;
-    QPoint m_lastPanDragPos;
+    QPoint m_bandscopeDragStartPos;
+    QPoint m_lastBandscopeDragPos;
 
     QVector<float> m_spectrumBins;
     QVector<float> m_peakHold;

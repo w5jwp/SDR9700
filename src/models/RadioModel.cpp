@@ -1,20 +1,20 @@
 #include "RadioModel.h"
 #include "VfoModel.h"
-#include "PanadapterModel.h"
+#include "BandscopeModel.h"
 #include "backend/RadioBackend.h"
 
 #include <QDebug>
 
 namespace
 {
-constexpr double kPanCenterMarginFraction = 0.25;
+constexpr double kBandscopeCenterMarginFraction = 0.25;
 }
 
 RadioModel::RadioModel(QObject* parent) : QObject(parent)
 {
     m_backend = new RadioBackend(this);
     m_vfo = new VfoModel(m_backend, this);
-    m_pan = new PanadapterModel(this);
+    m_bandscope = new BandscopeModel(this);
 
     connect(m_backend, &IRadioBackend::connected, this, &RadioModel::onBackendConnected);
     connect(m_backend, &IRadioBackend::disconnected, this, &RadioModel::onBackendDisconnected);
@@ -127,17 +127,17 @@ void RadioModel::onBackendReadyChanged(bool ready)
 void RadioModel::onFrequencyChanged(quint64 hz)
 {
     m_vfo->applyFrequency(hz);
-    if (m_pan->isUserZoomed())
+    if (m_bandscope->isUserZoomed())
     {
         return;
     }
     double freqMhz = hz / 1e6;
-    double start = m_pan->startMhz();
-    double end = m_pan->endMhz();
-    double margin = m_pan->bandwidthMhz() * kPanCenterMarginFraction;
+    double start = m_bandscope->startMhz();
+    double end = m_bandscope->endMhz();
+    double margin = m_bandscope->bandwidthMhz() * kBandscopeCenterMarginFraction;
     if (freqMhz < start + margin || freqMhz > end - margin)
     {
-        m_pan->centerOnFrequency(freqMhz);
+        m_bandscope->centerOnFrequency(freqMhz);
     }
 }
 
@@ -181,5 +181,5 @@ void RadioModel::onSpectrumDataReady(const QVector<float>& bins, double start, d
     {
         return;
     }
-    m_pan->ingestSpectrum(bins, start, end);
+    m_bandscope->ingestSpectrum(bins, start, end);
 }

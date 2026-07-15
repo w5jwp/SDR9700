@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QVector>
 
-class PanadapterModel : public QObject
+class BandscopeModel : public QObject
 {
     Q_OBJECT
 
@@ -12,7 +12,7 @@ class PanadapterModel : public QObject
     Q_PROPERTY(double bandwidthMhz READ bandwidthMhz NOTIFY rangeChanged)
 
   public:
-    explicit PanadapterModel(QObject* parent = nullptr);
+    explicit BandscopeModel(QObject* parent = nullptr);
 
     double centerMhz() const { return m_centerMhz; }
     double bandwidthMhz() const { return m_bandwidthMhz; }
