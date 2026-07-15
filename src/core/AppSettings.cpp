@@ -358,10 +358,7 @@ bool AppSettings::save() const
         settings.insert(QStringLiteral("radioChooser"), radioChooserSettings);
     }
 
-    QJsonObject root;
-    root.insert(QStringLiteral("settings"), settings);
-
-    const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    const QByteArray data = QJsonDocument(settings).toJson(QJsonDocument::Indented);
     if (file.write(data) != static_cast<qint64>(data.size()))
     {
         return false;
@@ -398,13 +395,7 @@ bool AppSettings::loadJson(const QString& path)
         return false;
     }
 
-    const QJsonObject root = doc.object();
-    if (!root.value(QStringLiteral("settings")).isObject())
-    {
-        return false;
-    }
-
-    const QJsonObject settings = root.value(QStringLiteral("settings")).toObject();
+    const QJsonObject settings = doc.object();
     for (auto it = settings.constBegin(); it != settings.constEnd(); ++it)
     {
         if (it.key() == QStringLiteral("audio") && it.value().isObject())

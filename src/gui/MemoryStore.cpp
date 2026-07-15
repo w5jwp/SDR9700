@@ -134,7 +134,6 @@ QVector<MemoryRecord> normalizedMemoryNumbers(QVector<MemoryRecord> memories)
 QJsonDocument memoriesExportDocument(const QVector<MemoryRecord>& memories)
 {
     QJsonObject root;
-    root.insert(QStringLiteral("application"), QStringLiteral("SDR9700"));
     root.insert(QStringLiteral("memories"), memoriesArray(normalizedMemoryNumbers(memories)));
     return QJsonDocument(root);
 }

@@ -383,9 +383,7 @@ bool looksLikeConfiguration(const QJsonDocument& doc)
 
 QByteArray configurationDataFromDocument(const QJsonDocument& doc)
 {
-    QJsonObject root;
-    root.insert(QStringLiteral("settings"), configurationSettingsFromDocument(doc));
-    return QJsonDocument(root).toJson(QJsonDocument::Indented);
+    return QJsonDocument(configurationSettingsFromDocument(doc)).toJson(QJsonDocument::Indented);
 }
 
 QJsonDocument readJsonFile(QWidget* parent, const QString& path, const QString& title)
