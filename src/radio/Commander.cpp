@@ -957,7 +957,6 @@ void Commander::parseCommand()
     case funcRFSQLControl:
     case funcTXDelayHF:
     case funcTXDelay50m:
-    case funcTimeOutTimer:
     case funcTimeOutCIV:
 
         if (payloadTooShort(2))
@@ -987,6 +986,7 @@ void Commander::parseCommand()
     case funcAMTXTreble:
     case funcFMTXBass:
     case funcFMTXTreble:
+    case funcTimeOutTimer:
     case funcBandEdgeBeep:
         if (payloadTooShort(1))
         {

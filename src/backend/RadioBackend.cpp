@@ -27,6 +27,7 @@ namespace
 constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 500;
 constexpr int kPttReleaseTailMs = 150;
+constexpr uchar kHardwareTxTimeoutTimer = 1; // 3 minutes, the IC-9700's shortest non-off value.
 constexpr uchar kMainReceiver = 0;
 constexpr quint32 kTxAudioSampleRate = 16000;
 
@@ -1234,6 +1235,9 @@ void RadioBackend::requestInitialRadioState()
                 commandSession->receiveCommand(funcSatelliteMode, QVariant::fromValue<bool>(false), 0);
                 commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
                 commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+                commandSession->receiveCommand(funcTimeOutTimer, QVariant::fromValue<uchar>(kHardwareTxTimeoutTimer),
+                                               0);
+                qInfo(logRadio()) << "Setting hardware TX timeout timer to 3 minutes";
 
                 const Funcs statusCommands[] = {
                     funcTransceiverStatus,
