@@ -435,6 +435,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 static constexpr double kS0Dbm = -147.0;
                 static constexpr double kS9Dbm = -93.0;
                 static constexpr double kS9p60Dbm = -33.0;
+                static constexpr double kS9MeterFraction = 4.0 / 7.0;
 
                 const double dbm = item.value.toDouble();
                 double fraction = 0.0;
@@ -444,11 +445,11 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 }
                 else if (dbm <= kS9Dbm)
                 {
-                    fraction = 0.6 * (dbm - kS0Dbm) / (kS9Dbm - kS0Dbm);
+                    fraction = kS9MeterFraction * (dbm - kS0Dbm) / (kS9Dbm - kS0Dbm);
                 }
                 else
                 {
-                    fraction = 0.6 + 0.4 * (dbm - kS9Dbm) / (kS9p60Dbm - kS9Dbm);
+                    fraction = kS9MeterFraction + (1.0 - kS9MeterFraction) * (dbm - kS9Dbm) / (kS9p60Dbm - kS9Dbm);
                 }
 
                 const int s = qBound(0, static_cast<int>(fraction * 255.0 + 0.5), 255);

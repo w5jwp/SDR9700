@@ -34,7 +34,9 @@ constexpr QRect kMemoryNameGeometry(6, 5, 200, 16);
 constexpr int kVfoFrequencyTopSpacing = 16;
 constexpr int kSignalMeterWidth = 220;
 constexpr int kSignalMeterHeight = 10;
-constexpr int kSignalLayoutSpacing = 0;
+constexpr int kSignalScaleHeight = 11;
+constexpr double kSignalScaleTextTopGap = 0.5;
+constexpr QSize kSignalBoxSize(kSignalMeterWidth, kSignalMeterHeight + kSignalScaleHeight);
 constexpr QSize kHeaderBadgeSize(54, 18);
 
 QString commandButtonStyle()
@@ -148,16 +150,23 @@ class SMeter : public QProgressBar
 
         if (m_sampleCount > 0)
         {
-            const int averageX =
-                fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_averageValue / maximum()) + 0.5);
-            painter.setPen(QPen(UiTheme::Color::MeterCyan, 1));
-            painter.drawLine(averageX, fillRect.top(), averageX, fillRect.bottom());
+            if (m_alcMode)
+            {
+                const int averageX =
+                    fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_averageValue / maximum()) + 0.5);
+                painter.setPen(QPen(UiTheme::Color::MeterCyan, 1));
+                painter.drawLine(averageX, fillRect.top(), averageX, fillRect.bottom());
+            }
 
             const int peakX =
                 fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_peakValue / double(maximum())) + 0.5);
-            const QColor peakColor = m_alcMode && m_peakValue >= 50 ? UiTheme::Color::MeterRed : UiTheme::Color::White;
-            painter.setPen(QPen(peakColor, 2));
-            painter.drawLine(peakX, fillRect.top(), peakX, fillRect.bottom());
+            const QColor peakColor = m_alcMode ? (m_peakValue >= 50 ? UiTheme::Color::MeterRed : UiTheme::Color::White)
+                                               : UiTheme::Color::MeterCyan;
+            painter.save();
+            painter.setRenderHint(QPainter::Antialiasing, false);
+            painter.setPen(QPen(peakColor, 1));
+            painter.drawLine(peakX, fillRect.top() + 1, peakX, fillRect.bottom() - 1);
+            painter.restore();
         }
     }
 
@@ -176,7 +185,7 @@ class SMeterScaleCanvas : public QWidget
   public:
     explicit SMeterScaleCanvas(QWidget* parent = nullptr) : QWidget(parent)
     {
-        setFixedHeight(12);
+        setFixedHeight(kSignalScaleHeight);
         setMinimumWidth(kSignalMeterWidth);
     }
 
@@ -197,10 +206,10 @@ class SMeterScaleCanvas : public QWidget
             double fraction;
         };
 
-        static const ScaleMark kSMarks[] = {{QStringLiteral("1"), 0.0667},   {QStringLiteral("3"), 0.2000},
-                                            {QStringLiteral("5"), 0.3333},   {QStringLiteral("7"), 0.4667},
-                                            {QStringLiteral("9"), 0.6000},   {QStringLiteral("+20"), 0.7333},
-                                            {QStringLiteral("+40"), 0.8500}, {QStringLiteral("+60"), 1.0000}};
+        static const ScaleMark kSMarks[] = {{QStringLiteral("1"), 0.0635},   {QStringLiteral("3"), 0.1905},
+                                            {QStringLiteral("5"), 0.3175},   {QStringLiteral("7"), 0.4444},
+                                            {QStringLiteral("9"), 0.5714},   {QStringLiteral("+20"), 0.7143},
+                                            {QStringLiteral("+40"), 0.8571}, {QStringLiteral("+60"), 1.0000}};
 
         static const ScaleMark kAlcMarks[] = {{QStringLiteral("0"), 0.000},
                                               {QStringLiteral(".5"), 0.250},
@@ -219,14 +228,25 @@ class SMeterScaleCanvas : public QWidget
         painter.setFont(scaleFont);
         painter.setPen(UiTheme::Color::MeterScaleText);
 
-        const int baselineY = height() - 2;
+        const QFontMetrics metrics(scaleFont);
+        int maxTextWidth = 0;
+        for (int i = 0; i <= maxIndex; ++i)
+        {
+            maxTextWidth = qMax(maxTextWidth, metrics.horizontalAdvance(marks[i].label));
+        }
+
+        const int scaleInset = maxTextWidth / 2 + 3;
+        const int scaleLeft = scaleInset;
+        const int scaleRight = qMax(scaleLeft, width() - 1 - scaleInset);
+        const int scaleWidth = qMax(1, scaleRight - scaleLeft);
+        const double baselineY = qMin<double>(height() - 1, metrics.ascent() + kSignalScaleTextTopGap);
         for (int i = 0; i <= maxIndex; ++i)
         {
             const QString& mark = marks[i].label;
-            const int textWidth = painter.fontMetrics().horizontalAdvance(mark);
-            const int anchorX = static_cast<int>(marks[i].fraction * (width() - 1) + 0.5);
+            const int textWidth = metrics.horizontalAdvance(mark);
+            const int anchorX = scaleLeft + static_cast<int>(marks[i].fraction * scaleWidth + 0.5);
             const int x = qBound(0, anchorX - textWidth / 2, std::max(0, width() - textWidth));
-            painter.drawText(x, baselineY, mark);
+            painter.drawText(QPointF(x, baselineY), mark);
         }
     }
 
@@ -306,9 +326,7 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     frequencyLayout->addWidget(m_frequencyEdit);
 
     auto* signalBox = new QWidget(this);
-    auto* signalLayout = new QVBoxLayout(signalBox);
-    signalLayout->setContentsMargins(kNoMargins);
-    signalLayout->setSpacing(kSignalLayoutSpacing);
+    signalBox->setFixedSize(kSignalBoxSize);
     m_signalMeter = new SMeter(signalBox);
     m_signalMeter->setRange(0, 100);
     m_signalMeter->setValue(0);
@@ -317,10 +335,10 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     m_signalMeter->setTextVisible(false);
     m_signalMeter->setAccessibleName(QStringLiteral("%1 signal meter").arg(title));
     m_signalMeter->setAccessibleDescription(QStringLiteral("Received signal strength meter."));
+    m_signalMeter->move(0, 0);
     m_signalScale = new SMeterScaleCanvas(signalBox);
     static_cast<SMeterScaleCanvas*>(m_signalScale)->setFixedWidth(kSignalMeterWidth);
-    signalLayout->addWidget(m_signalMeter);
-    signalLayout->addWidget(m_signalScale);
+    m_signalScale->move(0, kSignalMeterHeight);
 
     auto* sliders = new QWidget(this);
     auto* slidersLayout = new QVBoxLayout(sliders);
