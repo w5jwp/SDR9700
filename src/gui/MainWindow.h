@@ -57,14 +57,15 @@ class MainWindow : public QMainWindow
     void onAfGainChanged(int value);
     void onRfGainChanged(int value);
     void onSwrChanged(double swr);
+    void onAlcChanged(double alc);
     void updateSquelchButton();
     void showRfGainMenu();
     void updateRfGainButton();
     void onTxPowerChanged(int value);
     void updateTxPowerButton();
-    void showMicGainMenu();
-    void updateMicGainButton();
-    void showCustomMicGainDialog();
+    void showLanModMenu();
+    void updateLanModButton();
+    void showCustomLanModDialog();
     void onPttPressed();
     void onPttReleased();
     void onSpectrumClicked(double freqMhz);
@@ -91,6 +92,10 @@ class MainWindow : public QMainWindow
     void restoreWindowLayout();
     void saveWindowLayout() const;
     void showAgcMenu();
+    void showPreampMenu();
+    void updatePreampButton();
+    void showNotchMenu();
+    void updateNotchButton();
     void showRitMenu();
     void showCustomRitDialog();
     void updateRitButton();
@@ -147,8 +152,8 @@ class MainWindow : public QMainWindow
     int m_rfGainValue{128};
     QPushButton* m_squelchBtn{nullptr};
     int m_squelchValue{0};
-    QPushButton* m_micGainBtn{nullptr};
-    int m_micGainValue{51};
+    QPushButton* m_lanModBtn{nullptr};
+    int m_lanModValue{128};
     QPushButton* m_txPowerBtn{nullptr};
     int m_txPowerValue{128};
     quint64 m_vfoFrequencyHz{0};
@@ -244,6 +249,7 @@ class MainWindow : public QMainWindow
     bool m_txActive{false};
     int m_txAudioPeak{0};
     int m_txAudioRms{0};
+    double m_txAlc{0.0};
     QTimer* m_panTuneCommitTimer{nullptr};
     QTimer* m_panTuneReleaseTimer{nullptr};
     quint64 m_pendingPanTuneHz{0};
@@ -268,6 +274,7 @@ class MainWindow : public QMainWindow
     void updateControlLockIndicator();
     void updatePanadapterBandLimits(quint64 hz);
     int tuningStepHz() const;
+    void applyRadioTuningStep();
     quint64 roundFrequencyToStep(quint64 hz) const;
     void beginPanadapterDragTune();
     void tunePanadapterBySteps(int steps);

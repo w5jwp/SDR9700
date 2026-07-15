@@ -116,10 +116,11 @@ struct StepPreset
 {
     int hz;
     const char* label;
+    int radioStep;
 };
 constexpr StepPreset kStepPresets[] = {
-    {1, "1 Hz"},     {10, "10 Hz"},     {100, "100 Hz"},   {500, "500 Hz"},   {1000, "1 kHz"},
-    {5000, "5 kHz"}, {10000, "10 kHz"}, {25000, "25 kHz"}, {50000, "50 kHz"}, {100000, "100 kHz"},
+    {1, "1 Hz", 0},     {10, "10 Hz", 0},     {100, "100 Hz", 1},   {500, "500 Hz", 2},    {1000, "1 kHz", 3},
+    {5000, "5 kHz", 4}, {10000, "10 kHz", 6}, {25000, "25 kHz", 9}, {50000, "50 kHz", 10}, {100000, "100 kHz", 11},
 };
 
 constexpr quint64 kMinimumTuneFrequencyHz = 100000;
@@ -333,6 +334,28 @@ int vfoBandIndexForHz(quint64 hz)
 }
 
 static_assert(std::size(sdr9700::kRadioUiBandOrder) == 3);
+
+int radioTuningStepForHz(int hz)
+{
+    const auto preset = std::find_if(std::begin(kStepPresets), std::end(kStepPresets),
+                                     [hz](const StepPreset& item) { return item.hz == hz; });
+    return preset != std::end(kStepPresets) ? preset->radioStep : -1;
+}
+
+QString preampLevelLabel(int level)
+{
+    switch (qBound(0, level, 3))
+    {
+    case 1:
+        return QStringLiteral("INT");
+    case 2:
+        return QStringLiteral("EXT");
+    case 3:
+        return QStringLiteral("INT+EXT");
+    default:
+        return QStringLiteral("OFF");
+    }
+}
 
 struct OffsetPreset
 {
@@ -628,6 +651,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_model, &RadioModel::readyChanged, this, &MainWindow::onRadioReadyChanged);
     connect(m_model, &RadioModel::smeterChanged, this, &MainWindow::onSmeterChanged);
     connect(m_model, &RadioModel::swrChanged, this, &MainWindow::onSwrChanged);
+    connect(m_model, &RadioModel::alcChanged, this, &MainWindow::onAlcChanged);
     connect(m_model, &RadioModel::pttChanged, this, &MainWindow::onPttChanged);
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
     connect(m_model, &RadioModel::errorOccurred, this, &MainWindow::onError);
@@ -645,9 +669,11 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_vfo, &VfoModel::dtcsCodeChanged, this, &MainWindow::onDtcsCodeChanged);
     connect(m_vfo, &VfoModel::nrChanged, this, [this](bool on, int) { setCommandButtonActive(m_nrBtn, on); });
     connect(m_vfo, &VfoModel::nbChanged, this, [this](bool on, int) { setCommandButtonActive(m_nbBtn, on); });
-    connect(m_vfo, &VfoModel::preampChanged, this, [this](bool on) { setCommandButtonActive(m_preBtn, on); });
+    connect(m_vfo, &VfoModel::preampChanged, this, [this](bool) { updatePreampButton(); });
+    connect(m_vfo, &VfoModel::preampLevelChanged, this, [this](int) { updatePreampButton(); });
     connect(m_vfo, &VfoModel::attenuatorChanged, this, [this](bool on) { setCommandButtonActive(m_attBtn, on); });
-    connect(m_vfo, &VfoModel::autoNotchChanged, this, [this](bool on) { setCommandButtonActive(m_notchBtn, on); });
+    connect(m_vfo, &VfoModel::autoNotchChanged, this, [this](bool) { updateNotchButton(); });
+    connect(m_vfo, &VfoModel::manualNotchChanged, this, [this](bool) { updateNotchButton(); });
     connect(m_vfo, &VfoModel::compressorChanged, this, [this](bool on) { setCommandButtonActive(m_compBtn, on); });
     connect(m_vfo, &VfoModel::ritChanged, this, [this](bool, short) { updateRitButton(); });
     connect(m_vfo, &VfoModel::agcModeChanged, this,
@@ -664,13 +690,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                 updateSquelchButton();
             });
     connect(m_vfo, &VfoModel::txPowerChanged, this, &MainWindow::onTxPowerChanged);
-    connect(m_vfo, &VfoModel::micGainChanged, this,
-            [this](int level)
-            {
-                m_micGainValue = qBound(0, level, 255);
-                updateMicGainButton();
-            });
-
     if (auto* backend = m_model->backend())
     {
         connect(backend, &IRadioBackend::radioValueUpdated, this,
@@ -756,17 +775,13 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         updateSquelchButton();
                         break;
                     }
-                    case funcSWRMeter:
+                    case funcALCMeter:
                     {
                         if (!receiverPanel || !m_txActive)
                         {
                             break;
                         }
-                        const double swr = value.toDouble();
-                        const QColor fillColor = swr <= 1.7   ? UiTheme::Color::MeterGreen
-                                                 : swr <= 2.7 ? UiTheme::Color::MeterAmber
-                                                              : UiTheme::Color::MeterRed;
-                        receiverPanel->setSwr(swr, fillColor);
+                        receiverPanel->setAlc(value.toDouble());
                         break;
                     }
                     default:
@@ -1180,7 +1195,6 @@ void MainWindow::showSettingsDialog()
 #else
     SettingsDialog dlg(this);
 #endif
-    connect(&dlg, &SettingsDialog::lanModLevelChanged, m_model, &RadioModel::setLanModLevel);
     connect(m_model, &RadioModel::txAudioLevelChanged, &dlg, &SettingsDialog::setTransmitAudioLevel);
     connect(&dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_spectrumCanvas,
             &SpectrumCanvas::setInvertMouseWheel);
@@ -1199,7 +1213,9 @@ void MainWindow::showSettingsDialog()
     dlg.setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
     QTimer::singleShot(0, &dlg, [this, &dlg]() { centerPopupWindow(&dlg); });
     dlg.exec();
-    m_model->setLanModLevel(AppSettings::instance().value("LanModLevel", 128).toInt());
+    m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
+    updateLanModButton();
+    m_model->setLanModLevel(m_lanModValue);
     m_spectrumCanvas->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
 #ifdef HAVE_HIDAPI
@@ -2017,7 +2033,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_txPowerValue = 0;
     m_squelchValue = 0;
     m_rfGainValue = 0;
-    m_micGainValue = 0;
+    m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
     m_vfoPanel = new VfoPanel(QStringLiteral("VFO"), strip);
     m_vfoPanel->setFrequencyReadOnly(false);
     m_vfoPanel->setFrequencyText(QStringLiteral("---.---.---"));
@@ -2035,26 +2051,23 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_vfoPanel->setSquelch(0);
     m_memoryPanel = new MemoryPanel(strip);
 
-    m_agcBtn = makeSelectorButton("AGC", QStringLiteral("OFF"), "AGC mode", "Select AGC time constant.");
+    m_agcBtn = makeSelectorButton("AGC", QStringLiteral("MID"), "AGC mode", "Select AGC time constant.");
     m_attBtn = makeSelectorButton("ATT", QStringLiteral("OFF"), "Attenuator", "Toggle receiver attenuator.");
     m_attBtn->setCheckable(true);
     m_attBtn->setProperty("toggleLabel", "ATT");
     m_nbBtn = makeSelectorButton("NB", QStringLiteral("OFF"), "Noise blanker", "Toggle noise blanker.");
     m_nbBtn->setCheckable(true);
     m_nbBtn->setProperty("toggleLabel", "NB");
-    m_notchBtn = makeSelectorButton("NOTCH", QStringLiteral("OFF"), "Auto notch", "Toggle auto notch filter.");
-    m_notchBtn->setCheckable(true);
-    m_notchBtn->setProperty("toggleLabel", "NOTCH");
+    m_notchBtn = makeSelectorButton("NOTCH", QStringLiteral("OFF"), "Notch", "Select notch filter mode.");
     m_nrBtn = makeSelectorButton("NR", QStringLiteral("OFF"), "Noise reduction", "Toggle noise reduction.");
     m_nrBtn->setCheckable(true);
     m_nrBtn->setProperty("toggleLabel", "NR");
-    m_preBtn = makeSelectorButton("PRE", QStringLiteral("OFF"), "Preamp", "Toggle receiver preamp.");
-    m_preBtn->setCheckable(true);
-    m_preBtn->setProperty("toggleLabel", "PRE");
+    m_preBtn = makeSelectorButton("PRE", QStringLiteral("OFF"), "Preamp", "Select receiver preamp.");
     m_ritBtn = makeSelectorButton("RIT", QStringLiteral("OFF"), "RIT", "Set receiver incremental tuning offset.");
-    m_micGainBtn =
-        makeSelectorButton("MIC GAIN", QStringLiteral("OFF"), "Mic gain", "Set transmitter microphone gain.");
-    m_micGainBtn->setProperty("levelControl", true);
+    m_lanModBtn =
+        makeSelectorButton("LAN MOD", QStringLiteral("OFF"), "LAN MOD", "Set the IC-9700 LAN modulation input level.");
+    m_lanModBtn->setProperty("levelControl", true);
+    updateLanModButton();
     m_rfGainBtn = makeSelectorButton("RF GAIN", QStringLiteral("OFF"), "RF gain", "Set receiver RF gain.");
     m_rfGainBtn->setProperty("levelControl", true);
     m_agcBtn->setToolTip(QStringLiteral("Automatic Gain Control (AGC)\n"
@@ -2096,7 +2109,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     };
     const TransmitPanel::Buttons transmitButtons{
         m_compBtn,
-        m_micGainBtn,
+        m_lanModBtn,
     };
     auto* receiveGroup = new ReceivePanel(receiveButtons, strip);
     auto* repeaterGroup = new RepeaterPanel(repeaterButtons, strip);
@@ -2130,19 +2143,11 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     setCommandButtonActive(m_compBtn, m_vfo->compressorOn());
                 }
             });
-    connect(m_notchBtn, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (m_vfo)
-                {
-                    m_vfo->setAutoNotch(!m_vfo->autoNotchOn());
-                    setCommandButtonActive(m_notchBtn, m_vfo->autoNotchOn());
-                }
-            });
+    connect(m_notchBtn, &QPushButton::clicked, this, &MainWindow::showNotchMenu);
     connect(m_ritBtn, &QPushButton::clicked, this, &MainWindow::showRitMenu);
     connect(m_offsetBtn, &QPushButton::clicked, this, &MainWindow::showOffsetMenu);
     connect(m_toneBtn, &QPushButton::clicked, this, &MainWindow::showToneMenu);
-    connect(m_micGainBtn, &QPushButton::clicked, this, &MainWindow::showMicGainMenu);
+    connect(m_lanModBtn, &QPushButton::clicked, this, &MainWindow::showLanModMenu);
     connect(m_memoryPanel, &MemoryPanel::memoryActivated, this,
             [this](const QString& memoryId) { selectMemoryById(memoryId, false); });
 
@@ -2310,6 +2315,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHzSettingsKey),
                                                      chosen->data().toInt());
                     updateStepButton();
+                    applyRadioTuningStep();
                 }
             });
     updateStepButton();
@@ -2331,15 +2337,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                     setCommandButtonActive(m_nbBtn, m_vfo->nbOn());
                 }
             });
-    connect(m_preBtn, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (m_vfo)
-                {
-                    m_vfo->setPreampEnabled(!m_vfo->preampOn());
-                    setCommandButtonActive(m_preBtn, m_vfo->preampOn());
-                }
-            });
+    connect(m_preBtn, &QPushButton::clicked, this, &MainWindow::showPreampMenu);
     connect(m_attBtn, &QPushButton::clicked, this,
             [this]()
             {
@@ -2376,7 +2374,7 @@ void MainWindow::updateTxIndicator(bool on)
     updateIcomRC28Leds();
     if (m_vfoPanel)
     {
-        m_vfoPanel->setSwrMode(on);
+        m_vfoPanel->setAlcMode(on);
         m_vfoPanel->setSMeterValue(on ? 0 : qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
     }
     if (on)
@@ -2410,6 +2408,7 @@ void MainWindow::updateTxIndicator(bool on)
         {
             m_titleBar->setTxDurationActive(false);
         }
+        m_txAlc = 0.0;
         updateTxAudioMeter(0, 0);
     }
 }
@@ -2954,7 +2953,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     }
 
     for (auto* button : {m_agcBtn, m_nrBtn, m_nbBtn, m_notchBtn, m_preBtn, m_attBtn, m_ritBtn, m_compBtn, m_offsetBtn,
-                         m_toneBtn, m_squelchBtn, m_micGainBtn})
+                         m_toneBtn, m_squelchBtn, m_lanModBtn})
     {
         if (button)
         {
@@ -2987,7 +2986,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_txPowerValue = 0;
     m_rfGainValue = 0;
     m_squelchValue = 0;
-    m_micGainValue = 0;
+    m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
     m_duplexMode = dmSimplex;
     m_toneAccessMode = ratrNN;
     m_toneFrequency = 670;
@@ -3002,7 +3001,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
         m_vfoPanel->setBandText(QStringLiteral("--"));
         m_vfoPanel->setModeText(QStringLiteral("--"));
         m_vfoPanel->setMeterEnabled(false);
-        m_vfoPanel->setSwrMode(false);
+        m_vfoPanel->setAlcMode(false);
         m_vfoPanel->setSMeterValue(0);
         m_vfoPanel->setTxPower(0);
         m_vfoPanel->setSquelch(0);
@@ -3010,11 +3009,13 @@ void MainWindow::resetRadioOwnedControlsForSync()
 
     setCommandButtonActive(m_nrBtn, false);
     setCommandButtonActive(m_nbBtn, false);
+    setSelectorButtonLines(m_notchBtn, QStringLiteral("NOTCH"), QStringLiteral("OFF"));
     setCommandButtonActive(m_notchBtn, false);
+    setSelectorButtonLines(m_preBtn, QStringLiteral("PRE"), QStringLiteral("OFF"));
     setCommandButtonActive(m_preBtn, false);
     setCommandButtonActive(m_attBtn, false);
     setCommandButtonActive(m_compBtn, false);
-    setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), QStringLiteral("OFF"));
+    setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), QStringLiteral("MID"));
     setSelectorButtonLines(m_ritBtn, QStringLiteral("RIT"), QStringLiteral("OFF"));
     setCommandButtonActive(m_ritBtn, false);
     updateOffsetButton();
@@ -3022,7 +3023,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
     updateSquelchButton();
     updateTxPowerButton();
     updateRfGainButton();
-    updateMicGainButton();
+    updateLanModButton();
     updateTxIndicator(false);
     updateTxAudioMeter(0, 0);
 }
@@ -3153,6 +3154,7 @@ void MainWindow::dispatchIcomRC28Action(const QString& action)
         }
         AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHzSettingsKey), kStepPresets[nextIdx].hz);
         updateStepButton();
+        applyRadioTuningStep();
     }
     else if (action == QLatin1String("ToggleRit"))
     {
@@ -3440,6 +3442,20 @@ int MainWindow::tuningStepHz() const
     return qBound(
         1, AppSettings::instance().value(QString::fromLatin1(kTuningStepHzSettingsKey), kDefaultTuningStepHz).toInt(),
         10000000);
+}
+
+void MainWindow::applyRadioTuningStep()
+{
+    if (!m_model || !m_model->isReady())
+    {
+        return;
+    }
+
+    const int step = radioTuningStepForHz(tuningStepHz());
+    if (step >= 0)
+    {
+        m_model->setTuningStep(step);
+    }
 }
 
 void MainWindow::updateStepButton()
@@ -3844,7 +3860,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
         m_vfoPanel->setMeterEnabled(ready);
         if (!ready)
         {
-            m_vfoPanel->setSwrMode(false);
+            m_vfoPanel->setAlcMode(false);
             m_vfoPanel->setSMeterValue(0);
         }
     }
@@ -3855,6 +3871,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
 
     if (ready)
     {
+        applyRadioTuningStep();
         m_connStateName = QStringLiteral("Connected");
         m_connStateLabel->setText(
             QStringLiteral("<span style='color:%1'>Connected</span>").arg(UiTheme::Color::Success));
@@ -3952,16 +3969,22 @@ void MainWindow::onSwrChanged(double swr)
     const char* swrColor = swr <= 1.7   ? UiTheme::Color::Success
                            : swr <= 2.7 ? UiTheme::Color::Warning
                                         : UiTheme::Color::Danger;
-    const QColor fillColor = swr <= 1.7   ? UiTheme::Color::MeterGreen
-                             : swr <= 2.7 ? UiTheme::Color::MeterAmber
-                                          : UiTheme::Color::MeterRed;
     if (m_txSwrLabel)
     {
         m_txSwrLabel->setText(QStringLiteral("<span style='color:%1'>SWR %2</span>")
                                   .arg(QString::fromLatin1(swrColor))
                                   .arg(swr, 0, 'f', 2));
     }
-    m_vfoPanel->setSwr(swr, fillColor);
+}
+
+void MainWindow::onAlcChanged(double alc)
+{
+    m_txAlc = qBound(0.0, alc, 2.0);
+    if (!m_vfoPanel || !m_txActive)
+    {
+        return;
+    }
+    m_vfoPanel->setAlc(m_txAlc);
 }
 
 void MainWindow::updateTxAudioMeter(int peak, int rms)
@@ -4070,23 +4093,23 @@ void MainWindow::onTxPowerChanged(int value)
     updateTxPowerButton();
 }
 
-void MainWindow::updateMicGainButton()
+void MainWindow::updateLanModButton()
 {
-    if (!m_micGainBtn)
+    if (!m_lanModBtn)
     {
         return;
     }
 
-    const bool active = m_micGainValue > 0;
-    const int pct = active ? qBound(1, qRound(m_micGainValue * 100.0 / 255.0), 100) : 0;
+    const bool active = m_lanModValue > 0;
+    const int pct = active ? qBound(1, qRound(m_lanModValue * 100.0 / 255.0), 100) : 0;
     const QString secondary = active ? QStringLiteral("%1%").arg(pct) : QStringLiteral("OFF");
-    setSelectorButtonLines(m_micGainBtn, QStringLiteral("MIC GAIN"), secondary);
-    setCommandButtonActive(m_micGainBtn, active);
+    setSelectorButtonLines(m_lanModBtn, QStringLiteral("LAN MOD"), secondary);
+    setCommandButtonActive(m_lanModBtn, active);
 }
 
-void MainWindow::showMicGainMenu()
+void MainWindow::showLanModMenu()
 {
-    if (!m_micGainBtn || !m_vfo || !m_model->isReady() || m_controlsLocked)
+    if (!m_lanModBtn || !m_model->isReady() || m_controlsLocked)
     {
         return;
     }
@@ -4110,28 +4133,29 @@ void MainWindow::showMicGainMenu()
         connect(act, &QAction::triggered, this,
                 [this, preset]()
                 {
-                    m_micGainValue = qBound(0, preset.value, 255);
-                    updateMicGainButton();
-                    m_vfo->setMicGain(m_micGainValue);
+                    m_lanModValue = qBound(0, preset.value, 255);
+                    AppSettings::instance().setValue("LanModLevel", m_lanModValue);
+                    updateLanModButton();
+                    m_model->setLanModLevel(m_lanModValue);
                 });
     }
 
     menu.addSeparator();
     auto* customAction = menu.addAction(QStringLiteral("CUSTOM"));
-    connect(customAction, &QAction::triggered, this, &MainWindow::showCustomMicGainDialog);
+    connect(customAction, &QAction::triggered, this, &MainWindow::showCustomLanModDialog);
 
-    menu.exec(m_micGainBtn->mapToGlobal(QPoint(0, m_micGainBtn->height())));
+    menu.exec(m_lanModBtn->mapToGlobal(QPoint(0, m_lanModBtn->height())));
 }
 
-void MainWindow::showCustomMicGainDialog()
+void MainWindow::showCustomLanModDialog()
 {
-    if (!m_micGainBtn || !m_vfo || !m_model->isReady() || m_controlsLocked)
+    if (!m_lanModBtn || !m_model->isReady() || m_controlsLocked)
     {
         return;
     }
 
     QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("Custom Mic Gain"));
+    dialog.setWindowTitle(QStringLiteral("Custom LAN MOD"));
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
@@ -4139,8 +4163,8 @@ void MainWindow::showCustomMicGainDialog()
     auto* pct = new QSpinBox(&dialog);
     pct->setRange(0, 100);
     pct->setSuffix(QStringLiteral("%"));
-    pct->setValue(qRound(m_micGainValue * 100.0 / 255.0));
-    form->addRow(QStringLiteral("Mic Gain"), pct);
+    pct->setValue(qRound(m_lanModValue * 100.0 / 255.0));
+    form->addRow(QStringLiteral("LAN MOD"), pct);
     layout->addLayout(form);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
@@ -4154,9 +4178,10 @@ void MainWindow::showCustomMicGainDialog()
         return;
     }
 
-    m_micGainValue = qRound(pct->value() * 255.0 / 100.0);
-    updateMicGainButton();
-    m_vfo->setMicGain(m_micGainValue);
+    m_lanModValue = qRound(pct->value() * 255.0 / 100.0);
+    AppSettings::instance().setValue("LanModLevel", m_lanModValue);
+    updateLanModButton();
+    m_model->setLanModLevel(m_lanModValue);
 }
 
 void MainWindow::showDtmfDialog()
@@ -4397,10 +4422,100 @@ void MainWindow::showAgcMenu()
         const QString modeStr = QString::fromLatin1(item.mode);
         connect(act, &QAction::triggered, this, [this, modeStr]() { m_vfo->setAgcMode(modeStr); });
     }
-    menu.addSeparator();
-    auto* offAction = menu.addAction(QStringLiteral("OFF"));
-    connect(offAction, &QAction::triggered, this, [this]() { m_vfo->setAgcMode(QStringLiteral("off")); });
     menu.exec(m_agcBtn->mapToGlobal(QPoint(0, m_agcBtn->height())));
+}
+
+void MainWindow::showPreampMenu()
+{
+    if (!m_preBtn || !m_vfo || !m_model->isReady() || m_controlsLocked)
+    {
+        return;
+    }
+
+    QMenu menu(this);
+    styleCompactMenu(&menu);
+    static const struct
+    {
+        const char* label;
+        int level;
+    } kItems[] = {{"OFF", 0}, {"INT", 1}, {"EXT", 2}, {"INT+EXT", 3}};
+    for (const auto& item : kItems)
+    {
+        auto* act = menu.addAction(QString::fromLatin1(item.label));
+        connect(act, &QAction::triggered, this, [this, item]() { m_vfo->setPreampLevel(item.level); });
+    }
+    menu.exec(m_preBtn->mapToGlobal(QPoint(0, m_preBtn->height())));
+}
+
+void MainWindow::updatePreampButton()
+{
+    if (!m_preBtn || !m_vfo)
+    {
+        return;
+    }
+
+    const int level = m_vfo->preampLevel();
+    setSelectorButtonLines(m_preBtn, QStringLiteral("PRE"), preampLevelLabel(level));
+    setCommandButtonActive(m_preBtn, level != 0);
+}
+
+void MainWindow::showNotchMenu()
+{
+    if (!m_notchBtn || !m_vfo || !m_model->isReady() || m_controlsLocked)
+    {
+        return;
+    }
+
+    QMenu menu(this);
+    styleCompactMenu(&menu);
+    auto* offAction = menu.addAction(QStringLiteral("OFF"));
+    auto* autoAction = menu.addAction(QStringLiteral("AUTO"));
+    auto* manualAction = menu.addAction(QStringLiteral("MANUAL"));
+    auto* bothAction = menu.addAction(QStringLiteral("AUTO+MANUAL"));
+
+    const QAction* selected = menu.exec(m_notchBtn->mapToGlobal(QPoint(0, m_notchBtn->height())));
+    if (!selected)
+    {
+        return;
+    }
+
+    if (selected == offAction)
+    {
+        m_vfo->setAutoNotch(false);
+        m_vfo->setManualNotch(false);
+    }
+    else if (selected == autoAction)
+    {
+        m_vfo->setManualNotch(false);
+        m_vfo->setAutoNotch(true);
+    }
+    else if (selected == manualAction)
+    {
+        m_vfo->setAutoNotch(false);
+        m_vfo->setManualNotch(true);
+    }
+    else if (selected == bothAction)
+    {
+        m_vfo->setAutoNotch(true);
+        m_vfo->setManualNotch(true);
+    }
+}
+
+void MainWindow::updateNotchButton()
+{
+    if (!m_notchBtn || !m_vfo)
+    {
+        return;
+    }
+
+    const bool autoOn = m_vfo->autoNotchOn();
+    const bool manualOn = m_vfo->manualNotchOn();
+    const QString secondary = autoOn && manualOn ? QStringLiteral("A/M")
+                              : autoOn           ? QStringLiteral("AUTO")
+                              : manualOn         ? QStringLiteral("MAN")
+                                                 : QStringLiteral("OFF");
+    setSelectorButtonLines(m_notchBtn, QStringLiteral("NOTCH"), secondary);
+    setCommandButtonActive(m_notchBtn, autoOn || manualOn);
 }
 
 void MainWindow::updateRitButton()
@@ -4458,7 +4573,7 @@ void MainWindow::showCustomRitDialog()
     auto* layout = new QVBoxLayout(&dialog);
     auto* form = new QFormLayout;
     auto* rit = new QSpinBox(&dialog);
-    rit->setRange(-9999, 9999);
+    rit->setRange(-999, 999);
     rit->setSingleStep(10);
     rit->setSuffix(QStringLiteral(" Hz"));
     rit->setValue(m_vfo->ritOn() ? m_vfo->ritHz() : 0);

@@ -32,10 +32,8 @@ class IcomRC28SettingsPanel : public QWidget
 
     IcomRC28Manager* m_manager{nullptr};
     QLabel* m_statusLabel{nullptr};
-    QLabel* m_deviceNameLabel{nullptr};
     QLabel* m_devicePathLabel{nullptr};
     QLabel* m_serialLabel{nullptr};
-    QLabel* m_releaseLabel{nullptr};
     QComboBox* m_f1PressCombo{nullptr};
     QComboBox* m_f1HoldCombo{nullptr};
     QComboBox* m_f2PressCombo{nullptr};

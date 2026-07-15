@@ -17,12 +17,15 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 
 namespace
 {
 constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 500;
+constexpr int kPttReleaseTailMs = 150;
 constexpr uchar kMainReceiver = 0;
+constexpr quint32 kTxAudioSampleRate = 16000;
 
 bool populateModeInfo(const QString& mode, ModeInfo* info)
 {
@@ -97,14 +100,35 @@ bool populateModeInfo(const QString& mode, ModeInfo* info)
     return true;
 }
 
-int uiLevelFromRadioPercent(int percent)
+radioInput restoreInputForModSource(int reg)
 {
-    return qBound(0, qRound(qBound(0, percent, 100) * 255.0 / 100.0), 255);
+    return radioInput(inputUnknown, static_cast<qint8>(qBound(0, reg, 99)), QStringLiteral("Previous"));
 }
 
-ushort radioPercentFromUiLevel(int level)
+void sendDisconnectSafetyCommands(Commander* commandSession, std::optional<int> originalDataOffMod,
+                                  std::optional<int> originalData1Mod)
 {
-    return static_cast<ushort>(qBound(0, qRound(qBound(0, level, 255) * 100.0 / 255.0), 100));
+    if (!commandSession)
+    {
+        return;
+    }
+
+    // Use a conservative IC-9700 LAN disconnect order: unkey first, then stop
+    // unsolicited scope data before the UDP streams close.
+    commandSession->setPttActive(false);
+    commandSession->receiveCommandNoReadback(funcTransceiverStatus, QVariant::fromValue<bool>(false), 0);
+    commandSession->receiveCommandNoReadback(funcScopeDataOutput, QVariant::fromValue<bool>(false), 0);
+
+    if (originalDataOffMod.has_value())
+    {
+        commandSession->receiveCommandNoReadback(funcDATAOffMod,
+                                                 QVariant::fromValue(restoreInputForModSource(*originalDataOffMod)), 0);
+    }
+    if (originalData1Mod.has_value())
+    {
+        commandSession->receiveCommandNoReadback(funcDATA1Mod,
+                                                 QVariant::fromValue(restoreInputForModSource(*originalData1Mod)), 0);
+    }
 }
 
 // Standard DTMF dual-tone frequencies (row × column).
@@ -126,17 +150,16 @@ constexpr DtmfEntry kDtmfTable[] = {
 
 // Generates interleaved 16-bit signed little-endian mono PCM for a DTMF digit sequence.
 // Each digit is 100 ms of dual-tone followed by 100 ms of silence (200 ms total).
-// The IC-9700 LAN TX path expects 48000 Hz LPCM16 mono.
+// The buffer uses the same LPCM16 mono sample rate requested for TX audio.
 QByteArray generateDtmfPcm(const QString& digits)
 {
-    constexpr quint32 kSampleRate = 48000;
     constexpr int kToneMs = 200;
     constexpr int kGapMs = 200;
     constexpr double kAmplitude = 0.45; // each sine; combined peak ≤ 0.9 of full scale
     constexpr double kPi = 3.14159265358979323846;
 
-    const int toneSamples = kSampleRate * kToneMs / 1000; // 4800
-    const int gapSamples = kSampleRate * kGapMs / 1000;   // 4800
+    const int toneSamples = kTxAudioSampleRate * kToneMs / 1000;
+    const int gapSamples = kTxAudioSampleRate * kGapMs / 1000;
 
     QByteArray pcm;
     pcm.reserve(digits.size() * (toneSamples + gapSamples) * int(sizeof(qint16)));
@@ -155,7 +178,7 @@ QByteArray generateDtmfPcm(const QString& digits)
 
         for (int i = 0; i < toneSamples; ++i)
         {
-            const double t = double(i) / kSampleRate;
+            const double t = double(i) / kTxAudioSampleRate;
             const double v = kAmplitude * (std::sin(2.0 * kPi * f1 * t) + std::sin(2.0 * kPi * f2 * t));
             const qint16 s = qint16(std::clamp(v, -1.0, 1.0) * 32767.0);
             pcm.append(reinterpret_cast<const char*>(&s), sizeof(s));
@@ -177,78 +200,24 @@ RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThr
     m_pttStaleOnGuardTimer = new QTimer(this);
     m_pttStaleOnGuardTimer->setSingleShot(true);
 
+    m_pttReleaseDelayTimer = new QTimer(this);
+    m_pttReleaseDelayTimer->setSingleShot(true);
+    m_pttReleaseDelayTimer->setInterval(kPttReleaseTailMs);
+    connect(m_pttReleaseDelayTimer, &QTimer::timeout, this, &RadioBackend::sendPttOffNow);
+
     /*
         IC-9700 LAN TX audio startup sequence
 
-        The radio produced one or two short wideband bursts at the start of PTT
-        when SDR9700 only keyed TX and then sent LAN audio normally. The issue
-        was reproducible across PC microphone devices, which ruled out the local
-        audio input as the primary source.
-
-        The quiet sequence has three required parts:
-        1. Force the radio's TX modulation source to LAN on connect. The radio
-           can otherwise use/mix a non-LAN source during the transition. Do not
-           resend the modulation-source commands on every PTT press; changing
-           that state during key-up can itself produce a later transient.
-        2. Keep LAN modulation level at 0 while in RX and during the PTT-on
-           transition. Testing showed the burst follows an abrupt LAN modulation
-           gain restore, not the selected PC microphone device.
-        3. Let UdpAudio feed zero PCM at PTT-on, ramp the user's LAN modulation
-           level up while that audio gate is still closed, then fade live mic
-           audio in after the radio-side LAN audio path has settled.
-
-        Do not collapse this into a single immediate "PTT on + LAN gain" command
-        sequence unless it is re-tested on real IC-9700 hardware while monitoring
-        a second receiver/waterfall for startup noise.
+        SDR9700 keeps the radio's LAN MOD Level as a persistent radio setting
+        through the IC-9700 CI-V command model. TX startup muting is handled in
+        the audio path, not by forcing the radio menu value to zero. This keeps
+        the radio front panel/menu in sync with the GUI LAN MOD button.
 
         The control connection later sets UdpConnectionSettings::waterfallFormat to 2
         because IC-9700 scope packets can carry paired spectrum/waterfall
         payloads. UdpCivData splits that format before Commander parses scope
         data; this is independent from the TX audio startup sequence above.
     */
-    m_txAudioEnableTimer = new QTimer(this);
-    m_txAudioEnableTimer->setSingleShot(true);
-    connect(m_txAudioEnableTimer, &QTimer::timeout, this,
-            [this]()
-            {
-                // Step 2 of the TX startup sequence: after PTT is asserted and
-                // UdpAudio has started sending zero PCM, begin restoring LAN
-                // modulation gain while live mic audio is still gated.
-                if (!m_commander || !m_pttActive)
-                {
-                    return;
-                }
-
-                startTxGainRamp(m_lanModLevel);
-            });
-
-    m_txGainRampTimer = new QTimer(this);
-    m_txGainRampTimer->setInterval(40);
-    connect(m_txGainRampTimer, &QTimer::timeout, this,
-            [this]()
-            {
-                // Step 3 of the TX startup sequence: spread the LAN modulation
-                // gain restore across several CI-V writes so the radio-side LAN
-                // audio path settles before live microphone samples fade in.
-                if (!m_commander || !m_pttActive)
-                {
-                    m_txGainRampTimer->stop();
-                    return;
-                }
-
-                static constexpr int kRampSteps = 12;
-                ++m_txGainRampStep;
-                const int delta = m_txGainRampTarget - m_txGainRampStart;
-                const int rampedValue = qBound(0, m_txGainRampStart + (delta * m_txGainRampStep) / kRampSteps, 255);
-                sendLanModLevel(rampedValue);
-
-                if (m_txGainRampStep >= kRampSteps)
-                {
-                    sendLanModLevel(m_txGainRampTarget);
-                    m_txGainRampTimer->stop();
-                }
-            });
-
     m_bandStateRefreshTimer = new QTimer(this);
     m_bandStateRefreshTimer->setSingleShot(true);
     m_bandStateRefreshTimer->setInterval(350);
@@ -301,6 +270,9 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     m_connectionPort = port;
     m_connectionUser = user;
     m_connectionPass = pass;
+    m_originalDataOffMod.reset();
+    m_originalData1Mod.reset();
+    m_lastUserVisibleNetworkMessage.clear();
 
     const quint64 session = ++m_sessionId;
     m_lanModLevel = qBound(0, AppSettings::instance().value("LanModLevel", m_lanModLevel).toInt(), 255);
@@ -403,6 +375,10 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
 
                 emit radioValueUpdated(item.command, item.value, kMainReceiver);
                 auto mi = item.value.value<ModeInfo>();
+                if (mi.filter >= 1 && mi.filter <= 3)
+                {
+                    m_currentMainFilter = mi.filter;
+                }
                 m_initialMainModeReceived = true;
                 m_initialModeReceived = true;
                 emit modeChanged(modeInfoToString(mi));
@@ -476,13 +452,20 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 emit nbChanged(item.value.toBool());
                 break;
             case funcPreamp:
-                emit preampChanged(item.value.toInt() != 0);
+            {
+                const int level = qBound(0, item.value.toInt(), 3);
+                emit preampLevelChanged(level);
+                emit preampChanged(level != 0);
                 break;
+            }
             case funcAttenuator:
                 emit attenuatorChanged(item.value.toInt() != 0);
                 break;
             case funcAutoNotch:
                 emit autoNotchChanged(item.value.toBool());
+                break;
+            case funcManualNotch:
+                emit manualNotchChanged(item.value.toBool());
                 break;
             case funcCompressor:
                 emit compressorChanged(item.value.toBool());
@@ -506,17 +489,36 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 break;
             case funcRFPower:
             {
-                const int level = uiLevelFromRadioPercent(item.value.toInt());
+                const int level = qBound(0, item.value.toInt(), 255);
                 emit radioValueUpdated(item.command, QVariant(level), item.receiver);
                 emit txPowerChanged(level);
                 break;
             }
-            case funcMicGain:
-                emit micGainChanged(qBound(0, item.value.toInt(), 255));
+            case funcDATAOffMod:
+            {
+                if (!m_originalDataOffMod.has_value() && item.value.userType() == qMetaTypeId<radioInput>())
+                {
+                    const radioInput input = item.value.value<radioInput>();
+                    m_originalDataOffMod = input.reg;
+                    qInfo(logRadio()) << "Captured original DATA OFF MOD source register" << *m_originalDataOffMod;
+                }
+                emit radioValueUpdated(item.command, item.value, item.receiver);
                 break;
+            }
+            case funcDATA1Mod:
+            {
+                if (!m_originalData1Mod.has_value() && item.value.userType() == qMetaTypeId<radioInput>())
+                {
+                    const radioInput input = item.value.value<radioInput>();
+                    m_originalData1Mod = input.reg;
+                    qInfo(logRadio()) << "Captured original DATA1 MOD source register" << *m_originalData1Mod;
+                }
+                emit radioValueUpdated(item.command, item.value, item.receiver);
+                break;
+            }
             case funcSquelch:
             {
-                const int level = uiLevelFromRadioPercent(item.value.toInt());
+                const int level = qBound(0, item.value.toInt(), 255);
                 emit radioValueUpdated(item.command, QVariant(level), item.receiver);
                 emit squelchChanged(level > 0, level);
                 break;
@@ -524,6 +526,10 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             case funcSWRMeter:
                 emit radioValueUpdated(item.command, item.value, item.receiver);
                 emit swrChanged(item.value.toDouble());
+                break;
+            case funcALCMeter:
+                emit radioValueUpdated(item.command, item.value, item.receiver);
+                emit alcChanged(item.value.toDouble());
                 break;
             case funcTransceiverStatus:
             {
@@ -536,6 +542,10 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 if (!on && m_pttStaleOnGuardTimer)
                 {
                     m_pttStaleOnGuardTimer->stop();
+                }
+                if (!on && m_pttReleaseDelayTimer)
+                {
+                    m_pttReleaseDelayTimer->stop();
                 }
                 m_pttActive = on;
                 emit pttChanged(on);
@@ -630,7 +640,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     audioSetup txSetup;
     txSetup.type = qtAudio;
     txSetup.isinput = true;
-    txSetup.sampleRate = 48000;
+    txSetup.sampleRate = kTxAudioSampleRate;
     txSetup.latency = 80;
     txSetup.codec = kLpcmMono16;
     txSetup.resampleQuality = 4;
@@ -673,18 +683,19 @@ void RadioBackend::shutdownConnection()
     }
 
     ++m_sessionId;
-    m_txAudioEnableTimer->stop();
-    m_txGainRampTimer->stop();
     if (m_pttStaleOnGuardTimer)
     {
         m_pttStaleOnGuardTimer->stop();
+    }
+    if (m_pttReleaseDelayTimer)
+    {
+        m_pttReleaseDelayTimer->stop();
     }
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->stop();
     }
     m_pttActive = false;
-    m_txLanModApplied = 0;
 
     if (m_smeterPollTimer)
     {
@@ -710,9 +721,12 @@ void RadioBackend::shutdownConnection()
     }
 
     Commander* commandSession = m_commander;
+    const std::optional<int> originalDataOffMod = m_originalDataOffMod;
+    const std::optional<int> originalData1Mod = m_originalData1Mod;
 
     if (QThread::currentThread() == m_commander->thread())
     {
+        sendDisconnectSafetyCommands(m_commander, originalDataOffMod, originalData1Mod);
         m_commander->closeComm();
     }
     else
@@ -720,8 +734,9 @@ void RadioBackend::shutdownConnection()
         auto closeDone = std::make_shared<QSemaphore>();
         const bool queued = QMetaObject::invokeMethod(
             m_commander,
-            [commandSession, closeDone]()
+            [commandSession, closeDone, originalDataOffMod, originalData1Mod]()
             {
+                sendDisconnectSafetyCommands(commandSession, originalDataOffMod, originalData1Mod);
                 commandSession->closeComm();
                 closeDone->release();
             },
@@ -741,6 +756,9 @@ void RadioBackend::shutdownConnection()
     m_initialMainModeReceived = false;
     m_initialStateRequested = false;
     m_currentBandKey = -1;
+    m_originalDataOffMod.reset();
+    m_originalData1Mod.reset();
+    m_lastUserVisibleNetworkMessage.clear();
     emit readyChanged(false);
     emit disconnected();
 }
@@ -773,6 +791,7 @@ void RadioBackend::setMode(const QString& mode)
         qWarning(logRadio()) << "Ignoring unsupported mode selection:" << mode;
         return;
     }
+    mi.filter = static_cast<quint8>(qBound(1, m_currentMainFilter, 3));
 
     invokeOnCurrentCommander(
         [this, mi](Commander* commandSession)
@@ -816,16 +835,29 @@ void RadioBackend::setNbLevel(int level)
 
 void RadioBackend::setPreampEnabled(bool on)
 {
-    const uchar val = on ? 1 : 0;
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcPreamp, QVariant::fromValue<uchar>(val), 0); });
+    setPreampLevel(on ? 1 : 0);
+}
+
+void RadioBackend::setPreampLevel(int level)
+{
+    const uchar val = static_cast<uchar>(qBound(0, level, 3));
+    invokeOnCurrentCommander(
+        [=](Commander* commandSession)
+        {
+            commandSession->receiveCommand(funcPreamp, QVariant::fromValue<uchar>(val), 0);
+            commandSession->receiveCommand(funcAttenuator, QVariant(), 0);
+        });
 }
 
 void RadioBackend::setAttenuatorEnabled(bool on)
 {
     const uchar val = on ? 10 : 0;
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcAttenuator, QVariant::fromValue<uchar>(val), 0); });
+    invokeOnCurrentCommander(
+        [=](Commander* commandSession)
+        {
+            commandSession->receiveCommand(funcAttenuator, QVariant::fromValue<uchar>(val), 0);
+            commandSession->receiveCommand(funcPreamp, QVariant(), 0);
+        });
 }
 
 void RadioBackend::setAfGain(int level)
@@ -843,16 +875,16 @@ void RadioBackend::setRfGain(int level)
 
 void RadioBackend::setTxPower(int level)
 {
-    const ushort bounded = radioPercentFromUiLevel(level);
+    const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
     invokeOnCurrentCommander([=](Commander* commandSession)
                              { commandSession->receiveCommand(funcRFPower, QVariant::fromValue<ushort>(bounded), 0); });
 }
 
-void RadioBackend::setMicGain(int level)
+void RadioBackend::setTuningStep(int step)
 {
-    const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
+    const uchar val = static_cast<uchar>(qBound(0, step, 11));
     invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcMicGain, QVariant::fromValue<ushort>(bounded), 0); });
+                             { commandSession->receiveCommand(funcTuningStep, QVariant::fromValue<uchar>(val), 0); });
 }
 
 void RadioBackend::setSquelch(bool on, int level)
@@ -863,7 +895,7 @@ void RadioBackend::setSquelch(bool on, int level)
     }
     // On IC-9700, squelch level 0 = fully open, >0 = active.
     // Setting funcSquelch with 0 disables it; non-zero enables + sets level.
-    const ushort squelchVal = on ? qMax<ushort>(1, radioPercentFromUiLevel(level)) : 0;
+    const ushort squelchVal = on ? qMax<ushort>(1, static_cast<ushort>(qBound(0, level, 255))) : 0;
     invokeOnCurrentCommander(
         [squelchVal](Commander* commandSession)
         { commandSession->receiveCommand(funcSquelch, QVariant::fromValue<ushort>(squelchVal), 0); });
@@ -888,12 +920,6 @@ void RadioBackend::setAgcMode(const QString& mode)
     {
         agc = 3;
     }
-    else if (mode == "off")
-    {
-        // IC-9700 CI-V AGC: 0=off not supported; value 1 (FAST) is the
-        // fastest time constant available and is used as the "off" analogue.
-        agc = 1;
-    }
     invokeOnCurrentCommander([=](Commander* commandSession)
                              { commandSession->receiveCommand(funcAGCTimeConstant, QVariant(agc), 0); });
 }
@@ -904,6 +930,12 @@ void RadioBackend::setAutoNotch(bool on)
                              { commandSession->receiveCommand(funcAutoNotch, QVariant::fromValue<bool>(on), 0); });
 }
 
+void RadioBackend::setManualNotch(bool on)
+{
+    invokeOnCurrentCommander([=](Commander* commandSession)
+                             { commandSession->receiveCommand(funcManualNotch, QVariant::fromValue<bool>(on), 0); });
+}
+
 void RadioBackend::setRitEnabled(bool on)
 {
     invokeOnCurrentCommander([=](Commander* commandSession)
@@ -912,8 +944,9 @@ void RadioBackend::setRitEnabled(bool on)
 
 void RadioBackend::setRitOffset(short hz)
 {
+    const short bounded = qBound(static_cast<short>(-999), hz, static_cast<short>(999));
     invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcRitFreq, QVariant::fromValue<short>(hz), 0); });
+                             { commandSession->receiveCommand(funcRitFreq, QVariant::fromValue<short>(bounded), 0); });
 }
 
 void RadioBackend::setCompressor(bool on)
@@ -1069,18 +1102,19 @@ void RadioBackend::setPtt(bool on)
 
     if (on)
     {
+        if (m_pttReleaseDelayTimer)
+        {
+            m_pttReleaseDelayTimer->stop();
+        }
         if (m_pttActive)
         {
             return;
         }
 
-        m_txAudioEnableTimer->stop();
-        m_txGainRampTimer->stop();
         if (m_pttStaleOnGuardTimer)
         {
             m_pttStaleOnGuardTimer->stop();
         }
-        m_txLanModApplied = 0;
         m_pttActive = true;
         invokeOnCurrentCommander(
             [](Commander* commandSession)
@@ -1090,32 +1124,59 @@ void RadioBackend::setPtt(bool on)
                 commandSession->setPttActive(true);
                 commandSession->receiveCommand(funcTransceiverStatus, QVariant::fromValue<bool>(true), 0);
             });
-        // 220 ms: empirical delay for the IC-9700 to settle its LAN TX path
-        // before the gain ramp begins. Too short produces a burst; too long
-        // delays useful TX audio. Do not change without hardware testing.
-        m_txAudioEnableTimer->start(220);
     }
     else
     {
-        // Always send an unkey request. If local state ever gets stale, suppressing
-        // this command can leave the radio transmitting until disconnect.
-        m_txAudioEnableTimer->stop();
-        m_txGainRampTimer->stop();
-        m_pttActive = false;
-        m_txLanModApplied = 0;
-        if (m_pttStaleOnGuardTimer)
+        if (m_pttReleaseDelayTimer && m_pttReleaseDelayTimer->isActive())
         {
-            m_pttStaleOnGuardTimer->start(1000);
+            return;
         }
-        emit pttChanged(false);
-        invokeOnCurrentCommander(
-            [](Commander* commandSession)
-            {
-                commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue<quint16>(0), 0);
-                commandSession->setPttActive(false);
-                commandSession->receiveCommand(funcTransceiverStatus, QVariant::fromValue<bool>(false), 0);
-            });
+
+        if (!m_pttActive)
+        {
+            sendPttOffNow();
+            return;
+        }
+
+        // Keep the radio keyed briefly so the final TX audio frames already
+        // buffered locally or in the LAN path can reach the transmitter.
+        if (m_pttReleaseDelayTimer)
+        {
+            m_pttReleaseDelayTimer->start();
+        }
+        else
+        {
+            sendPttOffNow();
+        }
     }
+}
+
+void RadioBackend::sendPttOffNow()
+{
+    if (!m_commander)
+    {
+        return;
+    }
+
+    if (m_pttReleaseDelayTimer)
+    {
+        m_pttReleaseDelayTimer->stop();
+    }
+
+    // Always send an unkey request. If local state ever gets stale, suppressing
+    // this command can leave the radio transmitting until disconnect.
+    m_pttActive = false;
+    if (m_pttStaleOnGuardTimer)
+    {
+        m_pttStaleOnGuardTimer->start(1000);
+    }
+    emit pttChanged(false);
+    invokeOnCurrentCommander(
+        [](Commander* commandSession)
+        {
+            commandSession->setPttActive(false);
+            commandSession->receiveCommand(funcTransceiverStatus, QVariant::fromValue<bool>(false), 0);
+        });
 }
 
 void RadioBackend::sendDtmf(const QString& digits)
@@ -1132,7 +1193,7 @@ void RadioBackend::sendDtmf(const QString& digits)
     }
 
     // Queue the full PCM buffer to UdpAudio in a single call. receiveAudioData
-    // will substitute it for mic audio frame-by-frame once the TX gate expires.
+    // will substitute it for mic audio frame-by-frame while DTMF is active.
     // Both queueDtmfPcm and receiveAudioData run on udpHandlerThread, so there
     // is no race between the buffer being written and consumed.
     invokeOnCurrentCommander([pcm](Commander* c) { c->sendDtmfPcm(pcm); });
@@ -1170,7 +1231,6 @@ void RadioBackend::requestInitialRadioState()
                     funcNoiseBlanker,
                     funcPreamp,
                     funcAttenuator,
-                    funcMicGain,
                     funcSplitStatus,
                     funcReadFreqOffset,
                     funcToneSquelchType,
@@ -1183,7 +1243,9 @@ void RadioBackend::requestInitialRadioState()
                     funcDTCSCode,
                     funcCompressor,
                     funcAutoNotch,
+                    funcManualNotch,
                     funcAGCTimeConstant,
+                    funcTuningStep,
                     funcRitStatus,
                     funcRitFreq,
                     funcMonitor,
@@ -1360,8 +1422,7 @@ void RadioBackend::sendLanModLevel(int level)
         return;
     }
 
-    m_txLanModApplied = qBound(0, level, 255);
-    const ushort val = static_cast<ushort>(m_txLanModApplied);
+    const ushort val = static_cast<ushort>(qBound(0, level, 255));
 
     if (QThread::currentThread() == m_commander->thread())
     {
@@ -1373,43 +1434,10 @@ void RadioBackend::sendLanModLevel(int level)
                              { commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue(val), 0); });
 }
 
-void RadioBackend::startTxGainRamp(int targetLevel)
-{
-    m_txGainRampTimer->stop();
-    m_txGainRampStart = m_txLanModApplied;
-    m_txGainRampTarget = qBound(0, targetLevel, 255);
-    m_txGainRampStep = 0;
-
-    if (m_txGainRampStart == m_txGainRampTarget)
-    {
-        return;
-    }
-
-    m_txGainRampTimer->start();
-}
-
 void RadioBackend::setLanModLevel(int level)
 {
     m_lanModLevel = qBound(0, level, 255);
-    if (!m_commander || !m_pttActive)
-    {
-        return;
-    }
-
-    if (m_txAudioEnableTimer->isActive())
-    {
-        return;
-    }
-
-    if (m_txGainRampTimer->isActive())
-    {
-        m_txGainRampTarget = m_lanModLevel;
-        return;
-    }
-
-    // Only push the new level while transmitting; during RX the radio's LAN
-    // modulation input is intentionally held at 0.
-    startTxGainRamp(m_lanModLevel);
+    sendLanModLevel(m_lanModLevel);
 }
 
 void RadioBackend::onLanReady()
@@ -1430,16 +1458,19 @@ void RadioBackend::onLanReady()
     m_initialStateRequested = false;
     emit readyChanged(false);
 
+    const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
     invokeOnCurrentCommander(
-        [](Commander* commandSession)
+        [lanModLevel](Commander* commandSession)
         {
             commandSession->setRadioID(0xA2);
 
             const radioInput lanInput(inputLAN, 5, QStringLiteral("LAN"));
-            commandSession->receiveCommand(funcDATAOffMod, QVariant::fromValue(lanInput), 0);
-            commandSession->receiveCommand(funcDATA1Mod, QVariant::fromValue(lanInput), 0);
+            commandSession->receiveCommand(funcDATAOffMod, QVariant(), 0);
+            commandSession->receiveCommand(funcDATA1Mod, QVariant(), 0);
+            commandSession->receiveCommandNoReadback(funcDATAOffMod, QVariant::fromValue(lanInput), 0);
+            commandSession->receiveCommandNoReadback(funcDATA1Mod, QVariant::fromValue(lanInput), 0);
 
-            commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue<quint16>(0), 0);
+            commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue(lanModLevel), 0);
             commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcSatelliteMode, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
@@ -1510,14 +1541,15 @@ void RadioBackend::onLanReady()
         {
             return;
         }
+        const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
         invokeOnCurrentCommander(
-            [](Commander* commandSession)
+            [lanModLevel](Commander* commandSession)
             {
                 commandSession->receiveCommand(funcScopeOnOff, QVariant::fromValue<bool>(true), 0);
                 commandSession->receiveCommand(funcScopeDataOutput, QVariant::fromValue<bool>(true), 0);
                 commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
                 commandSession->receiveCommand(funcScopeSpan, QVariant::fromValue<uchar>(7), 0);
-                commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue<quint16>(0), 0);
+                commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue(lanModLevel), 0);
             });
     };
 
@@ -1551,7 +1583,7 @@ void RadioBackend::onLanReady()
                            }
                        });
 
-    // Poll S-meter at 10 Hz; the IC-9700 only sends meter data on request.
+    // Poll front-panel meters at 10 Hz; the IC-9700 only sends meter data on request.
     if (m_smeterPollTimer)
     {
         m_smeterPollTimer->stop();
@@ -1569,8 +1601,12 @@ void RadioBackend::onLanReady()
                 if (m_pttActive)
                 {
                     const uchar receiver = kMainReceiver;
-                    invokeOnCurrentCommander([receiver](Commander* commandSession)
-                                             { commandSession->receiveCommand(funcSWRMeter, QVariant(), receiver); });
+                    invokeOnCurrentCommander(
+                        [receiver](Commander* commandSession)
+                        {
+                            commandSession->receiveCommand(funcSWRMeter, QVariant(), receiver);
+                            commandSession->receiveCommand(funcALCMeter, QVariant(), receiver);
+                        });
                     return;
                 }
 
@@ -1614,6 +1650,15 @@ void RadioBackend::onNetworkStatus(networkStatus status)
     if (ms > 0)
     {
         emit networkQualityChanged(ms);
+    }
+    if (status.userVisibleMessage)
+    {
+        const QString message = status.message.trimmed();
+        if (!message.isEmpty() && message != m_lastUserVisibleNetworkMessage)
+        {
+            m_lastUserVisibleNetworkMessage = message;
+            emit statusMessage(message);
+        }
     }
 }
 

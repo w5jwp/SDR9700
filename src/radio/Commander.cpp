@@ -890,8 +890,13 @@ void Commander::parseCommand()
         {
             return;
         }
-        value.setValue(getMeterCal(meterALC, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
+        {
+            const quint8 rawAlc = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+            const double alc = getMeterCal(meterALC, rawAlc);
+            qDebug(logRadioTraffic()).nospace() << "ALC meter raw=" << rawAlc << " calibrated=" << alc;
+            value.setValue(alc);
+            break;
+        }
     case funcCompMeter:
         if (payloadTooShort(2))
         {
@@ -922,7 +927,6 @@ void Commander::parseCommand()
     case funcPBTOuter:
     case funcIFShift:
     case funcRFPower:
-    case funcMicGain:
     case funcNotchFilter:
     case funcCompressorLevel:
     case funcBreakInDelay:

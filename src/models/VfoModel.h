@@ -32,7 +32,9 @@ class VfoModel : public QObject
     bool nbOn() const { return m_nbOn; }
     bool attenuatorOn() const { return m_attenuatorOn; }
     bool preampOn() const { return m_preampOn; }
+    int preampLevel() const { return m_preampLevel; }
     bool autoNotchOn() const { return m_autoNotchOn; }
+    bool manualNotchOn() const { return m_manualNotchOn; }
     bool compressorOn() const { return m_compressorOn; }
     bool ritOn() const { return m_ritOn; }
     short ritHz() const { return m_ritHz; }
@@ -50,11 +52,12 @@ class VfoModel : public QObject
     void setNbEnabled(bool on);
     void setNbLevel(int level);
     void setPreampEnabled(bool on);
+    void setPreampLevel(int level);
     void setAttenuatorEnabled(bool on);
     void setTxPower(int level);
-    void setMicGain(int level);
     void setAgcMode(const QString& mode);
     void setAutoNotch(bool on);
+    void setManualNotch(bool on);
     void setCompressor(bool on);
     void setRitEnabled(bool on);
     void setRitOffset(short hz);
@@ -72,12 +75,13 @@ class VfoModel : public QObject
     void applyNrEnabled(bool on);
     void applyNbEnabled(bool on);
     void applyPreampEnabled(bool on);
+    void applyPreampLevel(int level);
     void applyAttenuatorEnabled(bool on);
     void applyRfGain(int level);
     void applySquelch(bool on, int level);
     void applyTxPower(int level);
-    void applyMicGain(int level);
     void applyAutoNotch(bool on);
+    void applyManualNotch(bool on);
     void applyCompressor(bool on);
     void applyAgcMode(const QString& mode);
     void applyRitEnabled(bool on);
@@ -99,11 +103,12 @@ class VfoModel : public QObject
     void nrChanged(bool on, int level);
     void nbChanged(bool on, int level);
     void preampChanged(bool on);
+    void preampLevelChanged(int level);
     void attenuatorChanged(bool on);
     void txPowerChanged(int level);
-    void micGainChanged(int level);
     void agcModeChanged(const QString& mode);
     void autoNotchChanged(bool on);
+    void manualNotchChanged(bool on);
     void compressorChanged(bool on);
     void ritChanged(bool on, short hz);
     void duplexModeChanged(duplexMode_t mode);
@@ -121,7 +126,6 @@ class VfoModel : public QObject
     std::optional<QString> m_mode;
     std::optional<int> m_rfGain;
     std::optional<int> m_txPower;
-    std::optional<int> m_micGain;
     struct SquelchState
     {
         bool on;
@@ -138,8 +142,10 @@ class VfoModel : public QObject
     bool m_nbOn{false};
     int m_nbLevel{5};
     bool m_preampOn{false};
+    int m_preampLevel{0};
     bool m_attenuatorOn{false};
     bool m_autoNotchOn{false};
+    bool m_manualNotchOn{false};
     bool m_compressorOn{false};
     QString m_agcMode{"mid"};
     bool m_ritOn{false};

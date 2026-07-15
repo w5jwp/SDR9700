@@ -25,19 +25,21 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::modeChanged, this, &RadioModel::onModeChanged);
     connect(m_backend, &IRadioBackend::smeterChanged, this, &RadioModel::onSmeterChanged);
     connect(m_backend, &IRadioBackend::swrChanged, this, &RadioModel::onSwrChanged);
+    connect(m_backend, &IRadioBackend::alcChanged, this, &RadioModel::onAlcChanged);
     connect(m_backend, &IRadioBackend::agcModeChanged, m_vfo, &VfoModel::applyAgcMode);
     connect(m_backend, &IRadioBackend::autoNotchChanged, m_vfo, &VfoModel::applyAutoNotch);
+    connect(m_backend, &IRadioBackend::manualNotchChanged, m_vfo, &VfoModel::applyManualNotch);
     connect(m_backend, &IRadioBackend::compressorChanged, m_vfo, &VfoModel::applyCompressor);
     connect(m_backend, &IRadioBackend::ritEnabledChanged, m_vfo, &VfoModel::applyRitEnabled);
     connect(m_backend, &IRadioBackend::ritOffsetChanged, m_vfo, &VfoModel::applyRitOffset);
     connect(m_backend, &IRadioBackend::nrChanged, m_vfo, &VfoModel::applyNrEnabled);
     connect(m_backend, &IRadioBackend::nbChanged, m_vfo, &VfoModel::applyNbEnabled);
     connect(m_backend, &IRadioBackend::preampChanged, m_vfo, &VfoModel::applyPreampEnabled);
+    connect(m_backend, &IRadioBackend::preampLevelChanged, m_vfo, &VfoModel::applyPreampLevel);
     connect(m_backend, &IRadioBackend::attenuatorChanged, m_vfo, &VfoModel::applyAttenuatorEnabled);
     connect(m_backend, &IRadioBackend::rfGainChanged, m_vfo, &VfoModel::applyRfGain);
     connect(m_backend, &IRadioBackend::squelchChanged, m_vfo, &VfoModel::applySquelch);
     connect(m_backend, &IRadioBackend::txPowerChanged, m_vfo, &VfoModel::applyTxPower);
-    connect(m_backend, &IRadioBackend::micGainChanged, m_vfo, &VfoModel::applyMicGain);
     connect(m_backend, &IRadioBackend::duplexModeChanged, m_vfo, &VfoModel::applyDuplexMode);
     connect(m_backend, &IRadioBackend::repeaterOffsetChanged, m_vfo, &VfoModel::applyRepeaterOffsetHz);
     connect(m_backend, &IRadioBackend::toneAccessModeChanged, m_vfo, &VfoModel::applyToneAccessMode);
@@ -74,6 +76,11 @@ void RadioModel::setTxAudioDevice(const QAudioDevice& dev)
 void RadioModel::setLanModLevel(int level)
 {
     m_backend->setLanModLevel(level);
+}
+
+void RadioModel::setTuningStep(int step)
+{
+    m_backend->setTuningStep(step);
 }
 
 void RadioModel::onBackendConnected()
@@ -148,6 +155,11 @@ void RadioModel::onSmeterChanged(int s)
 void RadioModel::onSwrChanged(double swr)
 {
     emit swrChanged(swr);
+}
+
+void RadioModel::onAlcChanged(double alc)
+{
+    emit alcChanged(alc);
 }
 
 void RadioModel::onPttChanged(bool on)

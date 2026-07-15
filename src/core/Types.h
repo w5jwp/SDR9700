@@ -328,7 +328,6 @@ enum Funcs
     funcPBTOuter,
     funcCwPitch,
     funcRFPower,
-    funcMicGain,
     funcKeySpeed,
     funcNotchFilter,
     funcCompressorLevel,

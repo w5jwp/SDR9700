@@ -7,12 +7,6 @@ namespace
 {
 constexpr int kAudioThreadShutdownWaitMs = 500;
 constexpr quint8 kLpcmMono16Codec = 0x04;
-constexpr quint8 kLpcmStereo16Codec = 0x10;
-
-bool isLpcm16Codec(quint8 codec)
-{
-    return codec == kLpcmMono16Codec || codec == kLpcmStereo16Codec;
-}
 } // namespace
 
 UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint16 lport, audioSetup rxSetup,
@@ -24,6 +18,10 @@ UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint
     this->radioIP = ip;
     this->rxSetup = rxSetup;
     this->txSetup = txSetup;
+    if (this->txSetup.sampleRate > 0 && this->txSetup.codec == kLpcmMono16Codec)
+    {
+        m_txSilencePacketBytes = int(this->txSetup.sampleRate / 50) * int(sizeof(qint16));
+    }
 
     if (txSetup.sampleRate == 0)
     {
@@ -146,20 +144,6 @@ void UdpAudio::sendAudioBuffer(const QByteArray& data)
     }
 }
 
-void UdpAudio::sendTxSilenceFrames(int frameCount)
-{
-    if (frameCount <= 0 || m_txSilencePacketBytes <= 0)
-    {
-        return;
-    }
-
-    QByteArray silence(m_txSilencePacketBytes, '\0');
-    for (int i = 0; i < frameCount; ++i)
-    {
-        sendAudioBuffer(silence);
-    }
-}
-
 void UdpAudio::receiveAudioData(audioPacket audio)
 {
     if (txaudio == nullptr)
@@ -175,34 +159,6 @@ void UdpAudio::receiveAudioData(audioPacket audio)
         if (m_dtmfTimerActive)
         {
             return;
-        }
-
-        const bool txActive = m_txActive.load();
-        const bool gateActive = txActive && m_txGateTimer.isValid() && m_txGateTimer.elapsed() < m_txGateMs;
-        if (!txActive || gateActive)
-        {
-            // During RX and the TX transition, send silence to keep the radio's
-            // LAN audio path warm without allowing pre-PTT samples to become
-            // the first modulated audio.
-            audio.data.fill(0);
-        }
-        else if (m_txFadeSamplesRemaining > 0 && m_txFadeSamplesTotal > 0)
-        {
-            if (!isLpcm16Codec(txSetup.codec) || audio.data.size() % int(sizeof(qint16)) != 0)
-            {
-                qWarning(logUdp()) << "TX fade requires LPCM16 audio with aligned sample bytes; dropping packet of"
-                                   << audio.data.size() << "bytes for codec" << txSetup.codec;
-                return;
-            }
-            qint16* samples = reinterpret_cast<qint16*>(audio.data.data());
-            const int sampleCount = audio.data.size() / int(sizeof(qint16));
-            for (int i = 0; i < sampleCount && m_txFadeSamplesRemaining > 0; ++i)
-            {
-                const int samplesDone = m_txFadeSamplesTotal - m_txFadeSamplesRemaining;
-                const float gain = float(samplesDone) / float(m_txFadeSamplesTotal);
-                samples[i] = qint16(float(samples[i]) * gain);
-                --m_txFadeSamplesRemaining;
-            }
         }
 
         sendAudioBuffer(audio.data);
@@ -226,15 +182,6 @@ void UdpAudio::sendNextDtmfFrame()
     {
         m_dtmfTimerActive = false;
         m_dtmfTimer->stop();
-        return;
-    }
-
-    // During gate, keep LAN path warm with silence but don't consume buffer.
-    const bool gateActive = m_txGateTimer.isValid() && m_txGateTimer.elapsed() < m_txGateMs;
-    if (gateActive)
-    {
-        QByteArray silence(m_txSilencePacketBytes, '\0');
-        sendAudioBuffer(silence);
         return;
     }
 
@@ -465,26 +412,8 @@ void UdpAudio::startAudio()
 void UdpAudio::setTxActive(bool active)
 {
     m_txActive.store(active);
-    if (active)
+    if (!active)
     {
-        // Part of the IC-9700 LAN TX startup-noise mitigation documented in
-        // RadioBackend: pre-fill the radio's LAN audio path with zero PCM and
-        // keep outgoing audio silent while RadioBackend restores LAN mod gain.
-        static constexpr int kTxPreRollFrames = 8;
-        static constexpr int kTxGateMs = 1000;
-        static constexpr int kTxFadeMs = 250;
-        m_txGateMs = kTxGateMs;
-        m_txGateTimer.restart();
-        m_txFadeSamplesTotal = int(txSetup.sampleRate) * kTxFadeMs / 1000;
-        m_txFadeSamplesRemaining = m_txFadeSamplesTotal;
-        sendTxSilenceFrames(kTxPreRollFrames);
-    }
-    else
-    {
-        m_txGateTimer.invalidate();
-        m_txGateMs = 0;
-        m_txFadeSamplesRemaining = 0;
-        m_txFadeSamplesTotal = 0;
         m_dtmfTimer->stop();
         m_dtmfTimerActive = false;
         m_dtmfPcm.clear();

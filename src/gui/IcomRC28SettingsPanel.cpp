@@ -82,34 +82,33 @@ IcomRC28SettingsPanel::IcomRC28SettingsPanel(IcomRC28Manager* manager, QWidget* 
 void IcomRC28SettingsPanel::buildUi()
 {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(12, 12, 12, 12);
-    root->setSpacing(10);
+    root->setContentsMargins(12, 4, 12, 0);
+    root->setSpacing(8);
 
     auto* deviceGroup = new QGroupBox(QStringLiteral("Device"), this);
     deviceGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* deviceForm = new QFormLayout(deviceGroup);
     deviceForm->setLabelAlignment(Qt::AlignRight);
+    deviceForm->setSpacing(6);
 
     m_statusLabel = new QLabel(QStringLiteral("Not connected"), deviceGroup);
-    m_deviceNameLabel = new QLabel(QStringLiteral("-"), deviceGroup);
     m_devicePathLabel = new QLabel(QStringLiteral("-"), deviceGroup);
     m_serialLabel = new QLabel(QStringLiteral("-"), deviceGroup);
-    m_releaseLabel = new QLabel(QStringLiteral("-"), deviceGroup);
-    for (auto* label : {m_statusLabel, m_deviceNameLabel, m_devicePathLabel, m_serialLabel, m_releaseLabel})
+    for (auto* label : {m_statusLabel, m_devicePathLabel, m_serialLabel})
     {
         label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     }
 
     deviceForm->addRow(QStringLiteral("Status:\t"), m_statusLabel);
-    deviceForm->addRow(QStringLiteral("Name:\t"), m_deviceNameLabel);
     deviceForm->addRow(QStringLiteral("Path:\t"), m_devicePathLabel);
     deviceForm->addRow(QStringLiteral("Serial:\t"), m_serialLabel);
-    deviceForm->addRow(QStringLiteral("Release:\t"), m_releaseLabel);
     root->addWidget(deviceGroup);
 
     auto* mapGroup = new QGroupBox(QStringLiteral("Button Mapping"), this);
     mapGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* mapForm = new QFormLayout(mapGroup);
+    mapForm->setLabelAlignment(Qt::AlignRight);
+    mapForm->setSpacing(6);
     m_f1PressCombo = new QComboBox(mapGroup);
     m_f1HoldCombo = new QComboBox(mapGroup);
     m_f2PressCombo = new QComboBox(mapGroup);
@@ -157,8 +156,8 @@ void IcomRC28SettingsPanel::buildUi()
 
     m_autoSnapCheck = new QCheckBox(QStringLiteral("Auto-snap to nearest 1 kHz after rotation stops"), encoderGroup);
     encoderLayout->addWidget(m_autoSnapCheck);
-    root->addWidget(encoderGroup);
-    root->addStretch(1);
+    encoderLayout->addStretch(1);
+    root->addWidget(encoderGroup, 1);
 
     connect(m_f1PressCombo, &QComboBox::currentIndexChanged, this,
             [this](int) { saveActionField(QStringLiteral("f1Press"), m_f1PressCombo->currentData().toString()); });
@@ -190,12 +189,6 @@ void IcomRC28SettingsPanel::refreshDeviceInfo()
                                : open  ? QStringLiteral("Connected")
                                        : (detected ? QStringLiteral("Detected") : QStringLiteral("Not connected")));
     }
-    if (m_deviceNameLabel)
-    {
-        m_deviceNameLabel->setText(
-            blocked ? m_manager->blockedDeviceName()
-                    : (m_manager->deviceName().isEmpty() ? QStringLiteral("-") : m_manager->deviceName()));
-    }
     if (m_devicePathLabel)
     {
         m_devicePathLabel->setText(m_manager->devicePath().isEmpty() ? QStringLiteral("-") : m_manager->devicePath());
@@ -203,12 +196,6 @@ void IcomRC28SettingsPanel::refreshDeviceInfo()
     if (m_serialLabel)
     {
         m_serialLabel->setText(m_manager->serialNumber().isEmpty() ? QStringLiteral("-") : m_manager->serialNumber());
-    }
-    if (m_releaseLabel)
-    {
-        m_releaseLabel->setText(m_manager->releaseNumber() > 0
-                                    ? QStringLiteral("0x%1").arg(m_manager->releaseNumber(), 4, 16, QLatin1Char('0'))
-                                    : QStringLiteral("-"));
     }
 }
 

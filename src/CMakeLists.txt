@@ -122,8 +122,10 @@ set(SDR9700_SOURCES
     gui/SettingsDialog.h
     gui/SettingsDialog.cpp
     gui/SettingsPanelStyle.h
-    gui/AudioSettingsPanel.h
-    gui/AudioSettingsPanel.cpp
+    gui/AudioInputSettingsPanel.h
+    gui/AudioInputSettingsPanel.cpp
+    gui/AudioOutputSettingsPanel.h
+    gui/AudioOutputSettingsPanel.cpp
     gui/MouseSettingsPanel.h
     gui/MouseSettingsPanel.cpp
     gui/RadioSetupSettingsPanel.h

@@ -122,10 +122,10 @@ as `build-codex`, `build-claude`, or similar variants.
 ## Acknowledgements
 
 SDR9700 benefited from the public work, operator experience, and hard-won
-lessons of the AetherSDR and wfview projects. Their codebases and communities
-helped validate radio behavior, highlight practical implementation details, and
-provide useful points of comparison while SDR9700 was shaped into its own
-IC-9700-focused Linux application.
+lessons of the AetherSDR, wfview, and radio-webop projects. Their codebases and
+communities helped validate radio behavior, highlight practical implementation
+details, and provide useful points of comparison while SDR9700 was shaped into
+its own IC-9700-focused Linux application.
 
 ## License
 

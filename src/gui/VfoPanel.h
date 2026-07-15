@@ -31,8 +31,8 @@ class VfoPanel : public QGroupBox
     void setStepText(const QString& text);
     QPoint stepMenuPosition() const;
     void setSMeterValue(int value);
-    void setSwrMode(bool on);
-    void setSwr(double swr, const QColor& fillColor);
+    void setAlcMode(bool on);
+    void setAlc(double alc);
     void setTxPower(int value);
     void setVolume(int value);
     void setVolumeVisible(bool visible);

@@ -39,6 +39,7 @@ class RadioModel : public QObject
     void setRxAudioDevice(const QAudioDevice& dev);
     void setTxAudioDevice(const QAudioDevice& dev);
     void setLanModLevel(int level);
+    void setTuningStep(int step);
 
   signals:
     void connectionChanged(bool connected);
@@ -46,6 +47,7 @@ class RadioModel : public QObject
     void infoChanged();
     void smeterChanged(int value);
     void swrChanged(double swr);
+    void alcChanged(double alc);
     void pttChanged(bool on);
     void transmittingChanged(bool on);
     void errorOccurred(const QString& message);
@@ -62,6 +64,7 @@ class RadioModel : public QObject
     void onModeChanged(const QString& mode);
     void onSmeterChanged(int s);
     void onSwrChanged(double swr);
+    void onAlcChanged(double alc);
     void onPttChanged(bool on);
     void onSpectrumDataReady(const QVector<float>& bins, double start, double end);
 

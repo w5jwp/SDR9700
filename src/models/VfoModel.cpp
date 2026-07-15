@@ -105,9 +105,20 @@ void VfoModel::setNbLevel(int level)
 
 void VfoModel::setPreampEnabled(bool on)
 {
+    setPreampLevel(on ? 1 : 0);
+}
+
+void VfoModel::setPreampLevel(int level)
+{
+    level = qBound(0, level, 3);
+    m_preampLevel = level;
+    const bool on = level != 0;
+    m_preampOn = on;
+    emit preampLevelChanged(level);
+    emit preampChanged(on);
     if (m_backend)
     {
-        m_backend->setPreampEnabled(on);
+        m_backend->setPreampLevel(level);
     }
 }
 
@@ -124,14 +135,6 @@ void VfoModel::setTxPower(int level)
     if (m_backend)
     {
         m_backend->setTxPower(level);
-    }
-}
-
-void VfoModel::setMicGain(int level)
-{
-    if (m_backend)
-    {
-        m_backend->setMicGain(level);
     }
 }
 
@@ -152,6 +155,16 @@ void VfoModel::setAutoNotch(bool on)
     if (m_backend)
     {
         m_backend->setAutoNotch(on);
+    }
+}
+
+void VfoModel::setManualNotch(bool on)
+{
+    m_manualNotchOn = on;
+    emit manualNotchChanged(on);
+    if (m_backend)
+    {
+        m_backend->setManualNotch(on);
     }
 }
 
@@ -177,6 +190,7 @@ void VfoModel::setRitEnabled(bool on)
 
 void VfoModel::setRitOffset(short hz)
 {
+    hz = qBound(static_cast<short>(-999), hz, static_cast<short>(999));
     m_ritHz = hz;
     emit ritChanged(m_ritOn, hz);
     if (m_backend)
@@ -197,6 +211,7 @@ void VfoModel::applyRitEnabled(bool on)
 
 void VfoModel::applyRitOffset(short hz)
 {
+    hz = qBound(static_cast<short>(-999), hz, static_cast<short>(999));
     if (m_ritHz == hz)
     {
         return;
@@ -209,6 +224,12 @@ void VfoModel::applyAutoNotch(bool on)
 {
     m_autoNotchOn = on;
     emit autoNotchChanged(on);
+}
+
+void VfoModel::applyManualNotch(bool on)
+{
+    m_manualNotchOn = on;
+    emit manualNotchChanged(on);
 }
 
 void VfoModel::applyCompressor(bool on)
@@ -331,11 +352,20 @@ void VfoModel::applyNbEnabled(bool on)
 
 void VfoModel::applyPreampEnabled(bool on)
 {
-    if (m_preampOn == on)
+    applyPreampLevel(on ? qMax(1, m_preampLevel) : 0);
+}
+
+void VfoModel::applyPreampLevel(int level)
+{
+    level = qBound(0, level, 3);
+    const bool on = level != 0;
+    if (m_preampLevel == level && m_preampOn == on)
     {
         return;
     }
+    m_preampLevel = level;
     m_preampOn = on;
+    emit preampLevelChanged(level);
     emit preampChanged(on);
 }
 
@@ -380,17 +410,6 @@ void VfoModel::applyTxPower(int level)
     }
     m_txPower = level;
     emit txPowerChanged(level);
-}
-
-void VfoModel::applyMicGain(int level)
-{
-    level = qBound(0, level, 255);
-    if (m_micGain.has_value() && *m_micGain == level)
-    {
-        return;
-    }
-    m_micGain = level;
-    emit micGainChanged(level);
 }
 
 void VfoModel::applyDuplexMode(duplexMode_t mode)

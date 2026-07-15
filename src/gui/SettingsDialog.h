@@ -13,7 +13,7 @@ class QShowEvent;
 class QStackedWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
-class AudioSettingsPanel;
+class AudioInputSettingsPanel;
 #ifdef HAVE_HIDAPI
 class IcomRC28Manager;
 #endif
@@ -26,7 +26,8 @@ class SettingsDialog : public QDialog
     enum class Page
     {
         RadioSetup,
-        Audio,
+        AudioInput,
+        AudioOutput,
         Application,
 #ifdef HAVE_HIDAPI
         IcomRC28,
@@ -41,7 +42,6 @@ class SettingsDialog : public QDialog
 #endif
 
   signals:
-    void lanModLevelChanged(int level);
     void reverseMouseWheelTuningChanged(bool reversed);
 #ifdef HAVE_HIDAPI
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);
@@ -69,7 +69,7 @@ class SettingsDialog : public QDialog
     QHash<int, std::function<QWidget*()>> m_deferredBuilders;
     QHash<int, int> m_pageIndexes;
     QHash<int, QTreeWidgetItem*> m_pageItems;
-    QPointer<AudioSettingsPanel> m_audioPanel;
+    QPointer<AudioInputSettingsPanel> m_audioInputPanel;
     int m_txAudioPeak{0};
     int m_txAudioRms{0};
 };

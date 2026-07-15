@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <atomic>
 #include <functional>
+#include <optional>
 
 class Commander;
 
@@ -34,12 +35,14 @@ class RadioBackend : public IRadioBackend
     void setNbEnabled(bool on) override;
     void setNbLevel(int level) override;
     void setPreampEnabled(bool on) override;
+    void setPreampLevel(int level) override;
     void setAttenuatorEnabled(bool on) override;
     void setAfGain(int level) override;
     void setRfGain(int level) override;
     void setSquelch(bool on, int level) override;
     void setAgcMode(const QString& mode) override;
     void setAutoNotch(bool on) override;
+    void setManualNotch(bool on) override;
     void setCompressor(bool on) override;
     void setRitEnabled(bool on) override;
     void setRitOffset(short hz) override;
@@ -55,7 +58,7 @@ class RadioBackend : public IRadioBackend
 
     void setPtt(bool on) override;
     void setTxPower(int level) override;
-    void setMicGain(int level) override;
+    void setTuningStep(int step) override;
     void pollFrequency() override;
     void setRxAudioDevice(const QAudioDevice& dev) override { m_rxDevice = dev; }
     void setTxAudioDevice(const QAudioDevice& dev) override { m_txDevice = dev; }
@@ -75,7 +78,7 @@ class RadioBackend : public IRadioBackend
     void updateReadyState();
     void handleReportedFrequency(quint64 hz);
     void sendLanModLevel(int level);
-    void startTxGainRamp(int targetLevel);
+    void sendPttOffNow();
     void selectMainVfoForCommand(Commander* commandSession) const;
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;
     void invokeOnCurrentCommander(const std::function<void(Commander*)>& command);
@@ -95,17 +98,14 @@ class RadioBackend : public IRadioBackend
     QAudioDevice m_rxDevice;
     QAudioDevice m_txDevice;
     int m_lanModLevel{128}; // 0-255, set via setLanModLevel()
+    std::optional<int> m_originalDataOffMod;
+    std::optional<int> m_originalData1Mod;
+    QString m_lastUserVisibleNetworkMessage;
     // True from the moment the user requests PTT until the radio is returned to
-    // RX. The early true state covers the pre-ramp window where LAN modulation
-    // is still muted but timers are preparing the radio-side TX audio path.
+    // RX. This mirrors the local transmit state used for TX-only meter polling.
     bool m_pttActive{false};
     QTimer* m_pttStaleOnGuardTimer{nullptr};
-    QTimer* m_txAudioEnableTimer{nullptr};
-    QTimer* m_txGainRampTimer{nullptr};
-    int m_txGainRampStart{0};
-    int m_txGainRampTarget{0};
-    int m_txGainRampStep{0};
-    int m_txLanModApplied{0};
+    QTimer* m_pttReleaseDelayTimer{nullptr};
     QTimer* m_scopeRetryTimer{nullptr};
     QTimer* m_initialStateRetryTimer{nullptr};
     QTimer* m_syncWatchdogTimer{nullptr};
@@ -119,4 +119,5 @@ class RadioBackend : public IRadioBackend
     QTimer* m_smeterPollTimer{nullptr};
     QTimer* m_bandStateRefreshTimer{nullptr};
     int m_currentBandKey{-1};
+    int m_currentMainFilter{1};
 };

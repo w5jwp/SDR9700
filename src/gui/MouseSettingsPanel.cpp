@@ -16,10 +16,10 @@ constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
 MouseSettingsPanel::MouseSettingsPanel(QWidget* parent) : QWidget(parent)
 {
     auto* vbox = new QVBoxLayout(this);
-    vbox->setContentsMargins(12, 12, 12, 12);
-    vbox->setSpacing(12);
+    vbox->setContentsMargins(12, 4, 12, 0);
+    vbox->setSpacing(8);
 
-    auto* group = new QGroupBox("Mouse wheel", this);
+    auto* group = new QGroupBox("Mouse Wheel", this);
     group->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* layout = new QVBoxLayout(group);
     layout->setContentsMargins(10, 12, 10, 10);

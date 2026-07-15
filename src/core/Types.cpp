@@ -20,7 +20,7 @@ const QString funcString[funcLastFunc]{
 
     // CI-V group 14: level controls.
     "+<CMD14 Levels>", "AF Gain", "RF Gain", "Squelch", "APF Level", "NR Level", "IF Shift", "PBT Inner", "PBT Outer",
-    "CW Pitch", "RF Power", "Mic Gain", "Key Speed", "Notch Filter", "Compressor Level", "Break-In Delay", "NB Level",
+    "CW Pitch", "RF Power", "Key Speed", "Notch Filter", "Compressor Level", "Break-In Delay", "NB Level",
     "DIGI-SEL Shift", "Drive Gain", "Monitor Gain", "Vox Gain", "Anti-Vox Gain", "Backlight Level",
 
     // CI-V group 15: meter readings.

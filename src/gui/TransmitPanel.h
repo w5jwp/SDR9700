@@ -12,7 +12,7 @@ class TransmitPanel : public QGroupBox
     struct Buttons
     {
         QPushButton* compressor{nullptr};
-        QPushButton* micGain{nullptr};
+        QPushButton* lanMod{nullptr};
     };
 
     explicit TransmitPanel(const Buttons& buttons, QWidget* parent = nullptr);

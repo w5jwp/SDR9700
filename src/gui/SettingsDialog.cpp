@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
-#include "AudioSettingsPanel.h"
+#include "AudioInputSettingsPanel.h"
+#include "AudioOutputSettingsPanel.h"
 #include "DialogPlacement.h"
 #include "FramelessTitleBar.h"
 #include "MouseSettingsPanel.h"
@@ -104,16 +105,18 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     addPage(Page::RadioSetup, QStringLiteral("Radio Setup"),
             QStringLiteral("profile connection host port username password auto connect radio lan"),
             []() { return new RadioSetupSettingsPanel; });
-    addPage(Page::Audio, QStringLiteral("Audio"),
-            QStringLiteral("audio input output device speaker microphone codec channels lan input mod level transmit"),
+    addPage(Page::AudioInput, QStringLiteral("Audio Input"),
+            QStringLiteral("audio input device microphone local level peak average rms transmit"),
             [this]()
             {
-                auto* panel = new AudioSettingsPanel;
-                m_audioPanel = panel;
+                auto* panel = new AudioInputSettingsPanel;
+                m_audioInputPanel = panel;
                 panel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
-                connect(panel, &AudioSettingsPanel::lanModLevelChanged, this, &SettingsDialog::lanModLevelChanged);
                 return panel;
             });
+    addPage(Page::AudioOutput, QStringLiteral("Audio Output"),
+            QStringLiteral("audio output device speaker codec channels receive playback"),
+            []() { return new AudioOutputSettingsPanel; });
     addPage(Page::Application, QStringLiteral("Mouse"),
             QStringLiteral("application local mouse wheel reverse tuning direction"),
             [this]()
@@ -184,9 +187,9 @@ void SettingsDialog::setTransmitAudioLevel(int peak, int rms)
 {
     m_txAudioPeak = qBound(0, peak, 255);
     m_txAudioRms = qBound(0, rms, 255);
-    if (m_audioPanel)
+    if (m_audioInputPanel)
     {
-        m_audioPanel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
+        m_audioInputPanel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
     }
 }
 

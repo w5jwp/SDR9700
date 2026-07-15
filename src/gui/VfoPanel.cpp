@@ -50,15 +50,15 @@ class SMeter : public QProgressBar
   public:
     explicit SMeter(QWidget* parent = nullptr) : QProgressBar(parent) {}
 
-    void setSwr(bool on)
+    void setAlc(bool on)
     {
-        m_swrMode = on;
+        m_alcMode = on;
         update();
     }
 
-    void setSwrFillColor(const QColor& color)
+    void setAlcFillColor(const QColor& color)
     {
-        m_swrFillColor = color;
+        m_alcFillColor = color;
         update();
     }
 
@@ -90,9 +90,9 @@ class SMeter : public QProgressBar
 
         const QRect fillRect = barRect.adjusted(1, 1, -1, -1);
         painter.setPen(Qt::NoPen);
-        if (m_swrMode)
+        if (m_alcMode)
         {
-            painter.setBrush(m_swrFillColor);
+            painter.setBrush(m_alcFillColor);
         }
         else
         {
@@ -108,8 +108,8 @@ class SMeter : public QProgressBar
     }
 
   private:
-    bool m_swrMode{false};
-    QColor m_swrFillColor{UiTheme::Color::MeterGreen};
+    bool m_alcMode{false};
+    QColor m_alcFillColor{UiTheme::Color::MeterGreen};
 };
 
 class SMeterScaleCanvas : public QWidget
@@ -121,9 +121,9 @@ class SMeterScaleCanvas : public QWidget
         setMinimumWidth(kSignalMeterWidth);
     }
 
-    void setSwr(bool on)
+    void setAlc(bool on)
     {
-        m_swrMode = on;
+        m_alcMode = on;
         update();
     }
 
@@ -143,15 +143,12 @@ class SMeterScaleCanvas : public QWidget
                                             {QStringLiteral("9"), 0.6000},  {QStringLiteral("+20"), 0.8000},
                                             {QStringLiteral("+40"), 1.0000}};
 
-        static const ScaleMark kSwrMarks[] = {{QStringLiteral("1.0"), 0.000},
-                                              {QStringLiteral("1.5"), 0.250},
-                                              {QStringLiteral("2.0"), 0.500},
-                                              {QStringLiteral("2.5"), 0.750},
-                                              {QStringLiteral("3.0"), 1.000}};
+        static const ScaleMark kAlcMarks[] = {
+            {QStringLiteral("0"), 0.000}, {QStringLiteral("1"), 0.500}, {QStringLiteral("2"), 1.000}};
 
-        const ScaleMark* marks = m_swrMode ? kSwrMarks : kSMarks;
+        const ScaleMark* marks = m_alcMode ? kAlcMarks : kSMarks;
         const int maxIndex =
-            (m_swrMode ? static_cast<int>(std::size(kSwrMarks)) : static_cast<int>(std::size(kSMarks))) - 1;
+            (m_alcMode ? static_cast<int>(std::size(kAlcMarks)) : static_cast<int>(std::size(kSMarks))) - 1;
 
         QPainter painter(this);
         QFont scaleFont = font();
@@ -172,7 +169,7 @@ class SMeterScaleCanvas : public QWidget
     }
 
   private:
-    bool m_swrMode{false};
+    bool m_alcMode{false};
 };
 } // namespace
 
@@ -421,33 +418,36 @@ void VfoPanel::setSMeterValue(int value)
     }
 }
 
-void VfoPanel::setSwrMode(bool on)
+void VfoPanel::setAlcMode(bool on)
 {
     if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
     {
-        meter->setSwr(on);
-        m_signalMeter->setAccessibleDescription(on ? QStringLiteral("SWR meter.")
+        meter->setAlc(on);
+        m_signalMeter->setAccessibleDescription(on ? QStringLiteral("ALC meter.")
                                                    : QStringLiteral("Received signal strength meter."));
     }
     if (auto* scale = dynamic_cast<SMeterScaleCanvas*>(m_signalScale))
     {
-        scale->setSwr(on);
+        scale->setAlc(on);
     }
 }
 
-void VfoPanel::setSwr(double swr, const QColor& fillColor)
+void VfoPanel::setAlc(double alc)
 {
     if (!m_signalMeter || !m_meterEnabled)
     {
         return;
     }
+    const QColor fillColor = alc <= 0.8   ? UiTheme::Color::MeterGreen
+                             : alc <= 1.0 ? UiTheme::Color::MeterAmber
+                                          : UiTheme::Color::MeterRed;
     if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
     {
-        meter->setSwrFillColor(fillColor);
+        meter->setAlcFillColor(fillColor);
     }
-    const int barValue = qBound(0, static_cast<int>((swr - 1.0) / 2.0 * 100.0 + 0.5), 100);
+    const int barValue = qBound(0, static_cast<int>(alc / 2.0 * 100.0 + 0.5), 100);
     m_signalMeter->setValue(barValue);
-    m_signalMeter->setAccessibleDescription(QStringLiteral("SWR meter: %1:1").arg(swr, 0, 'f', 2));
+    m_signalMeter->setAccessibleDescription(QStringLiteral("ALC meter: %1").arg(alc, 0, 'f', 2));
 }
 
 void VfoPanel::setTxPower(int value)

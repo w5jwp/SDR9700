@@ -33,7 +33,6 @@ enum stateTypes
     RFGAIN,
     SQUELCH,
     RFPOWER,
-    MICGAIN,
     COMPLEVEL,
     MONITORLEVEL,
     BAL,

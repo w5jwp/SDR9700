@@ -481,6 +481,7 @@ void UdpHandler::dataReceived()
                                      .arg(status.networkLatency, 3)
                                      .arg(status.packetsLost, 3)
                                      .arg(status.packetsSent, 3);
+                status.userVisibleMessage = false;
                 status.timeDifference = audio != nullptr ? audio->getTimeDifference() : 0;
                 emit haveNetworkStatus(status);
             }
@@ -738,7 +739,19 @@ void UdpHandler::dataReceived()
                     const QString inComputer = boundedLatin1(in->computer, sizeof(in->computer));
                     if (in->ipaddress != 0x00 && inComputer != compName)
                     {
-                        status.message = devName + " in use by: " + inComputer + " (" + ip.toString() + ")";
+                        networkStatus busyStatus = status;
+                        busyStatus.message =
+                            "Waiting for " + devName + "; in use by " + inComputer + " (" + ip.toString() + ")";
+                        busyStatus.userVisibleMessage = true;
+                        emit haveNetworkStatus(busyStatus);
+                        sendControl(false, 0x00, in->seq); // Respond with an idle
+                    }
+                    else if (inComputer != compName)
+                    {
+                        networkStatus busyStatus = status;
+                        busyStatus.message = "Waiting for " + devName + "; in use by another station";
+                        busyStatus.userVisibleMessage = true;
+                        emit haveNetworkStatus(busyStatus);
                         sendControl(false, 0x00, in->seq); // Respond with an idle
                     }
                     else
@@ -750,7 +763,10 @@ void UdpHandler::dataReceived()
                 else
                 {
                     qDebug(logUdp()) << "Attempting to connect to radio";
-                    status.message = devName + " available";
+                    networkStatus availableStatus = status;
+                    availableStatus.message = devName + " available; connecting";
+                    availableStatus.userVisibleMessage = true;
+                    emit haveNetworkStatus(availableStatus);
 
                     setCurrentRadio(0);
                 }

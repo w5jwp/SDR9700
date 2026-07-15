@@ -28,6 +28,11 @@ documentation, and prior open-source Icom LAN client work.
 - Authors: Phil Taylor M0VSE, Elliott Liggett, and contributors
 - License: GPL-2.0-or-later
 
+- Reference project: radio-webop
+- Reference URL: <https://github.com/Dreikor17/radio-webop>
+- Copyright: Copyright (C) 2026 Dreikor17
+- License: AGPL-3.0-only
+
 ## Build-Time/System Dependencies
 
 The application links against system-provided libraries when available. These

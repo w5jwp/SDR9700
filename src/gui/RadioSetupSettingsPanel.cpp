@@ -17,8 +17,8 @@
 RadioSetupSettingsPanel::RadioSetupSettingsPanel(QWidget* parent) : QWidget(parent)
 {
     auto* root = new QHBoxLayout(this);
-    root->setSpacing(12);
-    root->setContentsMargins(12, 12, 12, 12);
+    root->setSpacing(8);
+    root->setContentsMargins(12, 4, 12, 0);
 
     auto* leftPanel = new QWidget(this);
     auto* leftVbox = new QVBoxLayout(leftPanel);

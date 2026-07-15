@@ -579,7 +579,7 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
     // kPriorityHighest; raising it makes the S-meter visibly lag while command
     // intensive workflows are active.
     if (func != funcNone && func != funcPowerControl && func != funcSelectVFO &&
-        (!ret.value.isValid() || ret.command == funcSWRMeter ||
+        (!ret.value.isValid() || ret.command == funcSWRMeter || ret.command == funcALCMeter ||
          ret.reply.addSecs(QRandomGenerator::global()->bounded(5, 20)) <= QDateTime::currentDateTime()))
     {
         qDebug(logRadio()) << "No (or expired) cache found for" << funcString[func] << "requesting" << ret.reply;

@@ -147,7 +147,6 @@ inline constexpr RadioCommandDef kRadioCommands[] = {
     {funcPBTOuter, "1408", 0, 255, false, false, true, true, 0, false},
     {funcCwPitch, "1409", 300, 900, false, false, true, true, 0, false},
     {funcRFPower, "140a", 0, 255, false, false, true, true, 0, false},
-    {funcMicGain, "140b", 0, 255, false, false, true, true, 0, false},
     {funcKeySpeed, "140c", 6, 48, false, false, true, true, 0, false},
     {funcManualNotchWidth, "140d", 0, 255, false, false, true, true, 0, false},
     {funcCompressorLevel, "140e", 0, 255, false, false, true, true, 0, false},

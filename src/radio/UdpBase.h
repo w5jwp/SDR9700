@@ -72,6 +72,7 @@ struct networkStatus
     qint64 timeDifference = 0;
     QString message;
     QString rxLatencyClass;
+    bool userVisibleMessage{false};
 };
 
 class UdpBase : public QObject

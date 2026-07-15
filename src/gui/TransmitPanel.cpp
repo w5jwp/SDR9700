@@ -29,7 +29,7 @@ TransmitPanel::TransmitPanel(const Buttons& buttons, QWidget* parent) : QGroupBo
     row->setSpacing(kControlGroupSpacing);
     row->addStretch();
     row->addWidget(buttons.compressor);
-    row->addWidget(buttons.micGain);
+    row->addWidget(buttons.lanMod);
     row->addStretch();
 
     layout->addLayout(row);
