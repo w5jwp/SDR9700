@@ -50,14 +50,6 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
     std::fill(std::begin(audioLevelsTxRMS), std::end(audioLevelsTxRMS), 0);
     std::fill(std::begin(audioLevelsRxRMS), std::end(audioLevelsRxRMS), 0);
 
-    if (settings.waterfallFormat == 2)
-    {
-        splitWf = true;
-    }
-    else
-    {
-        splitWf = false;
-    }
     qInfo(logUdp()) << "Starting UdpHandler user:" << username << " rx latency:" << rxSetup.latency
                     << " tx latency:" << txSetup.latency << " rx sample rate: " << rxSetup.sampleRate
                     << " rx codec: " << rxSetup.codec << " tx sample rate: " << txSetup.sampleRate
@@ -604,7 +596,7 @@ void UdpHandler::dataReceived()
                             delete civPortReservation;
                             civPortReservation = nullptr;
                         }
-                        civ = new UdpCivData(localIP, radioIP, civPort, splitWf, civLocalPort);
+                        civ = new UdpCivData(localIP, radioIP, civPort, civLocalPort);
                         QObject::connect(civ, &UdpCivData::receive, this, &UdpHandler::receiveFromCivStream);
                         streamOpened = true;
                         emit streamReady();

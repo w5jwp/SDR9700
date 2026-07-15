@@ -50,7 +50,7 @@ class MainWindow : public QMainWindow
     void onFrequencyChanged(quint64 hz);
     void onModeChanged(const QString& mode);
     void onSmeterChanged(int s);
-    void onSpectrumReady(const QVector<float>& bins, double start, double end);
+    void onSpectrumReady(const QVector<float>& bins, double start, double end, bool outOfRange);
     void onStatusMessage(const QString& msg);
     void onError(const QString& msg);
 
@@ -275,6 +275,7 @@ class MainWindow : public QMainWindow
     void updateBandscopeBandLimits(quint64 hz);
     int tuningStepHz() const;
     void applyRadioTuningStep();
+    void applyBandscopeSettings();
     quint64 roundFrequencyToStep(quint64 hz) const;
     void beginBandscopeDragTune();
     void tuneBandscopeBySteps(int steps);

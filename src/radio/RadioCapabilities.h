@@ -227,7 +227,7 @@ inline constexpr RadioCommandDef kRadioCommands[] = {
     {funcScopeDataOutput, "2711", 0, 1, false, false, true, true, 0, false},
     {funcScopeMainSub, "2712", 0, 1, false, false, true, true, 0, false},
     {funcScopeMode, "2714", 0, 3, false, false, true, true, 0, false},
-    {funcScopeSpan, "2715", 0, 7, false, false, true, true, 0, false},
+    {funcScopeSpan, "2715", 2500, 500000, false, false, true, true, 0, false},
     {funcScopeEdge, "2716", 1, 4, false, false, true, true, 0, false},
     {funcScopeHold, "2717", 0, 1, false, false, true, true, 0, false},
     {funcScopeRef, "2719", 0, 255, false, false, true, true, 0, false},

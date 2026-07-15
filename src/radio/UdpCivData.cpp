@@ -1,13 +1,12 @@
 #include "UdpCivData.h"
 #include "LogCategories.h"
 
-UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, bool splitWf, quint16 localPort)
+UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, quint16 localPort)
 {
     qInfo(logUdp()) << "Starting UdpCivData";
     localIP = local;
     port = civPort;
     radioIP = ip;
-    splitWaterfall = splitWf;
 
     UdpBase::init(localPort);
 
@@ -181,62 +180,7 @@ void UdpCivData::dataReceived()
                         qInfo(logUdp()) << "CIV datagram: totalLen=" << r.length() << "scopeOffset=" << pos
                                         << "scopePayloadLen=" << len;
                     }
-                    if (splitWaterfall && pos >= 6 && len >= 490)
-                    {
-                        // IC-9700 CI-V Reference Guide, scope data output
-                        // command 27h, sends the waterfall as one 490-byte
-                        // packet. SDR9700 splits it into the 11 subframes
-                        // expected by Commander::parseSpectrum().
-                        constexpr int kIc9700WaterfallPayloadBytes = 490;
-                        constexpr int kIc9700WaterfallDivisions = 11;
-                        constexpr int kIc9700WaterfallDivisionBytes = 50;
-                        constexpr int kIc9700WaterfallFirstDataOffset = 12;
-                        if (len != kIc9700WaterfallPayloadBytes)
-                        {
-                            qWarning(logUdp()) << "Unknown spectrum size" << len;
-                            break;
-                        }
-                        const int numDivisions = kIc9700WaterfallDivisions;
-                        const int divSize = kIc9700WaterfallDivisionBytes;
-                        const int splitPos = kIc9700WaterfallFirstDataOffset;
-                        for (int i = 0; i < numDivisions; i++)
-                        {
-                            QByteArray wfPacket = r.mid(pos - 6, 9);
-                            char tens = ((i + 1) / 10);
-                            char units = ((i + 1) - (10 * tens));
-                            wfPacket[7] = units | (tens << 4);
-
-                            tens = (numDivisions / 10);
-                            units = (numDivisions - (10 * tens));
-                            wfPacket[8] = units | (tens << 4);
-
-                            if (i == 0)
-                            {
-                                // Sequence 1 carries scope mode and bounds before waveform pixels begin.
-                                wfPacket.append(r.mid(pos + 3, splitPos));
-                            }
-                            else
-                            {
-                                wfPacket.append(r.mid((pos + splitPos + 3) + ((i - 1) * divSize), divSize));
-                            }
-                            if (i < numDivisions - 1)
-                            {
-                                wfPacket.append('\xfd');
-                            }
-                            if (i == 0)
-                            {
-                                qDebug(logUdp()) << "WF split seq1:" << wfPacket.toHex(' ');
-                            }
-                            emit receive(wfPacket);
-                            wfPacket.clear();
-                        }
-                        qDebug(logUdp()) << "Waterfall packet len" << len << "numDivisions" << numDivisions << "divSize"
-                                         << divSize;
-                    }
-                    else
-                    {
-                        emit receive(r.mid(0x15));
-                    }
+                    emit receive(r.mid(0x15));
                 }
             }
             break;

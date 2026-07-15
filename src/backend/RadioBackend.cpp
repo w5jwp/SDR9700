@@ -16,6 +16,7 @@
 #include <QDebug>
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <memory>
 #include <optional>
 
@@ -213,10 +214,9 @@ RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThr
         the audio path, not by forcing the radio menu value to zero. This keeps
         the radio front panel/menu in sync with the GUI LAN MOD button.
 
-        The control connection later sets UdpConnectionSettings::waterfallFormat to 2
-        because IC-9700 scope packets can carry paired spectrum/waterfall
-        payloads. UdpCivData splits that format before Commander parses scope
-        data; this is independent from the TX audio startup sequence above.
+        IC-9700 LAN scope packets carry the complete sweep in one CI-V frame.
+        Commander parses that frame directly; this is independent from the TX
+        audio startup sequence above.
     */
     m_bandStateRefreshTimer = new QTimer(this);
     m_bandStateRefreshTimer->setSingleShot(true);
@@ -560,7 +560,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 {
                     m_scopeDataReceived = true;
                     QVector<float> bins = ScopeAdapter::toDbm(d.data, m_scopeMinDbm, m_scopeMaxDbm);
-                    emit spectrumDataReady(bins, d.startFreq, d.endFreq);
+                    emit spectrumDataReady(bins, d.startFreq, d.endFreq, d.oor);
                     updateReadyState();
                 }
                 break;
@@ -583,10 +583,6 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     passcode(pass, udpSettings.passwordEncoded);
     udpSettings.halfDuplex = false;
     udpSettings.adminLogin = false;
-    // IC-9700 LAN bundles all 11 scope packets into one UDP datagram.
-    // waterfallFormat=2 tells UdpCivData to split them before Commander parses.
-    udpSettings.waterfallFormat = 2;
-
     // Load the saved audio device if no device was explicitly set via setRxAudioDevice().
     if (m_rxDevice.isNull())
     {
@@ -1051,46 +1047,32 @@ void RadioBackend::setScopeSpanHz(quint64 hz)
     {
         return;
     }
-    // The embedded IC-9700 definition uses span indices 0-7:
-    // 0=2.5k, 1=5k, 2=10k, 3=25k, 4=50k, 5=100k, 6=250k, 7=500k
-    uchar span = 7; // default 500 kHz
-    if (hz <= 2500)
+
+    static constexpr quint64 kSupportedSpans[] = {2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000};
+    quint64 selected = kSupportedSpans[std::size(kSupportedSpans) - 1];
+    for (const quint64 span : kSupportedSpans)
     {
-        span = 0;
-    }
-    else if (hz <= 5000)
-    {
-        span = 1;
-    }
-    else if (hz <= 10000)
-    {
-        span = 2;
-    }
-    else if (hz <= 25000)
-    {
-        span = 3;
-    }
-    else if (hz <= 50000)
-    {
-        span = 4;
-    }
-    else if (hz <= 100000)
-    {
-        span = 5;
-    }
-    else if (hz <= 250000)
-    {
-        span = 6;
+        selected = span;
+        if (hz <= span)
+        {
+            break;
+        }
     }
 
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcScopeSpan, QVariant::fromValue<uchar>(span), 0); });
+    centerSpanData span;
+    span.freq = selected;
+    span.name = QString::number(selected);
+    invokeOnCurrentCommander(
+        [span](Commander* commandSession)
+        { commandSession->receiveCommand(funcScopeSpan, QVariant::fromValue<centerSpanData>(span), 0); });
 }
 
 void RadioBackend::setScopeMode(int mode)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcScopeMode, QVariant(mode), 0); });
+    const uchar bounded = static_cast<uchar>(qBound(0, mode, 1));
+    invokeOnCurrentCommander(
+        [=](Commander* commandSession)
+        { commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(bounded), 0); });
 }
 
 void RadioBackend::setPtt(bool on)
@@ -1548,7 +1530,10 @@ void RadioBackend::onLanReady()
                 commandSession->receiveCommand(funcScopeOnOff, QVariant::fromValue<bool>(true), 0);
                 commandSession->receiveCommand(funcScopeDataOutput, QVariant::fromValue<bool>(true), 0);
                 commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
-                commandSession->receiveCommand(funcScopeSpan, QVariant::fromValue<uchar>(7), 0);
+                centerSpanData span;
+                span.freq = 500000;
+                span.name = QStringLiteral("500 kHz");
+                commandSession->receiveCommand(funcScopeSpan, QVariant::fromValue<centerSpanData>(span), 0);
                 commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue(lanModLevel), 0);
             });
     };

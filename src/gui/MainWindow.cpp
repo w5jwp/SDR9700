@@ -30,6 +30,7 @@
 
 #include <QToolBar>
 #include <QAction>
+#include <QActionGroup>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -110,7 +111,11 @@ QString levelButtonStyle(bool active)
 constexpr auto kCloseMemoryWindowOnSelectSettingsKey = "CloseMemoryWindowOnSelect";
 constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
 constexpr auto kTuningStepHzSettingsKey = "TuningStepHz";
+constexpr auto kBandscopeModeSettingsKey = "BandscopeMode";
+constexpr auto kBandscopeSpanHzSettingsKey = "BandscopeSpanHz";
 constexpr int kDefaultTuningStepHz = 100;
+constexpr int kDefaultBandscopeMode = 0;
+constexpr quint64 kDefaultBandscopeSpanHz = 500000;
 
 struct StepPreset
 {
@@ -121,6 +126,17 @@ struct StepPreset
 constexpr StepPreset kStepPresets[] = {
     {1, "1 Hz", 0},     {10, "10 Hz", 0},     {100, "100 Hz", 1},   {500, "500 Hz", 2},    {1000, "1 kHz", 3},
     {5000, "5 kHz", 4}, {10000, "10 kHz", 6}, {25000, "25 kHz", 9}, {50000, "50 kHz", 10}, {100000, "100 kHz", 11},
+};
+
+struct BandscopeSpanPreset
+{
+    quint64 hz;
+    const char* label;
+};
+
+constexpr BandscopeSpanPreset kBandscopeSpanPresets[] = {
+    {2500, "2.5 kHz"}, {5000, "5 kHz"},     {10000, "10 kHz"},   {25000, "25 kHz"},
+    {50000, "50 kHz"}, {100000, "100 kHz"}, {250000, "250 kHz"}, {500000, "500 kHz"},
 };
 
 constexpr quint64 kMinimumTuneFrequencyHz = 100000;
@@ -900,6 +916,56 @@ void MainWindow::buildToolBar()
     auto* viewMenu = new QMenu(this);
     viewMenu->setStyleSheet(menuStyle);
     viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
+    auto* bandscopeMenu = viewMenu->addMenu(QStringLiteral("Bandscope"));
+    bandscopeMenu->setStyleSheet(menuStyle);
+
+    const int savedBandscopeMode = qBound(
+        0, AppSettings::instance().value(QString::fromLatin1(kBandscopeModeSettingsKey), kDefaultBandscopeMode).toInt(),
+        1);
+    const quint64 savedBandscopeSpanHz = AppSettings::instance()
+                                             .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                                                    QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                                             .toULongLong();
+    auto* modeGroup = new QActionGroup(bandscopeMenu);
+    modeGroup->setExclusive(true);
+    auto* centerModeAction = bandscopeMenu->addAction(QStringLiteral("Center mode"));
+    centerModeAction->setCheckable(true);
+    centerModeAction->setChecked(savedBandscopeMode == 0);
+    modeGroup->addAction(centerModeAction);
+    connect(centerModeAction, &QAction::triggered, this,
+            [this]()
+            {
+                AppSettings::instance().setValue(QString::fromLatin1(kBandscopeModeSettingsKey), 0);
+                applyBandscopeSettings();
+            });
+    auto* fixedModeAction = bandscopeMenu->addAction(QStringLiteral("Fixed mode"));
+    fixedModeAction->setCheckable(true);
+    fixedModeAction->setChecked(savedBandscopeMode == 1);
+    modeGroup->addAction(fixedModeAction);
+    connect(fixedModeAction, &QAction::triggered, this,
+            [this]()
+            {
+                AppSettings::instance().setValue(QString::fromLatin1(kBandscopeModeSettingsKey), 1);
+                applyBandscopeSettings();
+            });
+
+    bandscopeMenu->addSeparator();
+    auto* spanGroup = new QActionGroup(bandscopeMenu);
+    spanGroup->setExclusive(true);
+    for (const BandscopeSpanPreset& preset : kBandscopeSpanPresets)
+    {
+        auto* spanAction = bandscopeMenu->addAction(QString::fromLatin1(preset.label));
+        spanAction->setCheckable(true);
+        spanAction->setChecked(savedBandscopeSpanHz == preset.hz);
+        spanGroup->addAction(spanAction);
+        connect(spanAction, &QAction::triggered, this,
+                [this, preset]()
+                {
+                    AppSettings::instance().setValue(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                                                     QVariant::fromValue<qulonglong>(preset.hz));
+                    applyBandscopeSettings();
+                });
+    }
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 
     auto* helpMenu = new QMenu(this);
@@ -3460,6 +3526,31 @@ void MainWindow::applyRadioTuningStep()
     }
 }
 
+void MainWindow::applyBandscopeSettings()
+{
+    if (!m_model || !m_model->isReady() || m_controlsLocked)
+    {
+        return;
+    }
+
+    auto* backend = m_model->backend();
+    if (!backend)
+    {
+        return;
+    }
+
+    const int mode = qBound(
+        0, AppSettings::instance().value(QString::fromLatin1(kBandscopeModeSettingsKey), kDefaultBandscopeMode).toInt(),
+        1);
+    const quint64 spanHz = AppSettings::instance()
+                               .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                                      QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                               .toULongLong();
+
+    backend->setScopeMode(mode);
+    backend->setScopeSpanHz(spanHz);
+}
+
 void MainWindow::updateStepButton()
 {
     if (!m_vfoPanel)
@@ -3875,6 +3966,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
     if (ready)
     {
         applyRadioTuningStep();
+        applyBandscopeSettings();
         m_connStateName = QStringLiteral("Connected");
         m_connStateLabel->setText(
             QStringLiteral("<span style='color:%1'>Connected</span>").arg(UiTheme::Color::Success));
@@ -3996,7 +4088,7 @@ void MainWindow::updateTxAudioMeter(int peak, int rms)
     m_txAudioRms = qBound(0, rms, 255);
 }
 
-void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, double end)
+void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, double end, bool outOfRange)
 {
     const quint64 referenceHz = m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : (m_vfo ? m_vfo->frequencyHz() : 0);
     if (referenceHz > 0)
@@ -4005,7 +4097,7 @@ void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, doubl
     }
     m_spectrumCanvas->setDataFrequencyRange(start, end);
     updateSpectrumVfoMarker();
-    m_spectrumCanvas->updateSpectrum(bins);
+    m_spectrumCanvas->updateSpectrum(bins, outOfRange);
 }
 
 void MainWindow::showToast(const QString& msg, int durationMs)

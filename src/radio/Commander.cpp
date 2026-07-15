@@ -1643,9 +1643,8 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
         d = mainScopeData;
     }
 
-    // IC-9700 LAN scope data arrives as sequence 1 wave-info followed by
-    // waveform chunks. Sequence 1 carries mode and frequency bounds; later
-    // sequences carry waveform bytes.
+    // Scope data may arrive as one LAN frame or as a sequence of wave-info plus
+    // waveform chunks. The first bytes describe the sequence layout.
 
     Frequency fStart;
     Frequency fEnd;
@@ -1661,15 +1660,64 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     quint8 sequenceMax = bcdHexToUChar(payloadIn.at(1));
 
     constexpr int freqLen = 5;
+    constexpr int sequenceHeaderBytes = 2;
+    constexpr int waveInfoBytes = sequenceHeaderBytes + 2 + (freqLen * 2);
+
+    if (sequenceMax <= 1)
+    {
+        if (payloadIn.size() < waveInfoBytes)
+        {
+            qWarning(logRadio()) << "Ignoring short single-frame scope payload. required" << waveInfoBytes << "got"
+                                 << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            return false;
+        }
+
+        d.mode = static_cast<uchar>(payloadIn.at(sequenceHeaderBytes));
+        d.oor = static_cast<bool>(payloadIn.at(sequenceHeaderBytes + 1 + (freqLen * 2)));
+        d.data.clear();
+
+        fStart = parseFreqData(payloadIn.mid(sequenceHeaderBytes + 1, freqLen), receiver);
+        fEnd = parseFreqData(payloadIn.mid(sequenceHeaderBytes + 1 + freqLen, freqLen), receiver);
+        if (d.mode == 0)
+        {
+            const double halfSpanMhz = fEnd.MHzDouble / 2.0;
+            d.startFreq = fStart.MHzDouble - halfSpanMhz;
+            d.endFreq = fStart.MHzDouble + halfSpanMhz;
+        }
+        else
+        {
+            d.startFreq = fStart.MHzDouble;
+            d.endFreq = fEnd.MHzDouble;
+        }
+
+        if (d.oor)
+        {
+            d.data = QByteArray(radioCaps.spectLenMax, '\0');
+            d.valid = true;
+            return true;
+        }
+
+        d.data = payloadIn.mid(waveInfoBytes);
+        if (d.data.size() > radioCaps.spectLenMax)
+        {
+            d.data.truncate(radioCaps.spectLenMax);
+        }
+        ret = !d.data.isEmpty();
+        d.valid = ret;
+        qInfo(logRadio()) << "Spectrum single-frame start:" << d.startFreq << "end:" << d.endFreq << "mode:" << d.mode
+                          << "oor:" << d.oor << "dataLen:" << d.data.size();
+        return ret;
+    }
+
     // Sequence 2, index 05 starts waveform data. Sequence 11 carries the final
     // waveform pixels seen from IC-9700 LAN scope data.
     if (sequence == 1)
     {
-        const int waveInfoBytes = 4 + (freqLen * 2);
-        if (payloadIn.size() < waveInfoBytes)
+        const int multiFrameWaveInfoBytes = 4 + (freqLen * 2);
+        if (payloadIn.size() < multiFrameWaveInfoBytes)
         {
-            qWarning(logRadio()) << "Ignoring short scope wave-info payload. required" << waveInfoBytes << "got"
-                                 << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            qWarning(logRadio()) << "Ignoring short scope wave-info payload. required" << multiFrameWaveInfoBytes
+                                 << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
             return false;
         }
 
@@ -1703,9 +1751,9 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
 
         if (d.mode == 0)
         {
-            // "center" mode, start is actual center, end is bandwidth.
-            d.startFreq -= d.endFreq;
-            d.endFreq = d.startFreq + 2 * (d.endFreq);
+            const double halfSpanMhz = d.endFreq / 2.0;
+            d.startFreq -= halfSpanMhz;
+            d.endFreq = d.startFreq + (2 * halfSpanMhz);
         }
 
         if (sequence == sequenceMax)

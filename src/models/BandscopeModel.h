@@ -30,11 +30,11 @@ class BandscopeModel : public QObject
     void holdDisplayCenter(double centerMhz);
     void clearDisplayCenterHold();
 
-    void ingestSpectrum(const QVector<float>& binsDbm, double startMhz, double endMhz);
+    void ingestSpectrum(const QVector<float>& binsDbm, double startMhz, double endMhz, bool outOfRange);
 
   signals:
     void rangeChanged(double centerMhz, double bandwidthMhz);
-    void spectrumReady(const QVector<float>& binsDbm, double startMhz, double endMhz);
+    void spectrumReady(const QVector<float>& binsDbm, double startMhz, double endMhz, bool outOfRange);
 
   private:
     double constrainedBandwidth(double bandwidthMhz) const;

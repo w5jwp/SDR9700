@@ -187,7 +187,11 @@ int SpectrumCanvas::binForFrequency(double mhz, int binCount) const
     const double dataEndMhz = highFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
     if (binCount <= 0 || dataEndMhz <= dataStartMhz)
     {
-        return 0;
+        return -1;
+    }
+    if (mhz < dataStartMhz || mhz > dataEndMhz)
+    {
+        return -1;
     }
 
     const double normalized = (mhz - dataStartMhz) / (dataEndMhz - dataStartMhz);
@@ -324,9 +328,10 @@ void SpectrumCanvas::setSpectrumPaneHeight(int height)
     scheduleRepaint();
 }
 
-void SpectrumCanvas::updateSpectrum(const QVector<float>& binsDbm)
+void SpectrumCanvas::updateSpectrum(const QVector<float>& binsDbm, bool outOfRange)
 {
     m_spectrumBins = binsDbm;
+    m_scopeOutOfRange = outOfRange;
 
     if (m_peakHold.size() != binsDbm.size())
     {
@@ -351,6 +356,7 @@ void SpectrumCanvas::clearDisplay()
 {
     m_spectrumBins.clear();
     m_peakHold.clear();
+    m_scopeOutOfRange = false;
     m_waterfall.fill(Qt::black);
     scheduleRepaint();
 }
@@ -401,7 +407,7 @@ void SpectrumCanvas::appendWaterfallRow(const QVector<float>& binsDbm)
     for (int x = 0; x < w; ++x)
     {
         const int bin = binForDisplayX(x, binsDbm.size());
-        row[x] = dbmToColor(binsDbm[bin]);
+        row[x] = bin >= 0 ? dbmToColor(binsDbm[bin]) : qRgb(0x02, 0x0c, 0x14);
     }
 }
 
@@ -516,8 +522,9 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
         for (int x = 0; x < w; ++x)
         {
             const int bin = binForDisplayX(x, n);
+            const float dbm = bin >= 0 ? m_spectrumBins[bin] : m_minDbm;
 
-            int sy = dbmToY(m_spectrumBins[bin], specTop, specDrawH);
+            int sy = dbmToY(dbm, specTop, specDrawH);
             if (specFirst)
             {
                 specPath.moveTo(x, sy);
@@ -528,7 +535,7 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
                 specPath.lineTo(x, sy);
             }
 
-            if (!m_peakHold.isEmpty() && bin < m_peakHold.size())
+            if (!m_peakHold.isEmpty() && bin >= 0 && bin < m_peakHold.size())
             {
                 int py = dbmToY(m_peakHold[bin], specTop, specDrawH);
                 if (peakFirst)
@@ -565,6 +572,16 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
 
         p.restore();
         p.setRenderHint(QPainter::Antialiasing, false);
+    }
+
+    if (m_scopeOutOfRange)
+    {
+        p.setPen(QColor(0xff, 0x7a, 0x7a));
+        QFont f = p.font();
+        f.setPointSize(10);
+        f.setBold(true);
+        p.setFont(f);
+        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, QStringLiteral("OUT OF RANGE"));
     }
 
     if (!m_waterfall.isNull() && wfH > 0)

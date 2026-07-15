@@ -219,7 +219,7 @@ struct ScopeData
     uchar receiver;
     uchar mode;
     uchar fixedEdge = 0;
-    bool oor;
+    bool oor = false;
     double startFreq;
     double endFreq;
 };

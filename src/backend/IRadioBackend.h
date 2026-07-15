@@ -96,7 +96,7 @@ class IRadioBackend : public QObject
     void dtcsCodeChanged(ushort code);
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
 
-    void spectrumDataReady(const QVector<float>& binsDbm, double startMhz, double endMhz);
+    void spectrumDataReady(const QVector<float>& binsDbm, double startMhz, double endMhz, bool outOfRange);
 
     void networkQualityChanged(int rttMs);
 

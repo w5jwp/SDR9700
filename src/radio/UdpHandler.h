@@ -125,7 +125,6 @@ class UdpHandler : public UdpBase
     quint16 rxSampleRates = 0;
     quint16 txSampleRates = 0;
     networkStatus status;
-    bool splitWf = false;
 
     quint8 audioLevelsTxPeak[audioLevelBufferSize];
     quint8 audioLevelsRxPeak[audioLevelBufferSize];

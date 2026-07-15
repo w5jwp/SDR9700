@@ -176,7 +176,7 @@ void BandscopeModel::clearFrequencyLimits()
     constrainDisplayRange();
 }
 
-void BandscopeModel::ingestSpectrum(const QVector<float>& binsDbm, double startMhz, double endMhz)
+void BandscopeModel::ingestSpectrum(const QVector<float>& binsDbm, double startMhz, double endMhz, bool outOfRange)
 {
     // Minimum change in MHz that warrants a rangeChanged emission.
     static constexpr double kRangeChangeTolerance = 0.0001;
@@ -229,9 +229,9 @@ void BandscopeModel::ingestSpectrum(const QVector<float>& binsDbm, double startM
     {
         QVector<float> normalizedBins = binsDbm;
         std::reverse(normalizedBins.begin(), normalizedBins.end());
-        emit spectrumReady(normalizedBins, startMhz, endMhz);
+        emit spectrumReady(normalizedBins, startMhz, endMhz, outOfRange);
         return;
     }
 
-    emit spectrumReady(binsDbm, startMhz, endMhz);
+    emit spectrumReady(binsDbm, startMhz, endMhz, outOfRange);
 }

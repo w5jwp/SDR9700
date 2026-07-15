@@ -36,7 +36,6 @@ struct UdpConnectionSettings
     // connection lifetime; UdpHandler clears its copy during shutdown.
     QByteArray passwordEncoded;
     QString clientName;
-    quint8 waterfallFormat{0};
     bool halfDuplex{false};
     bool adminLogin{false};
 };

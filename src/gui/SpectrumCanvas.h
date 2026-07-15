@@ -25,7 +25,7 @@ class SpectrumCanvas : public QWidget
     void setInvertMouseWheel(bool invert);
     int spectrumPaneHeight() const;
     void setSpectrumPaneHeight(int height);
-    void updateSpectrum(const QVector<float>& binsDbm);
+    void updateSpectrum(const QVector<float>& binsDbm, bool outOfRange);
     void clearDisplay();
 
     void setFilterWidth(int lowHz, int highHz);
@@ -88,6 +88,7 @@ class SpectrumCanvas : public QWidget
     bool m_bandscopeButtonPressed{false};
     bool m_interactionLocked{false};
     bool m_invertMouseWheel{false};
+    bool m_scopeOutOfRange{false};
     double m_bandscopeDragAnchorFreqMhz{0.0};
     double m_wheelStepAccumulator{0.0};
     QPoint m_bandscopeDragStartPos;

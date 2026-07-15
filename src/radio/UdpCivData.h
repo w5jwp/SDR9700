@@ -27,7 +27,7 @@ class UdpCivData : public UdpBase
     Q_OBJECT
 
   public:
-    UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, bool splitWf, quint16 localPort);
+    UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, quint16 localPort);
     ~UdpCivData();
 
     void closeStream();
@@ -44,7 +44,6 @@ class UdpCivData : public UdpBase
     void sendOpenClose(bool close);
 
     QTimer* startCivDataTimer = nullptr;
-    bool splitWaterfall = false;
     bool m_watchdogAlerted = false;
     bool m_closeSent = false;
 };
