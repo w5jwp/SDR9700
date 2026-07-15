@@ -671,7 +671,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                 m_pendingBandscopeTuneHz = 0;
                 m_displayBandscopeTuneHz = 0;
                 m_bandscopeDisplayCenterHz = 0;
-                m_bandscopeDragCenterBaseHz = 0;
                 m_bandscopeFixedPanStartHz = 0;
                 m_bandscopeFixedPanEndHz = 0;
                 if (m_bandscope)
@@ -840,9 +839,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             });
 
     connect(m_bandscopeDisplay, &BandscopeDisplay::frequencyClicked, this, &MainWindow::onSpectrumClicked);
-    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneStepRequested, this, &MainWindow::tuneBandscopeBySteps);
-    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragStarted, this, &MainWindow::beginBandscopeDragPan);
-    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragRequested, this, &MainWindow::panBandscopeByDragDelta);
+    connect(m_bandscopeDisplay, &BandscopeDisplay::panCenterRequested, this,
+            [this](double centerMhz) { panBandscopeToCenter(static_cast<quint64>(std::llround(centerMhz * 1e6))); });
 
     onConnectionChanged(false);
 
@@ -3351,7 +3349,6 @@ void MainWindow::snapIcomRC28FrequencyToKhz()
     m_pendingBandscopeTuneHz = 0;
     m_displayBandscopeTuneHz = 0;
     m_bandscopeDisplayCenterHz = 0;
-    m_bandscopeDragCenterBaseHz = 0;
     m_bandscopeFixedPanStartHz = 0;
     m_bandscopeFixedPanEndHz = 0;
     if (m_bandscope)
@@ -3477,10 +3474,18 @@ void MainWindow::updateBandscopeBandLimits(quint64 hz)
     if (band == bandUnknown || !sdr9700::radioBandEdges(band, &startHz, &endHz))
     {
         m_bandscope->clearFrequencyLimits();
+        if (m_bandscopeDisplay)
+        {
+            m_bandscopeDisplay->clearFrequencyPanRange();
+        }
         return;
     }
 
     m_bandscope->setFrequencyLimits(startHz / 1e6, endHz / 1e6);
+    if (m_bandscopeDisplay)
+    {
+        m_bandscopeDisplay->setFrequencyPanRange(startHz / 1e6, endHz / 1e6);
+    }
 }
 
 int MainWindow::tuningStepHz() const
@@ -3571,48 +3576,14 @@ quint64 MainWindow::roundFrequencyToStep(quint64 hz) const
     return ((hz + stepHz / 2) / stepHz) * stepHz;
 }
 
-void MainWindow::beginBandscopeDragPan()
-{
-    if (!m_bandscope)
-    {
-        m_bandscopeDragCenterBaseHz = 0;
-        return;
-    }
-    m_bandscopeDragCenterBaseHz = m_bandscopeDisplayCenterHz > 0
-                                      ? m_bandscopeDisplayCenterHz
-                                      : static_cast<quint64>(std::llround(m_bandscope->centerMhz() * 1e6));
-}
-
-void MainWindow::tuneBandscopeBySteps(int steps)
-{
-    if (steps == 0 || !m_vfo || !m_model->isReady() || m_controlsLocked)
-    {
-        return;
-    }
-
-    const qint64 currentHz =
-        static_cast<qint64>(m_displayBandscopeTuneHz > 0 ? m_displayBandscopeTuneHz : m_vfo->frequencyHz());
-    const qint64 targetHz = currentHz + static_cast<qint64>(steps) * tuningStepHz();
-    scheduleBandscopeTune(
-        static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
-}
-
-void MainWindow::panBandscopeByDragDelta(double deltaMhz)
+void MainWindow::panBandscopeToCenter(quint64 centerHz)
 {
     if (!m_bandscopeDisplay || !m_bandscope || !m_model->isReady() || m_controlsLocked)
     {
         return;
     }
-    if (m_bandscopeDragCenterBaseHz == 0)
-    {
-        beginBandscopeDragPan();
-    }
 
-    const qint64 requestedCenterHz =
-        static_cast<qint64>(m_bandscopeDragCenterBaseHz) - static_cast<qint64>(std::llround(deltaMhz * 1e6));
-    const quint64 centerHz = clampBandscopeCenterHz(
-        static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), requestedCenterHz)),
-        m_bandscope->bandwidthMhz());
+    centerHz = clampBandscopeCenterHz(centerHz, m_bandscope->bandwidthMhz());
     const double bandwidthMhz = m_bandscope->bandwidthMhz();
     const quint64 bandwidthHz = static_cast<quint64>(std::llround(bandwidthMhz * 1e6));
     const quint64 startHz = centerHz - bandwidthHz / 2;
@@ -3892,7 +3863,6 @@ void MainWindow::onConnectionChanged(bool connected)
         m_pendingBandscopeTuneHz = 0;
         m_displayBandscopeTuneHz = 0;
         m_bandscopeDisplayCenterHz = 0;
-        m_bandscopeDragCenterBaseHz = 0;
         m_bandscopeFixedPanStartHz = 0;
         m_bandscopeFixedPanEndHz = 0;
         if (m_bandscope)
@@ -3901,6 +3871,7 @@ void MainWindow::onConnectionChanged(bool connected)
         }
         clearActiveMemory();
         m_bandscopeDisplay->clearDisplay();
+        m_bandscopeDisplay->clearFrequencyPanRange();
 #ifdef HAVE_HIDAPI
         m_icomRC28PttLatched = false;
 #endif
@@ -4026,7 +3997,6 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         m_pendingBandscopeTuneHz = 0;
         m_displayBandscopeTuneHz = 0;
         m_bandscopeDisplayCenterHz = 0;
-        m_bandscopeDragCenterBaseHz = 0;
         m_bandscopeFixedPanStartHz = 0;
         m_bandscopeFixedPanEndHz = 0;
         m_bandscopeTuneReleaseTimer->stop();

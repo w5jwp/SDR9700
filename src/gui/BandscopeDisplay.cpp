@@ -4,7 +4,11 @@
 
 #include <QComboBox>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QSignalBlocker>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace
 {
@@ -14,6 +18,43 @@ constexpr int kDefaultBandscopeHeightBias = 0;
 constexpr int kSpanComboWidth = 94;
 constexpr int kSpanComboHeight = 24;
 constexpr int kSpanComboMargin = 8;
+constexpr qint64 kPanScrollUnitHz = 100;
+constexpr double kMinFrequencyRangeMhz = 0.001;
+
+bool normalizeFrequencyRange(double* startMhz, double* endMhz)
+{
+    if (!startMhz || !endMhz || !std::isfinite(*startMhz) || !std::isfinite(*endMhz))
+    {
+        return false;
+    }
+    if (*endMhz < *startMhz)
+    {
+        std::swap(*startMhz, *endMhz);
+    }
+    return (*endMhz - *startMhz) >= kMinFrequencyRangeMhz;
+}
+
+int scrollUnitForMhz(double mhz)
+{
+    const qint64 unit = static_cast<qint64>(std::llround(mhz * 1e6 / kPanScrollUnitHz));
+    return static_cast<int>(std::clamp<qint64>(unit, 0, std::numeric_limits<int>::max()));
+}
+
+int scrollUnitsForMhzDelta(double mhz)
+{
+    if (!std::isfinite(mhz) || mhz <= 0.0)
+    {
+        return 1;
+    }
+
+    const qint64 units = static_cast<qint64>(std::llround(mhz * 1e6 / kPanScrollUnitHz));
+    return static_cast<int>(std::clamp<qint64>(units, 1, std::numeric_limits<int>::max()));
+}
+
+double mhzForScrollUnit(int unit)
+{
+    return (static_cast<double>(unit) * kPanScrollUnitHz) / 1e6;
+}
 } // namespace
 
 BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
@@ -21,12 +62,29 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
     setMinimumSize(640, 320);
 
     m_bandscopeCanvas = new BandscopeCanvas(this);
-    m_splitter = new QWidget(this);
+    m_panScrollBar = new QScrollBar(Qt::Horizontal, this);
     m_waterfallCanvas = new WaterfallCanvas(this);
     m_spanCombo = new QComboBox(this);
 
-    m_splitter->setStyleSheet(QStringLiteral("QWidget { background: #061116; border-top: 1px solid #9a2424; }"));
-    m_splitter->setFixedHeight(splitterHeight());
+    m_panScrollBar->setFixedHeight(panScrollBarHeight());
+    m_panScrollBar->setTracking(true);
+    m_panScrollBar->setEnabled(false);
+    m_panScrollBar->setToolTip(QStringLiteral("Pan bandscope"));
+    m_panScrollBar->setAccessibleName(QStringLiteral("Bandscope pan"));
+    m_panScrollBar->setStyleSheet(QStringLiteral(
+        "QScrollBar:horizontal { background: #061116; border-top: 1px solid #9a2424; border-bottom: 1px solid #12313d; "
+        "height: 16px; margin: 2px 8px; }"
+        "QScrollBar::groove:horizontal { background: #071a22; border: 1px solid #1b4656; border-radius: 5px; }"
+        "QScrollBar::handle:horizontal { background: #3a93aa; border: 1px solid #a7dced; border-radius: 5px; "
+        "min-width: 34px; margin: 1px; }"
+        "QScrollBar::handle:horizontal:hover { background: #48b4cf; border-color: #d2f6ff; }"
+        "QScrollBar::handle:horizontal:pressed { background: #5fd0ec; border-color: #ffffff; }"
+        "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { background: transparent; border: none; "
+        "width: 0px; }"
+        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
+        "QScrollBar:disabled { background: #061116; border-bottom-color: #061116; }"
+        "QScrollBar::groove:disabled { background: #071116; border-color: #15242b; }"
+        "QScrollBar::handle:disabled { background: #22313a; border-color: #33424a; }"));
     m_spanCombo->setFixedSize(kSpanComboWidth, kSpanComboHeight);
     m_spanCombo->setFocusPolicy(Qt::NoFocus);
     m_spanCombo->setToolTip(QStringLiteral("Bandscope span"));
@@ -47,13 +105,20 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
     m_spanCombo->raise();
 
     connect(m_bandscopeCanvas, &BandscopeCanvas::frequencyClicked, this, &BandscopeDisplay::frequencyClicked);
-    connect(m_bandscopeCanvas, &BandscopeCanvas::tuneStepRequested, this, &BandscopeDisplay::tuneStepRequested);
-    connect(m_bandscopeCanvas, &BandscopeCanvas::tuneDragStarted, this, &BandscopeDisplay::tuneDragStarted);
-    connect(m_bandscopeCanvas, &BandscopeCanvas::tuneDragRequested, this, &BandscopeDisplay::tuneDragRequested);
-    connect(m_bandscopeCanvas, &BandscopeCanvas::pointerInteractionStarted, m_waterfallCanvas,
+    connect(m_bandscopeCanvas, &BandscopeCanvas::wheelStepRequested, this, &BandscopeDisplay::panScrollBarBySteps);
+    connect(m_panScrollBar, &QScrollBar::sliderPressed, m_waterfallCanvas,
             [this]() { m_waterfallCanvas->setPaused(true); });
-    connect(m_bandscopeCanvas, &BandscopeCanvas::pointerInteractionFinished, m_waterfallCanvas,
+    connect(m_panScrollBar, &QScrollBar::sliderReleased, m_waterfallCanvas,
             [this]() { m_waterfallCanvas->setPaused(false); });
+    connect(m_panScrollBar, &QScrollBar::valueChanged, this,
+            [this](int value)
+            {
+                if (!m_hasPanRange || m_interactionLocked || !m_panScrollBar->isEnabled())
+                {
+                    return;
+                }
+                Q_EMIT panCenterRequested(mhzForScrollUnit(value));
+            });
     connect(m_spanCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int index)
             {
@@ -102,15 +167,68 @@ void BandscopeDisplay::updateSpanComboGeometry()
     m_spanCombo->raise();
 }
 
+void BandscopeDisplay::updatePanScrollBar()
+{
+    if (!m_panScrollBar)
+    {
+        return;
+    }
+
+    double visibleStartMhz = m_visibleStartMhz;
+    double visibleEndMhz = m_visibleEndMhz;
+    double panStartMhz = m_panStartMhz;
+    double panEndMhz = m_panEndMhz;
+    const bool validRange = normalizeFrequencyRange(&visibleStartMhz, &visibleEndMhz) && m_hasPanRange &&
+                            normalizeFrequencyRange(&panStartMhz, &panEndMhz);
+    if (!validRange)
+    {
+        const QSignalBlocker blocker(m_panScrollBar);
+        m_panScrollBar->setRange(0, 0);
+        m_panScrollBar->setPageStep(1);
+        m_panScrollBar->setSingleStep(1);
+        m_panScrollBar->setValue(0);
+        m_panScrollBar->setEnabled(false);
+        return;
+    }
+
+    const double bandwidthMhz = visibleEndMhz - visibleStartMhz;
+    const double halfBandwidthMhz = bandwidthMhz / 2.0;
+    const double minCenterMhz = panStartMhz + halfBandwidthMhz;
+    const double maxCenterMhz = panEndMhz - halfBandwidthMhz;
+    const bool canPan = maxCenterMhz > minCenterMhz;
+    const double centerMhz = qBound(qMin(minCenterMhz, maxCenterMhz), (visibleStartMhz + visibleEndMhz) / 2.0,
+                                    qMax(minCenterMhz, maxCenterMhz));
+
+    const QSignalBlocker blocker(m_panScrollBar);
+    m_panScrollBar->setRange(scrollUnitForMhz(qMin(minCenterMhz, maxCenterMhz)),
+                             scrollUnitForMhz(qMax(minCenterMhz, maxCenterMhz)));
+    const int pageStep = scrollUnitsForMhzDelta(bandwidthMhz);
+    m_panScrollBar->setPageStep(pageStep);
+    m_panScrollBar->setSingleStep(qMax(1, pageStep / 100));
+    m_panScrollBar->setValue(scrollUnitForMhz(centerMhz));
+    m_panScrollBar->setEnabled(!m_interactionLocked && canPan);
+}
+
+void BandscopeDisplay::panScrollBarBySteps(int steps)
+{
+    if (steps == 0 || !m_panScrollBar || !m_panScrollBar->isEnabled())
+    {
+        return;
+    }
+
+    const int stepSize = qMax(1, m_panScrollBar->singleStep());
+    m_panScrollBar->setValue(m_panScrollBar->value() + steps * stepSize);
+}
+
 int BandscopeDisplay::defaultSpectrumHeight() const
 {
-    return constrainedSpectrumHeight(((height() - BandscopeCanvas::scaleHeight() - splitterHeight()) / 2) +
+    return constrainedSpectrumHeight(((height() - BandscopeCanvas::scaleHeight() - panScrollBarHeight()) / 2) +
                                      kDefaultBandscopeHeightBias);
 }
 
 int BandscopeDisplay::constrainedSpectrumHeight(int requested) const
 {
-    const int available = qMax(0, height() - BandscopeCanvas::scaleHeight() - splitterHeight());
+    const int available = qMax(0, height() - BandscopeCanvas::scaleHeight() - panScrollBarHeight());
     const int maxSpectrumHeight = qMax(kMinSpectrumHeight, available - kMinWaterfallHeight);
     return qBound(qMin(kMinSpectrumHeight, maxSpectrumHeight), requested, maxSpectrumHeight);
 }
@@ -126,7 +244,7 @@ int BandscopeDisplay::currentSpectrumHeight() const
 
 void BandscopeDisplay::updateChildGeometry()
 {
-    if (!m_bandscopeCanvas || !m_splitter || !m_waterfallCanvas)
+    if (!m_bandscopeCanvas || !m_panScrollBar || !m_waterfallCanvas)
     {
         return;
     }
@@ -134,19 +252,54 @@ void BandscopeDisplay::updateChildGeometry()
     const int spectrumHeight = currentSpectrumHeight();
     const int bandscopeHeight = spectrumHeight + BandscopeCanvas::scaleHeight();
     const int splitTop = bandscopeHeight;
-    const int waterfallTop = splitTop + splitterHeight();
+    const int waterfallTop = splitTop + panScrollBarHeight();
     const int waterfallHeight = qMax(0, height() - waterfallTop);
 
     m_bandscopeCanvas->setGeometry(0, 0, width(), bandscopeHeight);
-    m_splitter->setGeometry(0, splitTop, width(), splitterHeight());
+    m_panScrollBar->setGeometry(0, splitTop, width(), panScrollBarHeight());
     m_waterfallCanvas->setGeometry(0, waterfallTop, width(), waterfallHeight);
     updateSpanComboGeometry();
 }
 
 void BandscopeDisplay::setFrequencyRange(double startMhz, double endMhz)
 {
+    m_visibleStartMhz = startMhz;
+    m_visibleEndMhz = endMhz;
     m_bandscopeCanvas->setFrequencyRange(startMhz, endMhz);
     m_waterfallCanvas->setFrequencyRange(startMhz, endMhz);
+    updatePanScrollBar();
+}
+
+void BandscopeDisplay::setFrequencyPanRange(double startMhz, double endMhz)
+{
+    if (!normalizeFrequencyRange(&startMhz, &endMhz))
+    {
+        clearFrequencyPanRange();
+        return;
+    }
+
+    if (m_hasPanRange && m_panStartMhz == startMhz && m_panEndMhz == endMhz)
+    {
+        return;
+    }
+
+    m_panStartMhz = startMhz;
+    m_panEndMhz = endMhz;
+    m_hasPanRange = true;
+    updatePanScrollBar();
+}
+
+void BandscopeDisplay::clearFrequencyPanRange()
+{
+    if (!m_hasPanRange)
+    {
+        return;
+    }
+
+    m_hasPanRange = false;
+    m_panStartMhz = 0.0;
+    m_panEndMhz = 0.0;
+    updatePanScrollBar();
 }
 
 void BandscopeDisplay::setDataFrequencyRange(double startMhz, double endMhz)
@@ -162,7 +315,9 @@ void BandscopeDisplay::setVfoFrequency(double freqMhz)
 
 void BandscopeDisplay::setInteractionLocked(bool locked)
 {
+    m_interactionLocked = locked;
     m_bandscopeCanvas->setInteractionLocked(locked);
+    updatePanScrollBar();
 }
 
 void BandscopeDisplay::setInvertMouseWheel(bool invert)

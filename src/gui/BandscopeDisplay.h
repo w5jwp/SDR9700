@@ -7,6 +7,7 @@
 
 class BandscopeCanvas;
 class QComboBox;
+class QScrollBar;
 class WaterfallCanvas;
 
 class BandscopeDisplay : public QWidget
@@ -25,6 +26,8 @@ class BandscopeDisplay : public QWidget
     void setSpanChoices(const QVector<SpanChoice>& choices);
     void setCurrentSpanHz(quint64 hz);
     void setFrequencyRange(double startMhz, double endMhz);
+    void setFrequencyPanRange(double startMhz, double endMhz);
+    void clearFrequencyPanRange();
     void setDataFrequencyRange(double startMhz, double endMhz);
     void setVfoFrequency(double freqMhz);
     void setInteractionLocked(bool locked);
@@ -40,25 +43,31 @@ class BandscopeDisplay : public QWidget
 
   signals:
     void frequencyClicked(double freqMhz);
-    void tuneStepRequested(int steps);
-    void tuneDragStarted();
-    void tuneDragRequested(double deltaMhz);
+    void panCenterRequested(double centerMhz);
     void spanSelected(quint64 hz);
 
   protected:
     void resizeEvent(QResizeEvent* event) override;
 
   private:
-    static int splitterHeight() { return 2; }
+    static int panScrollBarHeight() { return 16; }
     void updateSpanComboGeometry();
+    void updatePanScrollBar();
+    void panScrollBarBySteps(int steps);
     int defaultSpectrumHeight() const;
     int constrainedSpectrumHeight(int requested) const;
     int currentSpectrumHeight() const;
     void updateChildGeometry();
 
     BandscopeCanvas* m_bandscopeCanvas{nullptr};
-    QWidget* m_splitter{nullptr};
+    QScrollBar* m_panScrollBar{nullptr};
     WaterfallCanvas* m_waterfallCanvas{nullptr};
     QComboBox* m_spanCombo{nullptr};
+    double m_visibleStartMhz{144.0};
+    double m_visibleEndMhz{146.0};
+    double m_panStartMhz{0.0};
+    double m_panEndMhz{0.0};
+    bool m_hasPanRange{false};
+    bool m_interactionLocked{false};
     int m_spectrumHeight{-1};
 };

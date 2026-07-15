@@ -1,7 +1,6 @@
 #include "BandscopeCanvas.h"
 #include "LogCategories.h"
 
-#include <QCursor>
 #include <QFontMetrics>
 #include <QLinearGradient>
 #include <QMouseEvent>
@@ -18,7 +17,7 @@ constexpr float kPeakDecayLevelPerSec = 25.0f;
 constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
 constexpr int kLevelScalePanelWidth = 30;
 constexpr int kSpectrumVerticalPadding = 10;
-constexpr int kBandscopeDragThresholdPx = 6;
+constexpr int kClickMoveTolerancePx = 6;
 constexpr double kWheelStepAngleDelta = 120.0;
 constexpr double kMinFrequencyRangeMhz = 0.001;
 
@@ -193,14 +192,7 @@ void BandscopeCanvas::setInteractionLocked(bool locked)
     }
 
     m_interactionLocked = locked;
-    const bool wasInteracting = m_draggingBandscope || m_bandscopeButtonPressed;
-    m_draggingBandscope = false;
-    m_bandscopeButtonPressed = false;
-    if (wasInteracting)
-    {
-        Q_EMIT pointerInteractionFinished();
-    }
-    updateBandscopeCursor(mapFromGlobal(QCursor::pos()));
+    m_clickPressed = false;
     scheduleRepaint();
 }
 
@@ -238,17 +230,6 @@ void BandscopeCanvas::clearDisplay()
     m_peakHold.clear();
     m_scopeOutOfRange = false;
     scheduleRepaint();
-}
-
-void BandscopeCanvas::updateBandscopeCursor(const QPoint&)
-{
-    if (m_interactionLocked)
-    {
-        setCursor(Qt::ArrowCursor);
-        return;
-    }
-
-    setCursor((m_bandscopeButtonPressed || m_draggingBandscope) ? Qt::ClosedHandCursor : Qt::ArrowCursor);
 }
 
 void BandscopeCanvas::scheduleRepaint()
@@ -529,68 +510,24 @@ void BandscopeCanvas::mousePressEvent(QMouseEvent* ev)
     }
     if (ev->button() == Qt::LeftButton)
     {
-        m_bandscopeDragStartPos = ev->pos();
-        m_lastBandscopeDragPos = ev->pos();
-        m_bandscopeDragAnchorFreqMhz = xToFreq(ev->pos().x());
-        m_bandscopeButtonPressed = true;
-        m_draggingBandscope = false;
-        Q_EMIT pointerInteractionStarted();
-        setCursor(Qt::ClosedHandCursor);
-    }
-}
-
-void BandscopeCanvas::mouseMoveEvent(QMouseEvent* ev)
-{
-    updateBandscopeCursor(ev->pos());
-
-    if (m_interactionLocked)
-    {
-        return;
-    }
-
-    if (ev->buttons() & Qt::LeftButton)
-    {
-        if (!m_draggingBandscope)
-        {
-            if ((ev->pos() - m_bandscopeDragStartPos).manhattanLength() < kBandscopeDragThresholdPx)
-            {
-                return;
-            }
-            m_draggingBandscope = true;
-            m_lastBandscopeDragPos = m_bandscopeDragStartPos;
-            setCursor(Qt::ClosedHandCursor);
-            Q_EMIT tuneDragStarted();
-        }
-
-        if (width() <= 0)
-        {
-            return;
-        }
-
-        const double deltaMhz = xToFreq(ev->pos().x()) - m_bandscopeDragAnchorFreqMhz;
-        Q_EMIT tuneDragRequested(deltaMhz);
-        m_lastBandscopeDragPos = ev->pos();
+        m_clickPressed = true;
+        m_clickPressPos = ev->pos();
+        ev->accept();
     }
 }
 
 void BandscopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
 {
-    if (ev->button() == Qt::LeftButton && m_draggingBandscope)
+    if (ev->button() == Qt::LeftButton)
     {
-        m_draggingBandscope = false;
-        m_bandscopeButtonPressed = false;
-        Q_EMIT pointerInteractionFinished();
-        updateBandscopeCursor(ev->pos());
-    }
-    else if (ev->button() == Qt::LeftButton)
-    {
-        if (!m_interactionLocked)
+        const bool isClick = m_clickPressed && rect().contains(ev->pos()) &&
+                             (ev->pos() - m_clickPressPos).manhattanLength() <= kClickMoveTolerancePx;
+        m_clickPressed = false;
+        if (!m_interactionLocked && isClick)
         {
             Q_EMIT frequencyClicked(xToFreq(ev->pos().x()));
         }
-        m_bandscopeButtonPressed = false;
-        Q_EMIT pointerInteractionFinished();
-        updateBandscopeCursor(ev->pos());
+        ev->accept();
     }
 }
 
@@ -642,14 +579,6 @@ void BandscopeCanvas::wheelEvent(QWheelEvent* ev)
                            << "physicalSteps=" << physicalSteps << "reversePref=" << m_invertMouseWheel
                            << "acceptedSteps=" << acceptedSteps << "accumulator=" << m_wheelStepAccumulator;
 
-    Q_EMIT tuneStepRequested(acceptedSteps);
+    Q_EMIT wheelStepRequested(acceptedSteps);
     ev->accept();
-}
-
-void BandscopeCanvas::leaveEvent(QEvent*)
-{
-    if (!m_draggingBandscope && !m_bandscopeButtonPressed)
-    {
-        unsetCursor();
-    }
 }

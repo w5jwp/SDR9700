@@ -346,13 +346,13 @@ inline constexpr RadioFilterDef kRadioFilters[] = {
     {3, "FIL3", 0},
 };
 
-// Region codes follow the IC-9700 regional band-edge tables. The same amateur
-// band appears more than once when different regulatory regions expose
-// different legal frequency edges.
+// Region codes follow the IC-9700 regional band-edge tables. Keep these edges
+// within the IC-9700 hardware coverage even when the regional amateur allocation
+// is wider.
 inline constexpr RadioBandDef kRadioBands[] = {
     {"", band23cm, 1240000000ULL, 1300000000ULL, 1296100000ULL, 1300, 3, 5, true, 10.0F, "#ffff0000", "23cm", 0},
     {"1", band70cm, 430000000ULL, 440000000ULL, 432100000ULL, 450, 2, 5, true, 75.0F, "#ff00ff00", "70cm", 0},
-    {"2", band70cm, 420000000ULL, 450000000ULL, 432100000ULL, 450, 2, 5, true, 75.0F, "#ff00ff00", "70cm", 0},
+    {"2", band70cm, 430000000ULL, 450000000ULL, 432100000ULL, 450, 2, 5, true, 75.0F, "#ff00ff00", "70cm", 0},
     {"3", band70cm, 430000000ULL, 440000000ULL, 432100000ULL, 450, 2, 5, true, 75.0F, "#ff00ff00", "70cm", 0},
     {"1", band2m, 144000000ULL, 146000000ULL, 144200000ULL, 148, 1, 5, true, 100.0F, "#ff0000ff", "2m", 0},
     {"2", band2m, 144000000ULL, 148000000ULL, 144200000ULL, 148, 1, 5, true, 100.0F, "#ff0000ff", "2m", 0},

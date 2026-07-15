@@ -30,19 +30,13 @@ class BandscopeCanvas : public QWidget
 
   signals:
     void frequencyClicked(double freqMhz);
-    void tuneStepRequested(int steps);
-    void tuneDragStarted();
-    void tuneDragRequested(double deltaMhz);
-    void pointerInteractionStarted();
-    void pointerInteractionFinished();
+    void wheelStepRequested(int steps);
 
   protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* ev) override;
-    void mouseMoveEvent(QMouseEvent* ev) override;
     void mouseReleaseEvent(QMouseEvent* ev) override;
     void wheelEvent(QWheelEvent* ev) override;
-    void leaveEvent(QEvent*) override;
 
   private:
     int plotHeight() const;
@@ -50,7 +44,6 @@ class BandscopeCanvas : public QWidget
     int levelToY(float level, int topY, int h) const;
     int binForFrequency(double mhz, int binCount) const;
     int binForDisplayX(int x, int binCount) const;
-    void updateBandscopeCursor(const QPoint& pos);
     void scheduleRepaint();
 
     double m_startMhz{144.0};
@@ -63,15 +56,12 @@ class BandscopeCanvas : public QWidget
 
     int m_filterLowHz{-1400};
     int m_filterHighHz{1400};
-    bool m_draggingBandscope{false};
-    bool m_bandscopeButtonPressed{false};
+    bool m_clickPressed{false};
     bool m_interactionLocked{false};
     bool m_invertMouseWheel{false};
     bool m_scopeOutOfRange{false};
-    double m_bandscopeDragAnchorFreqMhz{0.0};
     double m_wheelStepAccumulator{0.0};
-    QPoint m_bandscopeDragStartPos;
-    QPoint m_lastBandscopeDragPos;
+    QPoint m_clickPressPos;
 
     QVector<float> m_spectrumBins;
     QVector<float> m_peakHold;
