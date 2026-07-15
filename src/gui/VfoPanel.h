@@ -34,10 +34,8 @@ class VfoPanel : public QGroupBox
     void setAlcMode(bool on);
     void setAlc(double alc);
     void setTxPower(int value);
-    void setVolume(int value);
-    void setVolumeVisible(bool visible);
+    void setLanMod(int value);
     void setSquelch(int value);
-    int volume() const;
     QPoint bandMenuPosition() const;
     QPoint modeMenuPosition() const;
 
@@ -47,7 +45,7 @@ class VfoPanel : public QGroupBox
     void modeClicked();
     void stepClicked();
     void txPowerChanged(int value);
-    void volumeChanged(int value);
+    void lanModChanged(int value);
     void squelchChanged(int value);
 
   private:
@@ -64,12 +62,11 @@ class VfoPanel : public QGroupBox
     QPushButton* m_stepButton{nullptr};
     QProgressBar* m_signalMeter{nullptr};
     QWidget* m_signalScale{nullptr};
-    QWidget* m_volumeRow{nullptr};
     QSlider* m_txPowerSlider{nullptr};
-    QSlider* m_volumeSlider{nullptr};
+    QSlider* m_lanModSlider{nullptr};
     QSlider* m_squelchSlider{nullptr};
     QLabel* m_txPowerValueLabel{nullptr};
-    QLabel* m_volumeValueLabel{nullptr};
+    QLabel* m_lanModValueLabel{nullptr};
     QLabel* m_squelchValueLabel{nullptr};
     bool m_meterEnabled{false};
 };

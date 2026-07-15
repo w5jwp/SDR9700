@@ -63,9 +63,6 @@ class MainWindow : public QMainWindow
     void updateRfGainButton();
     void onTxPowerChanged(int value);
     void updateTxPowerButton();
-    void showLanModMenu();
-    void updateLanModButton();
-    void showCustomLanModDialog();
     void onPttPressed();
     void onPttReleased();
     void onSpectrumClicked(double freqMhz);
@@ -152,7 +149,6 @@ class MainWindow : public QMainWindow
     int m_rfGainValue{128};
     QPushButton* m_squelchBtn{nullptr};
     int m_squelchValue{0};
-    QPushButton* m_lanModBtn{nullptr};
     int m_lanModValue{128};
     QPushButton* m_txPowerBtn{nullptr};
     int m_txPowerValue{128};
@@ -179,6 +175,7 @@ class MainWindow : public QMainWindow
     QTableWidget* m_memoryTable{nullptr};
     QCheckBox* m_closeMemoryWindowOnSelectCheck{nullptr};
     QLabel* m_memoryCountLabel{nullptr};
+    int m_currentAfGain{128};
     int m_savedAfGain{128};
     int m_lastSMeter{0};
     bool m_muted{false};

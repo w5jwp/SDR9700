@@ -1001,11 +1001,8 @@ void MainWindow::buildToolBar()
                     return;
                 }
                 const int bounded = qBound(0, value, 255);
+                m_currentAfGain = bounded;
                 AppSettings::instance().setValue(QStringLiteral("VolumeLevel"), bounded);
-                if (m_vfoPanel)
-                {
-                    m_vfoPanel->setVolume(bounded);
-                }
                 if (auto* backend = m_model->backend())
                 {
                     backend->setAfGain(bounded);
@@ -1281,7 +1278,10 @@ void MainWindow::showSettingsDialog()
     QTimer::singleShot(0, &dlg, [this, &dlg]() { centerPopupWindow(&dlg); });
     dlg.exec();
     m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
-    updateLanModButton();
+    if (m_vfoPanel)
+    {
+        m_vfoPanel->setLanMod(m_lanModValue);
+    }
     m_model->setLanModLevel(m_lanModValue);
     m_spectrumCanvas->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
@@ -2108,9 +2108,9 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_vfoPanel->setModeText(QStringLiteral("--"));
     m_vfoPanel->setMemoryName(QString::fromLatin1(kNoActiveMemoryLabel), QStringLiteral("No active memory"));
     m_vfoPanel->setTxPower(0);
+    m_vfoPanel->setLanMod(m_lanModValue);
     const int appVolume = appVolumeSettingValue();
-    m_vfoPanel->setVolume(appVolume);
-    m_vfoPanel->setVolumeVisible(false);
+    m_currentAfGain = appVolume;
     if (m_titleBar)
     {
         m_titleBar->setVolume(appVolume);
@@ -2131,10 +2131,6 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_nrBtn->setProperty("toggleLabel", "NR");
     m_preBtn = makeSelectorButton("PRE", QStringLiteral("OFF"), "Preamp", "Select receiver preamp.");
     m_ritBtn = makeSelectorButton("RIT", QStringLiteral("OFF"), "RIT", "Set receiver incremental tuning offset.");
-    m_lanModBtn =
-        makeSelectorButton("LAN MOD", QStringLiteral("OFF"), "LAN MOD", "Set the IC-9700 LAN modulation input level.");
-    m_lanModBtn->setProperty("levelControl", true);
-    updateLanModButton();
     m_rfGainBtn = makeSelectorButton("RF GAIN", QStringLiteral("OFF"), "RF gain", "Set receiver RF gain.");
     m_rfGainBtn->setProperty("levelControl", true);
     m_agcBtn->setToolTip(QStringLiteral("Automatic Gain Control (AGC)\n"
@@ -2176,7 +2172,6 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     };
     const TransmitPanel::Buttons transmitButtons{
         m_compBtn,
-        m_lanModBtn,
     };
     auto* receiveGroup = new ReceivePanel(receiveButtons, strip);
     auto* repeaterGroup = new RepeaterPanel(repeaterButtons, strip);
@@ -2214,7 +2209,6 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     connect(m_ritBtn, &QPushButton::clicked, this, &MainWindow::showRitMenu);
     connect(m_offsetBtn, &QPushButton::clicked, this, &MainWindow::showOffsetMenu);
     connect(m_toneBtn, &QPushButton::clicked, this, &MainWindow::showToneMenu);
-    connect(m_lanModBtn, &QPushButton::clicked, this, &MainWindow::showLanModMenu);
     connect(m_memoryPanel, &MemoryPanel::memoryActivated, this,
             [this](const QString& memoryId) { selectMemoryById(memoryId, false); });
 
@@ -2250,28 +2244,6 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     connect(m_pttBtn, &QPushButton::pressed, this, &MainWindow::onPttPressed);
     connect(m_pttBtn, &QPushButton::released, this, &MainWindow::onPttReleased);
     connect(m_dtmfDialog, &DtmfDialog::sendRequested, this, &MainWindow::onDtmfSendRequested);
-    auto connectVolumeSlider = [this](VfoPanel* widget)
-    {
-        connect(widget, &VfoPanel::volumeChanged, this,
-                [this](int value)
-                {
-                    if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
-                    {
-                        return;
-                    }
-                    const int bounded = qBound(0, value, 255);
-                    AppSettings::instance().setValue(QStringLiteral("VolumeLevel"), bounded);
-                    if (m_vfoPanel)
-                    {
-                        m_vfoPanel->setVolume(bounded);
-                    }
-                    if (auto* backend = m_model ? m_model->backend() : nullptr)
-                    {
-                        backend->setAfGain(bounded);
-                    }
-                });
-    };
-    connectVolumeSlider(m_vfoPanel);
     auto connectTxPowerSlider = [this](VfoPanel* widget)
     {
         connect(widget, &VfoPanel::txPowerChanged, this,
@@ -2289,6 +2261,21 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                 });
     };
     connectTxPowerSlider(m_vfoPanel);
+    auto connectLanModSlider = [this](VfoPanel* widget)
+    {
+        connect(widget, &VfoPanel::lanModChanged, this,
+                [this](int value)
+                {
+                    if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
+                    {
+                        return;
+                    }
+                    m_lanModValue = qBound(0, value, 255);
+                    AppSettings::instance().setValue(QStringLiteral("LanModLevel"), m_lanModValue);
+                    m_model->setLanModLevel(m_lanModValue);
+                });
+    };
+    connectLanModSlider(m_vfoPanel);
     auto connectSquelchSlider = [this](VfoPanel* widget)
     {
         connect(widget, &VfoPanel::squelchChanged, this,
@@ -2415,7 +2402,8 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                 }
             });
 
-    m_savedAfGain = appVolumeSettingValue();
+    m_currentAfGain = appVolumeSettingValue();
+    m_savedAfGain = m_currentAfGain;
     resetRadioOwnedControlsForSync();
 }
 
@@ -3061,7 +3049,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     }
 
     for (auto* button : {m_agcBtn, m_nrBtn, m_nbBtn, m_notchBtn, m_preBtn, m_attBtn, m_ritBtn, m_compBtn, m_offsetBtn,
-                         m_toneBtn, m_squelchBtn, m_lanModBtn})
+                         m_toneBtn, m_squelchBtn})
     {
         if (button)
         {
@@ -3112,6 +3100,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
         m_vfoPanel->setAlcMode(false);
         m_vfoPanel->setSMeterValue(0);
         m_vfoPanel->setTxPower(0);
+        m_vfoPanel->setLanMod(m_lanModValue);
         m_vfoPanel->setSquelch(0);
     }
 
@@ -3131,7 +3120,6 @@ void MainWindow::resetRadioOwnedControlsForSync()
     updateSquelchButton();
     updateTxPowerButton();
     updateRfGainButton();
-    updateLanModButton();
     updateTxIndicator(false);
     updateTxAudioMeter(0, 0);
 }
@@ -3154,11 +3142,8 @@ void MainWindow::toggleMute()
     m_muted = !m_muted;
     if (m_muted)
     {
-        m_savedAfGain = m_vfoPanel ? m_vfoPanel->volume() : appVolumeSettingValue();
-        if (m_vfoPanel)
-        {
-            m_vfoPanel->setVolume(0);
-        }
+        m_savedAfGain = m_currentAfGain;
+        m_currentAfGain = 0;
         if (m_titleBar)
         {
             m_titleBar->setVolume(0);
@@ -3169,10 +3154,7 @@ void MainWindow::toggleMute()
     else
     {
         const int restored = qBound(0, m_savedAfGain, 255);
-        if (m_vfoPanel)
-        {
-            m_vfoPanel->setVolume(restored);
-        }
+        m_currentAfGain = restored;
         if (m_titleBar)
         {
             m_titleBar->setVolume(restored);
@@ -3874,10 +3856,7 @@ void MainWindow::onConnectionChanged(bool connected)
         }
 
         const int appVolume = appVolumeSettingValue();
-        if (m_vfoPanel)
-        {
-            m_vfoPanel->setVolume(appVolume);
-        }
+        m_currentAfGain = appVolume;
         if (m_titleBar)
         {
             m_titleBar->setVolume(appVolume);
@@ -4227,97 +4206,6 @@ void MainWindow::onTxPowerChanged(int value)
         m_vfoPanel->setTxPower(m_txPowerValue);
     }
     updateTxPowerButton();
-}
-
-void MainWindow::updateLanModButton()
-{
-    if (!m_lanModBtn)
-    {
-        return;
-    }
-
-    const bool active = m_lanModValue > 0;
-    const int pct = active ? qBound(1, qRound(m_lanModValue * 100.0 / 255.0), 100) : 0;
-    const QString secondary = active ? QStringLiteral("%1%").arg(pct) : QStringLiteral("OFF");
-    setSelectorButtonLines(m_lanModBtn, QStringLiteral("LAN MOD"), secondary);
-    setCommandButtonActive(m_lanModBtn, active);
-}
-
-void MainWindow::showLanModMenu()
-{
-    if (!m_lanModBtn || !m_model->isReady() || m_controlsLocked)
-    {
-        return;
-    }
-
-    QMenu menu(this);
-    styleCompactMenu(&menu);
-
-    const struct
-    {
-        const char* label;
-        int value;
-    } kPresetItems[] = {
-        {"20%", 51},
-        {"50%", 128},
-        {"75%", 191},
-    };
-
-    for (const auto& preset : kPresetItems)
-    {
-        auto* act = menu.addAction(QString::fromLatin1(preset.label));
-        connect(act, &QAction::triggered, this,
-                [this, preset]()
-                {
-                    m_lanModValue = qBound(0, preset.value, 255);
-                    AppSettings::instance().setValue("LanModLevel", m_lanModValue);
-                    updateLanModButton();
-                    m_model->setLanModLevel(m_lanModValue);
-                });
-    }
-
-    menu.addSeparator();
-    auto* customAction = menu.addAction(QStringLiteral("CUSTOM"));
-    connect(customAction, &QAction::triggered, this, &MainWindow::showCustomLanModDialog);
-
-    menu.exec(m_lanModBtn->mapToGlobal(QPoint(0, m_lanModBtn->height())));
-}
-
-void MainWindow::showCustomLanModDialog()
-{
-    if (!m_lanModBtn || !m_model->isReady() || m_controlsLocked)
-    {
-        return;
-    }
-
-    QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("Custom LAN MOD"));
-    dialog.setModal(true);
-
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* form = new QFormLayout;
-    auto* pct = new QSpinBox(&dialog);
-    pct->setRange(0, 100);
-    pct->setSuffix(QStringLiteral("%"));
-    pct->setValue(qRound(m_lanModValue * 100.0 / 255.0));
-    form->addRow(QStringLiteral("LAN MOD"), pct);
-    layout->addLayout(form);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    centerPopupWindow(&dialog);
-    if (dialog.exec() != QDialog::Accepted)
-    {
-        return;
-    }
-
-    m_lanModValue = qRound(pct->value() * 255.0 / 100.0);
-    AppSettings::instance().setValue("LanModLevel", m_lanModValue);
-    updateLanModButton();
-    m_model->setLanModLevel(m_lanModValue);
 }
 
 void MainWindow::showDtmfDialog()

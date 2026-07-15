@@ -345,9 +345,8 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     slidersLayout->setContentsMargins(kNoMargins);
     slidersLayout->setSpacing(kSliderRowSpacing);
     slidersLayout->addWidget(makeSliderRow(QStringLiteral("TX PWR"), 0, &m_txPowerSlider, &m_txPowerValueLabel));
-    m_volumeRow = makeSliderRow(QStringLiteral("VOL"), 0, &m_volumeSlider, &m_volumeValueLabel);
-    slidersLayout->addWidget(m_volumeRow);
     slidersLayout->addWidget(makeSliderRow(QStringLiteral("SQL"), 0, &m_squelchSlider, &m_squelchValueLabel));
+    slidersLayout->addWidget(makeSliderRow(QStringLiteral("LAN MOD"), 0, &m_lanModSlider, &m_lanModValueLabel));
 
     layout->addLayout(header);
     layout->addWidget(frequencyField);
@@ -358,7 +357,7 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     connect(m_modeButton, &QPushButton::clicked, this, &VfoPanel::modeClicked);
     connect(m_stepButton, &QPushButton::clicked, this, &VfoPanel::stepClicked);
     connect(m_txPowerSlider, &QSlider::valueChanged, this, &VfoPanel::txPowerChanged);
-    connect(m_volumeSlider, &QSlider::valueChanged, this, &VfoPanel::volumeChanged);
+    connect(m_lanModSlider, &QSlider::valueChanged, this, &VfoPanel::lanModChanged);
     connect(m_squelchSlider, &QSlider::valueChanged, this, &VfoPanel::squelchChanged);
 
     setMeterEnabled(false);
@@ -456,9 +455,9 @@ void VfoPanel::setControlsEnabled(bool enabled)
     {
         m_txPowerSlider->setEnabled(enabled);
     }
-    if (m_volumeSlider)
+    if (m_lanModSlider)
     {
-        m_volumeSlider->setEnabled(enabled);
+        m_lanModSlider->setEnabled(enabled);
     }
     if (m_squelchSlider)
     {
@@ -556,27 +555,14 @@ void VfoPanel::setTxPower(int value)
     setSliderValue(m_txPowerSlider, m_txPowerValueLabel, value);
 }
 
-void VfoPanel::setVolume(int value)
+void VfoPanel::setLanMod(int value)
 {
-    setSliderValue(m_volumeSlider, m_volumeValueLabel, value);
-}
-
-void VfoPanel::setVolumeVisible(bool visible)
-{
-    if (m_volumeRow)
-    {
-        m_volumeRow->setVisible(visible);
-    }
+    setSliderValue(m_lanModSlider, m_lanModValueLabel, value);
 }
 
 void VfoPanel::setSquelch(int value)
 {
     setSliderValue(m_squelchSlider, m_squelchValueLabel, value);
-}
-
-int VfoPanel::volume() const
-{
-    return m_volumeSlider ? m_volumeSlider->value() : 0;
 }
 
 QPoint VfoPanel::bandMenuPosition() const
@@ -617,7 +603,7 @@ QWidget* VfoPanel::makeSliderRow(const QString& labelText, int value, QSlider** 
     rowLayout->setSpacing(kInlineSpacing);
 
     auto* label = new QLabel(labelText, row);
-    label->setFixedWidth(46);
+    label->setFixedWidth(54);
     label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     label->setStyleSheet(
         QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; }").arg(UiTheme::Color::TextMuted));
