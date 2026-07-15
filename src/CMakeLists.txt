@@ -128,16 +128,14 @@ set(SDR9700_SOURCES
     gui/SettingsPanelStyle.h
     gui/BandScopeSettingsPanel.h
     gui/BandScopeSettingsPanel.cpp
-    gui/AudioInputSettingsPanel.h
-    gui/AudioInputSettingsPanel.cpp
-    gui/AudioOutputSettingsPanel.h
-    gui/AudioOutputSettingsPanel.cpp
-    gui/MouseSettingsPanel.h
-    gui/MouseSettingsPanel.cpp
+    gui/AudioDevicesSettingsPanel.h
+    gui/AudioDevicesSettingsPanel.cpp
     gui/AboutDialog.h
     gui/AboutDialog.cpp
     gui/DtmfDialog.h
     gui/DtmfDialog.cpp
+    gui/MetersDialog.h
+    gui/MetersDialog.cpp
     gui/MainTitleBar.h
     gui/MainTitleBar.cpp
     gui/MemoryPanel.h

@@ -4,6 +4,7 @@
 #include "SettingsPanelStyle.h"
 #include "UiTheme.h"
 
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QGroupBox>
@@ -19,6 +20,7 @@ constexpr auto kBandscopeCenterLineColorSettingsKey = "BandscopeCenterLineColor"
 constexpr auto kBandscopeBackgroundColorSettingsKey = "BandscopeBackgroundColor";
 constexpr auto kBandscopeGridLineColorSettingsKey = "BandscopeGridLineColor";
 constexpr auto kBandscopeGridDensitySettingsKey = "BandscopeGridDensity";
+constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
 const QColor kDefaultCenterLineColor(0xf5, 0xf7, 0xf8);
 const QColor kDefaultBackgroundColor(0x0b, 0x3f, 0x55);
 const QColor kDefaultGridLineColor(0xc8, 0xf1, 0xf5);
@@ -54,15 +56,6 @@ BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
     root->setContentsMargins(12, 4, 12, 0);
     root->setSpacing(8);
 
-    auto* centerLineGroup = new QGroupBox("Center Line", this);
-    centerLineGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
-    auto* centerLineLayout = new QVBoxLayout(centerLineGroup);
-    centerLineLayout->setContentsMargins(10, 12, 10, 10);
-    centerLineLayout->setSpacing(8);
-    centerLineLayout->addLayout(
-        makeColorRow(centerLineGroup, QStringLiteral("Color:"), &m_centerLineColorButton, &m_centerLineResetButton));
-    root->addWidget(centerLineGroup);
-
     auto* backgroundGroup = new QGroupBox("Background", this);
     backgroundGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* backgroundLayout = new QVBoxLayout(backgroundGroup);
@@ -71,6 +64,15 @@ BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
     backgroundLayout->addLayout(
         makeColorRow(backgroundGroup, QStringLiteral("Color:"), &m_backgroundColorButton, &m_backgroundResetButton));
     root->addWidget(backgroundGroup);
+
+    auto* centerLineGroup = new QGroupBox("Center Line", this);
+    centerLineGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
+    auto* centerLineLayout = new QVBoxLayout(centerLineGroup);
+    centerLineLayout->setContentsMargins(10, 12, 10, 10);
+    centerLineLayout->setSpacing(8);
+    centerLineLayout->addLayout(
+        makeColorRow(centerLineGroup, QStringLiteral("Color:"), &m_centerLineColorButton, &m_centerLineResetButton));
+    root->addWidget(centerLineGroup);
 
     auto* gridGroup = new QGroupBox("Gridlines", this);
     gridGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
@@ -102,6 +104,17 @@ BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
     gridLayout->addLayout(gridRow);
     root->addWidget(gridGroup);
 
+    auto* wheelGroup = new QGroupBox("Mouse Wheel", this);
+    wheelGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
+    auto* wheelLayout = new QVBoxLayout(wheelGroup);
+    wheelLayout->setContentsMargins(10, 12, 10, 10);
+    wheelLayout->setSpacing(6);
+    m_invertMouseWheelCheck = new QCheckBox("Reverse wheel pan direction", wheelGroup);
+    m_invertMouseWheelCheck->setChecked(
+        AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
+    wheelLayout->addWidget(m_invertMouseWheelCheck);
+    root->addWidget(wheelGroup);
+
     connect(m_centerLineColorButton, &QPushButton::clicked, this, &BandScopeSettingsPanel::chooseCenterLineColor);
     connect(m_centerLineResetButton, &QPushButton::clicked, this, &BandScopeSettingsPanel::resetCenterLineColor);
     connect(m_backgroundColorButton, &QPushButton::clicked, this, &BandScopeSettingsPanel::chooseBackgroundColor);
@@ -115,6 +128,12 @@ BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
                 {
                     setGridDensity(m_gridDensityCombo->currentData().toInt(), true);
                 }
+            });
+    connect(m_invertMouseWheelCheck, &QCheckBox::toggled, this,
+            [this](bool checked)
+            {
+                AppSettings::instance().setValue(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), checked);
+                Q_EMIT reverseMouseWheelTuningChanged(checked);
             });
 
     updateColorButton(m_centerLineColorButton, m_centerLineColor);

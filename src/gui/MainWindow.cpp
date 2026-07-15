@@ -8,6 +8,7 @@
 #include "FramelessTitleBar.h"
 #include "MainTitleBar.h"
 #include "MemoryPanel.h"
+#include "MetersDialog.h"
 #include "PttPanel.h"
 #include "ReceivePanel.h"
 #include "RepeaterPanel.h"
@@ -717,8 +718,48 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_model, &RadioModel::connectionChanged, this, &MainWindow::onConnectionChanged);
     connect(m_model, &RadioModel::readyChanged, this, &MainWindow::onRadioReadyChanged);
     connect(m_model, &RadioModel::smeterChanged, this, &MainWindow::onSmeterChanged);
+    connect(m_model, &RadioModel::powerMeterChanged, this,
+            [this](double watts)
+            {
+                m_txPowerMeterWatts = qBound(0.0, watts, 120.0);
+                m_txPowerMeterValid = true;
+                if (m_metersDialog)
+                {
+                    m_metersDialog->setPowerMeter(m_txPowerMeterWatts);
+                }
+            });
     connect(m_model, &RadioModel::swrChanged, this, &MainWindow::onSwrChanged);
     connect(m_model, &RadioModel::alcChanged, this, &MainWindow::onAlcChanged);
+    connect(m_model, &RadioModel::compressionMeterChanged, this,
+            [this](double db)
+            {
+                m_txCompressionDb = qBound(0.0, db, 25.5);
+                m_txCompressionValid = true;
+                if (m_metersDialog)
+                {
+                    m_metersDialog->setCompressionMeter(m_txCompressionDb);
+                }
+            });
+    connect(m_model, &RadioModel::voltageMeterChanged, this,
+            [this](double volts)
+            {
+                m_txVoltageVolts = qBound(0.0, volts, 16.0);
+                m_txVoltageValid = true;
+                if (m_metersDialog)
+                {
+                    m_metersDialog->setVoltageMeter(m_txVoltageVolts);
+                }
+            });
+    connect(m_model, &RadioModel::currentMeterChanged, this,
+            [this](double amps)
+            {
+                m_txCurrentAmps = qBound(0.0, amps, 20.0);
+                m_txCurrentValid = true;
+                if (m_metersDialog)
+                {
+                    m_metersDialog->setCurrentMeter(m_txCurrentAmps);
+                }
+            });
     connect(m_model, &RadioModel::pttChanged, this, &MainWindow::onPttChanged);
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
     connect(m_model, &RadioModel::errorOccurred, this, &MainWindow::onError);
@@ -953,6 +994,7 @@ void MainWindow::buildToolBar()
     auto* viewMenu = new QMenu(this);
     viewMenu->setStyleSheet(menuStyle);
     viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
+    viewMenu->addAction("Meters", this, &MainWindow::showMetersDialog);
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 
     auto* helpMenu = new QMenu(this);
@@ -1268,7 +1310,7 @@ void MainWindow::showSettingsDialog()
     }
 
 #ifdef HAVE_HIDAPI
-    auto* dlg = new SettingsDialog(SettingsDialog::Page::AudioInput, this, m_icomRC28Manager);
+    auto* dlg = new SettingsDialog(SettingsDialog::Page::AudioDevices, this, m_icomRC28Manager);
 #else
     auto* dlg = new SettingsDialog(this);
 #endif
@@ -1281,7 +1323,6 @@ void MainWindow::showSettingsDialog()
                     m_settingsDialog = nullptr;
                 }
             });
-    connect(m_model, &RadioModel::txAudioLevelChanged, dlg, &SettingsDialog::setTransmitAudioLevel);
     connect(dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_bandscopeDisplay,
             &BandscopeDisplay::setInvertMouseWheel);
     connect(dlg, &SettingsDialog::bandscopeCenterLineColorChanged, m_bandscopeDisplay,
@@ -1303,7 +1344,6 @@ void MainWindow::showSettingsDialog()
             });
 #endif
     centerPopupWindow(dlg);
-    dlg->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
     QTimer::singleShot(0, dlg, [this, dlg]() { centerPopupWindow(dlg); });
     QPointer<SettingsDialog> dlgGuard = dlg;
     connect(dlg, &QDialog::finished, this,
@@ -2264,6 +2304,9 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     controlRow->addWidget(receiveStack, 1);
 
     m_dtmfDialog = new DtmfDialog(this);
+    m_metersDialog = new MetersDialog(this);
+    m_dtmfDialog->hide();
+    m_metersDialog->hide();
 
     m_dtmfPttOffTimer = new QTimer(this);
     m_dtmfPttOffTimer->setSingleShot(true);
@@ -2510,7 +2553,26 @@ void MainWindow::updateTxIndicator(bool on)
         {
             m_titleBar->setTxDurationActive(false);
         }
+        m_txPowerMeterWatts = 0.0;
+        m_txSwr = 1.0;
         m_txAlc = 0.0;
+        m_txCompressionDb = 0.0;
+        m_txVoltageVolts = 0.0;
+        m_txCurrentAmps = 0.0;
+        m_txPowerMeterValid = false;
+        m_txSwrValid = false;
+        m_txAlcValid = false;
+        m_txCompressionValid = false;
+        m_txVoltageValid = false;
+        m_txCurrentValid = false;
+        if (m_metersDialog)
+        {
+            m_metersDialog->resetMeters();
+            if (m_model && m_model->isReady())
+            {
+                m_metersDialog->setSMeter(m_lastSMeter);
+            }
+        }
         updateTxAudioMeter(0, 0);
     }
 }
@@ -3155,6 +3217,18 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_toneAccessMode = ratrNN;
     m_toneFrequency = 670;
     m_dtcsCode = 23;
+    m_txPowerMeterWatts = 0.0;
+    m_txSwr = 1.0;
+    m_txAlc = 0.0;
+    m_txCompressionDb = 0.0;
+    m_txVoltageVolts = 0.0;
+    m_txCurrentAmps = 0.0;
+    m_txPowerMeterValid = false;
+    m_txSwrValid = false;
+    m_txAlcValid = false;
+    m_txCompressionValid = false;
+    m_txVoltageValid = false;
+    m_txCurrentValid = false;
 
     if (m_vfoPanel)
     {
@@ -3190,6 +3264,10 @@ void MainWindow::resetRadioOwnedControlsForSync()
     updateRfGainButton();
     updateTxIndicator(false);
     updateTxAudioMeter(0, 0);
+    if (m_metersDialog)
+    {
+        m_metersDialog->resetMeters();
+    }
 }
 
 void MainWindow::applyActiveVfoFromRadio()
@@ -4158,6 +4236,10 @@ void MainWindow::onSmeterChanged(int s)
     }
 
     m_lastSMeter = qBound(0, s, 255);
+    if (m_metersDialog)
+    {
+        m_metersDialog->setSMeter(m_lastSMeter);
+    }
     if (!m_txActive)
     {
         if (m_vfoPanel)
@@ -4169,6 +4251,12 @@ void MainWindow::onSmeterChanged(int s)
 
 void MainWindow::onSwrChanged(double swr)
 {
+    m_txSwr = qBound(1.0, swr, 6.0);
+    m_txSwrValid = true;
+    if (m_metersDialog)
+    {
+        m_metersDialog->setSwr(m_txSwr);
+    }
     if (!m_vfoPanel || !m_txActive)
     {
         return;
@@ -4187,6 +4275,11 @@ void MainWindow::onSwrChanged(double swr)
 void MainWindow::onAlcChanged(double alc)
 {
     m_txAlc = qBound(0.0, alc, 2.0);
+    m_txAlcValid = true;
+    if (m_metersDialog)
+    {
+        m_metersDialog->setAlc(m_txAlc);
+    }
     if (!m_vfoPanel || !m_txActive)
     {
         return;
@@ -4198,6 +4291,10 @@ void MainWindow::updateTxAudioMeter(int peak, int rms)
 {
     m_txAudioPeak = qBound(0, peak, 255);
     m_txAudioRms = qBound(0, rms, 255);
+    if (m_metersDialog)
+    {
+        m_metersDialog->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
+    }
 }
 
 void MainWindow::onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange)
@@ -4308,6 +4405,50 @@ void MainWindow::showDtmfDialog()
     }
 
     bringDialogToFront(m_dtmfDialog);
+}
+
+void MainWindow::showMetersDialog()
+{
+    if (!m_metersDialog)
+    {
+        return;
+    }
+
+    if (m_model && m_model->isReady())
+    {
+        m_metersDialog->resetMeters();
+        m_metersDialog->setSMeter(m_lastSMeter);
+        if (m_txPowerMeterValid)
+        {
+            m_metersDialog->setPowerMeter(m_txPowerMeterWatts);
+        }
+        if (m_txSwrValid)
+        {
+            m_metersDialog->setSwr(m_txSwr);
+        }
+        if (m_txAlcValid)
+        {
+            m_metersDialog->setAlc(m_txAlc);
+        }
+        if (m_txCompressionValid)
+        {
+            m_metersDialog->setCompressionMeter(m_txCompressionDb);
+        }
+        if (m_txVoltageValid)
+        {
+            m_metersDialog->setVoltageMeter(m_txVoltageVolts);
+        }
+        if (m_txCurrentValid)
+        {
+            m_metersDialog->setCurrentMeter(m_txCurrentAmps);
+        }
+        m_metersDialog->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
+    }
+    else
+    {
+        m_metersDialog->resetMeters();
+    }
+    bringDialogToFront(m_metersDialog);
 }
 
 void MainWindow::onDtmfSendRequested(const QString& digits)

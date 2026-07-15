@@ -46,8 +46,12 @@ class RadioModel : public QObject
     void readyChanged(bool ready);
     void infoChanged();
     void smeterChanged(int value);
+    void powerMeterChanged(double watts);
     void swrChanged(double swr);
     void alcChanged(double alc);
+    void compressionMeterChanged(double db);
+    void voltageMeterChanged(double volts);
+    void currentMeterChanged(double amps);
     void pttChanged(bool on);
     void transmittingChanged(bool on);
     void errorOccurred(const QString& message);

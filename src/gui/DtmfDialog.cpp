@@ -1,4 +1,5 @@
 #include "DtmfDialog.h"
+#include "DialogPlacement.h"
 #include "UiTheme.h"
 
 #include <QGridLayout>
@@ -9,6 +10,8 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
+#include <QShowEvent>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWindow>
 
@@ -26,15 +29,56 @@ class DtmfTitleBar : public QWidget
     {
         if (event->button() == Qt::LeftButton)
         {
-            if (QWindow* win = window()->windowHandle())
+            QWidget* panel = parentWidget();
+            if (panel && panel->isWindow())
             {
-                win->startSystemMove();
+                if (QWindow* win = panel->windowHandle())
+                {
+                    win->startSystemMove();
+                }
+            }
+            else if (panel)
+            {
+                m_dragging = true;
+                m_dragOffset = panel->mapFromGlobal(event->globalPosition().toPoint());
             }
             event->accept();
             return;
         }
         QWidget::mousePressEvent(event);
     }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (!m_dragging)
+        {
+            QWidget::mouseMoveEvent(event);
+            return;
+        }
+
+        QWidget* panel = parentWidget();
+        QWidget* parent = panel ? panel->parentWidget() : nullptr;
+        if (!panel || !parent)
+        {
+            return;
+        }
+
+        QPoint target = parent->mapFromGlobal(event->globalPosition().toPoint() - m_dragOffset);
+        target.setX(qBound(0, target.x(), qMax(0, parent->width() - panel->width())));
+        target.setY(qBound(0, target.y(), qMax(0, parent->height() - panel->height())));
+        panel->move(target);
+        event->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        m_dragging = false;
+        QWidget::mouseReleaseEvent(event);
+    }
+
+  private:
+    bool m_dragging{false};
+    QPoint m_dragOffset;
 };
 
 struct DtmfKey
@@ -51,12 +95,12 @@ constexpr DtmfKey kKeys[4][4] = {
 };
 } // namespace
 
-DtmfDialog::DtmfDialog(QWidget* parent) : QDialog(parent)
+DtmfDialog::DtmfDialog(QWidget* parent) : QDialog(parent), m_centerHost(parent)
 {
     setWindowTitle(QStringLiteral("DTMF"));
     setWindowModality(Qt::NonModal);
     setAttribute(Qt::WA_DeleteOnClose, false);
-    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    setWindowFlags(Qt::FramelessWindowHint);
     setFixedWidth(260);
     setStyleSheet(QStringLiteral("DtmfDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
@@ -227,6 +271,15 @@ DtmfDialog::DtmfDialog(QWidget* parent) : QDialog(parent)
                     emit sendRequested(digits);
                 }
             });
+}
+
+void DtmfDialog::showEvent(QShowEvent* event)
+{
+    QDialog::showEvent(event);
+
+    sdr9700::ui::centerWindowOn(this, m_centerHost);
+    QTimer::singleShot(0, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
+    QTimer::singleShot(50, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
 }
 
 void DtmfDialog::appendDigit(const QString& digit)

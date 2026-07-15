@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class QComboBox;
+class QCheckBox;
 class QHBoxLayout;
 class QPushButton;
 
@@ -20,6 +21,7 @@ class BandScopeSettingsPanel : public QWidget
     void backgroundColorChanged(const QColor& color);
     void gridLineColorChanged(const QColor& color);
     void gridDensityChanged(int density);
+    void reverseMouseWheelTuningChanged(bool reversed);
 
   private slots:
     void chooseCenterLineColor();
@@ -45,6 +47,7 @@ class BandScopeSettingsPanel : public QWidget
     QPushButton* m_gridLineColorButton{nullptr};
     QPushButton* m_gridLineResetButton{nullptr};
     QComboBox* m_gridDensityCombo{nullptr};
+    QCheckBox* m_invertMouseWheelCheck{nullptr};
     QColor m_centerLineColor;
     QColor m_backgroundColor;
     QColor m_gridLineColor;

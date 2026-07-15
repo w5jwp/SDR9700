@@ -16,7 +16,6 @@ class QScrollArea;
 class QStackedWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
-class AudioInputSettingsPanel;
 #ifdef HAVE_HIDAPI
 class IcomRC28Manager;
 #endif
@@ -28,10 +27,8 @@ class SettingsDialog : public QDialog
   public:
     enum class Page
     {
-        AudioInput,
-        AudioOutput,
+        AudioDevices,
         BandScope,
-        Application,
 #ifdef HAVE_HIDAPI
         IcomRC28,
 #endif
@@ -53,9 +50,6 @@ class SettingsDialog : public QDialog
 #ifdef HAVE_HIDAPI
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);
 #endif
-
-  public slots:
-    void setTransmitAudioLevel(int peak, int rms);
 
   protected:
     void showEvent(QShowEvent* event) override;
@@ -80,7 +74,4 @@ class SettingsDialog : public QDialog
     QHash<int, std::function<QWidget*()>> m_deferredBuilders;
     QHash<int, int> m_pageIndexes;
     QHash<int, QTreeWidgetItem*> m_pageItems;
-    QPointer<AudioInputSettingsPanel> m_audioInputPanel;
-    int m_txAudioPeak{0};
-    int m_txAudioRms{0};
 };

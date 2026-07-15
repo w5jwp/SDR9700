@@ -4,14 +4,15 @@
 
 class QComboBox;
 
-class AudioOutputSettingsPanel : public QWidget
+class AudioDevicesSettingsPanel : public QWidget
 {
     Q_OBJECT
 
   public:
-    explicit AudioOutputSettingsPanel(QWidget* parent = nullptr);
+    explicit AudioDevicesSettingsPanel(QWidget* parent = nullptr);
 
   private:
+    QComboBox* m_inputCombo{nullptr};
     QComboBox* m_outputCombo{nullptr};
     QComboBox* m_outputChannelsCombo{nullptr};
 };

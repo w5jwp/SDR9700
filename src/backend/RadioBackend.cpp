@@ -542,9 +542,25 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 emit radioValueUpdated(item.command, item.value, item.receiver);
                 handleTransmitSwr(item.value.toDouble());
                 break;
+            case funcPowerMeter:
+                emit radioValueUpdated(item.command, item.value, item.receiver);
+                emit powerMeterChanged(item.value.toDouble());
+                break;
             case funcALCMeter:
                 emit radioValueUpdated(item.command, item.value, item.receiver);
                 emit alcChanged(item.value.toDouble());
+                break;
+            case funcCompMeter:
+                emit radioValueUpdated(item.command, item.value, item.receiver);
+                emit compressionMeterChanged(item.value.toDouble());
+                break;
+            case funcVdMeter:
+                emit radioValueUpdated(item.command, item.value, item.receiver);
+                emit voltageMeterChanged(item.value.toDouble());
+                break;
+            case funcIdMeter:
+                emit radioValueUpdated(item.command, item.value, item.receiver);
+                emit currentMeterChanged(item.value.toDouble());
                 break;
             case funcTransceiverStatus:
             {
@@ -1726,7 +1742,11 @@ void RadioBackend::onLanReady()
                         [receiver](Commander* commandSession)
                         {
                             commandSession->receiveCommand(funcSWRMeter, QVariant(), receiver);
+                            commandSession->receiveCommand(funcPowerMeter, QVariant(), receiver);
                             commandSession->receiveCommand(funcALCMeter, QVariant(), receiver);
+                            commandSession->receiveCommand(funcCompMeter, QVariant(), receiver);
+                            commandSession->receiveCommand(funcVdMeter, QVariant(), receiver);
+                            commandSession->receiveCommand(funcIdMeter, QVariant(), receiver);
                         });
                     return;
                 }

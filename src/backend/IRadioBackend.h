@@ -73,8 +73,12 @@ class IRadioBackend : public QObject
     void modeChanged(const QString& mode);
     void filterChanged(int lowHz, int highHz);
     void smeterChanged(int smeter);           // 0-9+(OVF) mapped to 0-255
+    void powerMeterChanged(double watts);     // calibrated RF output power in watts
     void swrChanged(double swr);              // calibrated SWR ratio (e.g. 1.0 = perfect)
     void alcChanged(double alc);              // calibrated ALC meter value (0.0-2.0, 1.0 = ALC limit)
+    void compressionMeterChanged(double db);  // calibrated compression meter value in dB
+    void voltageMeterChanged(double volts);   // calibrated drain voltage
+    void currentMeterChanged(double amps);    // calibrated drain current
     void agcModeChanged(const QString& mode); // "fast","mid","slow"
     void autoNotchChanged(bool on);
     void manualNotchChanged(bool on);

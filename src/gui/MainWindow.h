@@ -33,6 +33,7 @@ class QTableWidget;
 class QTimer;
 class DtmfDialog;
 class MainTitleBar;
+class MetersDialog;
 class RadioChooserDialog;
 class SettingsDialog;
 #ifdef HAVE_HIDAPI
@@ -119,6 +120,7 @@ class MainWindow : public QMainWindow
     void updateStepButton();
     void updateIcomRC28Leds();
     void showDtmfDialog();
+    void showMetersDialog();
     void buildMemoryWindow();
     void showMemoryWindow();
     void storeCurrentMemory();
@@ -171,6 +173,7 @@ class MainWindow : public QMainWindow
     QPushButton* m_toneBtn{nullptr};
     QPushButton* m_pttBtn{nullptr};
     DtmfDialog* m_dtmfDialog{nullptr};
+    MetersDialog* m_metersDialog{nullptr};
     QPointer<SettingsDialog> m_settingsDialog;
     QPointer<RadioChooserDialog> m_radioChooserDialog;
     QTimer* m_dtmfPttOffTimer{nullptr};
@@ -252,7 +255,18 @@ class MainWindow : public QMainWindow
     bool m_txActive{false};
     int m_txAudioPeak{0};
     int m_txAudioRms{0};
+    double m_txPowerMeterWatts{0.0};
+    double m_txSwr{1.0};
     double m_txAlc{0.0};
+    double m_txCompressionDb{0.0};
+    double m_txVoltageVolts{0.0};
+    double m_txCurrentAmps{0.0};
+    bool m_txPowerMeterValid{false};
+    bool m_txSwrValid{false};
+    bool m_txAlcValid{false};
+    bool m_txCompressionValid{false};
+    bool m_txVoltageValid{false};
+    bool m_txCurrentValid{false};
     QTimer* m_bandscopeTuneCommitTimer{nullptr};
     QTimer* m_bandscopeTuneReleaseTimer{nullptr};
     quint64 m_pendingBandscopeTuneHz{0};

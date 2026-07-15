@@ -24,8 +24,12 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::frequencyChanged, this, &RadioModel::onFrequencyChanged);
     connect(m_backend, &IRadioBackend::modeChanged, this, &RadioModel::onModeChanged);
     connect(m_backend, &IRadioBackend::smeterChanged, this, &RadioModel::onSmeterChanged);
+    connect(m_backend, &IRadioBackend::powerMeterChanged, this, &RadioModel::powerMeterChanged);
     connect(m_backend, &IRadioBackend::swrChanged, this, &RadioModel::onSwrChanged);
     connect(m_backend, &IRadioBackend::alcChanged, this, &RadioModel::onAlcChanged);
+    connect(m_backend, &IRadioBackend::compressionMeterChanged, this, &RadioModel::compressionMeterChanged);
+    connect(m_backend, &IRadioBackend::voltageMeterChanged, this, &RadioModel::voltageMeterChanged);
+    connect(m_backend, &IRadioBackend::currentMeterChanged, this, &RadioModel::currentMeterChanged);
     connect(m_backend, &IRadioBackend::agcModeChanged, m_vfo, &VfoModel::applyAgcMode);
     connect(m_backend, &IRadioBackend::autoNotchChanged, m_vfo, &VfoModel::applyAutoNotch);
     connect(m_backend, &IRadioBackend::manualNotchChanged, m_vfo, &VfoModel::applyManualNotch);

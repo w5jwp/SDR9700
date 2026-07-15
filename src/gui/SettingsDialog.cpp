@@ -1,10 +1,8 @@
 #include "SettingsDialog.h"
-#include "AudioInputSettingsPanel.h"
-#include "AudioOutputSettingsPanel.h"
+#include "AudioDevicesSettingsPanel.h"
 #include "BandScopeSettingsPanel.h"
 #include "DialogPlacement.h"
 #include "FramelessTitleBar.h"
-#include "MouseSettingsPanel.h"
 #ifdef HAVE_HIDAPI
 #include "IcomRC28SettingsPanel.h"
 #endif
@@ -34,7 +32,7 @@ int pageKey(SettingsDialog::Page page)
 }
 } // namespace
 
-SettingsDialog::SettingsDialog(QWidget* parent) : SettingsDialog(Page::AudioInput, parent) {}
+SettingsDialog::SettingsDialog(QWidget* parent) : SettingsDialog(Page::AudioDevices, parent) {}
 
 #ifdef HAVE_HIDAPI
 SettingsDialog::SettingsDialog(Page page, QWidget* parent, IcomRC28Manager* icomRC28Manager)
@@ -116,9 +114,9 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     body->addWidget(m_pageScroll, 1);
     contentLayout->addLayout(body, 1);
 
-    QTreeWidgetItem* accessoriesCategory = addCategory(
-        QStringLiteral("ACCESSORIES"), QStringLiteral("accessories hardware controller remote encoder mouse"));
 #ifdef HAVE_HIDAPI
+    QTreeWidgetItem* accessoriesCategory =
+        addCategory(QStringLiteral("ACCESSORIES"), QStringLiteral("accessories hardware controller remote encoder"));
     addPage(accessoriesCategory, Page::IcomRC28, QStringLiteral("Icom RC-28 Remote Encoder"),
             QStringLiteral("hardware icom icomRC28 rc-28 remote encoder controller knob button f1 f2 ptt mapping"),
             [this]()
@@ -129,16 +127,6 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                 return panel;
             });
 #endif
-    addPage(accessoriesCategory, Page::Application, QStringLiteral("Mouse"),
-            QStringLiteral("application local mouse wheel reverse tuning direction"),
-            [this]()
-            {
-                auto* panel = new MouseSettingsPanel;
-                connect(panel, &MouseSettingsPanel::reverseMouseWheelTuningChanged, this,
-                        &SettingsDialog::reverseMouseWheelTuningChanged);
-                return panel;
-            });
-
     QTreeWidgetItem* appearanceCategory =
         addCategory(QStringLiteral("APPEARANCE"), QStringLiteral("appearance display visual band scope bandscope"));
     addPage(appearanceCategory, Page::BandScope, QStringLiteral("Band Scope"),
@@ -155,23 +143,16 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                         &SettingsDialog::bandscopeGridLineColorChanged);
                 connect(panel, &BandScopeSettingsPanel::gridDensityChanged, this,
                         &SettingsDialog::bandscopeGridDensityChanged);
+                connect(panel, &BandScopeSettingsPanel::reverseMouseWheelTuningChanged, this,
+                        &SettingsDialog::reverseMouseWheelTuningChanged);
                 return panel;
             });
 
-    QTreeWidgetItem* audioCategory =
-        addCategory(QStringLiteral("AUDIO"), QStringLiteral("audio input output computer radio"));
-    addPage(audioCategory, Page::AudioInput, QStringLiteral("Input (Computer to Radio)"),
-            QStringLiteral("audio input device microphone local level peak average rms transmit"),
-            [this]()
-            {
-                auto* panel = new AudioInputSettingsPanel;
-                m_audioInputPanel = panel;
-                panel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
-                return panel;
-            });
-    addPage(audioCategory, Page::AudioOutput, QStringLiteral("Output (Radio to Computer)"),
-            QStringLiteral("audio output device speaker codec channels receive playback"),
-            []() { return new AudioOutputSettingsPanel; });
+    QTreeWidgetItem* audioCategory = addCategory(QStringLiteral("RECEIVE & TRANSMIT"),
+                                                 QStringLiteral("receive transmit audio input output computer radio"));
+    addPage(audioCategory, Page::AudioDevices, QStringLiteral("Audio Devices"),
+            QStringLiteral("audio input output device microphone speaker codec channels receive transmit playback"),
+            []() { return new AudioDevicesSettingsPanel; });
     for (int i = 0; i < m_navigation->topLevelItemCount(); ++i)
     {
         m_navigation->topLevelItem(i)->sortChildren(0, Qt::AscendingOrder);
@@ -244,16 +225,6 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
 
     root->addWidget(content, 1);
-}
-
-void SettingsDialog::setTransmitAudioLevel(int peak, int rms)
-{
-    m_txAudioPeak = qBound(0, peak, 255);
-    m_txAudioRms = qBound(0, rms, 255);
-    if (m_audioInputPanel)
-    {
-        m_audioInputPanel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
-    }
 }
 
 QTreeWidgetItem* SettingsDialog::addCategory(const QString& title, const QString& keywords)

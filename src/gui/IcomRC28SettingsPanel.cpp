@@ -85,7 +85,7 @@ void IcomRC28SettingsPanel::buildUi()
     root->setContentsMargins(12, 4, 12, 0);
     root->setSpacing(8);
 
-    auto* deviceGroup = new QGroupBox(QStringLiteral("Device"), this);
+    auto* deviceGroup = new QGroupBox(QStringLiteral("Status"), this);
     deviceGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* deviceForm = new QFormLayout(deviceGroup);
     deviceForm->setLabelAlignment(Qt::AlignRight);
