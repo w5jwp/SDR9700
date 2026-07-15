@@ -26,7 +26,7 @@ class IcomRC28SettingsPanel : public QWidget
     void appendLog(const QString& text);
     void loadSettings();
     void saveActionField(const QString& field, const QString& value);
-    void savePttMode(const QString& mode);
+    void savePTTMode(const QString& mode);
     void saveSensitivity(int value);
     void saveAutoSnap(bool on);
 

@@ -12,14 +12,12 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QDebug>
-#include <QSysInfo>
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
 #include <algorithm>
 #include <array>
-#include <unistd.h>
 
 namespace
 {
@@ -61,7 +59,7 @@ QString profileKeyPath()
     // not depend on libsecret/KWallet yet: those services vary by Linux desktop
     // environment, while SDR9700 needs deterministic headless/test behavior and
     // no additional runtime package requirement. The tradeoff is explicit: if
-    // an attacker obtains both config.json and this owner-readable key file,
+    // an attacker obtains both sdr9700.json and this owner-readable key file,
     // saved radio passwords can be decrypted offline.
     QString configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     if (configRoot.isEmpty())
@@ -127,18 +125,6 @@ RadioProfileStore& RadioProfileStore::instance()
     return s;
 }
 
-QByteArray RadioProfileStore::legacyMachineKey()
-{
-    QFile f("/etc/machine-id");
-    QByteArray id;
-    if (f.open(QIODevice::ReadOnly))
-    {
-        id = f.readAll().trimmed();
-    }
-    id += "SDR9700-radio-profiles";
-    return QCryptographicHash::hash(id, QCryptographicHash::Sha256);
-}
-
 QByteArray RadioProfileStore::passwordKeyMaterial()
 {
     // Current profile encryption key scheme: a per-user random secret stored in
@@ -152,26 +138,6 @@ QByteArray RadioProfileStore::passwordKeyMaterial()
     {
         return {};
     }
-    material += "|SDR9700-radio-profiles-aes-gcm";
-    return QCryptographicHash::hash(material, QCryptographicHash::Sha256);
-}
-
-static QByteArray legacyPasswordKeyMaterial()
-{
-    // Migration-only key scheme used by early AES-GCM profile records before
-    // the per-user random secret existed. Decryption tries this only after the
-    // current key fails so earlier saved passwords can be re-encrypted on load.
-    QByteArray material;
-
-    QFile machineId("/etc/machine-id");
-    if (machineId.open(QIODevice::ReadOnly))
-    {
-        material += machineId.readAll().trimmed();
-    }
-    material += '|';
-    material += QByteArray::number(static_cast<qlonglong>(getuid()));
-    material += '|';
-    material += QSysInfo::machineHostName().toUtf8();
     material += "|SDR9700-radio-profiles-aes-gcm";
     return QCryptographicHash::hash(material, QCryptographicHash::Sha256);
 }
@@ -256,7 +222,7 @@ static bool tryDecryptAesGcm(const QByteArray& key, const QByteArray& nonce, con
     return ok;
 }
 
-QString RadioProfileStore::decryptPassword(const QString& stored, bool* usedLegacyKey)
+QString RadioProfileStore::decryptPassword(const QString& stored)
 {
     if (stored.isEmpty())
     {
@@ -264,7 +230,7 @@ QString RadioProfileStore::decryptPassword(const QString& stored, bool* usedLega
     }
     if (!stored.startsWith(QString::fromLatin1(kEncryptedPasswordPrefix)))
     {
-        return decryptLegacyPassword(stored);
+        return {};
     }
 
     const QByteArray payload =
@@ -280,105 +246,56 @@ QString RadioProfileStore::decryptPassword(const QString& stored, bool* usedLega
     const QByteArray tag = payload.mid(kPasswordSaltBytes + kPasswordNonceBytes, kPasswordTagBytes);
     const QByteArray ciphertext = payload.mid(headerBytes);
     QByteArray key = derivePasswordKey(passwordKeyMaterial(), salt);
-    bool usingLegacyKey = false;
     if (key.isEmpty())
     {
-        key = derivePasswordKey(legacyPasswordKeyMaterial(), salt);
-        usingLegacyKey = true;
-        if (key.isEmpty())
-        {
-            secureZero(key);
-            return {};
-        }
+        secureZero(key);
+        return {};
     }
 
     QByteArray plaintext;
     if (!tryDecryptAesGcm(key, nonce, tag, ciphertext, plaintext))
     {
-        if (usingLegacyKey)
-        {
-            secureZero(key);
-            secureZero(plaintext);
-            return {};
-        }
         secureZero(key);
         secureZero(plaintext);
-        key = derivePasswordKey(legacyPasswordKeyMaterial(), salt);
-        if (key.isEmpty())
-        {
-            return {};
-        }
-        if (!tryDecryptAesGcm(key, nonce, tag, ciphertext, plaintext))
-        {
-            secureZero(key);
-            secureZero(plaintext);
-            return {};
-        }
-        usingLegacyKey = true;
+        return {};
     }
 
-    *usedLegacyKey = usingLegacyKey;
     QString decrypted = QString::fromUtf8(plaintext);
     secureZero(key);
     secureZero(plaintext);
     return decrypted;
 }
 
-QString RadioProfileStore::decryptLegacyPassword(const QString& stored)
-{
-    QByteArray key = legacyMachineKey();
-    QByteArray data = QByteArray::fromBase64(stored.toLatin1());
-    for (int i = 0; i < data.size(); ++i)
-    {
-        data[i] = data[i] ^ key[i % key.size()];
-    }
-    return QString::fromUtf8(data);
-}
-
 void RadioProfileStore::load()
 {
     m_profiles.clear();
     AppSettings& settings = AppSettings::instance();
-    const QString stored = settings.value("RadioProfiles", "{}").toString();
+    const QString stored = settings.value("radioProfiles", "{}").toString();
     const QJsonDocument doc = QJsonDocument::fromJson(stored.toUtf8());
     const QJsonObject root = doc.object();
 
-    m_lastProfileId = QUuid(root.value("lastProfileId").toString());
+    m_lastProfileId = QUuid(root.value("lastProfileID").toString());
 
     const QJsonArray profileArray = root.value("profiles").toArray();
-    bool needsResave = false;
     for (const QJsonValue& value : profileArray)
     {
         const QJsonObject obj = value.toObject();
         RadioProfile p;
-        p.id = QUuid(obj.value("id").toString());
+        p.id = QUuid(obj.value("ID").toString());
         p.name = obj.value("name").toString();
         p.host = obj.value("host").toString();
         p.port = static_cast<quint16>(obj.value("port").toInt(50001));
         p.username = obj.value("username").toString();
         const QString storedPassword = obj.value("password").toString();
-        bool usedLegacyKey = false;
-        p.password = decryptPassword(storedPassword, &usedLegacyKey);
+        p.password = decryptPassword(storedPassword);
         if (!storedPassword.isEmpty() && p.password.isEmpty())
         {
             qWarning(logSystem()) << "Skipping radio profile with unreadable encrypted password:" << p.name;
             continue;
         }
-        if (!storedPassword.isEmpty() &&
-            (!storedPassword.startsWith(QLatin1String(kEncryptedPasswordPrefix)) || usedLegacyKey))
-        {
-            needsResave = true;
-        }
         if (!p.id.isNull() && !p.host.isEmpty())
         {
             m_profiles.append(p);
-        }
-    }
-    if (needsResave)
-    {
-        if (!save())
-        {
-            qWarning(logSystem()) << "Failed to re-encrypt legacy XOR profiles with AES-GCM";
         }
     }
 }
@@ -386,13 +303,13 @@ void RadioProfileStore::load()
 bool RadioProfileStore::save() const
 {
     QJsonObject root;
-    root.insert("lastProfileId", m_lastProfileId.toString());
+    root.insert("lastProfileID", m_lastProfileId.toString());
 
     QJsonArray profileArray;
     for (const RadioProfile& p : m_profiles)
     {
         QJsonObject obj;
-        obj.insert("id", p.id.toString());
+        obj.insert("ID", p.id.toString());
         obj.insert("name", p.name);
         obj.insert("host", p.host);
         obj.insert("port", static_cast<int>(p.port));
@@ -408,7 +325,7 @@ bool RadioProfileStore::save() const
     }
     root.insert("profiles", profileArray);
 
-    return AppSettings::instance().setValue("RadioProfiles",
+    return AppSettings::instance().setValue("radioProfiles",
                                             QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)));
 }
 

@@ -42,11 +42,9 @@ class RadioProfileStore : public QObject
   private:
     RadioProfileStore() = default;
 
-    static QByteArray legacyMachineKey();
     static QByteArray passwordKeyMaterial();
     static QString encryptPassword(const QString& plain);
-    static QString decryptPassword(const QString& stored, bool* usedLegacyKey);
-    static QString decryptLegacyPassword(const QString& stored);
+    static QString decryptPassword(const QString& stored);
 
     QList<RadioProfile> m_profiles;
     QUuid m_lastProfileId;

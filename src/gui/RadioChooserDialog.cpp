@@ -140,7 +140,7 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     contentLayout->addLayout(body, 1);
 
     m_autoConnectCheck = new QCheckBox("Auto-connect previous radio on startup", content);
-    m_autoConnectCheck->setChecked(AppSettings::instance().value("AutoConnect", "True").toBool());
+    m_autoConnectCheck->setChecked(AppSettings::instance().value("autoConnect", "True").toBool());
     contentLayout->addWidget(m_autoConnectCheck);
 
     auto* footerLine = new QWidget(content);
@@ -351,7 +351,7 @@ void RadioChooserDialog::onSaveProfile()
 
 void RadioChooserDialog::onAutoConnectToggled(bool on)
 {
-    AppSettings::instance().setValue("AutoConnect", on);
+    AppSettings::instance().setValue("autoConnect", on);
 }
 
 void RadioChooserDialog::loadProfileIntoForm(const RadioProfile& profile)

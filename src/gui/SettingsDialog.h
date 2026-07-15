@@ -11,6 +11,7 @@
 
 class QWidget;
 class QLabel;
+class QVBoxLayout;
 class QShowEvent;
 class QScrollArea;
 class QStackedWidget;
@@ -28,6 +29,7 @@ class SettingsDialog : public QDialog
     enum class Page
     {
         AudioDevices,
+        ApplicationConfiguration,
         BandScope,
 #ifdef HAVE_HIDAPI
         IcomRC28,
@@ -47,6 +49,7 @@ class SettingsDialog : public QDialog
     void bandscopeGridLineColorChanged(const QColor& color);
     void bandscopeGridDensityChanged(int density);
     void reverseMouseWheelTuningChanged(bool reversed);
+    void memoriesChanged(const QString& message);
 #ifdef HAVE_HIDAPI
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);
 #endif
@@ -61,6 +64,7 @@ class SettingsDialog : public QDialog
     void buildDeferredPage(Page page);
     void filterNavigation(const QString& text);
     void selectPage(Page page);
+    void updatePageScrollGutter();
     static QString itemSearchText(QTreeWidgetItem* item);
 
 #ifdef HAVE_HIDAPI
@@ -69,6 +73,7 @@ class SettingsDialog : public QDialog
     QPointer<QWidget> m_centerHost;
     QTreeWidget* m_navigation{nullptr};
     QScrollArea* m_pageScroll{nullptr};
+    QVBoxLayout* m_pageLayout{nullptr};
     QStackedWidget* m_pages{nullptr};
     QLabel* m_pageTitle{nullptr};
     QHash<int, std::function<QWidget*()>> m_deferredBuilders;

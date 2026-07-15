@@ -28,7 +28,7 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     }
 
     const AppSettings& settings = AppSettings::instance();
-    const QByteArray savedIn = settings.value("AudioInputDeviceId").toString().toUtf8();
+    const QByteArray savedIn = settings.value("audioInputDeviceID").toString().toUtf8();
     if (!savedIn.isEmpty())
     {
         const int idx = m_inputCombo->findData(savedIn);
@@ -56,8 +56,8 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     m_outputChannelsCombo->addItem(QStringLiteral("LPCM 16-bit, 1 channel"), 1);
     m_outputChannelsCombo->addItem(QStringLiteral("LPCM 16-bit, 2 channels"), 2);
 
-    const QByteArray savedOut = settings.value("AudioOutputDeviceId").toString().toUtf8();
-    const int savedOutputChannels = qBound(1, settings.value("AudioOutputChannels", 2).toInt(), 2);
+    const QByteArray savedOut = settings.value("audioOutputDeviceID").toString().toUtf8();
+    const int savedOutputChannels = qBound(1, settings.value("audioOutputChannels", 2).toInt(), 2);
 
     if (!savedOut.isEmpty())
     {
@@ -78,13 +78,13 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     vbox->addStretch(1);
 
     connect(m_inputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int)
-            { AppSettings::instance().setValue("AudioInputDeviceId", m_inputCombo->currentData().toByteArray()); });
+            { AppSettings::instance().setValue("audioInputDeviceID", m_inputCombo->currentData().toByteArray()); });
     connect(m_outputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int)
-            { AppSettings::instance().setValue("AudioOutputDeviceId", m_outputCombo->currentData().toByteArray()); });
+            { AppSettings::instance().setValue("audioOutputDeviceID", m_outputCombo->currentData().toByteArray()); });
     connect(m_outputChannelsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int)
             {
-                AppSettings::instance().setValue("AudioOutputChannels",
+                AppSettings::instance().setValue("audioOutputChannels",
                                                  qBound(1, m_outputChannelsCombo->currentData().toInt(), 2));
             });
 }

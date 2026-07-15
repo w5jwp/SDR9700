@@ -13,26 +13,12 @@
 
 namespace
 {
-constexpr auto kIcomRC28SettingsKey = "IcomRC28Settings";
-constexpr auto kLegacyRC28SettingsKey = "RC28Settings";
+constexpr auto kICOMRC28ButtonMappingKey = "ICOMRC28ButtonMapping";
 
 QString readIcomRC28SettingsJson()
 {
     auto& settings = AppSettings::instance();
-    const QString key = QString::fromLatin1(kIcomRC28SettingsKey);
-    const QString legacyKey = QString::fromLatin1(kLegacyRC28SettingsKey);
-    if (settings.contains(key))
-    {
-        return settings.value(key, QStringLiteral("{}")).toString();
-    }
-
-    const QString legacyValue = settings.value(legacyKey, QStringLiteral("{}")).toString();
-    if (settings.contains(legacyKey))
-    {
-        settings.setValue(key, legacyValue);
-        settings.remove(legacyKey);
-    }
-    return legacyValue;
+    return settings.value(QString::fromLatin1(kICOMRC28ButtonMappingKey), QStringLiteral("{}")).toString();
 }
 } // namespace
 
@@ -68,12 +54,8 @@ void IcomRC28Manager::setSettingsField(const QString& field, const QString& valu
     auto& settings = AppSettings::instance();
     QJsonObject obj = QJsonDocument::fromJson(readIcomRC28SettingsJson().toUtf8()).object();
     obj.insert(field, value);
-    settings.setValue(QString::fromLatin1(kIcomRC28SettingsKey),
+    settings.setValue(QString::fromLatin1(kICOMRC28ButtonMappingKey),
                       QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)));
-    if (settings.contains(QString::fromLatin1(kLegacyRC28SettingsKey)))
-    {
-        settings.remove(QString::fromLatin1(kLegacyRC28SettingsKey));
-    }
 }
 
 QString IcomRC28Manager::detectDevice()

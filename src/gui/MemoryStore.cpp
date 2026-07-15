@@ -3,8 +3,14 @@
 #include "AppSettings.h"
 #include "RadioCapabilities.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
+#include <QSaveFile>
 #include <QUuid>
 #include <algorithm>
 
@@ -18,15 +24,15 @@ QString memoryBandLabelForHz(quint64 hz)
 QJsonObject memoryToJson(const MemoryRecord& memory)
 {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), memory.id);
+    object.insert(QStringLiteral("ID"), memory.id);
     object.insert(QStringLiteral("number"), memoryNumberLabel(memory.number));
     object.insert(QStringLiteral("name"), memory.name);
     object.insert(QStringLiteral("band"), memory.band);
     object.insert(QStringLiteral("bandKey"), memory.bandKey);
-    object.insert(QStringLiteral("receiveHz"), QString::number(memory.receiveHz));
+    object.insert(QStringLiteral("receiveHZ"), QString::number(memory.receiveHz));
     object.insert(QStringLiteral("shift"), memory.shift);
     object.insert(QStringLiteral("duplexMode"), memory.duplexMode);
-    object.insert(QStringLiteral("offsetHz"), QString::number(memory.offsetHz));
+    object.insert(QStringLiteral("offsetHZ"), QString::number(memory.offsetHz));
     object.insert(QStringLiteral("toneOption"), memory.toneOption);
     object.insert(QStringLiteral("toneFrequency"), memory.toneFrequency);
     object.insert(QStringLiteral("toneMode"), memory.toneMode);
@@ -38,15 +44,15 @@ QJsonObject memoryToJson(const MemoryRecord& memory)
 MemoryRecord memoryFromJson(const QJsonObject& object)
 {
     MemoryRecord memory;
-    memory.id = object.value(QStringLiteral("id")).toString();
+    memory.id = object.value(QStringLiteral("ID")).toString();
     memory.number = object.value(QStringLiteral("number")).toInt(0);
     memory.name = object.value(QStringLiteral("name")).toString();
     memory.band = object.value(QStringLiteral("band")).toString();
     memory.bandKey = object.value(QStringLiteral("bandKey")).toInt(-1);
-    memory.receiveHz = object.value(QStringLiteral("receiveHz")).toVariant().toULongLong();
+    memory.receiveHz = object.value(QStringLiteral("receiveHZ")).toVariant().toULongLong();
     memory.shift = object.value(QStringLiteral("shift")).toString();
     memory.duplexMode = object.value(QStringLiteral("duplexMode")).toInt(dmSimplex);
-    memory.offsetHz = object.value(QStringLiteral("offsetHz")).toVariant().toULongLong();
+    memory.offsetHz = object.value(QStringLiteral("offsetHZ")).toVariant().toULongLong();
     memory.toneOption = object.value(QStringLiteral("toneOption")).toString();
     memory.toneFrequency = object.value(QStringLiteral("toneFrequency")).toString();
     memory.toneMode = object.value(QStringLiteral("toneMode")).toInt(ratrNN);
@@ -63,6 +69,37 @@ QJsonArray memoriesArray(const QVector<MemoryRecord>& memories)
         array.append(memoryToJson(memory));
     }
     return array;
+}
+
+QJsonArray memoriesArrayFromValue(const QJsonValue& value)
+{
+    if (value.isArray())
+    {
+        return value.toArray();
+    }
+    if (value.isString())
+    {
+        const QJsonDocument doc = QJsonDocument::fromJson(value.toString().toUtf8());
+        if (doc.isArray())
+        {
+            return doc.array();
+        }
+        if (doc.isObject())
+        {
+            return memoriesArrayFromValue(doc.object());
+        }
+    }
+    if (value.isObject())
+    {
+        const QJsonObject object = value.toObject();
+        QJsonArray array = memoriesArrayFromValue(object.value(QStringLiteral("memories")));
+        if (!array.isEmpty())
+        {
+            return array;
+        }
+        return memoriesArrayFromValue(object.value(QStringLiteral("settings")));
+    }
+    return {};
 }
 } // namespace
 
@@ -97,7 +134,6 @@ QVector<MemoryRecord> normalizedMemoryNumbers(QVector<MemoryRecord> memories)
 QJsonDocument memoriesExportDocument(const QVector<MemoryRecord>& memories)
 {
     QJsonObject root;
-    root.insert(QStringLiteral("version"), 1);
     root.insert(QStringLiteral("application"), QStringLiteral("SDR9700"));
     root.insert(QStringLiteral("memories"), memoriesArray(normalizedMemoryNumbers(memories)));
     return QJsonDocument(root);
@@ -112,7 +148,7 @@ QVector<MemoryRecord> memoriesFromDocument(const QJsonDocument& doc)
     }
     else if (doc.isObject())
     {
-        array = doc.object().value(QStringLiteral("memories")).toArray();
+        array = memoriesArrayFromValue(doc.object());
     }
 
     QVector<MemoryRecord> memories;
@@ -144,10 +180,20 @@ QVector<MemoryRecord> memoriesFromDocument(const QJsonDocument& doc)
     return memories;
 }
 
+QString memoriesPath()
+{
+    return QDir(QFileInfo(AppSettings::configPath()).absolutePath()).filePath(QStringLiteral("sdr9700-memories.json"));
+}
+
 QVector<MemoryRecord> loadMemories()
 {
-    const QString stored = AppSettings::instance().value(QString::fromLatin1(kMemoriesSettingsKey)).toString();
-    const QJsonDocument doc = QJsonDocument::fromJson(stored.toUtf8());
+    QFile file(memoriesPath());
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        return {};
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     if (!doc.isArray() && !doc.isObject())
     {
         return {};
@@ -159,7 +205,19 @@ QVector<MemoryRecord> loadMemories()
 bool saveMemories(const QVector<MemoryRecord>& memories)
 {
     const QVector<MemoryRecord> normalized = normalizedMemoryNumbers(memories);
-    return AppSettings::instance().setValue(
-        QString::fromLatin1(kMemoriesSettingsKey),
-        QString::fromUtf8(QJsonDocument(memoriesArray(normalized)).toJson(QJsonDocument::Compact)));
+    const QString path = memoriesPath();
+    QDir().mkpath(QFileInfo(path).absolutePath());
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        return false;
+    }
+
+    const QByteArray data = memoriesExportDocument(normalized).toJson(QJsonDocument::Indented);
+    if (file.write(data) != static_cast<qint64>(data.size()))
+    {
+        return false;
+    }
+    return file.commit();
 }

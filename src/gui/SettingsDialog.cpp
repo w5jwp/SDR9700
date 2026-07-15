@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "ApplicationConfigurationSettingsPanel.h"
 #include "AudioDevicesSettingsPanel.h"
 #include "BandScopeSettingsPanel.h"
 #include "DialogPlacement.h"
@@ -18,6 +19,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QShowEvent>
+#include <QSize>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QTreeWidget>
@@ -26,10 +28,28 @@
 
 namespace
 {
+constexpr int kSettingsPageScrollbarGutter = 10;
+
 int pageKey(SettingsDialog::Page page)
 {
     return static_cast<int>(page);
 }
+
+class CurrentPageStackedWidget : public QStackedWidget
+{
+  public:
+    using QStackedWidget::QStackedWidget;
+
+    QSize sizeHint() const override
+    {
+        return currentWidget() ? currentWidget()->sizeHint() : QStackedWidget::sizeHint();
+    }
+
+    QSize minimumSizeHint() const override
+    {
+        return currentWidget() ? currentWidget()->minimumSizeHint() : QStackedWidget::minimumSizeHint();
+    }
+};
 } // namespace
 
 SettingsDialog::SettingsDialog(QWidget* parent) : SettingsDialog(Page::AudioDevices, parent) {}
@@ -86,7 +106,7 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     m_navigation->setUniformRowHeights(false);
     m_navigation->setAccessibleName(QStringLiteral("Settings pages"));
     m_navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     body->addWidget(m_navigation);
 
     auto* divider = new QWidget(content);
@@ -95,21 +115,30 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     body->addWidget(divider);
 
     auto* pageHost = new QWidget(content);
-    auto* pageLayout = new QVBoxLayout(pageHost);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(8);
+    m_pageLayout = new QVBoxLayout(pageHost);
+    m_pageLayout->setContentsMargins(0, 0, 0, 0);
+    m_pageLayout->setSpacing(8);
     m_pageTitle = new QLabel(pageHost);
     m_pageTitle->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 16px; font-weight: bold; }")
                                    .arg(QLatin1String(UiTheme::Color::TextPrimary)));
-    pageLayout->addWidget(m_pageTitle);
-    m_pages = new QStackedWidget(pageHost);
-    pageLayout->addWidget(m_pages, 1);
+    m_pageLayout->addWidget(m_pageTitle);
+    m_pages = new CurrentPageStackedWidget(pageHost);
+    connect(m_pages, &QStackedWidget::currentChanged, m_pages, &QWidget::updateGeometry);
+    connect(m_pages, &QStackedWidget::currentChanged, this,
+            [this]()
+            {
+                updatePageScrollGutter();
+                QTimer::singleShot(0, this, &SettingsDialog::updatePageScrollGutter);
+            });
+    m_pageLayout->addWidget(m_pages, 1);
 
     m_pageScroll = new QScrollArea(content);
     m_pageScroll->setWidgetResizable(true);
     m_pageScroll->setFrameShape(QFrame::NoFrame);
     m_pageScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_pageScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_pageScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    connect(m_pageScroll->verticalScrollBar(), &QScrollBar::rangeChanged, this,
+            [this](int, int) { updatePageScrollGutter(); });
     m_pageScroll->setWidget(pageHost);
     body->addWidget(m_pageScroll, 1);
     contentLayout->addLayout(body, 1);
@@ -127,6 +156,18 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                 return panel;
             });
 #endif
+    QTreeWidgetItem* applicationCategory =
+        addCategory(QStringLiteral("APPLICATION"), QStringLiteral("application configuration backup restore reset"));
+    addPage(applicationCategory, Page::ApplicationConfiguration, QStringLiteral("Configuration"),
+            QStringLiteral("application configuration backup restore export import reset memories settings"),
+            [this]()
+            {
+                auto* panel = new ApplicationConfigurationSettingsPanel;
+                connect(panel, &ApplicationConfigurationSettingsPanel::memoriesChanged, this,
+                        &SettingsDialog::memoriesChanged);
+                return panel;
+            });
+
     QTreeWidgetItem* appearanceCategory =
         addCategory(QStringLiteral("APPEARANCE"), QStringLiteral("appearance display visual band scope bandscope"));
     addPage(appearanceCategory, Page::BandScope, QStringLiteral("Band Scope"),
@@ -327,6 +368,25 @@ void SettingsDialog::selectPage(Page page)
 
     m_navigation->setCurrentItem(item);
     m_navigation->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+}
+
+void SettingsDialog::updatePageScrollGutter()
+{
+    if (!m_pageScroll || !m_pageLayout)
+    {
+        return;
+    }
+
+    const QScrollBar* verticalScrollBar = m_pageScroll->verticalScrollBar();
+    const bool needsVerticalScroll = verticalScrollBar && verticalScrollBar->maximum() > verticalScrollBar->minimum();
+    const int rightGutter = needsVerticalScroll ? kSettingsPageScrollbarGutter : 0;
+    const QMargins margins = m_pageLayout->contentsMargins();
+    if (margins.right() == rightGutter)
+    {
+        return;
+    }
+
+    m_pageLayout->setContentsMargins(margins.left(), margins.top(), rightGutter, margins.bottom());
 }
 
 QString SettingsDialog::itemSearchText(QTreeWidgetItem* item)

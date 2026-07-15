@@ -121,11 +121,15 @@ set(SDR9700_SOURCES
     gui/UiTheme.h
     gui/MemoryStore.h
     gui/MemoryStore.cpp
+    gui/ConfigurationManager.h
+    gui/ConfigurationManager.cpp
     gui/RadioChooserDialog.h
     gui/RadioChooserDialog.cpp
     gui/SettingsDialog.h
     gui/SettingsDialog.cpp
     gui/SettingsPanelStyle.h
+    gui/ApplicationConfigurationSettingsPanel.h
+    gui/ApplicationConfigurationSettingsPanel.cpp
     gui/BandScopeSettingsPanel.h
     gui/BandScopeSettingsPanel.cpp
     gui/AudioDevicesSettingsPanel.h

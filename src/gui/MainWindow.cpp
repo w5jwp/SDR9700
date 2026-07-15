@@ -13,6 +13,7 @@
 #include "VfoPanel.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
+#include "ConfigurationManager.h"
 #include "MemoryStore.h"
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
@@ -50,7 +51,6 @@
 #include <QColor>
 #include <QFormLayout>
 #include <QFile>
-#include <QFileDialog>
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QCloseEvent>
@@ -70,11 +70,6 @@
 #include <QDateTime>
 #include <QVector>
 #include <QWidgetAction>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
-#include <QSaveFile>
 #include <QUuid>
 #include <algorithm>
 #include <functional>
@@ -107,16 +102,16 @@ QString levelButtonStyle(bool active)
                   : commandButtonStyle(false);
 }
 
-constexpr auto kCloseMemoryWindowOnSelectSettingsKey = "CloseMemoryWindowOnSelect";
-constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
-constexpr auto kTuningStepHzSettingsKey = "TuningStepHz";
-constexpr auto kBandscopeSpanHzSettingsKey = "BandscopeSpanHz";
-constexpr auto kBandscopeCenterLineColorSettingsKey = "BandscopeCenterLineColor";
-constexpr auto kBandscopeBackgroundColorSettingsKey = "BandscopeBackgroundColor";
-constexpr auto kBandscopeGridLineColorSettingsKey = "BandscopeGridLineColor";
-constexpr auto kBandscopeGridDensitySettingsKey = "BandscopeGridDensity";
-constexpr int kDefaultTuningStepHz = 100;
-constexpr quint64 kDefaultBandscopeSpanHz = 500000;
+constexpr auto kMemoryWindowCloseOnSelectSettingsKey = "memoryWindowCloseOnSelect";
+constexpr auto kBandScopeInvertMouseWheelSettingsKey = "bandScopeInvertMouseWheel";
+constexpr auto kTuningStepHZSettingsKey = "tuningStepHZ";
+constexpr auto kBandScopeSpanHZSettingsKey = "bandScopeSpanHZ";
+constexpr auto kBandScopeCenterLineColorSettingsKey = "bandScopeCenterLineColor";
+constexpr auto kBandScopeBackgroundColorSettingsKey = "bandScopeBackgroundColor";
+constexpr auto kBandScopeGridLineColorSettingsKey = "bandScopeGridLineColor";
+constexpr auto kBandScopeGridDensitySettingsKey = "bandScopeGridDensity";
+constexpr int kDefaultTuningStepHZ = 100;
+constexpr quint64 kDefaultBandScopeSpanHZ = 500000;
 const QColor kDefaultBandscopeCenterLineColor(0xf5, 0xf7, 0xf8);
 const QColor kDefaultBandscopeBackgroundColor(0x0b, 0x3f, 0x55);
 const QColor kDefaultBandscopeGridLineColor(0xc8, 0xf1, 0xf5);
@@ -176,8 +171,6 @@ constexpr QMargins kControlStripMargins(8, 14, 8, 16);
 constexpr int kControlRowSpacing = 8;
 constexpr int kControlGroupMargin = 8;
 constexpr int kControlGroupSpacing = 6;
-constexpr int kBandscopeSpectrumHeightIncrease = 20;
-constexpr int kBandscopeSpectrumHeight760Increase = 40;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 constexpr QSize kSelectorButtonSize(72, UiTheme::Size::ControlButtonHeight);
 
@@ -216,7 +209,7 @@ int bandscopeGridDensitySetting()
 {
     return qBound(0,
                   AppSettings::instance()
-                      .value(QString::fromLatin1(kBandscopeGridDensitySettingsKey), kDefaultBandscopeGridDensity)
+                      .value(QString::fromLatin1(kBandScopeGridDensitySettingsKey), kDefaultBandscopeGridDensity)
                       .toInt(),
                   2);
 }
@@ -263,7 +256,7 @@ QRect centeredRectInAvailableGeometry(QSize size, const QRect& available)
 
 int appVolumeSettingValue()
 {
-    return qBound(0, AppSettings::instance().value(QStringLiteral("VolumeLevel"), 128).toInt(), 255);
+    return qBound(0, AppSettings::instance().value(QStringLiteral("volumeLevel"), 128).toInt(), 255);
 }
 
 class TwoLineButton : public QPushButton
@@ -664,13 +657,13 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     vbox->addWidget(bandscopeDivider);
     m_bandscopeDisplay = new BandscopeDisplay(central);
     m_bandscopeDisplay->setInvertMouseWheel(
-        AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
+        AppSettings::instance().value(QString::fromLatin1(kBandScopeInvertMouseWheelSettingsKey), "False").toBool());
     m_bandscopeDisplay->setVfoMarkerColor(
-        colorSetting(kBandscopeCenterLineColorSettingsKey, kDefaultBandscopeCenterLineColor));
+        colorSetting(kBandScopeCenterLineColorSettingsKey, kDefaultBandscopeCenterLineColor));
     m_bandscopeDisplay->setBackgroundColor(
-        colorSetting(kBandscopeBackgroundColorSettingsKey, kDefaultBandscopeBackgroundColor));
+        colorSetting(kBandScopeBackgroundColorSettingsKey, kDefaultBandscopeBackgroundColor));
     m_bandscopeDisplay->setGridLineColor(
-        colorSetting(kBandscopeGridLineColorSettingsKey, kDefaultBandscopeGridLineColor));
+        colorSetting(kBandScopeGridLineColorSettingsKey, kDefaultBandscopeGridLineColor));
     m_bandscopeDisplay->setGridDensity(bandscopeGridDensitySetting());
     QVector<BandscopeDisplay::SpanChoice> spanChoices;
     spanChoices.reserve(static_cast<int>(std::size(kBandscopeSpanPresets)));
@@ -680,8 +673,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     }
     m_bandscopeDisplay->setSpanChoices(spanChoices);
     const quint64 initialBandscopeSpanHz = AppSettings::instance()
-                                               .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
-                                                      QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                                               .value(QString::fromLatin1(kBandScopeSpanHZSettingsKey),
+                                                      QVariant::fromValue<qulonglong>(kDefaultBandScopeSpanHZ))
                                                .toULongLong();
     m_bandscopeDisplay->setCurrentSpanHz(initialBandscopeSpanHz);
     const double initialBandscopeCenterMhz = m_vfo->frequencyHz() / 1e6;
@@ -693,7 +686,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_bandscopeDisplay, &BandscopeDisplay::spanSelected, this,
             [this](quint64 hz)
             {
-                AppSettings::instance().setValue(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                AppSettings::instance().setValue(QString::fromLatin1(kBandScopeSpanHZSettingsKey),
                                                  QVariant::fromValue<qulonglong>(hz));
                 applyBandscopeSettings();
             });
@@ -956,7 +949,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         return;
                     }
                     m_icomRC28HoldConsumed[i] = true;
-                    const QString field = i == 0 ? QStringLiteral("f1Hold") : QStringLiteral("f2Hold");
+                    const QString field = i == 0 ? QStringLiteral("F1Hold") : QStringLiteral("F2Hold");
                     dispatchIcomRC28Action(IcomRC28Manager::settingsField(field, QStringLiteral("None")));
                 });
     }
@@ -1051,7 +1044,7 @@ void MainWindow::buildToolBar()
                 }
                 const int bounded = qBound(0, value, 255);
                 m_currentAfGain = bounded;
-                AppSettings::instance().setValue(QStringLiteral("VolumeLevel"), bounded);
+                AppSettings::instance().setValue(QStringLiteral("volumeLevel"), bounded);
                 if (auto* backend = m_model->backend())
                 {
                     backend->setAfGain(bounded);
@@ -1177,7 +1170,7 @@ void MainWindow::buildMemoryWindow()
     localNote->setStyleSheet("QLabel { color: palette(mid); }");
     m_closeMemoryWindowOnSelectCheck = new QCheckBox("Close after selection", panel);
     m_closeMemoryWindowOnSelectCheck->setChecked(
-        AppSettings::instance().value(QString::fromLatin1(kCloseMemoryWindowOnSelectSettingsKey), "True").toBool());
+        AppSettings::instance().value(QString::fromLatin1(kMemoryWindowCloseOnSelectSettingsKey), "True").toBool());
     m_closeMemoryWindowOnSelectCheck->setToolTip("Close the Memories window after selecting a memory.");
     m_closeMemoryWindowOnSelectCheck->setStyleSheet("QCheckBox { color: palette(mid); }");
     m_memoryCountLabel = new QLabel(panel);
@@ -1203,7 +1196,7 @@ void MainWindow::buildMemoryWindow()
     connect(m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &MainWindow::reloadMemoryTable);
     connect(m_closeMemoryWindowOnSelectCheck, &QCheckBox::toggled, this, [](bool checked)
-            { AppSettings::instance().setValue(QString::fromLatin1(kCloseMemoryWindowOnSelectSettingsKey), checked); });
+            { AppSettings::instance().setValue(QString::fromLatin1(kMemoryWindowCloseOnSelectSettingsKey), checked); });
     connect(selectButton, &QPushButton::clicked, this, &MainWindow::selectCheckedMemory);
     connect(upButton, &QPushButton::clicked, this, &MainWindow::moveSelectedMemoryUp);
     connect(downButton, &QPushButton::clicked, this, &MainWindow::moveSelectedMemoryDown);
@@ -1214,81 +1207,20 @@ void MainWindow::buildMemoryWindow()
     connect(importButton, &QPushButton::clicked, this,
             [this]()
             {
-                const QString path =
-                    QFileDialog::getOpenFileName(this, "Import Memories", QString(),
-                                                 "SDR9700 memories (*.json);;JSON files (*.json);;All files (*)");
-                if (path.isEmpty())
+                const MemoryImportResult result = ConfigurationManager::importMemories(this);
+                if (result.success)
                 {
-                    return;
+                    reloadMemoryTable();
+                    showToast(QString("Imported %1 memories").arg(result.importedCount));
                 }
-
-                QFile file(path);
-                if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-                {
-                    QMessageBox::warning(this, "Import Memories", "Could not open the selected memory file.");
-                    return;
-                }
-
-                QJsonParseError error;
-                const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-                if (error.error != QJsonParseError::NoError)
-                {
-                    QMessageBox::warning(this, "Import Memories", "The selected file is not valid JSON.");
-                    return;
-                }
-
-                QVector<MemoryRecord> existing = loadMemories();
-                const QVector<MemoryRecord> imported = memoriesFromDocument(doc);
-                for (MemoryRecord memory : imported)
-                {
-                    auto current = std::find_if(existing.begin(), existing.end(), [&memory](const MemoryRecord& record)
-                                                { return record.id == memory.id; });
-                    if (current != existing.end())
-                    {
-                        *current = memory;
-                    }
-                    else
-                    {
-                        existing.append(memory);
-                    }
-                }
-                if (!saveMemories(existing))
-                {
-                    QMessageBox::warning(this, "Import Memories", "Could not save the imported memories.");
-                    return;
-                }
-                reloadMemoryTable();
-                showToast(QString("Imported %1 memories").arg(imported.size()));
             });
     connect(exportButton, &QPushButton::clicked, this,
             [this]()
             {
-                const QString path =
-                    QFileDialog::getSaveFileName(this, "Export Memories", "sdr9700-memories.json",
-                                                 "SDR9700 memories (*.json);;JSON files (*.json);;All files (*)");
-                if (path.isEmpty())
+                if (ConfigurationManager::exportMemories(this))
                 {
-                    return;
+                    showToast("Memories exported");
                 }
-
-                QSaveFile file(path);
-                if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-                {
-                    QMessageBox::warning(this, "Export Memories", "Could not write the selected memory file.");
-                    return;
-                }
-                const QByteArray data = memoriesExportDocument(loadMemories()).toJson(QJsonDocument::Indented);
-                if (file.write(data) != static_cast<qint64>(data.size()))
-                {
-                    QMessageBox::warning(this, "Export Memories", "Could not write the selected memory file.");
-                    return;
-                }
-                if (!file.commit())
-                {
-                    QMessageBox::warning(this, "Export Memories", "Could not save the memory file.");
-                    return;
-                }
-                showToast("Memories exported");
             });
 
     reloadMemoryTable();
@@ -1351,6 +1283,12 @@ void MainWindow::showSettingsDialog()
     connect(dlg, &SettingsDialog::bandscopeGridLineColorChanged, m_bandscopeDisplay,
             &BandscopeDisplay::setGridLineColor);
     connect(dlg, &SettingsDialog::bandscopeGridDensityChanged, m_bandscopeDisplay, &BandscopeDisplay::setGridDensity);
+    connect(dlg, &SettingsDialog::memoriesChanged, this,
+            [this](const QString& message)
+            {
+                reloadMemoryTable();
+                showToast(message);
+            });
 #ifdef HAVE_HIDAPI
     connect(dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
             [this](const QString&, const QString&)
@@ -1373,7 +1311,7 @@ void MainWindow::showSettingsDialog()
                     m_settingsDialog = nullptr;
                 }
 
-                m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
+                m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
                 if (m_vfoPanel)
                 {
                     m_vfoPanel->setLanMod(m_lanModValue);
@@ -1381,7 +1319,7 @@ void MainWindow::showSettingsDialog()
                 m_model->setLanModLevel(m_lanModValue);
                 m_bandscopeDisplay->setInvertMouseWheel(
                     AppSettings::instance()
-                        .value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False")
+                        .value(QString::fromLatin1(kBandScopeInvertMouseWheelSettingsKey), "False")
                         .toBool());
 #ifdef HAVE_HIDAPI
                 refreshIcomRC28EncoderSettings();
@@ -2203,7 +2141,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_txPowerValue = 0;
     m_squelchValue = 0;
     m_rfGainValue = 0;
-    m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
+    m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
     m_vfoPanel = new VfoPanel(QStringLiteral("VFO"), strip);
     m_vfoPanel->setFrequencyReadOnly(false);
     m_vfoPanel->setFrequencyText(QStringLiteral("---.---.---"));
@@ -2377,7 +2315,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                         return;
                     }
                     m_lanModValue = qBound(0, value, 255);
-                    AppSettings::instance().setValue(QStringLiteral("LanModLevel"), m_lanModValue);
+                    AppSettings::instance().setValue(QStringLiteral("LANModLevel"), m_lanModValue);
                     m_model->setLanModLevel(m_lanModValue);
                 });
     };
@@ -2472,7 +2410,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                 const QAction* chosen = menu.exec(m_vfoPanel->stepMenuPosition());
                 if (chosen)
                 {
-                    AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHzSettingsKey),
+                    AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHZSettingsKey),
                                                      chosen->data().toInt());
                     updateStepButton();
                     applyRadioTuningStep();
@@ -2638,7 +2576,7 @@ void MainWindow::updateStatusClock()
 void MainWindow::toggleStatusClockMode()
 {
     m_statusClockUtc = !m_statusClockUtc;
-    AppSettings::instance().setValue("StatusClockUtc", m_statusClockUtc);
+    AppSettings::instance().setValue("statusClockUTC", m_statusClockUtc);
     updateStatusClock();
 }
 
@@ -2994,7 +2932,7 @@ void MainWindow::buildStatusBar()
 
     // AppSettings stores booleans as "True"/"False" strings per CONVENTIONS.md.
     m_statusClockUtc =
-        AppSettings::instance().value("StatusClockUtc", "True").toString().compare("True", Qt::CaseInsensitive) == 0;
+        AppSettings::instance().value("statusClockUTC", "True").toString().compare("True", Qt::CaseInsensitive) == 0;
     updateStatusClock();
     updateNetworkQuality(0);
     auto* clockTimer = new QTimer(this);
@@ -3070,7 +3008,7 @@ void MainWindow::tryAutoConnect()
     store.load();
     m_allowChooserOnDisconnect = false;
 
-    const bool autoConnect = AppSettings::instance().value("AutoConnect", "True").toBool();
+    const bool autoConnect = AppSettings::instance().value("autoConnect", "True").toBool();
     if (autoConnect)
     {
         const QUuid lastId = store.lastProfileId();
@@ -3105,69 +3043,35 @@ void MainWindow::closeEvent(QCloseEvent* event)
 void MainWindow::restoreWindowLayout()
 {
     const QSize fixedSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
-    const bool hasSavedPos = AppSettings::instance().contains(QStringLiteral("MainWindowX")) &&
-                             AppSettings::instance().contains(QStringLiteral("MainWindowY"));
+    const bool hasSavedPos = AppSettings::instance().contains(QStringLiteral("mainWindowPositionX")) &&
+                             AppSettings::instance().contains(QStringLiteral("mainWindowPositionY"));
     if (hasSavedPos)
     {
-        const QPoint savedTopLeft(AppSettings::instance().value(QStringLiteral("MainWindowX")).toInt(),
-                                  AppSettings::instance().value(QStringLiteral("MainWindowY")).toInt());
+        const QPoint savedTopLeft(AppSettings::instance().value(QStringLiteral("mainWindowPositionX")).toInt(),
+                                  AppSettings::instance().value(QStringLiteral("mainWindowPositionY")).toInt());
         const QRect savedRect(savedTopLeft, fixedSize);
         const QPoint pos = availableScreenContains(savedRect)
                                ? savedTopLeft
                                : centeredRectInAvailableGeometry(fixedSize, availableGeometryFor(savedRect)).topLeft();
         move(pos);
     }
-    else
-    {
-        const QString geometry = AppSettings::instance().value("MainWindowGeometry").toString();
-        if (!geometry.isEmpty())
-        {
-            restoreGeometry(QByteArray::fromBase64(geometry.toLatin1()));
-            setFixedSize(fixedSize);
-            if (!availableScreenContains(frameGeometry()))
-            {
-                move(centeredRectInAvailableGeometry(fixedSize, availableGeometryFor(frameGeometry())).topLeft());
-            }
-        }
-    }
-
     if (m_bandscopeDisplay)
     {
-        int spectrumHeight = AppSettings::instance().value("BandscopeSpectrumHeight", -1).toInt();
-        const QString migrationKey = QStringLiteral("BandscopeSpectrumHeight680Migrated");
-        const QString height760MigrationKey = QStringLiteral("BandscopeSpectrumHeight760Migrated");
-        const bool needsSpectrumHeightMigration = !AppSettings::instance().contains(migrationKey);
-        const bool needsHeight760Migration = !AppSettings::instance().contains(height760MigrationKey);
+        const int spectrumHeight = AppSettings::instance().value("bandScopeSpectrumHeight", -1).toInt();
         if (spectrumHeight > 0)
         {
-            if (needsSpectrumHeightMigration)
-            {
-                spectrumHeight += kBandscopeSpectrumHeightIncrease;
-            }
-            if (needsHeight760Migration)
-            {
-                spectrumHeight += kBandscopeSpectrumHeight760Increase;
-            }
             m_bandscopeDisplay->setSpectrumPaneHeight(spectrumHeight);
-        }
-        if (needsSpectrumHeightMigration)
-        {
-            AppSettings::instance().setValue(migrationKey, true);
-        }
-        if (needsHeight760Migration)
-        {
-            AppSettings::instance().setValue(height760MigrationKey, true);
         }
     }
 }
 
 void MainWindow::saveWindowLayout() const
 {
-    AppSettings::instance().setValue("MainWindowX", normalGeometry().x());
-    AppSettings::instance().setValue("MainWindowY", normalGeometry().y());
+    AppSettings::instance().setValue("mainWindowPositionX", normalGeometry().x());
+    AppSettings::instance().setValue("mainWindowPositionY", normalGeometry().y());
     if (m_bandscopeDisplay)
     {
-        AppSettings::instance().setValue("BandscopeSpectrumHeight", m_bandscopeDisplay->spectrumPaneHeight());
+        AppSettings::instance().setValue("bandScopeSpectrumHeight", m_bandscopeDisplay->spectrumPaneHeight());
     }
 }
 
@@ -3235,7 +3139,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_txPowerValue = 0;
     m_rfGainValue = 0;
     m_squelchValue = 0;
-    m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
+    m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
     m_duplexMode = dmSimplex;
     m_toneAccessMode = ratrNN;
     m_toneFrequency = 670;
@@ -3412,7 +3316,7 @@ void MainWindow::dispatchIcomRC28Action(const QString& action)
                 break;
             }
         }
-        AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHzSettingsKey), kStepPresets[nextIdx].hz);
+        AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHZSettingsKey), kStepPresets[nextIdx].hz);
         updateStepButton();
         applyRadioTuningStep();
     }
@@ -3470,11 +3374,11 @@ void MainWindow::updateIcomRC28Leds()
         return false;
     };
 
-    if (holdActionActive(IcomRC28Manager::settingsField(QStringLiteral("f1Hold"), QStringLiteral("None"))))
+    if (holdActionActive(IcomRC28Manager::settingsField(QStringLiteral("F1Hold"), QStringLiteral("None"))))
     {
         b &= ~IcomRC28Manager::kLedBitF1;
     }
-    if (holdActionActive(IcomRC28Manager::settingsField(QStringLiteral("f2Hold"), QStringLiteral("None"))))
+    if (holdActionActive(IcomRC28Manager::settingsField(QStringLiteral("F2Hold"), QStringLiteral("None"))))
     {
         b &= ~IcomRC28Manager::kLedBitF2;
     }
@@ -3606,7 +3510,7 @@ void MainWindow::handleIcomRC28Button(int button, int action)
         if (m_icomRC28HoldTimers[index] && m_icomRC28HoldTimers[index]->isActive() && !m_icomRC28HoldConsumed[index])
         {
             m_icomRC28HoldTimers[index]->stop();
-            const QString field = index == 0 ? QStringLiteral("f1Press") : QStringLiteral("f2Press");
+            const QString field = index == 0 ? QStringLiteral("F1Press") : QStringLiteral("F2Press");
             dispatchIcomRC28Action(IcomRC28Manager::settingsField(field, QStringLiteral("None")));
         }
         m_icomRC28HoldConsumed[index] = false;
@@ -3618,7 +3522,7 @@ void MainWindow::handleIcomRC28Button(int button, int action)
         return;
     }
 
-    const QString mode = IcomRC28Manager::settingsField(QStringLiteral("pttMode"), QStringLiteral("Disabled"));
+    const QString mode = IcomRC28Manager::settingsField(QStringLiteral("PTTMode"), QStringLiteral("Disabled"));
     if (mode == QLatin1String("Disabled"))
     {
         return;
@@ -3711,7 +3615,7 @@ void MainWindow::updateBandscopeBandLimits(quint64 hz)
 int MainWindow::tuningStepHz() const
 {
     return qBound(
-        1, AppSettings::instance().value(QString::fromLatin1(kTuningStepHzSettingsKey), kDefaultTuningStepHz).toInt(),
+        1, AppSettings::instance().value(QString::fromLatin1(kTuningStepHZSettingsKey), kDefaultTuningStepHZ).toInt(),
         10000000);
 }
 
@@ -3743,8 +3647,8 @@ void MainWindow::applyBandscopeSettings()
     }
 
     const quint64 spanHz = AppSettings::instance()
-                               .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
-                                      QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                               .value(QString::fromLatin1(kBandScopeSpanHZSettingsKey),
+                                      QVariant::fromValue<qulonglong>(kDefaultBandScopeSpanHZ))
                                .toULongLong();
 
     backend->setScopeMode(0);
@@ -3889,8 +3793,8 @@ void MainWindow::scheduleBandscopeTune(quint64 hz)
         if (auto* backend = m_model ? m_model->backend() : nullptr)
         {
             const quint64 spanHz = AppSettings::instance()
-                                       .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
-                                              QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                                       .value(QString::fromLatin1(kBandScopeSpanHZSettingsKey),
+                                              QVariant::fromValue<qulonglong>(kDefaultBandScopeSpanHZ))
                                        .toULongLong();
             backend->setScopeMode(0);
             backend->setScopeSpanHz(spanHz);

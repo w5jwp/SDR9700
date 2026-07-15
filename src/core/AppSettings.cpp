@@ -18,11 +18,193 @@
 
 namespace
 {
+bool audioSetting(const QString& key)
+{
+    static const QStringList kAudioSettings = {
+        QStringLiteral("audioInputDeviceID"),
+        QStringLiteral("audioOutputChannels"),
+        QStringLiteral("audioOutputDeviceID"),
+    };
+    return kAudioSettings.contains(key);
+}
+
+bool bandscopeSetting(const QString& key)
+{
+    static const QStringList kBandscopeSettings = {
+        QStringLiteral("bandScopeBackgroundColor"),  QStringLiteral("bandScopeCenterLineColor"),
+        QStringLiteral("bandScopeGridDensity"),      QStringLiteral("bandScopeGridLineColor"),
+        QStringLiteral("bandScopeInvertMouseWheel"), QStringLiteral("bandScopeSpanHZ"),
+        QStringLiteral("bandScopeSpectrumHeight"),
+    };
+    return kBandscopeSettings.contains(key);
+}
+
+bool mainWindowSetting(const QString& key)
+{
+    static const QStringList kMainWindowSettings = {
+        QStringLiteral("mainWindowPositionX"),
+        QStringLiteral("mainWindowPositionY"),
+        QStringLiteral("statusClockUTC"),
+    };
+    return kMainWindowSettings.contains(key);
+}
+
+bool memoryWindowSetting(const QString& key)
+{
+    static const QStringList kMemoryWindowSettings = {
+        QStringLiteral("memoryWindowCloseOnSelect"),
+    };
+    return kMemoryWindowSettings.contains(key);
+}
+
+bool radioSetting(const QString& key)
+{
+    static const QStringList kRadioSettings = {
+        QStringLiteral("LANModLevel"),
+        QStringLiteral("tuningStepHZ"),
+        QStringLiteral("volumeLevel"),
+    };
+    return kRadioSettings.contains(key);
+}
+
+bool radioChooserSetting(const QString& key)
+{
+    static const QStringList kRadioChooserSettings = {
+        QStringLiteral("autoConnect"),
+        QStringLiteral("radioProfiles"),
+    };
+    return kRadioChooserSettings.contains(key);
+}
+
+bool accessoriesSetting(const QString& key)
+{
+    static const QStringList kAccessoriesSettings = {
+        QStringLiteral("ICOMRC28ButtonMapping"),
+    };
+    return kAccessoriesSettings.contains(key);
+}
+
 bool settingStoresJson(const QString& key)
 {
-    static const QStringList kJsonSettings = {QStringLiteral("Memories"), QStringLiteral("RadioProfiles"),
-                                              QStringLiteral("IcomRC28Settings"), QStringLiteral("RC28Settings")};
+    static const QStringList kJsonSettings = {QStringLiteral("radioProfiles"), QStringLiteral("ICOMRC28ButtonMapping")};
     return kJsonSettings.contains(key);
+}
+
+void insertStoredSetting(QJsonObject* target, const QString& key, const QString& storedValue)
+{
+    if (settingStoresJson(key))
+    {
+        QJsonParseError error;
+        const QJsonDocument nested = QJsonDocument::fromJson(storedValue.toUtf8(), &error);
+        if (error.error == QJsonParseError::NoError && nested.isObject())
+        {
+            target->insert(key, nested.object());
+            return;
+        }
+        if (error.error == QJsonParseError::NoError && nested.isArray())
+        {
+            target->insert(key, nested.array());
+            return;
+        }
+    }
+
+    target->insert(key, storedValue);
+}
+
+QString audioStoredKey(const QString& key)
+{
+    if (key == QStringLiteral("audioInputDeviceID"))
+    {
+        return QStringLiteral("inputDeviceID");
+    }
+    if (key == QStringLiteral("audioOutputDeviceID"))
+    {
+        return QStringLiteral("outputDeviceID");
+    }
+    if (key == QStringLiteral("audioOutputChannels"))
+    {
+        return QStringLiteral("outputChannels");
+    }
+    return {};
+}
+
+QString bandscopeStoredKey(const QString& key)
+{
+    if (key == QStringLiteral("bandScopeBackgroundColor"))
+    {
+        return QStringLiteral("backgroundColor");
+    }
+    if (key == QStringLiteral("bandScopeCenterLineColor"))
+    {
+        return QStringLiteral("centerLineColor");
+    }
+    if (key == QStringLiteral("bandScopeGridDensity"))
+    {
+        return QStringLiteral("gridDensity");
+    }
+    if (key == QStringLiteral("bandScopeGridLineColor"))
+    {
+        return QStringLiteral("gridLineColor");
+    }
+    if (key == QStringLiteral("bandScopeInvertMouseWheel"))
+    {
+        return QStringLiteral("invertMouseWheel");
+    }
+    if (key == QStringLiteral("bandScopeSpanHZ"))
+    {
+        return QStringLiteral("spanHZ");
+    }
+    if (key == QStringLiteral("bandScopeSpectrumHeight"))
+    {
+        return QStringLiteral("spectrumHeight");
+    }
+    return {};
+}
+
+QString mainWindowStoredKey(const QString& key)
+{
+    if (key == QStringLiteral("mainWindowPositionX"))
+    {
+        return QStringLiteral("positionX");
+    }
+    if (key == QStringLiteral("mainWindowPositionY"))
+    {
+        return QStringLiteral("positionY");
+    }
+    if (key == QStringLiteral("statusClockUTC"))
+    {
+        return key;
+    }
+    return {};
+}
+
+QString memoryWindowStoredKey(const QString& key)
+{
+    if (key == QStringLiteral("memoryWindowCloseOnSelect"))
+    {
+        return QStringLiteral("closeOnSelect");
+    }
+    return {};
+}
+
+void loadStoredSetting(QHash<QString, QString>* values, const QString& key, const QJsonValue& value)
+{
+    if (value.isUndefined() || value.isNull())
+    {
+        return;
+    }
+    if (value.isObject())
+    {
+        values->insert(key, QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact)));
+    }
+    else if (value.isArray())
+    {
+        values->insert(key, QString::fromUtf8(QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact)));
+    }
+    else
+    {
+        values->insert(key, value.toVariant().toString());
+    }
 }
 } // namespace
 
@@ -90,7 +272,7 @@ bool AppSettings::remove(const QString& key)
 
 bool AppSettings::save() const
 {
-    const QString path = settingsPath();
+    const QString path = configPath();
     QDir().mkpath(QFileInfo(path).absolutePath());
 
     QSaveFile file(path);
@@ -100,32 +282,83 @@ bool AppSettings::save() const
     }
 
     QJsonObject settings;
+    QJsonObject audioSettings;
+    QJsonObject bandscopeSettings;
+    QJsonObject mainWindowSettings;
+    QJsonObject memoryWindowSettings;
+    QJsonObject radioSettings;
+    QJsonObject radioChooserSettings;
+    QJsonObject accessoriesSettings;
     QList<QString> keys = m_values.keys();
     std::sort(keys.begin(), keys.end());
     for (const QString& key : keys)
     {
         const QString storedValue = m_values.value(key);
-        if (settingStoresJson(key))
+        if (audioSetting(key))
         {
-            QJsonParseError error;
-            const QJsonDocument nested = QJsonDocument::fromJson(storedValue.toUtf8(), &error);
-            if (error.error == QJsonParseError::NoError && nested.isObject())
-            {
-                settings.insert(key, nested.object());
-                continue;
-            }
-            if (error.error == QJsonParseError::NoError && nested.isArray())
-            {
-                settings.insert(key, nested.array());
-                continue;
-            }
+            insertStoredSetting(&audioSettings, audioStoredKey(key), storedValue);
+            continue;
         }
-
-        settings.insert(key, storedValue);
+        if (bandscopeSetting(key))
+        {
+            insertStoredSetting(&bandscopeSettings, bandscopeStoredKey(key), storedValue);
+            continue;
+        }
+        if (mainWindowSetting(key))
+        {
+            insertStoredSetting(&mainWindowSettings, mainWindowStoredKey(key), storedValue);
+            continue;
+        }
+        if (memoryWindowSetting(key))
+        {
+            insertStoredSetting(&memoryWindowSettings, memoryWindowStoredKey(key), storedValue);
+            continue;
+        }
+        if (radioSetting(key))
+        {
+            insertStoredSetting(&radioSettings, key, storedValue);
+            continue;
+        }
+        if (radioChooserSetting(key))
+        {
+            insertStoredSetting(&radioChooserSettings, key, storedValue);
+            continue;
+        }
+        if (accessoriesSetting(key))
+        {
+            insertStoredSetting(&accessoriesSettings, key, storedValue);
+        }
+    }
+    if (!accessoriesSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("accessories"), accessoriesSettings);
+    }
+    if (!audioSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("audio"), audioSettings);
+    }
+    if (!bandscopeSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("bandScope"), bandscopeSettings);
+    }
+    if (!mainWindowSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("mainWindow"), mainWindowSettings);
+    }
+    if (!memoryWindowSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("memoryWindow"), memoryWindowSettings);
+    }
+    if (!radioSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("radio"), radioSettings);
+    }
+    if (!radioChooserSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("radioChooser"), radioChooserSettings);
     }
 
     QJsonObject root;
-    root.insert(QStringLiteral("version"), 1);
     root.insert(QStringLiteral("settings"), settings);
 
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
@@ -147,7 +380,7 @@ bool AppSettings::save() const
 
 void AppSettings::load()
 {
-    loadJson(settingsPath());
+    loadJson(configPath());
 }
 
 bool AppSettings::loadJson(const QString& path)
@@ -166,36 +399,107 @@ bool AppSettings::loadJson(const QString& path)
     }
 
     const QJsonObject root = doc.object();
-    const QJsonObject settings = root.value(QStringLiteral("settings")).toObject(root);
+    if (!root.value(QStringLiteral("settings")).isObject())
+    {
+        return false;
+    }
+
+    const QJsonObject settings = root.value(QStringLiteral("settings")).toObject();
     for (auto it = settings.constBegin(); it != settings.constEnd(); ++it)
     {
-        if (it.value().isObject())
+        if (it.key() == QStringLiteral("audio") && it.value().isObject())
         {
-            m_values.insert(it.key(),
-                            QString::fromUtf8(QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact)));
+            const QJsonObject audio = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("audioInputDeviceID"),
+                              audio.value(QStringLiteral("inputDeviceID")));
+            loadStoredSetting(&m_values, QStringLiteral("audioOutputChannels"),
+                              audio.value(QStringLiteral("outputChannels")));
+            loadStoredSetting(&m_values, QStringLiteral("audioOutputDeviceID"),
+                              audio.value(QStringLiteral("outputDeviceID")));
+            continue;
         }
-        else if (it.value().isArray())
+
+        if (it.key() == QStringLiteral("bandScope") && it.value().isObject())
         {
-            m_values.insert(it.key(),
-                            QString::fromUtf8(QJsonDocument(it.value().toArray()).toJson(QJsonDocument::Compact)));
+            const QJsonObject bandscope = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("bandScopeBackgroundColor"),
+                              bandscope.value(QStringLiteral("backgroundColor")));
+            loadStoredSetting(&m_values, QStringLiteral("bandScopeCenterLineColor"),
+                              bandscope.value(QStringLiteral("centerLineColor")));
+            loadStoredSetting(&m_values, QStringLiteral("bandScopeGridDensity"),
+                              bandscope.value(QStringLiteral("gridDensity")));
+            loadStoredSetting(&m_values, QStringLiteral("bandScopeGridLineColor"),
+                              bandscope.value(QStringLiteral("gridLineColor")));
+            loadStoredSetting(&m_values, QStringLiteral("bandScopeInvertMouseWheel"),
+                              bandscope.value(QStringLiteral("invertMouseWheel")));
+            loadStoredSetting(&m_values, QStringLiteral("bandScopeSpanHZ"), bandscope.value(QStringLiteral("spanHZ")));
+            loadStoredSetting(&m_values, QStringLiteral("bandScopeSpectrumHeight"),
+                              bandscope.value(QStringLiteral("spectrumHeight")));
+            continue;
         }
-        else
+
+        if (it.key() == QStringLiteral("mainWindow") && it.value().isObject())
         {
-            m_values.insert(it.key(), it.value().toVariant().toString());
+            const QJsonObject mainWindow = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("mainWindowPositionX"),
+                              mainWindow.value(QStringLiteral("positionX")));
+            loadStoredSetting(&m_values, QStringLiteral("mainWindowPositionY"),
+                              mainWindow.value(QStringLiteral("positionY")));
+            loadStoredSetting(&m_values, QStringLiteral("statusClockUTC"),
+                              mainWindow.value(QStringLiteral("statusClockUTC")));
+            continue;
+        }
+
+        if (it.key() == QStringLiteral("memoryWindow") && it.value().isObject())
+        {
+            const QJsonObject memoryWindow = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("memoryWindowCloseOnSelect"),
+                              memoryWindow.value(QStringLiteral("closeOnSelect")));
+            continue;
+        }
+
+        if (it.key() == QStringLiteral("radio") && it.value().isObject())
+        {
+            const QJsonObject radio = it.value().toObject();
+            for (auto radioIt = radio.constBegin(); radioIt != radio.constEnd(); ++radioIt)
+            {
+                if (radioSetting(radioIt.key()))
+                {
+                    loadStoredSetting(&m_values, radioIt.key(), radioIt.value());
+                }
+            }
+            continue;
+        }
+
+        if (it.key() == QStringLiteral("radioChooser") && it.value().isObject())
+        {
+            const QJsonObject radioChooser = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("autoConnect"),
+                              radioChooser.value(QStringLiteral("autoConnect")));
+            loadStoredSetting(&m_values, QStringLiteral("radioProfiles"),
+                              radioChooser.value(QStringLiteral("radioProfiles")));
+            continue;
+        }
+
+        if (it.key() == QStringLiteral("accessories") && it.value().isObject())
+        {
+            const QJsonObject accessories = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("ICOMRC28ButtonMapping"),
+                              accessories.value(QStringLiteral("ICOMRC28ButtonMapping")));
         }
     }
 
     return true;
 }
 
-QString AppSettings::settingsPath()
+QString AppSettings::configPath()
 {
     QString configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     if (configRoot.isEmpty())
     {
         configRoot = QDir::homePath() + "/.config";
     }
-    return QDir(configRoot).filePath("SDR9700/config.json");
+    return QDir(configRoot).filePath("SDR9700/sdr9700.json");
 }
 
 QString AppSettings::encodeValue(const QVariant& value)

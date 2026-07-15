@@ -291,7 +291,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     m_lastUserVisibleNetworkMessage.clear();
 
     const quint64 session = ++m_sessionId;
-    m_lanModLevel = qBound(0, AppSettings::instance().value("LanModLevel", m_lanModLevel).toInt(), 255);
+    m_lanModLevel = qBound(0, AppSettings::instance().value("LANModLevel", m_lanModLevel).toInt(), 255);
 
     m_commander = new Commander();
     Commander* commandSession = m_commander;
@@ -656,7 +656,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     // Load the saved audio device if no device was explicitly set via setRxAudioDevice().
     if (m_rxDevice.isNull())
     {
-        const QByteArray savedId = AppSettings::instance().value("AudioOutputDeviceId").toString().toUtf8();
+        const QByteArray savedId = AppSettings::instance().value("audioOutputDeviceID").toString().toUtf8();
         if (!savedId.isEmpty())
         {
             const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
@@ -670,7 +670,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     }
     if (m_txDevice.isNull())
     {
-        const QByteArray savedId = AppSettings::instance().value("AudioInputDeviceId").toString().toUtf8();
+        const QByteArray savedId = AppSettings::instance().value("audioInputDeviceID").toString().toUtf8();
         if (!savedId.isEmpty())
         {
             const QList<QAudioDevice> inputs = QMediaDevices::audioInputs();
@@ -690,8 +690,8 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     static constexpr quint8 kLpcmStereo16 = 0x10;
     static constexpr quint16 kIc9700CivAddress = 0xA2;
     static constexpr quint16 kUnusedTcpPort = 0;
-    const int outputChannels = qBound(1, AppSettings::instance().value("AudioOutputChannels", 2).toInt(), 2);
-    const int outputVolume = qBound(0, AppSettings::instance().value("VolumeLevel", 128).toInt(), 255);
+    const int outputChannels = qBound(1, AppSettings::instance().value("audioOutputChannels", 2).toInt(), 2);
+    const int outputVolume = qBound(0, AppSettings::instance().value("volumeLevel", 128).toInt(), 255);
 
     audioSetup rxSetup;
     rxSetup.type = qtAudio;

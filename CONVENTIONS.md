@@ -1,4 +1,4 @@
-# SDR9700 Coding Conventions
+#SDR9700 Coding Conventions
 
 This file defines how SDR9700 code should be written. It applies to source,
 tests, build scripts, and documentation that describes implementation details.
@@ -63,14 +63,19 @@ Run it before submitting source changes.
 - Functions, methods, and local variables: `camelCase`.
 - Member variables: `m_camelCase`.
 - Constants: `kPascalCase`.
-- App settings keys: `PascalCase`.
+- App settings keys: `camelCase`; use all caps for abbreviations inside a key,
+  such as `ID`, `UTC`, `LAN`, `PTT`, `ICOM`, `RC28`, and `HZ`.
 - File names should match the main class where practical.
 
 ## Settings
 
 - Use `AppSettings` for SDR9700 client settings.
-- Store client settings in `~/.config/SDR9700/config.json`.
+- Store client settings in `~/.config/SDR9700/sdr9700.json`.
+- Store local memory channels in `~/.config/SDR9700/sdr9700-memories.json`.
 - Do not add new app-owned `QSettings` persistence.
+- Do not add configuration fallback paths, migration keys, or migration
+  holdover code. Configuration import may clean and accept the current schema;
+  runtime loading should use only the current schema.
 - Radio capability definitions are compiled into the application; do not add
   runtime radio definition files.
 - Store booleans as `"True"` or `"False"`.

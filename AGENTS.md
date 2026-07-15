@@ -1,4 +1,4 @@
-# SDR9700 — Project Context for AI Agents
+#SDR9700 — Project Context for AI Agents
 
 SDR9700 is a Linux-native Qt/C++ GUI client for controlling an Icom IC-9700
 amateur radio transceiver over the radio's LAN interface.
@@ -47,7 +47,8 @@ audio routing, and station workflows.
 When an AI agent is asked to perform a top-down and bottom-up review of the
 source code, the expected result is a detailed, nit-picky review of every file
 within the source tree. Findings should be identified for a maintainer to review
-and confirm; do not automatically correct issues found during this review unless
+and confirm;
+do not automatically correct issues found during this review unless
 the maintainer explicitly asks for fixes.
 
 A code review must always include these automated checks, run from the project
@@ -116,15 +117,24 @@ Debug builds default to `--log=all` when no log option is supplied.
 
 ## Settings
 
-Client-side settings are stored by `AppSettings` at:
+Client-side application settings are stored by `AppSettings` at:
 
 ```text
-~/.config/SDR9700/config.json
+~/.config/SDR9700/sdr9700.json
 ```
 
-The file is JSON. Boolean settings are stored as `"True"` / `"False"` strings
-for compatibility with existing code. Prefer PascalCase keys such as
-`AutoConnect`, `AudioInputDeviceId`, and `RadioProfiles`.
+Local memory channels are stored at:
+
+```text
+~/.config/SDR9700/sdr9700-memories.json
+```
+
+These files are JSON. Boolean settings are stored as `"True"` / `"False"` strings
+for compatibility with existing code. Use camel-case keys, with all-caps
+abbreviations, grouped under current schema objects such as `radioChooser`,
+`audio`, `bandScope`, and `radio`. Do not add configuration fallback paths,
+migration keys, or migration holdover code; configuration import is the cleanup
+boundary for current schema validation.
 
 ## Architecture
 

@@ -14,13 +14,13 @@ class AppSettings
     bool contains(const QString& key) const;
     bool remove(const QString& key);
     bool save() const;
+    static QString configPath();
 
   private:
     AppSettings();
 
     void load();
     bool loadJson(const QString& path);
-    static QString settingsPath();
     static QString encodeValue(const QVariant& value);
 
     QHash<QString, QString> m_values;

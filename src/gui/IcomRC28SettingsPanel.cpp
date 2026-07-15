@@ -160,15 +160,15 @@ void IcomRC28SettingsPanel::buildUi()
     root->addWidget(encoderGroup, 1);
 
     connect(m_f1PressCombo, &QComboBox::currentIndexChanged, this,
-            [this](int) { saveActionField(QStringLiteral("f1Press"), m_f1PressCombo->currentData().toString()); });
+            [this](int) { saveActionField(QStringLiteral("F1Press"), m_f1PressCombo->currentData().toString()); });
     connect(m_f1HoldCombo, &QComboBox::currentIndexChanged, this,
-            [this](int) { saveActionField(QStringLiteral("f1Hold"), m_f1HoldCombo->currentData().toString()); });
+            [this](int) { saveActionField(QStringLiteral("F1Hold"), m_f1HoldCombo->currentData().toString()); });
     connect(m_f2PressCombo, &QComboBox::currentIndexChanged, this,
-            [this](int) { saveActionField(QStringLiteral("f2Press"), m_f2PressCombo->currentData().toString()); });
+            [this](int) { saveActionField(QStringLiteral("F2Press"), m_f2PressCombo->currentData().toString()); });
     connect(m_f2HoldCombo, &QComboBox::currentIndexChanged, this,
-            [this](int) { saveActionField(QStringLiteral("f2Hold"), m_f2HoldCombo->currentData().toString()); });
+            [this](int) { saveActionField(QStringLiteral("F2Hold"), m_f2HoldCombo->currentData().toString()); });
     connect(m_pttModeCombo, &QComboBox::currentIndexChanged, this,
-            [this](int) { savePttMode(m_pttModeCombo->currentData().toString()); });
+            [this](int) { savePTTMode(m_pttModeCombo->currentData().toString()); });
     connect(m_sensitivitySlider, &QSlider::valueChanged, this, &IcomRC28SettingsPanel::saveSensitivity);
     connect(m_autoSnapCheck, &QCheckBox::toggled, this, &IcomRC28SettingsPanel::saveAutoSnap);
 }
@@ -215,15 +215,15 @@ void IcomRC28SettingsPanel::loadSettings()
     const QSignalBlocker blockAutoSnap(m_autoSnapCheck);
 
     populateActionCombo(m_f1PressCombo,
-                        IcomRC28Manager::settingsField(QStringLiteral("f1Press"), QStringLiteral("None")));
+                        IcomRC28Manager::settingsField(QStringLiteral("F1Press"), QStringLiteral("None")));
     populateActionCombo(m_f1HoldCombo,
-                        IcomRC28Manager::settingsField(QStringLiteral("f1Hold"), QStringLiteral("None")));
+                        IcomRC28Manager::settingsField(QStringLiteral("F1Hold"), QStringLiteral("None")));
     populateActionCombo(m_f2PressCombo,
-                        IcomRC28Manager::settingsField(QStringLiteral("f2Press"), QStringLiteral("None")));
+                        IcomRC28Manager::settingsField(QStringLiteral("F2Press"), QStringLiteral("None")));
     populateActionCombo(m_f2HoldCombo,
-                        IcomRC28Manager::settingsField(QStringLiteral("f2Hold"), QStringLiteral("None")));
+                        IcomRC28Manager::settingsField(QStringLiteral("F2Hold"), QStringLiteral("None")));
 
-    const QString pttMode = IcomRC28Manager::settingsField(QStringLiteral("pttMode"), QStringLiteral("Disabled"));
+    const QString pttMode = IcomRC28Manager::settingsField(QStringLiteral("PTTMode"), QStringLiteral("Disabled"));
     const int pttIndex = m_pttModeCombo->findData(pttMode);
     m_pttModeCombo->setCurrentIndex(pttIndex >= 0 ? pttIndex : 0);
 
@@ -241,10 +241,10 @@ void IcomRC28SettingsPanel::saveActionField(const QString& field, const QString&
     appendLog(QStringLiteral("%1 -> %2").arg(field, actionLabel(value)));
 }
 
-void IcomRC28SettingsPanel::savePttMode(const QString& mode)
+void IcomRC28SettingsPanel::savePTTMode(const QString& mode)
 {
-    IcomRC28Manager::setSettingsField(QStringLiteral("pttMode"), mode);
-    appendLog(QStringLiteral("pttMode -> %1").arg(mode));
+    IcomRC28Manager::setSettingsField(QStringLiteral("PTTMode"), mode);
+    appendLog(QStringLiteral("PTTMode -> %1").arg(mode));
 }
 
 void IcomRC28SettingsPanel::saveSensitivity(int value)

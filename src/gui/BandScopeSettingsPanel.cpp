@@ -16,11 +16,11 @@
 
 namespace
 {
-constexpr auto kBandscopeCenterLineColorSettingsKey = "BandscopeCenterLineColor";
-constexpr auto kBandscopeBackgroundColorSettingsKey = "BandscopeBackgroundColor";
-constexpr auto kBandscopeGridLineColorSettingsKey = "BandscopeGridLineColor";
-constexpr auto kBandscopeGridDensitySettingsKey = "BandscopeGridDensity";
-constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
+constexpr auto kBandScopeCenterLineColorSettingsKey = "bandScopeCenterLineColor";
+constexpr auto kBandScopeBackgroundColorSettingsKey = "bandScopeBackgroundColor";
+constexpr auto kBandScopeGridLineColorSettingsKey = "bandScopeGridLineColor";
+constexpr auto kBandScopeGridDensitySettingsKey = "bandScopeGridDensity";
+constexpr auto kBandScopeInvertMouseWheelSettingsKey = "bandScopeInvertMouseWheel";
 const QColor kDefaultCenterLineColor(0xf5, 0xf7, 0xf8);
 const QColor kDefaultBackgroundColor(0x0b, 0x3f, 0x55);
 const QColor kDefaultGridLineColor(0xc8, 0xf1, 0xf5);
@@ -39,7 +39,7 @@ int storedGridDensity()
 {
     return qBound(kMinGridDensity,
                   AppSettings::instance()
-                      .value(QString::fromLatin1(kBandscopeGridDensitySettingsKey), kDefaultGridDensity)
+                      .value(QString::fromLatin1(kBandScopeGridDensitySettingsKey), kDefaultGridDensity)
                       .toInt(),
                   kMaxGridDensity);
 }
@@ -47,9 +47,9 @@ int storedGridDensity()
 
 BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
     : QWidget(parent),
-      m_centerLineColor(storedColor(kBandscopeCenterLineColorSettingsKey, kDefaultCenterLineColor)),
-      m_backgroundColor(storedColor(kBandscopeBackgroundColorSettingsKey, kDefaultBackgroundColor)),
-      m_gridLineColor(storedColor(kBandscopeGridLineColorSettingsKey, kDefaultGridLineColor)),
+      m_centerLineColor(storedColor(kBandScopeCenterLineColorSettingsKey, kDefaultCenterLineColor)),
+      m_backgroundColor(storedColor(kBandScopeBackgroundColorSettingsKey, kDefaultBackgroundColor)),
+      m_gridLineColor(storedColor(kBandScopeGridLineColorSettingsKey, kDefaultGridLineColor)),
       m_gridDensity(storedGridDensity())
 {
     auto* root = new QVBoxLayout(this);
@@ -111,7 +111,7 @@ BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
     wheelLayout->setSpacing(6);
     m_invertMouseWheelCheck = new QCheckBox("Reverse wheel pan direction", wheelGroup);
     m_invertMouseWheelCheck->setChecked(
-        AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
+        AppSettings::instance().value(QString::fromLatin1(kBandScopeInvertMouseWheelSettingsKey), "False").toBool());
     wheelLayout->addWidget(m_invertMouseWheelCheck);
     root->addWidget(wheelGroup);
 
@@ -132,7 +132,7 @@ BandScopeSettingsPanel::BandScopeSettingsPanel(QWidget* parent)
     connect(m_invertMouseWheelCheck, &QCheckBox::toggled, this,
             [this](bool checked)
             {
-                AppSettings::instance().setValue(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), checked);
+                AppSettings::instance().setValue(QString::fromLatin1(kBandScopeInvertMouseWheelSettingsKey), checked);
                 Q_EMIT reverseMouseWheelTuningChanged(checked);
             });
 
@@ -215,7 +215,7 @@ void BandScopeSettingsPanel::setCenterLineColor(const QColor& color, bool persis
     m_centerLineColor = normalized;
     if (persist)
     {
-        AppSettings::instance().setValue(QString::fromLatin1(kBandscopeCenterLineColorSettingsKey),
+        AppSettings::instance().setValue(QString::fromLatin1(kBandScopeCenterLineColorSettingsKey),
                                          m_centerLineColor.name(QColor::HexRgb));
     }
     updateColorButton(m_centerLineColorButton, m_centerLineColor);
@@ -238,7 +238,7 @@ void BandScopeSettingsPanel::setBackgroundColor(const QColor& color, bool persis
     m_backgroundColor = normalized;
     if (persist)
     {
-        AppSettings::instance().setValue(QString::fromLatin1(kBandscopeBackgroundColorSettingsKey),
+        AppSettings::instance().setValue(QString::fromLatin1(kBandScopeBackgroundColorSettingsKey),
                                          m_backgroundColor.name(QColor::HexRgb));
     }
     updateColorButton(m_backgroundColorButton, m_backgroundColor);
@@ -261,7 +261,7 @@ void BandScopeSettingsPanel::setGridLineColor(const QColor& color, bool persist)
     m_gridLineColor = normalized;
     if (persist)
     {
-        AppSettings::instance().setValue(QString::fromLatin1(kBandscopeGridLineColorSettingsKey),
+        AppSettings::instance().setValue(QString::fromLatin1(kBandScopeGridLineColorSettingsKey),
                                          m_gridLineColor.name(QColor::HexRgb));
     }
     updateColorButton(m_gridLineColorButton, m_gridLineColor);
@@ -279,7 +279,7 @@ void BandScopeSettingsPanel::setGridDensity(int density, bool persist)
     m_gridDensity = normalized;
     if (persist)
     {
-        AppSettings::instance().setValue(QString::fromLatin1(kBandscopeGridDensitySettingsKey), m_gridDensity);
+        AppSettings::instance().setValue(QString::fromLatin1(kBandScopeGridDensitySettingsKey), m_gridDensity);
     }
     if (m_gridDensityCombo)
     {
