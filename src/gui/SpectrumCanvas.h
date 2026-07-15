@@ -25,7 +25,7 @@ class SpectrumCanvas : public QWidget
     void setInvertMouseWheel(bool invert);
     int spectrumPaneHeight() const;
     void setSpectrumPaneHeight(int height);
-    void updateSpectrum(const QVector<float>& binsDbm, bool outOfRange);
+    void updateSpectrum(const QVector<float>& levels, bool outOfRange);
     void clearDisplay();
 
     void setFilterWidth(int lowHz, int highHz);
@@ -59,15 +59,15 @@ class SpectrumCanvas : public QWidget
     QRect splitterRect() const;
 
     double xToFreq(int x) const;
-    int dbmToY(float dbm, int topY, int h) const;
-    QRgb dbmToColor(float dbm) const;
+    int levelToY(float level, int topY, int h) const;
+    QRgb levelToColor(float level) const;
 
     int defaultSpectrumHeight() const;
     int constrainedSpectrumHeight(int requested) const;
     bool applySpectrumPaneHeight(int requested);
     void updateBandscopeCursor(const QPoint& pos);
     void rebuildWaterfallImage();
-    void appendWaterfallRow(const QVector<float>& binsDbm);
+    void appendWaterfallRow(const QVector<float>& levels);
     int binForFrequency(double mhz, int binCount) const;
     int binForDisplayX(int x, int binCount) const;
     void repositionZoomButtons();
@@ -78,8 +78,8 @@ class SpectrumCanvas : public QWidget
     double m_dataStartMhz{144.0};
     double m_dataEndMhz{146.0};
     double m_vfoMhz{145.0};
-    float m_minDbm{-140.0f};
-    float m_maxDbm{-10.0f};
+    float m_minLevel{0.0f};
+    float m_maxLevel{160.0f};
 
     int m_filterLowHz{-1400};
     int m_filterHighHz{1400};

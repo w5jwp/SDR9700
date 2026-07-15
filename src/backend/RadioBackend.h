@@ -92,8 +92,6 @@ class RadioBackend : public IRadioBackend
     QString m_connectionUser;
     QString m_connectionPass;
 
-    float m_scopeMinDbm{-140.0f};
-    float m_scopeMaxDbm{-10.0f};
     quint32 m_rxSampleRate{48000};
     QAudioDevice m_rxDevice;
     QAudioDevice m_txDevice;

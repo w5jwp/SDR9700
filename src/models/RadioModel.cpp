@@ -175,11 +175,11 @@ void RadioModel::onPttChanged(bool on)
     emit pttChanged(on);
 }
 
-void RadioModel::onSpectrumDataReady(const QVector<float>& bins, double start, double end, bool outOfRange)
+void RadioModel::onSpectrumDataReady(const QVector<float>& levels, double start, double end, bool outOfRange)
 {
     if (!m_ready)
     {
         return;
     }
-    m_bandscope->ingestSpectrum(bins, start, end, outOfRange);
+    m_bandscope->ingestSpectrum(levels, start, end, outOfRange);
 }

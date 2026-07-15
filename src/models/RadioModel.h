@@ -66,7 +66,7 @@ class RadioModel : public QObject
     void onSwrChanged(double swr);
     void onAlcChanged(double alc);
     void onPttChanged(bool on);
-    void onSpectrumDataReady(const QVector<float>& bins, double start, double end, bool outOfRange);
+    void onSpectrumDataReady(const QVector<float>& levels, double start, double end, bool outOfRange);
 
   private:
     IRadioBackend* m_backend{nullptr};

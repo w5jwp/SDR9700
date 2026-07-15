@@ -14,9 +14,11 @@
 #include <QThread>
 #include <QTimer>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
 
@@ -552,13 +554,41 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             case funcScopeWaveData:
             {
                 auto d = item.value.value<ScopeData>();
-                qDebug(logRadio()) << "ScopeWaveData: valid=" << d.valid << "dataLen=" << d.data.size()
-                                   << "start=" << d.startFreq << "end=" << d.endFreq;
+                qDebug(logBandscope()) << "ScopeWaveData: valid=" << d.valid << "dataLen=" << d.data.size()
+                                       << "start=" << d.startFreq << "end=" << d.endFreq;
                 if (d.valid && !d.data.isEmpty())
                 {
                     m_scopeDataReceived = true;
-                    QVector<float> bins = ScopeAdapter::toDbm(d.data, m_scopeMinDbm, m_scopeMaxDbm);
-                    emit spectrumDataReady(bins, d.startFreq, d.endFreq, d.oor);
+                    QVector<float> levels = ScopeAdapter::toLevels(d.data);
+                    if (logBandscope().isDebugEnabled())
+                    {
+                        static QElapsedTimer statsTimer;
+                        if (!statsTimer.isValid() || statsTimer.elapsed() >= 1000)
+                        {
+                            int rawMin = std::numeric_limits<int>::max();
+                            int rawMax = std::numeric_limits<int>::min();
+                            int rawZeros = 0;
+                            qint64 rawTotal = 0;
+                            for (const unsigned char raw : d.data)
+                            {
+                                const int value = static_cast<int>(raw);
+                                rawMin = qMin(rawMin, value);
+                                rawMax = qMax(rawMax, value);
+                                rawTotal += value;
+                                if (value == 0)
+                                {
+                                    ++rawZeros;
+                                }
+                            }
+                            qDebug(logBandscope()).nospace()
+                                << "Bandscope stats: range=" << d.startFreq << "-" << d.endFreq << "MHz"
+                                << " levels[min=" << rawMin << " max=" << rawMax
+                                << " avg=" << (double(rawTotal) / double(d.data.size())) << " zeros=" << rawZeros << "/"
+                                << d.data.size() << "]";
+                            statsTimer.restart();
+                        }
+                    }
+                    emit spectrumDataReady(levels, d.startFreq, d.endFreq, d.oor);
                     updateReadyState();
                 }
                 break;

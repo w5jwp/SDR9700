@@ -177,8 +177,8 @@ void UdpCivData::dataReceived()
                     const int len = pos >= 0 ? r.mid(pos).indexOf(QByteArrayLiteral("\xfd")) : -1;
                     if (pos >= 0)
                     {
-                        qInfo(logUdp()) << "CIV datagram: totalLen=" << r.length() << "scopeOffset=" << pos
-                                        << "scopePayloadLen=" << len;
+                        qInfo(logBandscope()) << "CIV datagram: totalLen=" << r.length() << "scopeOffset=" << pos
+                                              << "scopePayloadLen=" << len;
                     }
                     emit receive(r.mid(0x15));
                 }

@@ -4009,8 +4009,8 @@ void MainWindow::onFrequencyChanged(quint64 hz)
     {
         if (hz != m_displayBandscopeTuneHz)
         {
-            qDebug(logGui()) << "Ignoring transient bandscope tune confirmation"
-                             << "confirmedHz=" << hz << "displayHz=" << m_displayBandscopeTuneHz;
+            qDebug(logBandscope()) << "Ignoring transient bandscope tune confirmation"
+                                   << "confirmedHz=" << hz << "displayHz=" << m_displayBandscopeTuneHz;
             return;
         }
         m_pendingBandscopeTuneHz = 0;
@@ -4099,7 +4099,7 @@ void MainWindow::updateTxAudioMeter(int peak, int rms)
     m_txAudioRms = qBound(0, rms, 255);
 }
 
-void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, double end, bool outOfRange)
+void MainWindow::onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange)
 {
     const quint64 referenceHz = m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : (m_vfo ? m_vfo->frequencyHz() : 0);
     if (referenceHz > 0)
@@ -4108,7 +4108,7 @@ void MainWindow::onSpectrumReady(const QVector<float>& bins, double start, doubl
     }
     m_spectrumCanvas->setDataFrequencyRange(start, end);
     updateSpectrumVfoMarker();
-    m_spectrumCanvas->updateSpectrum(bins, outOfRange);
+    m_spectrumCanvas->updateSpectrum(levels, outOfRange);
 }
 
 void MainWindow::showToast(const QString& msg, int durationMs)

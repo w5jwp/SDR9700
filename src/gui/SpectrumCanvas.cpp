@@ -13,14 +13,16 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 
-static constexpr float kPeakDecayDbPerSec = 20.0f;
-static constexpr float kPeakDecayPerTickDb = kPeakDecayDbPerSec * 0.05f;
-static constexpr int kDbScalePanelWidth = 38;
+static constexpr float kPeakDecayLevelPerSec = 25.0f;
+static constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
+static constexpr int kLevelScalePanelWidth = 30;
 static constexpr int kMinSpectrumHeight = 150;
 static constexpr int kMinWaterfallHeight = 180;
 static constexpr int kSpectrumVerticalPadding = 10;
 static constexpr int kBandscopeDragThresholdPx = 6;
+static constexpr int kDefaultBandscopeHeightBias = 0;
 static constexpr double kWheelStepAngleDelta = 120.0;
 static constexpr double kMinFrequencyRangeMhz = 0.001;
 
@@ -87,7 +89,7 @@ SpectrumCanvas::SpectrumCanvas(QWidget* parent) : QWidget(parent)
                 {
                     if (!m_spectrumBins.isEmpty() && i < m_spectrumBins.size() && m_peakHold[i] > m_spectrumBins[i])
                     {
-                        m_peakHold[i] -= kPeakDecayPerTickDb;
+                        m_peakHold[i] -= kPeakDecayPerTickLevel;
                         changed = true;
                     }
                 }
@@ -124,7 +126,7 @@ QRect SpectrumCanvas::splitterRect() const
 
 int SpectrumCanvas::defaultSpectrumHeight() const
 {
-    return constrainedSpectrumHeight((height() - scaleHeight() - splitterHeight()) / 2);
+    return constrainedSpectrumHeight(((height() - scaleHeight() - splitterHeight()) / 2) + kDefaultBandscopeHeightBias);
 }
 
 int SpectrumCanvas::constrainedSpectrumHeight(int requested) const
@@ -203,16 +205,16 @@ int SpectrumCanvas::binForDisplayX(int x, int binCount) const
     return binForFrequency(xToFreq(x), binCount);
 }
 
-int SpectrumCanvas::dbmToY(float dbm, int topY, int h) const
+int SpectrumCanvas::levelToY(float level, int topY, int h) const
 {
-    float norm = (dbm - m_minDbm) / (m_maxDbm - m_minDbm);
+    float norm = (level - m_minLevel) / (m_maxLevel - m_minLevel);
     norm = std::max(0.0f, std::min(1.0f, norm));
     const int pad = qMin(kSpectrumVerticalPadding, qMax(0, h / 4));
     const int plotH = qMax(1, h - pad * 2);
     return topY + pad + int((1.0f - norm) * plotH);
 }
 
-QRgb SpectrumCanvas::dbmToColor(float dbm) const
+QRgb SpectrumCanvas::levelToColor(float level) const
 {
     static const struct
     {
@@ -224,7 +226,7 @@ QRgb SpectrumCanvas::dbmToColor(float dbm) const
     };
     static constexpr int N = static_cast<int>(std::size(stops));
 
-    float t = (dbm - m_minDbm) / (m_maxDbm - m_minDbm);
+    float t = (level - m_minLevel) / (m_maxLevel - m_minLevel);
     t = std::max(0.0f, std::min(1.0f, t));
 
     for (int i = 1; i < N; ++i)
@@ -328,27 +330,27 @@ void SpectrumCanvas::setSpectrumPaneHeight(int height)
     scheduleRepaint();
 }
 
-void SpectrumCanvas::updateSpectrum(const QVector<float>& binsDbm, bool outOfRange)
+void SpectrumCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
-    m_spectrumBins = binsDbm;
+    m_spectrumBins = levels;
     m_scopeOutOfRange = outOfRange;
 
-    if (m_peakHold.size() != binsDbm.size())
+    if (m_peakHold.size() != levels.size())
     {
-        m_peakHold = binsDbm;
+        m_peakHold = levels;
     }
     else
     {
-        for (int i = 0; i < binsDbm.size(); ++i)
+        for (int i = 0; i < levels.size(); ++i)
         {
-            if (binsDbm[i] > m_peakHold[i])
+            if (levels[i] > m_peakHold[i])
             {
-                m_peakHold[i] = binsDbm[i];
+                m_peakHold[i] = levels[i];
             }
         }
     }
 
-    appendWaterfallRow(binsDbm);
+    appendWaterfallRow(levels);
     scheduleRepaint();
 }
 
@@ -380,7 +382,7 @@ void SpectrumCanvas::rebuildWaterfallImage()
     m_waterfall.fill(Qt::black);
 }
 
-void SpectrumCanvas::appendWaterfallRow(const QVector<float>& binsDbm)
+void SpectrumCanvas::appendWaterfallRow(const QVector<float>& levels)
 {
     if (m_waterfall.isNull() || m_waterfall.height() == 0)
     {
@@ -396,7 +398,7 @@ void SpectrumCanvas::appendWaterfallRow(const QVector<float>& binsDbm)
     }
 
     QRgb* row = reinterpret_cast<QRgb*>(m_waterfall.bits());
-    if (binsDbm.isEmpty())
+    if (levels.isEmpty())
     {
         for (int x = 0; x < w; ++x)
         {
@@ -404,10 +406,38 @@ void SpectrumCanvas::appendWaterfallRow(const QVector<float>& binsDbm)
         }
         return;
     }
+
+    if (logWaterfall().isDebugEnabled())
+    {
+        static QElapsedTimer waterfallLogTimer;
+        if (!waterfallLogTimer.isValid() || waterfallLogTimer.elapsed() >= 1000)
+        {
+            float minLevel = std::numeric_limits<float>::max();
+            float maxLevel = std::numeric_limits<float>::lowest();
+            double totalLevel = 0.0;
+            int zeroCount = 0;
+            for (const float level : levels)
+            {
+                minLevel = std::min(minLevel, level);
+                maxLevel = std::max(maxLevel, level);
+                totalLevel += level;
+                if (level <= m_minLevel)
+                {
+                    ++zeroCount;
+                }
+            }
+            qDebug(logWaterfall()).nospace()
+                << "Waterfall row: image=" << w << "x" << h << " bins=" << levels.size() << " levels[min=" << minLevel
+                << " max=" << maxLevel << " avg=" << (totalLevel / double(levels.size())) << " floor=" << zeroCount
+                << "/" << levels.size() << "]";
+            waterfallLogTimer.restart();
+        }
+    }
+
     for (int x = 0; x < w; ++x)
     {
-        const int bin = binForDisplayX(x, binsDbm.size());
-        row[x] = bin >= 0 ? dbmToColor(binsDbm[bin]) : qRgb(0x02, 0x0c, 0x14);
+        const int bin = binForDisplayX(x, levels.size());
+        row[x] = bin >= 0 ? levelToColor(levels[bin]) : qRgb(0x02, 0x0c, 0x14);
     }
 }
 
@@ -445,33 +475,33 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
 
     const int specTop = 0;
     const int specDrawH = specH;
-    const QRect spectrumPlotRect(kDbScalePanelWidth, specTop, qMax(0, w - kDbScalePanelWidth), specDrawH);
+    const QRect spectrumPlotRect(kLevelScalePanelWidth, specTop, qMax(0, w - kLevelScalePanelWidth), specDrawH);
 
     {
         QFont f = p.font();
         f.setPointSize(8);
         p.setFont(f);
 
-        const float range = m_maxDbm - m_minDbm;
-        const float majorDbStep = range > 100.0f ? 20.0f : 10.0f;
-        const float minorDbStep = majorDbStep / 4.0f;
-        auto drawDbLines = [&](float step)
+        const float range = m_maxLevel - m_minLevel;
+        const float majorLevelStep = range > 100.0f ? 20.0f : 10.0f;
+        const float minorLevelStep = majorLevelStep / 4.0f;
+        auto drawLevelLines = [&](float step)
         {
-            const int firstStep = int(std::ceil(m_minDbm / step));
-            const int lastStep = int(std::floor(m_maxDbm / step));
+            const int firstStep = int(std::ceil(m_minLevel / step));
+            const int lastStep = int(std::floor(m_maxLevel / step));
             for (int i = firstStep; i <= lastStep; ++i)
             {
-                const float db = float(i) * step;
-                const int y = dbmToY(db, specTop, specDrawH);
-                p.drawLine(kDbScalePanelWidth, y, w, y);
+                const float level = float(i) * step;
+                const int y = levelToY(level, specTop, specDrawH);
+                p.drawLine(kLevelScalePanelWidth, y, w, y);
             }
         };
 
         p.setPen(QPen(kGridMinor, 1));
-        drawDbLines(minorDbStep);
+        drawLevelLines(minorLevelStep);
 
         p.setPen(QPen(kGridMajor, 1));
-        drawDbLines(majorDbStep);
+        drawLevelLines(majorLevelStep);
 
         const double scaleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
         const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
@@ -522,9 +552,9 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
         for (int x = 0; x < w; ++x)
         {
             const int bin = binForDisplayX(x, n);
-            const float dbm = bin >= 0 ? m_spectrumBins[bin] : m_minDbm;
+            const float level = bin >= 0 ? m_spectrumBins[bin] : m_minLevel;
 
-            int sy = dbmToY(dbm, specTop, specDrawH);
+            int sy = levelToY(level, specTop, specDrawH);
             if (specFirst)
             {
                 specPath.moveTo(x, sy);
@@ -537,7 +567,7 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
 
             if (!m_peakHold.isEmpty() && bin >= 0 && bin < m_peakHold.size())
             {
-                int py = dbmToY(m_peakHold[bin], specTop, specDrawH);
+                int py = levelToY(m_peakHold[bin], specTop, specDrawH);
                 if (peakFirst)
                 {
                     peakPath.moveTo(x, py);
@@ -609,25 +639,26 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
     }
 
     {
-        p.fillRect(0, specTop, kDbScalePanelWidth, specH, kScalePanel);
+        p.fillRect(0, specTop, kLevelScalePanelWidth, specH, kScalePanel);
         p.setPen(kScalePanelBorder);
-        p.drawLine(kDbScalePanelWidth - 1, specTop, kDbScalePanelWidth - 1, specH);
+        p.drawLine(kLevelScalePanelWidth - 1, specTop, kLevelScalePanelWidth - 1, specH);
 
         QFont f = p.font();
         f.setPointSize(8);
         p.setFont(f);
         p.setPen(kGridText);
 
-        const float range = m_maxDbm - m_minDbm;
-        float dbStep = range > 100.0f ? 20.0f : 10.0f;
-        for (float db = std::ceil(m_minDbm / dbStep) * dbStep; db <= m_maxDbm; db += dbStep)
+        const float range = m_maxLevel - m_minLevel;
+        float levelStep = range > 100.0f ? 20.0f : 10.0f;
+        for (float level = std::ceil(m_minLevel / levelStep) * levelStep; level <= m_maxLevel; level += levelStep)
         {
-            int y = dbmToY(db, specTop, specDrawH);
+            int y = levelToY(level, specTop, specDrawH);
             const int labelH = QFontMetrics(f).height();
-            const QRect labelRect(3, y - labelH / 2, kDbScalePanelWidth - 7, labelH);
+            const QRect labelRect(1, y - labelH / 2, kLevelScalePanelWidth - 4, labelH);
             if (labelRect.top() >= specTop && labelRect.bottom() <= specH)
             {
-                p.drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter, QString("%1").arg(int(db)));
+                const int relativeLevel = int(std::lround(level - m_maxLevel));
+                p.drawText(labelRect, Qt::AlignRight | Qt::AlignVCenter, QString("%1").arg(relativeLevel));
             }
         }
     }
@@ -685,7 +716,6 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
         const int scaleY = spectrumHeight() - 1;
         p.setPen(QPen(QColor(0xf5, 0xf7, 0xf8, 230), 1, Qt::SolidLine));
         p.drawLine(vx, 0, vx, scaleY - 1);
-        p.drawLine(vx, waterfallTop(), vx, height());
     }
 }
 
@@ -824,10 +854,10 @@ void SpectrumCanvas::wheelEvent(QWheelEvent* ev)
     }
 
     m_wheelStepAccumulator -= acceptedSteps;
-    qDebug(logGui()) << "Bandscope wheel"
-                     << "angle=" << angle << "pixel=" << ev->pixelDelta() << "qtInverted=" << ev->inverted()
-                     << "physicalSteps=" << physicalSteps << "reversePref=" << m_invertMouseWheel
-                     << "acceptedSteps=" << acceptedSteps << "accumulator=" << m_wheelStepAccumulator;
+    qDebug(logBandscope()) << "Bandscope wheel"
+                           << "angle=" << angle << "pixel=" << ev->pixelDelta() << "qtInverted=" << ev->inverted()
+                           << "physicalSteps=" << physicalSteps << "reversePref=" << m_invertMouseWheel
+                           << "acceptedSteps=" << acceptedSteps << "accumulator=" << m_wheelStepAccumulator;
 
     Q_EMIT tuneStepRequested(acceptedSteps);
     ev->accept();

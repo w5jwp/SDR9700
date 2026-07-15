@@ -50,7 +50,7 @@ class MainWindow : public QMainWindow
     void onFrequencyChanged(quint64 hz);
     void onModeChanged(const QString& mode);
     void onSmeterChanged(int s);
-    void onSpectrumReady(const QVector<float>& bins, double start, double end, bool outOfRange);
+    void onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange);
     void onStatusMessage(const QString& msg);
     void onError(const QString& msg);
 
