@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QVariant>
+#include <QVector>
 
 struct CacheItem;
 
@@ -16,6 +17,7 @@ class RadioRouter : public QObject
     explicit RadioRouter(QObject* parent = nullptr);
 
     void route(const CacheItem& item);
+    void routeBatch(const QVector<CacheItem>& items);
 
   signals:
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);

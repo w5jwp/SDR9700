@@ -20,6 +20,7 @@ class AudioHandlerQtInput : public AudioHandlerBase
     QAudioSource* audioInput{nullptr};
 
     QIODevice* audioDevice{nullptr};
+    qsizetype m_bufferReadOffset{0};
 
   private slots:
     void onReadyRead();

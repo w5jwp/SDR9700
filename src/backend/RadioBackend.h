@@ -87,11 +87,13 @@ class RadioBackend : public IRadioBackend
     void forcePttOffForSafety(const QString& message);
     void handleTransmitSwr(double swr);
     void selectMainVfoForCommand(Commander* commandSession) const;
+    void resetScopeController();
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;
     void invokeOnCurrentCommander(const std::function<void(Commander*)>& command);
     void restartAfterSyncTimeout();
 
     QThread* m_workerThread{nullptr};
+    QThread* m_radioDataThread{nullptr};
     Commander* m_commander{nullptr};
     ScopeController* m_scopeController{nullptr};
     RadioRouter* m_radioRouter{nullptr};
@@ -129,4 +131,5 @@ class RadioBackend : public IRadioBackend
     int m_currentBandKey{-1};
     int m_currentMainFilter{1};
     int m_highSwrReadingCount{0};
+    int m_txMeterPollTick{0};
 };

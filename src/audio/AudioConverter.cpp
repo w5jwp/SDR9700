@@ -2,6 +2,7 @@
 #include "LogCategories.h"
 
 #include <speex/speex_resampler.h>
+#include <cstring>
 
 namespace
 {
@@ -286,7 +287,10 @@ bool AudioConverter::convert(audioPacket audio)
                 return false;
             }
 
-            emit floatAudio(samplesF);
+            if (receivers(SIGNAL(floatAudio(Eigen::VectorXf))) > 0)
+            {
+                emit floatAudio(samplesF);
+            }
             audio.amplitudePeak = samplesF.array().abs().maxCoeff();
             audio.amplitudeRMS = std::sqrt((samplesF.array() * samplesF.array()).mean());
 
@@ -478,8 +482,9 @@ bool AudioConverter::convert(audioPacket audio)
                 }
                 else if (outFormat.sampleFormat() == QAudioFormat::Float)
                 {
-                    audio.data =
-                        QByteArray(reinterpret_cast<char*>(samplesF.data()), int(samplesF.size()) * int(sizeof(float)));
+                    scratchOut.resize(int(samplesF.size()) * int(sizeof(float)));
+                    std::memcpy(scratchOut.data(), samplesF.data(), size_t(scratchOut.size()));
+                    audio.data.swap(scratchOut);
                 }
                 else
                 {

@@ -12,7 +12,6 @@ namespace
 constexpr int kControlGroupMargin = 8;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 constexpr int kReceiveButtonStackSpacing = 8;
-constexpr int kTransmitButtonTopSpacing = 18;
 constexpr QSize kPttButtonSize(kCommandButtonSize.width(),
                                UiTheme::Size::ControlButtonHeight * 2 + kReceiveButtonStackSpacing);
 } // namespace
@@ -39,7 +38,7 @@ PttPanel::PttPanel(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* par
                                           UiTheme::Color::TextField, UiTheme::Color::PttHover,
                                           UiTheme::Color::PttHoverBorder, UiTheme::Color::PttActive,
                                           UiTheme::Color::PttActiveBorder, UiTheme::Color::White));
-        layout->addSpacing(kTransmitButtonTopSpacing);
+        layout->addStretch();
         layout->addWidget(pttButton, 0, Qt::AlignHCenter);
 
         if (dtmfButton)

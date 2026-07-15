@@ -158,6 +158,245 @@ int BandscopeCanvas::binForDisplayX(int x, int binCount) const
     return binForFrequency(xToFreq(x), binCount);
 }
 
+void BandscopeCanvas::invalidateStaticLayer()
+{
+    m_staticLayerDirty = true;
+    m_displayBins.clear();
+}
+
+void BandscopeCanvas::ensureStaticLayer()
+{
+    const QSize currentSize = size();
+    if (!currentSize.isValid())
+    {
+        return;
+    }
+
+    if (!m_staticLayerDirty && !m_staticLayer.isNull() && m_staticLayerSize == currentSize)
+    {
+        return;
+    }
+
+    m_staticLayer = QPixmap(currentSize);
+    m_staticLayerSize = currentSize;
+    m_staticLayer.fill(Qt::transparent);
+
+    QPainter painter(&m_staticLayer);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    renderStaticLayer(&painter);
+
+    m_staticLayerDirty = false;
+}
+
+void BandscopeCanvas::renderStaticLayer(QPainter* painter) const
+{
+    if (!painter)
+    {
+        return;
+    }
+
+    static const QColor kBgScale(0x06, 0x11, 0x16);
+    static const QColor kGridText(0xc6, 0xe0, 0xe8);
+    static const QColor kScalePanelBorder(0x52, 0x8f, 0x9e, 120);
+    static const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
+
+    const int specH = plotHeight();
+    const int w = width();
+    const int specTop = 0;
+    const int specDrawH = specH;
+
+    QLinearGradient specBg(0, 0, 0, specH);
+    specBg.setColorAt(0.00, m_backgroundColor);
+    specBg.setColorAt(0.52, m_backgroundColor.lighter(145));
+    specBg.setColorAt(1.00, m_backgroundColor.darker(135));
+    painter->fillRect(0, 0, w, specH, specBg);
+
+    {
+        QFont f = painter->font();
+        f.setPointSize(8);
+        painter->setFont(f);
+
+        const float range = m_maxLevel - m_minLevel;
+        float majorLevelStep = range > 100.0f ? 20.0f : 10.0f;
+        float levelMinorDivisions = 4.0f;
+        if (m_gridDensity == kGridDensityFewer)
+        {
+            majorLevelStep *= 2.0f;
+            levelMinorDivisions = 2.0f;
+        }
+        else if (m_gridDensity == kGridDensityMore)
+        {
+            majorLevelStep /= 2.0f;
+            levelMinorDivisions = 5.0f;
+        }
+        const float minorLevelStep = majorLevelStep / levelMinorDivisions;
+        auto drawLevelLines = [&](float step)
+        {
+            const int firstStep = int(std::ceil(m_minLevel / step));
+            const int lastStep = int(std::floor(m_maxLevel / step));
+            for (int i = firstStep; i <= lastStep; ++i)
+            {
+                const float level = float(i) * step;
+                const int y = levelToY(level, specTop, specDrawH);
+                painter->drawLine(levelScalePanelWidth(), y, w, y);
+            }
+        };
+
+        painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 46), 1));
+        drawLevelLines(minorLevelStep);
+
+        painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 86), 1));
+        drawLevelLines(majorLevelStep);
+
+        const double scaleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
+        const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
+        const int plotW = qMax(1, w - levelScalePanelWidth());
+        const double mhzPerPx = (scaleEndMhz > scaleStartMhz) ? (scaleEndMhz - scaleStartMhz) / plotW : 1.0;
+        double tickStep = 0.5;
+        double minMajorGridPx = 80.0;
+        double frequencyMinorDivisions = 5.0;
+        if (m_gridDensity == kGridDensityFewer)
+        {
+            minMajorGridPx = 130.0;
+            frequencyMinorDivisions = 2.0;
+        }
+        else if (m_gridDensity == kGridDensityMore)
+        {
+            minMajorGridPx = 45.0;
+            frequencyMinorDivisions = 10.0;
+        }
+        while (tickStep / mhzPerPx < minMajorGridPx && tickStep < 100)
+        {
+            tickStep *= 2;
+        }
+        const double minorTickStep = tickStep / frequencyMinorDivisions;
+        auto drawMhzLines = [&](double step)
+        {
+            const qint64 firstStep = qint64(std::ceil(scaleStartMhz / step));
+            const qint64 lastStep = qint64(std::floor(scaleEndMhz / step));
+            for (qint64 i = firstStep; i <= lastStep; ++i)
+            {
+                const double mhz = double(i) * step;
+                const int x = freqToX(mhz);
+                painter->drawLine(x, specTop, x, specH);
+            }
+        };
+
+        painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 46), 1));
+        drawMhzLines(minorTickStep);
+
+        painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 86), 1));
+        drawMhzLines(tickStep);
+    }
+
+    {
+        painter->fillRect(0, specTop, levelScalePanelWidth(), qMax(0, specH - specTop), kBgScale);
+        painter->fillRect(0, specH - 1, levelScalePanelWidth(), scaleHeight(), kBgScale);
+        painter->setPen(kScalePanelBorder);
+        painter->drawLine(levelScalePanelWidth() - 1, specTop, levelScalePanelWidth() - 1, qMax(specTop, specH - 1));
+
+        QFont f = painter->font();
+        f.setPointSize(8);
+        painter->setFont(f);
+        painter->setPen(kGridText);
+        const QFontMetrics fontMetrics(f);
+
+        const float range = m_maxLevel - m_minLevel;
+        const float levelStep = range > 100.0f ? 20.0f : 10.0f;
+        for (float level = std::ceil(m_minLevel / levelStep) * levelStep; level <= m_maxLevel; level += levelStep)
+        {
+            const int y = levelToY(level, specTop, specDrawH);
+            const int labelH = fontMetrics.height();
+            const int labelY = y <= specTop ? specTop : y - labelH / 2;
+            const QRect labelRect(1, labelY, levelScalePanelWidth() - 4, labelH);
+            if (labelRect.intersects(QRect(0, specTop, levelScalePanelWidth(), specH + scaleHeight())))
+            {
+                const int relativeLevel = int(std::lround(level - m_maxLevel));
+                painter->drawText(labelRect, Qt::AlignRight | Qt::AlignVCenter, QString("%1").arg(relativeLevel));
+            }
+        }
+    }
+
+    {
+        const int scaleY = specH - 1;
+        painter->fillRect(0, scaleY, w, scaleHeight(), kBgScale);
+        painter->fillRect(levelScalePanelWidth(), scaleY, qMax(0, w - levelScalePanelWidth()), 1, kScaleAccentLine);
+        painter->setPen(kGridText);
+
+        QFont f = painter->font();
+        f.setPointSize(8);
+        painter->setFont(f);
+        const QFontMetrics fontMetrics(f);
+
+        const double scaleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
+        const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
+        const int plotW = qMax(1, w - levelScalePanelWidth());
+        const double mhzPerPx = (scaleEndMhz > scaleStartMhz) ? (scaleEndMhz - scaleStartMhz) / plotW : 1.0;
+        static constexpr double kNiceSteps[] = {100.0, 50.0, 25.0, 10.0, 5.0,   2.5,  1.0,
+                                                0.5,   0.25, 0.1,  0.05, 0.025, 0.01, 0.005};
+        double tickStep = kNiceSteps[0];
+        for (double s : kNiceSteps)
+        {
+            if (s / mhzPerPx >= 70.0)
+            {
+                tickStep = s;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        const int decimals = (tickStep >= 1.0) ? 1 : (tickStep >= 0.1) ? 2 : 3;
+        const int tickTop = scaleY + 2;
+        const int tickH = 6;
+        const int textY = scaleY + 21;
+        const double first = std::ceil(scaleStartMhz / tickStep) * tickStep;
+        for (double mhz = first; mhz <= scaleEndMhz; mhz += tickStep)
+        {
+            const int x = freqToX(mhz);
+            const QString label = QString::number(mhz, 'f', decimals);
+            const int labelW = fontMetrics.horizontalAdvance(label);
+            const int labelX =
+                qBound(levelScalePanelWidth() + 2, x - labelW / 2, qMax(levelScalePanelWidth() + 2, w - labelW - 2));
+            painter->setPen(QPen(kGridText, 1));
+            painter->drawLine(x, tickTop, x, tickTop + tickH);
+            painter->setPen(kGridText);
+            painter->drawText(labelX, textY, label);
+        }
+    }
+}
+
+void BandscopeCanvas::ensureDisplayBinMap(int binCount)
+{
+    const QSize currentSize = size();
+    if (binCount <= 0 || !currentSize.isValid())
+    {
+        m_displayBins.clear();
+        return;
+    }
+
+    if (!m_displayBins.isEmpty() && m_displayBinMapSize == currentSize && m_displayBinMapBinCount == binCount &&
+        m_displayBinMapStartMhz == m_startMhz && m_displayBinMapEndMhz == m_endMhz &&
+        m_displayBinMapDataStartMhz == m_dataStartMhz && m_displayBinMapDataEndMhz == m_dataEndMhz)
+    {
+        return;
+    }
+
+    m_displayBins.resize(width());
+    for (int x = 0; x < m_displayBins.size(); ++x)
+    {
+        m_displayBins[x] = binForDisplayX(x, binCount);
+    }
+
+    m_displayBinMapSize = currentSize;
+    m_displayBinMapBinCount = binCount;
+    m_displayBinMapStartMhz = m_startMhz;
+    m_displayBinMapEndMhz = m_endMhz;
+    m_displayBinMapDataStartMhz = m_dataStartMhz;
+    m_displayBinMapDataEndMhz = m_dataEndMhz;
+}
+
 void BandscopeCanvas::setFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
@@ -170,6 +409,7 @@ void BandscopeCanvas::setFrequencyRange(double startMhz, double endMhz)
     }
     m_startMhz = startMhz;
     m_endMhz = endMhz;
+    invalidateStaticLayer();
     scheduleRepaint();
 }
 
@@ -185,6 +425,7 @@ void BandscopeCanvas::setDataFrequencyRange(double startMhz, double endMhz)
     }
     m_dataStartMhz = startMhz;
     m_dataEndMhz = endMhz;
+    m_displayBins.clear();
 }
 
 void BandscopeCanvas::setVfoFrequency(double freqMhz)
@@ -225,6 +466,7 @@ void BandscopeCanvas::setBackgroundColor(const QColor& color)
     }
 
     m_backgroundColor = normalized;
+    invalidateStaticLayer();
     scheduleRepaint();
 }
 
@@ -242,6 +484,7 @@ void BandscopeCanvas::setGridLineColor(const QColor& color)
     }
 
     m_gridLineColor = normalized;
+    invalidateStaticLayer();
     scheduleRepaint();
 }
 
@@ -254,6 +497,7 @@ void BandscopeCanvas::setGridDensity(int density)
     }
 
     m_gridDensity = normalized;
+    invalidateStaticLayer();
     scheduleRepaint();
 }
 
@@ -324,106 +568,20 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
-    static const QColor kBgScale(0x06, 0x11, 0x16);
-    static const QColor kGridText(0xc6, 0xe0, 0xe8);
     static const QColor kTrace(0xf2, 0xf7, 0xfa);
     static const QColor kPeak(0xae, 0xe8, 0xff, 95);
-    static const QColor kScalePanelBorder(0x52, 0x8f, 0x9e, 120);
-    static const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 
+    ensureStaticLayer();
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);
 
     const int specH = plotHeight();
     const int w = width();
-
-    QLinearGradient specBg(0, 0, 0, specH);
-    specBg.setColorAt(0.00, m_backgroundColor);
-    specBg.setColorAt(0.52, m_backgroundColor.lighter(145));
-    specBg.setColorAt(1.00, m_backgroundColor.darker(135));
-    p.fillRect(0, 0, w, specH, specBg);
-
     const int specTop = 0;
     const int specDrawH = specH;
-    const QRect spectrumPlotRect(levelScalePanelWidth(), specTop, qMax(0, w - levelScalePanelWidth()), specDrawH);
-
-    {
-        QFont f = p.font();
-        f.setPointSize(8);
-        p.setFont(f);
-
-        const float range = m_maxLevel - m_minLevel;
-        float majorLevelStep = range > 100.0f ? 20.0f : 10.0f;
-        float levelMinorDivisions = 4.0f;
-        if (m_gridDensity == kGridDensityFewer)
-        {
-            majorLevelStep *= 2.0f;
-            levelMinorDivisions = 2.0f;
-        }
-        else if (m_gridDensity == kGridDensityMore)
-        {
-            majorLevelStep /= 2.0f;
-            levelMinorDivisions = 5.0f;
-        }
-        const float minorLevelStep = majorLevelStep / levelMinorDivisions;
-        auto drawLevelLines = [&](float step)
-        {
-            const int firstStep = int(std::ceil(m_minLevel / step));
-            const int lastStep = int(std::floor(m_maxLevel / step));
-            for (int i = firstStep; i <= lastStep; ++i)
-            {
-                const float level = float(i) * step;
-                const int y = levelToY(level, specTop, specDrawH);
-                p.drawLine(levelScalePanelWidth(), y, w, y);
-            }
-        };
-
-        p.setPen(QPen(colorWithAlpha(m_gridLineColor, 46), 1));
-        drawLevelLines(minorLevelStep);
-
-        p.setPen(QPen(colorWithAlpha(m_gridLineColor, 86), 1));
-        drawLevelLines(majorLevelStep);
-
-        const double scaleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
-        const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
-        const int plotW = qMax(1, w - levelScalePanelWidth());
-        double mhzPerPx = (scaleEndMhz > scaleStartMhz) ? (scaleEndMhz - scaleStartMhz) / plotW : 1.0;
-        double tickStep = 0.5;
-        double minMajorGridPx = 80.0;
-        double frequencyMinorDivisions = 5.0;
-        if (m_gridDensity == kGridDensityFewer)
-        {
-            minMajorGridPx = 130.0;
-            frequencyMinorDivisions = 2.0;
-        }
-        else if (m_gridDensity == kGridDensityMore)
-        {
-            minMajorGridPx = 45.0;
-            frequencyMinorDivisions = 10.0;
-        }
-        while (tickStep / mhzPerPx < minMajorGridPx && tickStep < 100)
-        {
-            tickStep *= 2;
-        }
-        const double minorTickStep = tickStep / frequencyMinorDivisions;
-        auto drawMhzLines = [&](double step)
-        {
-            const qint64 firstStep = qint64(std::ceil(scaleStartMhz / step));
-            const qint64 lastStep = qint64(std::floor(scaleEndMhz / step));
-            for (qint64 i = firstStep; i <= lastStep; ++i)
-            {
-                const double mhz = double(i) * step;
-                const int x = freqToX(mhz);
-                p.drawLine(x, specTop, x, specH);
-            }
-        };
-
-        p.setPen(QPen(colorWithAlpha(m_gridLineColor, 46), 1));
-        drawMhzLines(minorTickStep);
-
-        p.setPen(QPen(colorWithAlpha(m_gridLineColor, 86), 1));
-        drawMhzLines(tickStep);
-    }
+    const QRect spectrumPlotRect(levelScalePanelWidth(), specTop, qMax(0, w - levelScalePanelWidth()),
+                                 qMax(0, specDrawH - 1));
+    p.drawPixmap(0, 0, m_staticLayer);
 
     if (m_spectrumBins.isEmpty())
     {
@@ -436,19 +594,19 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
 
     if (!m_spectrumBins.isEmpty())
     {
+        ensureDisplayBinMap(m_spectrumBins.size());
         p.setRenderHint(QPainter::Antialiasing, true);
         p.save();
         p.setClipRect(spectrumPlotRect);
         QPainterPath specPath, peakPath;
         bool specFirst = true, peakFirst = true;
-        const int n = m_spectrumBins.size();
 
-        for (int x = 0; x < w; ++x)
+        for (int x = levelScalePanelWidth(); x < w; ++x)
         {
-            const int bin = binForDisplayX(x, n);
+            const int bin = (x >= 0 && x < m_displayBins.size()) ? m_displayBins[x] : -1;
             const float level = bin >= 0 ? m_spectrumBins[bin] : m_minLevel;
 
-            int sy = levelToY(level, specTop, specDrawH);
+            const int sy = levelToY(level, specTop, specDrawH);
             if (specFirst)
             {
                 specPath.moveTo(x, sy);
@@ -461,7 +619,7 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
 
             if (!m_peakHold.isEmpty() && bin >= 0 && bin < m_peakHold.size())
             {
-                int py = levelToY(m_peakHold[bin], specTop, specDrawH);
+                const int py = levelToY(m_peakHold[bin], specTop, specDrawH);
                 if (peakFirst)
                 {
                     peakPath.moveTo(x, py);
@@ -476,7 +634,7 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
 
         QPainterPath fillPath(specPath);
         fillPath.lineTo(w, specH);
-        fillPath.lineTo(0, specH);
+        fillPath.lineTo(levelScalePanelWidth(), specH);
         fillPath.closeSubpath();
 
         QLinearGradient fillGrad(0, specTop, 0, specH);
@@ -512,88 +670,12 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
     const double visibleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
     if (m_vfoMhz >= visibleStartMhz && m_vfoMhz <= visibleEndMhz && m_filterHighHz > m_filterLowHz)
     {
-        double loMhz = m_vfoMhz + m_filterLowHz / 1e6;
-        double hiMhz = m_vfoMhz + m_filterHighHz / 1e6;
-        int fx1 = freqToX(loMhz);
-        int fx2 = freqToX(hiMhz);
-        QColor filterFill(0x00, 0xb4, 0xd8, 22);
+        const double loMhz = m_vfoMhz + m_filterLowHz / 1e6;
+        const double hiMhz = m_vfoMhz + m_filterHighHz / 1e6;
+        const int fx1 = freqToX(loMhz);
+        const int fx2 = freqToX(hiMhz);
+        const QColor filterFill(0x00, 0xb4, 0xd8, 22);
         p.fillRect(fx1, 0, fx2 - fx1, specH, filterFill);
-    }
-
-    {
-        p.fillRect(0, specTop, levelScalePanelWidth(), qMax(0, specH - specTop), kBgScale);
-        p.fillRect(0, specH - 1, levelScalePanelWidth(), scaleHeight(), kBgScale);
-        p.setPen(kScalePanelBorder);
-        p.drawLine(levelScalePanelWidth() - 1, specTop, levelScalePanelWidth() - 1, qMax(specTop, specH - 1));
-
-        QFont f = p.font();
-        f.setPointSize(8);
-        p.setFont(f);
-        p.setPen(kGridText);
-
-        const float range = m_maxLevel - m_minLevel;
-        float levelStep = range > 100.0f ? 20.0f : 10.0f;
-        for (float level = std::ceil(m_minLevel / levelStep) * levelStep; level <= m_maxLevel; level += levelStep)
-        {
-            int y = levelToY(level, specTop, specDrawH);
-            const int labelH = QFontMetrics(f).height();
-            const int labelY = y <= specTop ? specTop : y - labelH / 2;
-            const QRect labelRect(1, labelY, levelScalePanelWidth() - 4, labelH);
-            if (labelRect.intersects(QRect(0, specTop, levelScalePanelWidth(), specH + scaleHeight())))
-            {
-                const int relativeLevel = int(std::lround(level - m_maxLevel));
-                p.drawText(labelRect, Qt::AlignRight | Qt::AlignVCenter, QString("%1").arg(relativeLevel));
-            }
-        }
-    }
-
-    {
-        const int scaleY = specH - 1;
-        p.fillRect(0, scaleY, w, scaleHeight(), kBgScale);
-        p.fillRect(levelScalePanelWidth(), scaleY, qMax(0, w - levelScalePanelWidth()), 1, kScaleAccentLine);
-        p.setPen(kGridText);
-
-        QFont f = p.font();
-        f.setPointSize(8);
-        p.setFont(f);
-
-        const double scaleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
-        const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
-        const int plotW = qMax(1, w - levelScalePanelWidth());
-        const double mhzPerPx = (scaleEndMhz > scaleStartMhz) ? (scaleEndMhz - scaleStartMhz) / plotW : 1.0;
-        static constexpr double kNiceSteps[] = {100.0, 50.0, 25.0, 10.0, 5.0,   2.5,  1.0,
-                                                0.5,   0.25, 0.1,  0.05, 0.025, 0.01, 0.005};
-        double tickStep = kNiceSteps[0];
-        for (double s : kNiceSteps)
-        {
-            if (s / mhzPerPx >= 70.0)
-            {
-                tickStep = s;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        int decimals = (tickStep >= 1.0) ? 1 : (tickStep >= 0.1) ? 2 : 3;
-
-        const int tickTop = scaleY + 2;
-        const int tickH = 6;
-        const int textY = scaleY + 21;
-        double first = std::ceil(scaleStartMhz / tickStep) * tickStep;
-        for (double mhz = first; mhz <= scaleEndMhz; mhz += tickStep)
-        {
-            int x = freqToX(mhz);
-            QString label = QString::number(mhz, 'f', decimals);
-            const int labelW = QFontMetrics(f).horizontalAdvance(label);
-            const int labelX =
-                qBound(levelScalePanelWidth() + 2, x - labelW / 2, qMax(levelScalePanelWidth() + 2, w - labelW - 2));
-            p.setPen(QPen(kGridText, 1));
-            p.drawLine(x, tickTop, x, tickTop + tickH);
-            p.setPen(kGridText);
-            p.drawText(labelX, textY, label);
-        }
     }
 
     if (m_vfoMhz >= visibleStartMhz && m_vfoMhz <= visibleEndMhz)

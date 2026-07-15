@@ -12,6 +12,14 @@ constexpr uchar kMainReceiver = 0;
 
 RadioRouter::RadioRouter(QObject* parent) : QObject(parent) {}
 
+void RadioRouter::routeBatch(const QVector<CacheItem>& items)
+{
+    for (const CacheItem& item : items)
+    {
+        route(item);
+    }
+}
+
 QString RadioRouter::modeInfoToString(const ModeInfo& mi) const
 {
     radioMode_t mode = mi.mk;

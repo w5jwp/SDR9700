@@ -198,13 +198,22 @@ QByteArray generateDtmfPcm(const QString& digits)
 
 } // namespace
 
-RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThread(new QThread(this))
+RadioBackend::RadioBackend(QObject* parent)
+    : IRadioBackend(parent), m_workerThread(new QThread(this)), m_radioDataThread(new QThread(this))
 {
     m_workerThread->setObjectName("radio-worker");
     m_workerThread->start();
 
-    m_scopeController = new ScopeController(this);
-    m_radioRouter = new RadioRouter(this);
+    m_radioDataThread->setObjectName("radio-data");
+    m_radioDataThread->start();
+
+    m_scopeController = new ScopeController();
+    m_scopeController->moveToThread(m_radioDataThread);
+    connect(m_radioDataThread, &QThread::finished, m_scopeController, &QObject::deleteLater);
+
+    m_radioRouter = new RadioRouter();
+    m_radioRouter->moveToThread(m_radioDataThread);
+    connect(m_radioDataThread, &QThread::finished, m_radioRouter, &QObject::deleteLater);
     connect(m_scopeController, &ScopeController::scopeDataReceived, this,
             [this]()
             {
@@ -372,6 +381,28 @@ RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThr
 RadioBackend::~RadioBackend()
 {
     shutdownConnection();
+    if (m_scopeController && m_radioDataThread && m_radioDataThread->isRunning())
+    {
+        QMetaObject::invokeMethod(m_scopeController, &ScopeController::reset, Qt::QueuedConnection);
+    }
+    if (m_radioDataThread)
+    {
+        m_radioDataThread->quit();
+        if (!m_radioDataThread->wait(3000))
+        {
+            qWarning(logRadio()) << "[SHUTDOWN] radio-data did not stop within 3000 ms; requesting interruption";
+            m_radioDataThread->requestInterruption();
+            m_radioDataThread->quit();
+            if (!m_radioDataThread->wait(1000))
+            {
+                qCritical(logRadio()) << "[SHUTDOWN] radio-data did not stop after bounded shutdown; leaving thread "
+                                         "detached to avoid blocking the UI";
+                m_radioDataThread->setParent(nullptr);
+                connect(m_radioDataThread, &QThread::finished, m_radioDataThread, &QObject::deleteLater);
+                m_radioDataThread = nullptr;
+            }
+        }
+    }
     m_workerThread->quit();
     if (!m_workerThread->wait(3000))
     {
@@ -458,13 +489,13 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             });
 
     // All radio-to-UI data (frequency, mode, S-meter, scope) flows through the
-    // CachingQueue's sendValue signal.  Connect once per connectToRadio() call;
-    // the connection is torn down automatically when the queue is destroyed with
-    // the Commander on disconnect.
+    // CachingQueue's batched sendValues signal.  Connect once per connectToRadio()
+    // call; the connection is torn down automatically when the queue is destroyed
+    // with the Commander on disconnect.
     CachingQueue* q = CachingQueue::getInstance(m_commander);
     connect(
-        q, &CachingQueue::sendValue, this,
-        [this, session, commandSession](const CacheItem& item)
+        q, &CachingQueue::sendValues, this,
+        [this, session, commandSession](const QVector<CacheItem>& items)
         {
             if (!isCurrentSession(session, commandSession))
             {
@@ -472,7 +503,9 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             }
             if (m_radioRouter)
             {
-                m_radioRouter->route(item);
+                QMetaObject::invokeMethod(
+                    m_radioRouter, [router = m_radioRouter, items]() { router->routeBatch(items); },
+                    Qt::QueuedConnection);
             }
         },
         Qt::AutoConnection);
@@ -653,16 +686,14 @@ void RadioBackend::shutdownConnection()
     m_commander = nullptr;
     m_radioReady = false;
     m_scopeDataReceived = false;
-    if (m_scopeController)
-    {
-        m_scopeController->reset();
-    }
+    resetScopeController();
     m_initialFrequencyReceived = false;
     m_initialModeReceived = false;
     m_initialMainFrequencyReceived = false;
     m_initialMainModeReceived = false;
     m_initialStateRequested = false;
     m_currentBandKey = -1;
+    m_txMeterPollTick = 0;
     m_originalDataOffMod.reset();
     m_originalData1Mod.reset();
     m_lastUserVisibleNetworkMessage.clear();
@@ -1121,6 +1152,22 @@ void RadioBackend::disarmTransmitSafety()
     m_highSwrReadingCount = 0;
 }
 
+void RadioBackend::resetScopeController()
+{
+    if (!m_scopeController)
+    {
+        return;
+    }
+
+    if (QThread::currentThread() == m_scopeController->thread())
+    {
+        m_scopeController->reset();
+        return;
+    }
+
+    QMetaObject::invokeMethod(m_scopeController, &ScopeController::reset, Qt::QueuedConnection);
+}
+
 void RadioBackend::forcePttOffForSafety(const QString& message)
 {
     if (!m_commander || !m_pttActive)
@@ -1435,15 +1482,13 @@ void RadioBackend::onLanReady()
 
     m_radioReady = false;
     m_scopeDataReceived = false;
-    if (m_scopeController)
-    {
-        m_scopeController->reset();
-    }
+    resetScopeController();
     m_initialFrequencyReceived = false;
     m_initialModeReceived = false;
     m_initialMainFrequencyReceived = false;
     m_initialMainModeReceived = false;
     m_initialStateRequested = false;
+    m_txMeterPollTick = 0;
     emit readyChanged(false);
 
     const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
@@ -1592,19 +1637,27 @@ void RadioBackend::onLanReady()
                 if (m_pttActive)
                 {
                     const uchar receiver = kMainReceiver;
+                    const int pollTick = m_txMeterPollTick++;
                     invokeOnCurrentCommander(
-                        [receiver](Commander* commandSession)
+                        [receiver, pollTick](Commander* commandSession)
                         {
                             commandSession->receiveCommand(funcSWRMeter, QVariant(), receiver);
                             commandSession->receiveCommand(funcPowerMeter, QVariant(), receiver);
                             commandSession->receiveCommand(funcALCMeter, QVariant(), receiver);
-                            commandSession->receiveCommand(funcCompMeter, QVariant(), receiver);
-                            commandSession->receiveCommand(funcVdMeter, QVariant(), receiver);
-                            commandSession->receiveCommand(funcIdMeter, QVariant(), receiver);
+                            if (pollTick % 2 == 0)
+                            {
+                                commandSession->receiveCommand(funcCompMeter, QVariant(), receiver);
+                            }
+                            if (pollTick % 5 == 0)
+                            {
+                                commandSession->receiveCommand(funcVdMeter, QVariant(), receiver);
+                                commandSession->receiveCommand(funcIdMeter, QVariant(), receiver);
+                            }
                         });
                     return;
                 }
 
+                m_txMeterPollTick = 0;
                 const uchar receiver = kMainReceiver;
                 invokeOnCurrentCommander([receiver](Commander* commandSession)
                                          { commandSession->receiveCommand(funcSMeter, QVariant(), receiver); });

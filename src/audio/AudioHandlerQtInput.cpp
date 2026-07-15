@@ -38,6 +38,8 @@ void AudioHandlerQtInput::closeDevice() noexcept
         audioInput = nullptr;
     }
     audioDevice = nullptr;
+    tempBuf.data.clear();
+    m_bufferReadOffset = 0;
 }
 
 void AudioHandlerQtInput::onReadyRead()
@@ -49,16 +51,27 @@ void AudioHandlerQtInput::onReadyRead()
     tempBuf.data.append(audioDevice->readAll());
 
     const int bytesPerBlock = nativeFormat.bytesForDuration(setupData.blockSize * 1000);
-    while (tempBuf.data.size() >= bytesPerBlock)
+    if (bytesPerBlock <= 0)
+    {
+        return;
+    }
+
+    while (tempBuf.data.size() - m_bufferReadOffset >= bytesPerBlock)
     {
         audioPacket pkt;
         pkt.time = QTime::currentTime();
         pkt.sent = 0;
         pkt.volume = volume;
         memcpy(&pkt.guid, setupData.guid, GUIDLEN);
-        pkt.data = tempBuf.data.left(bytesPerBlock);
-        tempBuf.data.remove(0, bytesPerBlock);
+        pkt.data = QByteArray(tempBuf.data.constData() + m_bufferReadOffset, bytesPerBlock);
+        m_bufferReadOffset += bytesPerBlock;
         emit sendToConverter(pkt);
+    }
+
+    if (m_bufferReadOffset > 0 && m_bufferReadOffset >= tempBuf.data.size() / 2)
+    {
+        tempBuf.data.remove(0, m_bufferReadOffset);
+        m_bufferReadOffset = 0;
     }
 }
 

@@ -8,6 +8,7 @@
 #include <QMap>
 #include <QMultiMap>
 #include <QVariant>
+#include <QVector>
 #include <QQueue>
 #include <QRect>
 #include <QWaitCondition>
@@ -110,6 +111,7 @@ class CachingQueue : public QThread
   signals:
     void haveCommand(Funcs func, QVariant param, uchar receiver);
     void sendValue(CacheItem item);
+    void sendValues(QVector<CacheItem> items);
     void sendMessage(QString msg);
     void cacheUpdated(CacheItem item);
     void radioCapsUpdated(radioCapabilities* caps);
@@ -181,3 +183,4 @@ class CachingQueue : public QThread
 
 Q_DECLARE_METATYPE(QueueItem)
 Q_DECLARE_METATYPE(CacheItem)
+Q_DECLARE_METATYPE(QVector<CacheItem>)

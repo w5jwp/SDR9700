@@ -3,7 +3,9 @@
 
 #include <QElapsedTimer>
 #include <QColor>
+#include <QPixmap>
 #include <QPoint>
+#include <QSize>
 #include <QTimer>
 #include <QVector>
 #include <QWidget>
@@ -50,6 +52,10 @@ class BandscopeCanvas : public QWidget
     int levelToY(float level, int topY, int h) const;
     int binForFrequency(double mhz, int binCount) const;
     int binForDisplayX(int x, int binCount) const;
+    void invalidateStaticLayer();
+    void ensureStaticLayer();
+    void renderStaticLayer(QPainter* painter) const;
+    void ensureDisplayBinMap(int binCount);
     void scheduleRepaint();
 
     double m_startMhz{144.0};
@@ -75,6 +81,16 @@ class BandscopeCanvas : public QWidget
 
     QVector<float> m_spectrumBins;
     QVector<float> m_peakHold;
+    QVector<int> m_displayBins;
+    QPixmap m_staticLayer;
+    QSize m_staticLayerSize;
+    QSize m_displayBinMapSize;
+    int m_displayBinMapBinCount{0};
+    double m_displayBinMapStartMhz{0.0};
+    double m_displayBinMapEndMhz{0.0};
+    double m_displayBinMapDataStartMhz{0.0};
+    double m_displayBinMapDataEndMhz{0.0};
+    bool m_staticLayerDirty{true};
 
     QTimer m_peakDecayTimer;
     QTimer m_repaintTimer;

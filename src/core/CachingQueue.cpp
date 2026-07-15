@@ -27,6 +27,7 @@ CachingQueue* CachingQueue::getInstance(QObject* parent)
     QMutexLocker locker(&instanceMutex);
     if (instance == nullptr)
     {
+        qRegisterMetaType<QVector<CacheItem>>("QVector<CacheItem>");
         instance = new CachingQueue();
         instance->setObjectName(QStringLiteral("CachingQueue()"));
         if (!shutdownHookInstalled)
@@ -182,9 +183,22 @@ void CachingQueue::run()
             pendingMessages.swap(messages);
 
             locker.unlock();
-            while (!pendingItems.isEmpty())
+            if (!pendingItems.isEmpty())
             {
-                emit sendValue(pendingItems.dequeue());
+                QVector<CacheItem> batch;
+                batch.reserve(pendingItems.size());
+                while (!pendingItems.isEmpty())
+                {
+                    batch.append(pendingItems.dequeue());
+                }
+                emit sendValues(batch);
+                if (receivers(SIGNAL(sendValue(CacheItem))) > 0)
+                {
+                    for (const CacheItem& item : batch)
+                    {
+                        emit sendValue(item);
+                    }
+                }
             }
             while (!pendingMessages.isEmpty())
             {

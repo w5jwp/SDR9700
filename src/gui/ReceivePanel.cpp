@@ -1,6 +1,7 @@
 #include "ReceivePanel.h"
 
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QVBoxLayout>
@@ -9,7 +10,6 @@ namespace
 {
 constexpr int kControlGroupMargin = 5;
 constexpr int kControlGroupSpacing = 8;
-constexpr int kControlButtonTopSpacing = 18;
 } // namespace
 
 ReceivePanel::ReceivePanel(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
@@ -28,8 +28,15 @@ ReceivePanel::ReceivePanel(const Buttons& buttons, QWidget* parent) : QGroupBox(
     auto* grid = new QGridLayout(gridBox);
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(kControlGroupSpacing);
-    layout->addSpacing(kControlButtonTopSpacing);
-    layout->addWidget(gridBox, 0, Qt::AlignHCenter | Qt::AlignTop);
+    auto* buttonRow = new QHBoxLayout;
+    buttonRow->setContentsMargins(0, 0, 0, 0);
+    buttonRow->setSpacing(0);
+    buttonRow->addStretch();
+    buttonRow->addWidget(gridBox, 0, Qt::AlignTop);
+    buttonRow->addStretch();
+
+    layout->addStretch();
+    layout->addLayout(buttonRow);
     layout->addStretch();
 
     grid->addWidget(buttons.agc, 0, 0);
