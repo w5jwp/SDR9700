@@ -12,14 +12,15 @@ namespace
 constexpr int kControlGroupMargin = 8;
 constexpr QSize kCommandButtonSize(72, UiTheme::Size::ControlButtonHeight);
 constexpr int kReceiveButtonStackSpacing = 8;
+constexpr int kTransmitButtonTopSpacing = 18;
 constexpr QSize kPttButtonSize(kCommandButtonSize.width(),
                                UiTheme::Size::ControlButtonHeight * 2 + kReceiveButtonStackSpacing);
 } // namespace
 
 PttPanel::PttPanel(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* parent) : QGroupBox(parent)
 {
-    setTitle(QStringLiteral("PTT"));
-    setAccessibleName(QStringLiteral("PTT"));
+    setTitle(QStringLiteral("Transmit"));
+    setAccessibleName(QStringLiteral("Transmit"));
     setMaximumWidth(kCommandButtonSize.width() + 2 * kControlGroupMargin);
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 
@@ -38,7 +39,7 @@ PttPanel::PttPanel(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* par
                                           UiTheme::Color::TextField, UiTheme::Color::PttHover,
                                           UiTheme::Color::PttHoverBorder, UiTheme::Color::PttActive,
                                           UiTheme::Color::PttActiveBorder, UiTheme::Color::White));
-        layout->addStretch();
+        layout->addSpacing(kTransmitButtonTopSpacing);
         layout->addWidget(pttButton, 0, Qt::AlignHCenter);
 
         if (dtmfButton)

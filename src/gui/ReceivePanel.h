@@ -13,12 +13,16 @@ class ReceivePanel : public QGroupBox
     {
         QPushButton* agc{nullptr};
         QPushButton* attenuator{nullptr};
+        QPushButton* compressor{nullptr};
         QPushButton* noiseBlanker{nullptr};
         QPushButton* notch{nullptr};
         QPushButton* noiseReduction{nullptr};
+        QPushButton* offset{nullptr};
         QPushButton* preamp{nullptr};
         QPushButton* rfGain{nullptr};
         QPushButton* rit{nullptr};
+        QPushButton* tone{nullptr};
+        QPushButton* xfc{nullptr};
     };
 
     explicit ReceivePanel(const Buttons& buttons, QWidget* parent = nullptr);

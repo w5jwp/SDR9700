@@ -36,6 +36,7 @@ class VfoModel : public QObject
     bool autoNotchOn() const { return m_autoNotchOn; }
     bool manualNotchOn() const { return m_manualNotchOn; }
     bool compressorOn() const { return m_compressorOn; }
+    bool xfcOn() const { return m_xfcOn; }
     bool ritOn() const { return m_ritOn; }
     short ritHz() const { return m_ritHz; }
 
@@ -58,6 +59,7 @@ class VfoModel : public QObject
     void setAutoNotch(bool on);
     void setManualNotch(bool on);
     void setCompressor(bool on);
+    void setXfcEnabled(bool on);
     void setRitEnabled(bool on);
     void setRitOffset(short hz);
     void setDuplexMode(duplexMode_t mode);
@@ -82,6 +84,7 @@ class VfoModel : public QObject
     void applyAutoNotch(bool on);
     void applyManualNotch(bool on);
     void applyCompressor(bool on);
+    void applyXfcEnabled(bool on);
     void applyAgcMode(const QString& mode);
     void applyRitEnabled(bool on);
     void applyRitOffset(short hz);
@@ -109,6 +112,7 @@ class VfoModel : public QObject
     void autoNotchChanged(bool on);
     void manualNotchChanged(bool on);
     void compressorChanged(bool on);
+    void xfcChanged(bool on);
     void ritChanged(bool on, short hz);
     void duplexModeChanged(duplexMode_t mode);
     void repeaterOffsetChanged(quint64 hz);
@@ -146,6 +150,7 @@ class VfoModel : public QObject
     bool m_autoNotchOn{false};
     bool m_manualNotchOn{false};
     bool m_compressorOn{false};
+    bool m_xfcOn{false};
     QString m_agcMode{"mid"};
     bool m_ritOn{false};
     short m_ritHz{0};

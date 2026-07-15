@@ -9,13 +9,14 @@ namespace
 {
 constexpr int kControlGroupMargin = 5;
 constexpr int kControlGroupSpacing = 8;
+constexpr int kControlButtonTopSpacing = 18;
 } // namespace
 
 ReceivePanel::ReceivePanel(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
 {
-    setObjectName(QStringLiteral("ReceivePanel"));
-    setTitle(QStringLiteral("Receive"));
-    setAccessibleName(QStringLiteral("Receive"));
+    setObjectName(QStringLiteral("ControlPanel"));
+    setTitle(QStringLiteral("Control"));
+    setAccessibleName(QStringLiteral("Control"));
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     auto* layout = new QVBoxLayout(this);
@@ -27,16 +28,20 @@ ReceivePanel::ReceivePanel(const Buttons& buttons, QWidget* parent) : QGroupBox(
     auto* grid = new QGridLayout(gridBox);
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(kControlGroupSpacing);
-    layout->addStretch();
-    layout->addWidget(gridBox, 0, Qt::AlignHCenter);
+    layout->addSpacing(kControlButtonTopSpacing);
+    layout->addWidget(gridBox, 0, Qt::AlignHCenter | Qt::AlignTop);
     layout->addStretch();
 
     grid->addWidget(buttons.agc, 0, 0);
     grid->addWidget(buttons.attenuator, 0, 1);
-    grid->addWidget(buttons.noiseBlanker, 0, 2);
-    grid->addWidget(buttons.notch, 0, 3);
-    grid->addWidget(buttons.noiseReduction, 1, 0);
-    grid->addWidget(buttons.preamp, 1, 1);
-    grid->addWidget(buttons.rfGain, 1, 2);
-    grid->addWidget(buttons.rit, 1, 3);
+    grid->addWidget(buttons.compressor, 0, 2);
+    grid->addWidget(buttons.noiseBlanker, 0, 3);
+    grid->addWidget(buttons.notch, 1, 0);
+    grid->addWidget(buttons.noiseReduction, 1, 1);
+    grid->addWidget(buttons.offset, 1, 2);
+    grid->addWidget(buttons.preamp, 1, 3);
+    grid->addWidget(buttons.rfGain, 2, 0);
+    grid->addWidget(buttons.rit, 2, 1);
+    grid->addWidget(buttons.tone, 2, 2);
+    grid->addWidget(buttons.xfc, 2, 3);
 }

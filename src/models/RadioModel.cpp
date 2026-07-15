@@ -34,6 +34,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::autoNotchChanged, m_vfo, &VfoModel::applyAutoNotch);
     connect(m_backend, &IRadioBackend::manualNotchChanged, m_vfo, &VfoModel::applyManualNotch);
     connect(m_backend, &IRadioBackend::compressorChanged, m_vfo, &VfoModel::applyCompressor);
+    connect(m_backend, &IRadioBackend::xfcChanged, m_vfo, &VfoModel::applyXfcEnabled);
     connect(m_backend, &IRadioBackend::ritEnabledChanged, m_vfo, &VfoModel::applyRitEnabled);
     connect(m_backend, &IRadioBackend::ritOffsetChanged, m_vfo, &VfoModel::applyRitOffset);
     connect(m_backend, &IRadioBackend::nrChanged, m_vfo, &VfoModel::applyNrEnabled);

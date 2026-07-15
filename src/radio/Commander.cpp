@@ -1294,6 +1294,7 @@ void Commander::parseCommand()
     // CI-V 1C: boolean status registers.
     case funcRitStatus:
     case funcTransceiverStatus:
+    case funcXFCStatus:
         if (payloadTooShort(1))
         {
             return;

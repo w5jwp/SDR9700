@@ -485,6 +485,9 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             case funcCompressor:
                 emit compressorChanged(item.value.toBool());
                 break;
+            case funcXFCStatus:
+                emit xfcChanged(item.value.toBool());
+                break;
             case funcRitStatus:
                 emit ritEnabledChanged(item.value.toBool());
                 break;
@@ -1019,6 +1022,12 @@ void RadioBackend::setCompressor(bool on)
                              { commandSession->receiveCommand(funcCompressor, QVariant::fromValue<bool>(on), 0); });
 }
 
+void RadioBackend::setXfcEnabled(bool on)
+{
+    invokeOnCurrentCommander([=](Commander* commandSession)
+                             { commandSession->receiveCommand(funcXFCStatus, QVariant::fromValue<bool>(on), 0); });
+}
+
 void RadioBackend::setDuplexMode(duplexMode_t mode)
 {
     invokeOnCurrentCommander(
@@ -1376,6 +1385,7 @@ void RadioBackend::requestInitialRadioState()
                     funcTSQLFreq,
                     funcDTCSCode,
                     funcCompressor,
+                    funcXFCStatus,
                     funcAutoNotch,
                     funcManualNotch,
                     funcAGCTimeConstant,

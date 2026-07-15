@@ -38,6 +38,7 @@ class IRadioBackend : public QObject
     virtual void setAutoNotch(bool on) = 0;
     virtual void setManualNotch(bool on) = 0;
     virtual void setCompressor(bool on) = 0;
+    virtual void setXfcEnabled(bool on) = 0;
     virtual void setRitEnabled(bool on) = 0;
     virtual void setRitOffset(short hz) = 0;
     virtual void setDuplexMode(duplexMode_t mode) = 0;
@@ -83,6 +84,7 @@ class IRadioBackend : public QObject
     void autoNotchChanged(bool on);
     void manualNotchChanged(bool on);
     void compressorChanged(bool on);
+    void xfcChanged(bool on);
     void ritEnabledChanged(bool on);
     void ritOffsetChanged(short hz);
     void pttChanged(bool on);

@@ -173,6 +173,14 @@ void VfoModel::setCompressor(bool on)
     }
 }
 
+void VfoModel::setXfcEnabled(bool on)
+{
+    if (m_backend)
+    {
+        m_backend->setXfcEnabled(on);
+    }
+}
+
 void VfoModel::setRitEnabled(bool on)
 {
     m_ritOn = on;
@@ -231,6 +239,16 @@ void VfoModel::applyCompressor(bool on)
 {
     m_compressorOn = on;
     emit compressorChanged(on);
+}
+
+void VfoModel::applyXfcEnabled(bool on)
+{
+    if (m_xfcOn == on)
+    {
+        return;
+    }
+    m_xfcOn = on;
+    emit xfcChanged(on);
 }
 
 void VfoModel::applyAgcMode(const QString& mode)

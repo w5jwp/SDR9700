@@ -11,8 +11,6 @@
 #include "MetersDialog.h"
 #include "PttPanel.h"
 #include "ReceivePanel.h"
-#include "RepeaterPanel.h"
-#include "TransmitPanel.h"
 #include "VfoPanel.h"
 #include "UiTheme.h"
 #include "MemoryStore.h"
@@ -793,6 +791,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_vfo, &VfoModel::autoNotchChanged, this, [this](bool) { updateNotchButton(); });
     connect(m_vfo, &VfoModel::manualNotchChanged, this, [this](bool) { updateNotchButton(); });
     connect(m_vfo, &VfoModel::compressorChanged, this, [this](bool on) { setCommandButtonActive(m_compBtn, on); });
+    connect(m_vfo, &VfoModel::xfcChanged, this, [this](bool on) { setCommandButtonActive(m_xfcBtn, on); });
     connect(m_vfo, &VfoModel::ritChanged, this, [this](bool, short) { updateRitButton(); });
     connect(m_vfo, &VfoModel::agcModeChanged, this,
             [this](const QString& mode) { setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), mode.toUpper()); });
@@ -2259,30 +2258,22 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_offsetBtn->setToolTip("Select repeater duplex offset.");
     m_toneBtn = makeSelectorButton("TONE", QStringLiteral("OFF"), "Tone settings", "Select tone, CTCSS, or DTCS.");
     m_toneBtn->setToolTip("Select tone, CTCSS, or DTCS.");
+    m_xfcBtn = makeSelectorButton("XFC", QStringLiteral("OFF"), "XFC", "Toggle transmit frequency check.");
+    m_xfcBtn->setCheckable(true);
+    m_xfcBtn->setProperty("toggleLabel", "XFC");
+    m_xfcBtn->setToolTip("Transmit Frequency Check (XFC)\nMonitor the transmit frequency while split is active.");
 
     const ReceivePanel::Buttons receiveButtons{
-        m_agcBtn, m_attBtn, m_nbBtn, m_notchBtn, m_nrBtn, m_preBtn, m_rfGainBtn, m_ritBtn,
-    };
-    const RepeaterPanel::Buttons repeaterButtons{
-        m_offsetBtn,
-        m_toneBtn,
-    };
-    const TransmitPanel::Buttons transmitButtons{
-        m_compBtn,
+        m_agcBtn,    m_attBtn, m_compBtn,   m_nbBtn,  m_notchBtn, m_nrBtn,
+        m_offsetBtn, m_preBtn, m_rfGainBtn, m_ritBtn, m_toneBtn,  m_xfcBtn,
     };
     auto* receiveGroup = new ReceivePanel(receiveButtons, strip);
-    auto* repeaterGroup = new RepeaterPanel(repeaterButtons, strip);
-    auto* transmitGroup = new TransmitPanel(transmitButtons, strip);
+    auto* pttGroup = new PttPanel(m_pttBtn, nullptr, strip);
     auto* receiveStack = new QWidget(strip);
+    receiveStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     auto* receiveStackLayout = new QVBoxLayout(receiveStack);
     receiveStackLayout->setContentsMargins(0, 0, 0, 0);
     receiveStackLayout->setSpacing(kControlGroupSpacing);
-    auto* receiveBottomLayout = new QHBoxLayout;
-    receiveBottomLayout->setContentsMargins(0, 0, 0, 0);
-    receiveBottomLayout->setSpacing(kControlRowSpacing);
-    receiveBottomLayout->addWidget(repeaterGroup, 1);
-    receiveBottomLayout->addWidget(transmitGroup, 1);
-    auto* pttGroup = new PttPanel(m_pttBtn, nullptr, strip);
 
     auto* receiveTopRow = new QHBoxLayout;
     receiveTopRow->setContentsMargins(0, 0, 0, 0);
@@ -2290,7 +2281,6 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     receiveTopRow->addWidget(receiveGroup, 1);
     receiveTopRow->addWidget(pttGroup);
     receiveStackLayout->addLayout(receiveTopRow);
-    receiveStackLayout->addLayout(receiveBottomLayout);
 
     connect(m_agcBtn, &QPushButton::clicked, this, &MainWindow::showAgcMenu);
     connect(m_compBtn, &QPushButton::clicked, this,
@@ -2306,6 +2296,15 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     connect(m_ritBtn, &QPushButton::clicked, this, &MainWindow::showRitMenu);
     connect(m_offsetBtn, &QPushButton::clicked, this, &MainWindow::showOffsetMenu);
     connect(m_toneBtn, &QPushButton::clicked, this, &MainWindow::showToneMenu);
+    connect(m_xfcBtn, &QPushButton::clicked, this,
+            [this]()
+            {
+                if (m_vfo)
+                {
+                    m_vfo->setXfcEnabled(!m_vfo->xfcOn());
+                    setCommandButtonActive(m_xfcBtn, m_vfo->xfcOn());
+                }
+            });
     connect(m_memoryPanel, &MemoryPanel::memoryActivated, this,
             [this](const QString& memoryId) { selectMemoryById(memoryId, false); });
 
@@ -3189,7 +3188,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     }
 
     for (auto* button : {m_agcBtn, m_nrBtn, m_nbBtn, m_notchBtn, m_preBtn, m_attBtn, m_ritBtn, m_compBtn, m_offsetBtn,
-                         m_toneBtn, m_squelchBtn})
+                         m_toneBtn, m_xfcBtn, m_squelchBtn})
     {
         if (button)
         {
@@ -3264,6 +3263,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
     setCommandButtonActive(m_preBtn, false);
     setCommandButtonActive(m_attBtn, false);
     setCommandButtonActive(m_compBtn, false);
+    setCommandButtonActive(m_xfcBtn, false);
     setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), QStringLiteral("MID"));
     setSelectorButtonLines(m_ritBtn, QStringLiteral("RIT"), QStringLiteral("OFF"));
     setCommandButtonActive(m_ritBtn, false);

@@ -171,6 +171,7 @@ class MainWindow : public QMainWindow
     QPushButton* m_ritBtn{nullptr};
     QPushButton* m_offsetBtn{nullptr};
     QPushButton* m_toneBtn{nullptr};
+    QPushButton* m_xfcBtn{nullptr};
     QPushButton* m_pttBtn{nullptr};
     DtmfDialog* m_dtmfDialog{nullptr};
     MetersDialog* m_metersDialog{nullptr};
