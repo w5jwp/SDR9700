@@ -85,9 +85,11 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
         "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { background: transparent; border: none; "
         "width: 0px; }"
         "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
-        "QScrollBar:disabled { background: #061116; border-bottom-color: #061116; }"
-        "QScrollBar::groove:disabled { background: #071116; border-color: #15242b; }"
-        "QScrollBar::handle:disabled { background: #22313a; border-color: #33424a; }"));
+        "QScrollBar:disabled { background: #061116; border-bottom-color: #9a2424; }"
+        "QScrollBar::groove:horizontal:disabled { background: #061116; border-color: #173542; }"
+        "QScrollBar::handle:horizontal:disabled { background: transparent; border: none; min-width: 0px; }"
+        "QScrollBar::add-page:horizontal:disabled, QScrollBar::sub-page:horizontal:disabled { background: "
+        "transparent; }"));
     m_spanCombo->setFixedSize(kSpanComboWidth, kSpanComboHeight);
     m_spanCombo->setFocusPolicy(Qt::NoFocus);
     m_spanCombo->setToolTip(QStringLiteral("Bandscope span"));
@@ -186,10 +188,10 @@ void BandscopeDisplay::updatePanScrollBar()
     if (!validRange)
     {
         const QSignalBlocker blocker(m_panScrollBar);
-        m_panScrollBar->setRange(0, 0);
-        m_panScrollBar->setPageStep(1);
+        m_panScrollBar->setRange(0, 100);
+        m_panScrollBar->setPageStep(20);
         m_panScrollBar->setSingleStep(1);
-        m_panScrollBar->setValue(0);
+        m_panScrollBar->setValue(50);
         m_panScrollBar->setEnabled(false);
         return;
     }

@@ -13,6 +13,7 @@
 namespace
 {
 constexpr double kMinFrequencyRangeMhz = 0.001;
+const QRgb kWaterfallIdleColor = qRgb(0x02, 0x0c, 0x14);
 
 bool normalizeFrequencyRange(double* startMhz, double* endMhz)
 {
@@ -164,7 +165,7 @@ void WaterfallCanvas::updateSpectrum(const QVector<float>& levels)
     {
         for (int x = 0; x < w; ++x)
         {
-            row[x] = qRgb(0, 0, 0);
+            row[x] = kWaterfallIdleColor;
         }
         update();
         return;
@@ -209,7 +210,7 @@ void WaterfallCanvas::clearDisplay()
 {
     if (!m_waterfall.isNull())
     {
-        m_waterfall.fill(Qt::black);
+        m_waterfall.fill(kWaterfallIdleColor);
     }
     update();
 }
@@ -221,7 +222,7 @@ void WaterfallCanvas::rebuildImage()
         return;
     }
     m_waterfall = QImage(width(), height(), QImage::Format_RGB32);
-    m_waterfall.fill(Qt::black);
+    m_waterfall.fill(kWaterfallIdleColor);
 }
 
 void WaterfallCanvas::paintEvent(QPaintEvent* event)

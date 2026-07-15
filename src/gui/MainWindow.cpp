@@ -679,10 +679,17 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
         spanChoices.append({preset.hz, QString::fromLatin1(preset.label)});
     }
     m_bandscopeDisplay->setSpanChoices(spanChoices);
-    m_bandscopeDisplay->setCurrentSpanHz(AppSettings::instance()
-                                             .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
-                                                    QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
-                                             .toULongLong());
+    const quint64 initialBandscopeSpanHz = AppSettings::instance()
+                                               .value(QString::fromLatin1(kBandscopeSpanHzSettingsKey),
+                                                      QVariant::fromValue<qulonglong>(kDefaultBandscopeSpanHz))
+                                               .toULongLong();
+    m_bandscopeDisplay->setCurrentSpanHz(initialBandscopeSpanHz);
+    const double initialBandscopeCenterMhz = m_vfo->frequencyHz() / 1e6;
+    const double initialBandscopeBandwidthMhz = initialBandscopeSpanHz / 1e6;
+    m_bandscopeDisplay->setFrequencyRange(initialBandscopeCenterMhz - initialBandscopeBandwidthMhz / 2.0,
+                                          initialBandscopeCenterMhz + initialBandscopeBandwidthMhz / 2.0);
+    m_bandscopeDisplay->setDataFrequencyRange(initialBandscopeCenterMhz - initialBandscopeBandwidthMhz / 2.0,
+                                              initialBandscopeCenterMhz + initialBandscopeBandwidthMhz / 2.0);
     connect(m_bandscopeDisplay, &BandscopeDisplay::spanSelected, this,
             [this](quint64 hz)
             {
