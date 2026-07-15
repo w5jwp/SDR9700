@@ -5,7 +5,6 @@
 #include "AboutDialog.h"
 #include "DialogPlacement.h"
 #include "DtmfDialog.h"
-#include "FramelessTitleBar.h"
 #include "MainTitleBar.h"
 #include "MemoryPanel.h"
 #include "MetersDialog.h"
@@ -13,6 +12,7 @@
 #include "ReceivePanel.h"
 #include "VfoPanel.h"
 #include "UiTheme.h"
+#include "UtilityWindow.h"
 #include "MemoryStore.h"
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
@@ -1014,7 +1014,7 @@ void MainWindow::buildToolBar()
     auto* viewMenu = new QMenu(this);
     viewMenu->setStyleSheet(menuStyle);
     viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
-    viewMenu->addAction("Memories", this, &MainWindow::showMemoryWindow);
+    viewMenu->addAction("Memory Manager", this, &MainWindow::showMemoryWindow);
     viewMenu->addAction("Meters", this, &MainWindow::showMetersDialog);
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 
@@ -1064,9 +1064,7 @@ void MainWindow::buildToolBar()
 
 void MainWindow::buildMemoryWindow()
 {
-    m_memoryWindow = new QDialog(this);
-    m_memoryWindow->setWindowTitle("Memory");
-    m_memoryWindow->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    m_memoryWindow = new sdr9700::ui::UtilityWindow(QStringLiteral("Memory Manager"), this);
     m_memoryWindow->setStyleSheet(
         QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
             .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
@@ -1192,7 +1190,7 @@ void MainWindow::buildMemoryWindow()
     footer->addWidget(closeButton);
     root->addLayout(footer);
 
-    auto* memTitleBar = new FramelessTitleBar(QStringLiteral("Memory"), m_memoryWindow);
+    auto* memTitleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("Memory Manager"), m_memoryWindow);
     connect(memTitleBar->closeButton(), &QPushButton::clicked, m_memoryWindow, &QWidget::hide);
     connect(closeButton, &QPushButton::clicked, m_memoryWindow, &QWidget::hide);
 
@@ -1405,10 +1403,7 @@ void MainWindow::showMemoryWindow()
         return;
     }
     reloadMemoryTable();
-    centerPopupWindow(m_memoryWindow);
-    m_memoryWindow->show();
-    m_memoryWindow->raise();
-    m_memoryWindow->activateWindow();
+    static_cast<sdr9700::ui::UtilityWindow*>(m_memoryWindow)->showCentered();
 }
 
 QString MainWindow::selectedMemoryId() const
@@ -4451,7 +4446,7 @@ void MainWindow::showDtmfDialog()
         return;
     }
 
-    bringDialogToFront(m_dtmfDialog);
+    m_dtmfDialog->showCentered();
 }
 
 void MainWindow::showMetersDialog()
@@ -4495,7 +4490,7 @@ void MainWindow::showMetersDialog()
     {
         m_metersDialog->resetMeters();
     }
-    bringDialogToFront(m_metersDialog);
+    m_metersDialog->showCentered();
 }
 
 void MainWindow::onDtmfSendRequested(const QString& digits)

@@ -1,15 +1,14 @@
 #pragma once
 
-#include <QDialog>
-#include <QPointer>
+#include "UtilityWindow.h"
+
 #include <QString>
 
 class QLabel;
 class QGridLayout;
 class QProgressBar;
-class QShowEvent;
 
-class MetersDialog : public QDialog
+class MetersDialog : public sdr9700::ui::UtilityWindow
 {
     Q_OBJECT
 
@@ -27,9 +26,6 @@ class MetersDialog : public QDialog
     void setCurrentMeter(double amps);
     void setTransmitAudioLevel(int peak, int rms);
 
-  protected:
-    void showEvent(QShowEvent* event) override;
-
   private:
     struct MeterRow
     {
@@ -41,7 +37,6 @@ class MetersDialog : public QDialog
     void setMeterRow(const MeterRow& row, int value, const QString& text);
     void setMeterFillColor(const MeterRow& row, const char* color);
 
-    QPointer<QWidget> m_centerHost;
     MeterRow m_sMeter;
     MeterRow m_powerMeter;
     MeterRow m_swrMeter;

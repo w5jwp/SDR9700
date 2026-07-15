@@ -1,17 +1,11 @@
 #include "MetersDialog.h"
-#include "DialogPlacement.h"
 #include "UiTheme.h"
 
 #include <QGridLayout>
-#include <QHBoxLayout>
 #include <QLabel>
-#include <QMouseEvent>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QShowEvent>
-#include <QTimer>
 #include <QVBoxLayout>
-#include <QWindow>
 
 namespace
 {
@@ -72,75 +66,10 @@ QString sMeterText(int value)
     return QStringLiteral("S9+%1").arg(plusDb);
 }
 
-class MetersTitleBar : public QWidget
-{
-  public:
-    explicit MetersTitleBar(QWidget* parent = nullptr) : QWidget(parent) {}
-
-  protected:
-    void mousePressEvent(QMouseEvent* event) override
-    {
-        if (event->button() == Qt::LeftButton)
-        {
-            QWidget* panel = parentWidget();
-            if (panel && panel->isWindow())
-            {
-                if (QWindow* win = panel->windowHandle())
-                {
-                    win->startSystemMove();
-                }
-            }
-            else if (panel)
-            {
-                m_dragging = true;
-                m_dragOffset = panel->mapFromGlobal(event->globalPosition().toPoint());
-            }
-            event->accept();
-            return;
-        }
-        QWidget::mousePressEvent(event);
-    }
-
-    void mouseMoveEvent(QMouseEvent* event) override
-    {
-        if (!m_dragging)
-        {
-            QWidget::mouseMoveEvent(event);
-            return;
-        }
-
-        QWidget* panel = parentWidget();
-        QWidget* parent = panel ? panel->parentWidget() : nullptr;
-        if (!panel || !parent)
-        {
-            return;
-        }
-
-        QPoint target = parent->mapFromGlobal(event->globalPosition().toPoint() - m_dragOffset);
-        target.setX(qBound(0, target.x(), qMax(0, parent->width() - panel->width())));
-        target.setY(qBound(0, target.y(), qMax(0, parent->height() - panel->height())));
-        panel->move(target);
-        event->accept();
-    }
-
-    void mouseReleaseEvent(QMouseEvent* event) override
-    {
-        m_dragging = false;
-        QWidget::mouseReleaseEvent(event);
-    }
-
-  private:
-    bool m_dragging{false};
-    QPoint m_dragOffset;
-};
 } // namespace
 
-MetersDialog::MetersDialog(QWidget* parent) : QDialog(parent), m_centerHost(parent)
+MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLiteral("Meters"), parent)
 {
-    setWindowTitle(QStringLiteral("Meters"));
-    setWindowModality(Qt::NonModal);
-    setAttribute(Qt::WA_DeleteOnClose, false);
-    setWindowFlags(Qt::FramelessWindowHint);
     setFixedWidth(500);
     setStyleSheet(QStringLiteral("MetersDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
@@ -149,29 +78,8 @@ MetersDialog::MetersDialog(QWidget* parent) : QDialog(parent), m_centerHost(pare
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
 
-    auto* titleBar = new MetersTitleBar(this);
-    titleBar->setFixedHeight(28);
-    titleBar->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::MenuBar));
-    auto* titleLayout = new QHBoxLayout(titleBar);
-    titleLayout->setContentsMargins(10, 0, 0, 0);
-    titleLayout->setSpacing(0);
-
-    auto* titleLabel = new QLabel(QStringLiteral("Meters"), titleBar);
-    titleLabel->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; font-size: 12px; font-weight: bold; background: transparent; }")
-            .arg(UiTheme::Color::TextMuted));
-    titleLayout->addWidget(titleLabel);
-    titleLayout->addStretch();
-
-    auto* closeBtn = new QPushButton(QStringLiteral("X"), titleBar);
-    closeBtn->setFixedSize(28, 28);
-    closeBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background: transparent; border: none; color: %1; font-size: 13px; }"
-                       "QPushButton:hover { background: %2; color: %3; }")
-            .arg(QLatin1String(UiTheme::Color::TextMuted), QLatin1String(UiTheme::Color::Danger),
-                 QLatin1String(UiTheme::Color::White)));
-    connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
-    titleLayout->addWidget(closeBtn);
+    auto* titleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("Meters"), this);
+    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QWidget::close);
     root->addWidget(titleBar);
 
     auto* content = new QWidget(this);
@@ -201,15 +109,6 @@ MetersDialog::MetersDialog(QWidget* parent) : QDialog(parent), m_centerHost(pare
 
     contentLayout->addLayout(grid);
     resetMeters();
-}
-
-void MetersDialog::showEvent(QShowEvent* event)
-{
-    QDialog::showEvent(event);
-
-    sdr9700::ui::centerWindowOn(this, m_centerHost);
-    QTimer::singleShot(0, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
-    QTimer::singleShot(50, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
 }
 
 MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, const QString& label,
