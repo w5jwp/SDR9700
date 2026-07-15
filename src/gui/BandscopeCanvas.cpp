@@ -17,6 +17,7 @@ constexpr float kPeakDecayLevelPerSec = 25.0f;
 constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
 constexpr int kClickMoveTolerancePx = 6;
 constexpr int kLevelScaleTopInsetPx = 6;
+constexpr int kLevelScaleBottomInsetPx = 9;
 constexpr int kGridDensityFewer = 0;
 constexpr int kGridDensityNormal = 1;
 constexpr int kGridDensityMore = 2;
@@ -131,7 +132,8 @@ int BandscopeCanvas::levelToY(float level, int topY, int h) const
     float norm = (level - m_minLevel) / (m_maxLevel - m_minLevel);
     norm = std::max(0.0f, std::min(1.0f, norm));
     const int topInset = qMin(kLevelScaleTopInsetPx, qMax(0, h - 1));
-    return topY + topInset + int((1.0f - norm) * qMax(1, h - 1 - topInset));
+    const int bottomInset = qMin(kLevelScaleBottomInsetPx, qMax(0, h - 1 - topInset));
+    return topY + topInset + int((1.0f - norm) * qMax(1, h - 1 - topInset - bottomInset));
 }
 
 int BandscopeCanvas::binForFrequency(double mhz, int binCount) const
@@ -326,8 +328,8 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
     static const QColor kGridText(0xc6, 0xe0, 0xe8);
     static const QColor kTrace(0xf2, 0xf7, 0xfa);
     static const QColor kPeak(0xae, 0xe8, 0xff, 95);
-    static const QColor kScalePanel(0x00, 0x00, 0x00, 218);
     static const QColor kScalePanelBorder(0x52, 0x8f, 0x9e, 120);
+    static const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);
@@ -519,7 +521,8 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
     }
 
     {
-        p.fillRect(0, specTop, levelScalePanelWidth(), specH + scaleHeight(), kScalePanel);
+        p.fillRect(0, specTop, levelScalePanelWidth(), qMax(0, specH - specTop), kBgScale);
+        p.fillRect(0, specH - 1, levelScalePanelWidth(), scaleHeight(), kBgScale);
         p.setPen(kScalePanelBorder);
         p.drawLine(levelScalePanelWidth() - 1, specTop, levelScalePanelWidth() - 1, qMax(specTop, specH - 1));
 
@@ -546,8 +549,8 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
 
     {
         const int scaleY = specH - 1;
-        p.fillRect(levelScalePanelWidth(), scaleY, qMax(0, w - levelScalePanelWidth()), scaleHeight(), kBgScale);
-        p.fillRect(levelScalePanelWidth(), scaleY, qMax(0, w - levelScalePanelWidth()), 1, QColor(0x9a, 0x24, 0x24));
+        p.fillRect(0, scaleY, w, scaleHeight(), kBgScale);
+        p.fillRect(levelScalePanelWidth(), scaleY, qMax(0, w - levelScalePanelWidth()), 1, kScaleAccentLine);
         p.setPen(kGridText);
 
         QFont f = p.font();

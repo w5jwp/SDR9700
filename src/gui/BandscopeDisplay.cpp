@@ -16,6 +16,8 @@ namespace
 constexpr int kMinSpectrumHeight = 150;
 constexpr int kMinWaterfallHeight = 180;
 constexpr int kDefaultBandscopeHeightBias = 0;
+const QColor kScaleBackground(0x06, 0x11, 0x16);
+const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 constexpr int kSpanComboWidth = 94;
 constexpr int kSpanComboHeight = 24;
 constexpr int kSpanComboMargin = 8;
@@ -269,6 +271,15 @@ void BandscopeDisplay::paintEvent(QPaintEvent* event)
 
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
+
+    if (m_bandscopeCanvas && m_panScrollBar)
+    {
+        const QRect scrollbarRect = m_panScrollBar->geometry();
+        const int fillerTop = qMax(0, scrollbarRect.top() - 1);
+        painter.fillRect(0, fillerTop, BandscopeCanvas::levelScalePanelWidth(), scrollbarRect.bottom() - fillerTop + 1,
+                         kScaleBackground);
+        painter.fillRect(0, scrollbarRect.bottom(), BandscopeCanvas::levelScalePanelWidth(), 1, kScaleAccentLine);
+    }
 }
 
 void BandscopeDisplay::setFrequencyRange(double startMhz, double endMhz)
