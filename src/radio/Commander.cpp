@@ -862,8 +862,13 @@ void Commander::parseCommand()
         {
             return;
         }
-        value.setValue(getMeterCal(meterS, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
+        {
+            const quint8 rawS = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+            const double sMeter = getMeterCal(meterS, rawS);
+            qDebug(logRadioTraffic()).nospace() << "S meter raw=" << static_cast<int>(rawS) << " calibrated=" << sMeter;
+            value.setValue(sMeter);
+            break;
+        }
     case funcCenterMeter:
         if (payloadTooShort(2))
         {
@@ -883,8 +888,14 @@ void Commander::parseCommand()
         {
             return;
         }
-        value.setValue(getMeterCal(meterSWR, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
+        {
+            const quint8 rawSwr = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+            const double swr = getMeterCal(meterSWR, rawSwr);
+            qDebug(logRadioTraffic()).nospace()
+                << "SWR meter raw=" << static_cast<int>(rawSwr) << " calibrated=" << swr;
+            value.setValue(swr);
+            break;
+        }
     case funcALCMeter:
         if (payloadTooShort(2))
         {
@@ -893,7 +904,8 @@ void Commander::parseCommand()
         {
             const quint8 rawAlc = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
             const double alc = getMeterCal(meterALC, rawAlc);
-            qDebug(logRadioTraffic()).nospace() << "ALC meter raw=" << rawAlc << " calibrated=" << alc;
+            qDebug(logRadioTraffic()).nospace()
+                << "ALC meter raw=" << static_cast<int>(rawAlc) << " calibrated=" << alc;
             value.setValue(alc);
             break;
         }

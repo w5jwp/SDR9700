@@ -416,11 +416,9 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 break;
             case funcSMeter:
             {
-                // Display S0..S9 over the first 60% and S9..S9+40 over the remaining 40%.
-                // The radio can report higher CI-V values, but SDR9700 pegs the displayed meter at +40.
                 static constexpr double kS0Dbm = -147.0;
                 static constexpr double kS9Dbm = -93.0;
-                static constexpr double kS9p40Dbm = -53.0;
+                static constexpr double kS9p60Dbm = -33.0;
 
                 const double dbm = item.value.toDouble();
                 double fraction = 0.0;
@@ -434,7 +432,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 }
                 else
                 {
-                    fraction = 0.6 + 0.4 * (dbm - kS9Dbm) / (kS9p40Dbm - kS9Dbm);
+                    fraction = 0.6 + 0.4 * (dbm - kS9Dbm) / (kS9p60Dbm - kS9Dbm);
                 }
 
                 const int s = qBound(0, static_cast<int>(fraction * 255.0 + 0.5), 255);

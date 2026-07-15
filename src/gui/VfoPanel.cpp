@@ -12,6 +12,7 @@
 #include <QSlider>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <array>
 
 namespace
 {
@@ -33,7 +34,7 @@ constexpr QRect kMemoryNameGeometry(6, 5, 200, 16);
 constexpr int kVfoFrequencyTopSpacing = 16;
 constexpr int kSignalMeterWidth = 220;
 constexpr int kSignalMeterHeight = 10;
-constexpr int kSignalLayoutSpacing = 1;
+constexpr int kSignalLayoutSpacing = 0;
 constexpr QSize kHeaderBadgeSize(54, 18);
 
 QString commandButtonStyle()
@@ -53,12 +54,39 @@ class SMeter : public QProgressBar
     void setAlc(bool on)
     {
         m_alcMode = on;
+        resetBallistics();
         update();
     }
 
-    void setAlcFillColor(const QColor& color)
+    void resetBallistics()
     {
-        m_alcFillColor = color;
+        m_samples.fill(0);
+        m_sampleCount = 0;
+        m_samplePosition = 0;
+        m_averageValue = 0.0;
+        m_peakValue = 0;
+        setValue(0);
+    }
+
+    void setMeterValue(int newValue)
+    {
+        const int bounded = qBound(minimum(), newValue, maximum());
+        setValue(bounded);
+
+        m_samples[m_samplePosition] = bounded;
+        m_samplePosition = (m_samplePosition + 1) % static_cast<int>(m_samples.size());
+        m_sampleCount = qMin(m_sampleCount + 1, static_cast<int>(m_samples.size()));
+
+        int sum = 0;
+        int peak = 0;
+        for (int i = 0; i < m_sampleCount; ++i)
+        {
+            sum += m_samples[i];
+            peak = qMax(peak, m_samples[i]);
+        }
+
+        m_averageValue = m_sampleCount > 0 ? static_cast<double>(sum) / static_cast<double>(m_sampleCount) : 0.0;
+        m_peakValue = peak;
         update();
     }
 
@@ -92,7 +120,12 @@ class SMeter : public QProgressBar
         painter.setPen(Qt::NoPen);
         if (m_alcMode)
         {
-            painter.setBrush(m_alcFillColor);
+            QLinearGradient gradient(fillRect.left(), 0, fillRect.right(), 0);
+            gradient.setColorAt(0.00, UiTheme::Color::MeterGreen);
+            gradient.setColorAt(0.40, UiTheme::Color::MeterGreen);
+            gradient.setColorAt(0.50, UiTheme::Color::MeterAmber);
+            gradient.setColorAt(1.00, UiTheme::Color::MeterRed);
+            painter.setBrush(gradient);
         }
         else
         {
@@ -105,11 +138,37 @@ class SMeter : public QProgressBar
             painter.setBrush(gradient);
         }
         painter.drawRoundedRect(QRect(fillRect.left(), fillRect.top(), fillWidth, fillRect.height()), 2, 2);
+
+        if (m_alcMode)
+        {
+            const int redlineX = fillRect.left() + static_cast<int>((fillRect.width() - 1) * 0.5 + 0.5);
+            painter.setPen(QPen(UiTheme::Color::MeterRed, 1));
+            painter.drawLine(redlineX, fillRect.top(), redlineX, fillRect.bottom());
+        }
+
+        if (m_sampleCount > 0)
+        {
+            const int averageX =
+                fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_averageValue / maximum()) + 0.5);
+            painter.setPen(QPen(UiTheme::Color::MeterCyan, 1));
+            painter.drawLine(averageX, fillRect.top(), averageX, fillRect.bottom());
+
+            const int peakX =
+                fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_peakValue / double(maximum())) + 0.5);
+            const QColor peakColor = m_alcMode && m_peakValue >= 50 ? UiTheme::Color::MeterRed : UiTheme::Color::White;
+            painter.setPen(QPen(peakColor, 2));
+            painter.drawLine(peakX, fillRect.top(), peakX, fillRect.bottom());
+        }
     }
 
   private:
+    static constexpr int kBallisticSamples = 30;
     bool m_alcMode{false};
-    QColor m_alcFillColor{UiTheme::Color::MeterGreen};
+    std::array<int, kBallisticSamples> m_samples{};
+    int m_sampleCount{0};
+    int m_samplePosition{0};
+    double m_averageValue{0.0};
+    int m_peakValue{0};
 };
 
 class SMeterScaleCanvas : public QWidget
@@ -117,7 +176,7 @@ class SMeterScaleCanvas : public QWidget
   public:
     explicit SMeterScaleCanvas(QWidget* parent = nullptr) : QWidget(parent)
     {
-        setFixedHeight(14);
+        setFixedHeight(12);
         setMinimumWidth(kSignalMeterWidth);
     }
 
@@ -138,13 +197,16 @@ class SMeterScaleCanvas : public QWidget
             double fraction;
         };
 
-        static const ScaleMark kSMarks[] = {{QStringLiteral("1"), 0.0667},  {QStringLiteral("3"), 0.2000},
-                                            {QStringLiteral("5"), 0.3333},  {QStringLiteral("7"), 0.4667},
-                                            {QStringLiteral("9"), 0.6000},  {QStringLiteral("+20"), 0.8000},
-                                            {QStringLiteral("+40"), 1.0000}};
+        static const ScaleMark kSMarks[] = {{QStringLiteral("1"), 0.0667},   {QStringLiteral("3"), 0.2000},
+                                            {QStringLiteral("5"), 0.3333},   {QStringLiteral("7"), 0.4667},
+                                            {QStringLiteral("9"), 0.6000},   {QStringLiteral("+20"), 0.7333},
+                                            {QStringLiteral("+40"), 0.8500}, {QStringLiteral("+60"), 1.0000}};
 
-        static const ScaleMark kAlcMarks[] = {
-            {QStringLiteral("0"), 0.000}, {QStringLiteral("1"), 0.500}, {QStringLiteral("2"), 1.000}};
+        static const ScaleMark kAlcMarks[] = {{QStringLiteral("0"), 0.000},
+                                              {QStringLiteral(".5"), 0.250},
+                                              {QStringLiteral("1"), 0.500},
+                                              {QStringLiteral("1.5"), 0.750},
+                                              {QStringLiteral("2"), 1.000}};
 
         const ScaleMark* marks = m_alcMode ? kAlcMarks : kSMarks;
         const int maxIndex =
@@ -157,7 +219,7 @@ class SMeterScaleCanvas : public QWidget
         painter.setFont(scaleFont);
         painter.setPen(UiTheme::Color::MeterScaleText);
 
-        const int baselineY = height() - 3;
+        const int baselineY = height() - 2;
         for (int i = 0; i <= maxIndex; ++i)
         {
             const QString& mark = marks[i].label;
@@ -394,7 +456,14 @@ void VfoPanel::setMeterEnabled(bool enabled)
         m_signalMeter->setEnabled(enabled);
         if (!enabled)
         {
-            m_signalMeter->setValue(0);
+            if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
+            {
+                meter->resetBallistics();
+            }
+            else
+            {
+                m_signalMeter->setValue(0);
+            }
             m_signalMeter->setAccessibleDescription(QStringLiteral("Signal meter disabled while syncing."));
         }
     }
@@ -410,10 +479,24 @@ void VfoPanel::setSMeterValue(int value)
     {
         if (!m_meterEnabled)
         {
-            m_signalMeter->setValue(0);
+            if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
+            {
+                meter->resetBallistics();
+            }
+            else
+            {
+                m_signalMeter->setValue(0);
+            }
             return;
         }
-        m_signalMeter->setValue(qBound(0, value, 100));
+        if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
+        {
+            meter->setMeterValue(qBound(0, value, 100));
+        }
+        else
+        {
+            m_signalMeter->setValue(qBound(0, value, 100));
+        }
         m_signalMeter->setAccessibleDescription(QStringLiteral("Received signal strength meter."));
     }
 }
@@ -438,15 +521,15 @@ void VfoPanel::setAlc(double alc)
     {
         return;
     }
-    const QColor fillColor = alc <= 0.8   ? UiTheme::Color::MeterGreen
-                             : alc <= 1.0 ? UiTheme::Color::MeterAmber
-                                          : UiTheme::Color::MeterRed;
+    const int barValue = qBound(0, static_cast<int>(alc / 2.0 * 100.0 + 0.5), 100);
     if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
     {
-        meter->setAlcFillColor(fillColor);
+        meter->setMeterValue(barValue);
     }
-    const int barValue = qBound(0, static_cast<int>(alc / 2.0 * 100.0 + 0.5), 100);
-    m_signalMeter->setValue(barValue);
+    else
+    {
+        m_signalMeter->setValue(barValue);
+    }
     m_signalMeter->setAccessibleDescription(QStringLiteral("ALC meter: %1").arg(alc, 0, 'f', 2));
 }
 
