@@ -213,12 +213,10 @@ bool IcomRC28Manager::open()
     m_deviceName = QStringLiteral("Icom RC-28 Remote Encoder");
     m_devicePath.clear();
     m_serialNumber.clear();
-    m_releaseNumber = 0;
     if (auto* info = hid_enumerate(kIcomRC28Vid, kIcomRC28Pid))
     {
         m_devicePath = QString::fromLatin1(info->path ? info->path : "");
         m_serialNumber = info->serial_number ? QString::fromWCharArray(info->serial_number) : QString{};
-        m_releaseNumber = info->release_number;
         hid_free_enumeration(info);
     }
 
@@ -248,7 +246,6 @@ void IcomRC28Manager::close()
         m_deviceName.clear();
         m_devicePath.clear();
         m_serialNumber.clear();
-        m_releaseNumber = 0;
         emit connectionChanged(false, {});
     }
 }

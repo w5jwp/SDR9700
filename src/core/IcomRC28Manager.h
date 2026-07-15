@@ -21,11 +21,8 @@ class IcomRC28Manager : public QObject
 
     bool isOpen() const { return m_device.load(std::memory_order_relaxed) != nullptr; }
     bool isBlockedByMultiple() const { return m_multipleDetected.load(std::memory_order_acquire); }
-    const QString& blockedDeviceName() const { return m_blockedDeviceName; }
-    const QString& deviceName() const { return m_deviceName; }
     const QString& devicePath() const { return m_devicePath; }
     const QString& serialNumber() const { return m_serialNumber; }
-    uint16_t releaseNumber() const { return m_releaseNumber; }
 
     static QString settingsField(const QString& field, const QString& defaultValue);
     static void setSettingsField(const QString& field, const QString& value);
@@ -61,7 +58,6 @@ class IcomRC28Manager : public QObject
     QString m_deviceName;
     QString m_devicePath;
     QString m_serialNumber;
-    uint16_t m_releaseNumber{0};
     std::atomic<bool> m_multipleDetected{false};
     QString m_blockedDeviceName;
     uint8_t m_prevButtons{kIcomRC28ButtonsIdle};

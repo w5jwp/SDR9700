@@ -103,11 +103,6 @@ void VfoModel::setNbLevel(int level)
     }
 }
 
-void VfoModel::setPreampEnabled(bool on)
-{
-    setPreampLevel(on ? 1 : 0);
-}
-
 void VfoModel::setPreampLevel(int level)
 {
     level = qBound(0, level, 3);

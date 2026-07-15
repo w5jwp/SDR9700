@@ -70,8 +70,11 @@ cppcheck --enable=all --inconclusive --std=c++20 \
   --suppress=toomanyconfigs \
   --suppress=preprocessorErrorDirective \
   --suppressions-list=.cppcheck-suppressions \
-  -I src src
+  -I src -i src/build src
 ```
+
+Do not scan `src/build` with cppcheck. It contains generated CMake, Qt MOC,
+and resource files, which wastes review time and obscures source findings.
 
 Any findings from these tools that are not already suppressed must be included
 in the review report.

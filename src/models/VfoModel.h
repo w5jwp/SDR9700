@@ -51,7 +51,6 @@ class VfoModel : public QObject
     void setNrLevel(int level);
     void setNbEnabled(bool on);
     void setNbLevel(int level);
-    void setPreampEnabled(bool on);
     void setPreampLevel(int level);
     void setAttenuatorEnabled(bool on);
     void setTxPower(int level);

@@ -158,18 +158,8 @@ void BandscopeModel::ingestSpectrum(const QVector<float>& levels, double startMh
     m_sourceCenterMhz = incomingCenter;
     m_sourceBandwidthMhz = incomingBw;
 
-    double displayCenter = m_centerMhz;
-    double displayBandwidth = m_bandwidthMhz;
-    if (!m_hasDisplayCenterHold)
-    {
-        displayCenter = incomingCenter;
-        displayBandwidth = incomingBw;
-    }
-    else if (m_hasDisplayCenterHold)
-    {
-        displayCenter = m_heldCenterMhz;
-        displayBandwidth = incomingBw;
-    }
+    double displayCenter = m_hasDisplayCenterHold ? m_heldCenterMhz : incomingCenter;
+    double displayBandwidth = incomingBw;
     displayBandwidth = constrainedBandwidth(displayBandwidth);
     displayCenter = constrainedCenter(displayCenter, displayBandwidth);
 

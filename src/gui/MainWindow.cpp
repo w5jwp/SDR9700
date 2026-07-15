@@ -4465,10 +4465,10 @@ void MainWindow::showNotchMenu()
 
     QMenu menu(this);
     styleCompactMenu(&menu);
-    auto* offAction = menu.addAction(QStringLiteral("OFF"));
-    auto* autoAction = menu.addAction(QStringLiteral("AUTO"));
-    auto* manualAction = menu.addAction(QStringLiteral("MANUAL"));
-    auto* bothAction = menu.addAction(QStringLiteral("AUTO+MANUAL"));
+    const auto* offAction = menu.addAction(QStringLiteral("OFF"));
+    const auto* autoAction = menu.addAction(QStringLiteral("AUTO"));
+    const auto* manualAction = menu.addAction(QStringLiteral("MANUAL"));
+    const auto* bothAction = menu.addAction(QStringLiteral("AUTO+MANUAL"));
 
     const QAction* selected = menu.exec(m_notchBtn->mapToGlobal(QPoint(0, m_notchBtn->height())));
     if (!selected)
