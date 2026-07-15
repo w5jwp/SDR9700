@@ -1,6 +1,7 @@
 #include "BandscopeDisplay.h"
 #include "BandscopeCanvas.h"
 #include "WaterfallCanvas.h"
+#include "WaterfallController.h"
 
 #include <QComboBox>
 #include <QPainter>
@@ -67,6 +68,7 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
     m_bandscopeCanvas = new BandscopeCanvas(this);
     m_panScrollBar = new QScrollBar(Qt::Horizontal, this);
     m_waterfallCanvas = new WaterfallCanvas(this);
+    m_waterfallController = new WaterfallController(this);
     m_spanCombo = new QComboBox(this);
 
     m_panScrollBar->setFixedHeight(panScrollBarHeight());
@@ -111,10 +113,12 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
 
     connect(m_bandscopeCanvas, &BandscopeCanvas::frequencyClicked, this, &BandscopeDisplay::frequencyClicked);
     connect(m_bandscopeCanvas, &BandscopeCanvas::wheelStepRequested, this, &BandscopeDisplay::panScrollBarBySteps);
-    connect(m_panScrollBar, &QScrollBar::sliderPressed, m_waterfallCanvas,
-            [this]() { m_waterfallCanvas->setPaused(true); });
-    connect(m_panScrollBar, &QScrollBar::sliderReleased, m_waterfallCanvas,
-            [this]() { m_waterfallCanvas->setPaused(false); });
+    connect(m_waterfallController, &WaterfallController::imageChanged, m_waterfallCanvas,
+            &WaterfallCanvas::setWaterfallImage);
+    connect(m_panScrollBar, &QScrollBar::sliderPressed, m_waterfallController,
+            [this]() { m_waterfallController->setPaused(true); });
+    connect(m_panScrollBar, &QScrollBar::sliderReleased, m_waterfallController,
+            [this]() { m_waterfallController->setPaused(false); });
     connect(m_panScrollBar, &QScrollBar::valueChanged, this,
             [this](int value)
             {
@@ -264,6 +268,7 @@ void BandscopeDisplay::updateChildGeometry()
     m_bandscopeCanvas->setGeometry(0, 0, width(), bandscopeHeight);
     m_panScrollBar->setGeometry(plotLeft, splitTop, qMax(0, width() - plotLeft), panScrollBarHeight());
     m_waterfallCanvas->setGeometry(0, waterfallTop, width(), waterfallHeight);
+    m_waterfallController->setCanvasSize(m_waterfallCanvas->size());
     updateSpanComboGeometry();
 }
 
@@ -289,7 +294,7 @@ void BandscopeDisplay::setFrequencyRange(double startMhz, double endMhz)
     m_visibleStartMhz = startMhz;
     m_visibleEndMhz = endMhz;
     m_bandscopeCanvas->setFrequencyRange(startMhz, endMhz);
-    m_waterfallCanvas->setFrequencyRange(startMhz, endMhz);
+    m_waterfallController->setFrequencyRange(startMhz, endMhz);
     updatePanScrollBar();
 }
 
@@ -328,7 +333,7 @@ void BandscopeDisplay::clearFrequencyPanRange()
 void BandscopeDisplay::setDataFrequencyRange(double startMhz, double endMhz)
 {
     m_bandscopeCanvas->setDataFrequencyRange(startMhz, endMhz);
-    m_waterfallCanvas->setDataFrequencyRange(startMhz, endMhz);
+    m_waterfallController->setDataFrequencyRange(startMhz, endMhz);
 }
 
 void BandscopeDisplay::setVfoFrequency(double freqMhz)
@@ -387,13 +392,13 @@ void BandscopeDisplay::setSpectrumPaneHeight(int height)
 void BandscopeDisplay::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
     m_bandscopeCanvas->updateSpectrum(levels, outOfRange);
-    m_waterfallCanvas->updateSpectrum(levels);
+    m_waterfallController->updateSpectrum(levels);
 }
 
 void BandscopeDisplay::clearDisplay()
 {
     m_bandscopeCanvas->clearDisplay();
-    m_waterfallCanvas->clearDisplay();
+    m_waterfallController->clearDisplay();
 }
 
 void BandscopeDisplay::setFilterWidth(int lowHz, int highHz)

@@ -101,6 +101,10 @@ set(SDR9700_SOURCES
     ../resources/resources.qrc
 
     backend/IRadioBackend.h
+    backend/ScopeController.h
+    backend/ScopeController.cpp
+    backend/RadioRouter.h
+    backend/RadioRouter.cpp
     backend/RadioBackend.h
     backend/RadioBackend.cpp
 
@@ -110,6 +114,8 @@ set(SDR9700_SOURCES
     models/VfoModel.cpp
     models/BandscopeModel.h
     models/BandscopeModel.cpp
+    models/MeterController.h
+    models/MeterController.cpp
 
     gui/BandscopeCanvas.h
     gui/BandscopeCanvas.cpp
@@ -117,6 +123,8 @@ set(SDR9700_SOURCES
     gui/BandscopeDisplay.cpp
     gui/WaterfallCanvas.h
     gui/WaterfallCanvas.cpp
+    gui/WaterfallController.h
+    gui/WaterfallController.cpp
     gui/DialogPlacement.h
     gui/UiTheme.h
     gui/MemoryStore.h

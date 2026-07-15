@@ -8,6 +8,8 @@
 class IRadioBackend;
 class VfoModel;
 class BandscopeModel;
+class MeterController;
+struct MeterSnapshot;
 
 class RadioModel : public QObject
 {
@@ -31,6 +33,7 @@ class RadioModel : public QObject
 
     VfoModel* vfo() const { return m_vfo; }
     BandscopeModel* bandscope() const { return m_bandscope; }
+    MeterController* meterController() const { return m_meterController; }
     IRadioBackend* backend() const { return m_backend; }
 
   public slots:
@@ -52,6 +55,7 @@ class RadioModel : public QObject
     void compressionMeterChanged(double db);
     void voltageMeterChanged(double volts);
     void currentMeterChanged(double amps);
+    void meterSnapshotChanged(const MeterSnapshot& snapshot);
     void pttChanged(bool on);
     void transmittingChanged(bool on);
     void errorOccurred(const QString& message);
@@ -66,9 +70,7 @@ class RadioModel : public QObject
     void onBackendReadyChanged(bool ready);
     void onFrequencyChanged(quint64 hz);
     void onModeChanged(const QString& mode);
-    void onSmeterChanged(int s);
-    void onSwrChanged(double swr);
-    void onAlcChanged(double alc);
+    void onMeterSnapshotChanged(const MeterSnapshot& snapshot);
     void onPttChanged(bool on);
     void onSpectrumDataReady(const QVector<float>& levels, double start, double end, bool outOfRange);
 
@@ -76,6 +78,7 @@ class RadioModel : public QObject
     IRadioBackend* m_backend{nullptr};
     VfoModel* m_vfo{nullptr};
     BandscopeModel* m_bandscope{nullptr};
+    MeterController* m_meterController{nullptr};
 
     bool m_connected{false};
     bool m_ready{false};

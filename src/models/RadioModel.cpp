@@ -1,6 +1,7 @@
 #include "RadioModel.h"
 #include "VfoModel.h"
 #include "BandscopeModel.h"
+#include "MeterController.h"
 #include "backend/RadioBackend.h"
 
 #include <QDebug>
@@ -15,6 +16,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     m_backend = new RadioBackend(this);
     m_vfo = new VfoModel(m_backend, this);
     m_bandscope = new BandscopeModel(this);
+    m_meterController = new MeterController(this);
 
     connect(m_backend, &IRadioBackend::connected, this, &RadioModel::onBackendConnected);
     connect(m_backend, &IRadioBackend::disconnected, this, &RadioModel::onBackendDisconnected);
@@ -23,13 +25,14 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::statusMessage, this, &RadioModel::statusMessage);
     connect(m_backend, &IRadioBackend::frequencyChanged, this, &RadioModel::onFrequencyChanged);
     connect(m_backend, &IRadioBackend::modeChanged, this, &RadioModel::onModeChanged);
-    connect(m_backend, &IRadioBackend::smeterChanged, this, &RadioModel::onSmeterChanged);
-    connect(m_backend, &IRadioBackend::powerMeterChanged, this, &RadioModel::powerMeterChanged);
-    connect(m_backend, &IRadioBackend::swrChanged, this, &RadioModel::onSwrChanged);
-    connect(m_backend, &IRadioBackend::alcChanged, this, &RadioModel::onAlcChanged);
-    connect(m_backend, &IRadioBackend::compressionMeterChanged, this, &RadioModel::compressionMeterChanged);
-    connect(m_backend, &IRadioBackend::voltageMeterChanged, this, &RadioModel::voltageMeterChanged);
-    connect(m_backend, &IRadioBackend::currentMeterChanged, this, &RadioModel::currentMeterChanged);
+    connect(m_backend, &IRadioBackend::smeterChanged, m_meterController, &MeterController::setSMeter);
+    connect(m_backend, &IRadioBackend::powerMeterChanged, m_meterController, &MeterController::setPowerMeter);
+    connect(m_backend, &IRadioBackend::swrChanged, m_meterController, &MeterController::setSwr);
+    connect(m_backend, &IRadioBackend::alcChanged, m_meterController, &MeterController::setAlc);
+    connect(m_backend, &IRadioBackend::compressionMeterChanged, m_meterController,
+            &MeterController::setCompressionMeter);
+    connect(m_backend, &IRadioBackend::voltageMeterChanged, m_meterController, &MeterController::setVoltageMeter);
+    connect(m_backend, &IRadioBackend::currentMeterChanged, m_meterController, &MeterController::setCurrentMeter);
     connect(m_backend, &IRadioBackend::agcModeChanged, m_vfo, &VfoModel::applyAgcMode);
     connect(m_backend, &IRadioBackend::autoNotchChanged, m_vfo, &VfoModel::applyAutoNotch);
     connect(m_backend, &IRadioBackend::manualNotchChanged, m_vfo, &VfoModel::applyManualNotch);
@@ -53,7 +56,8 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::spectrumDataReady, this, &RadioModel::onSpectrumDataReady);
     connect(m_backend, &IRadioBackend::pttChanged, this, &RadioModel::onPttChanged);
     connect(m_backend, &IRadioBackend::networkQualityChanged, this, &RadioModel::networkQualityChanged);
-    connect(m_backend, &IRadioBackend::txAudioLevelChanged, this, &RadioModel::txAudioLevelChanged);
+    connect(m_backend, &IRadioBackend::txAudioLevelChanged, m_meterController, &MeterController::setTransmitAudioLevel);
+    connect(m_meterController, &MeterController::snapshotChanged, this, &RadioModel::onMeterSnapshotChanged);
 }
 
 RadioModel::~RadioModel() = default;
@@ -101,6 +105,7 @@ void RadioModel::onBackendDisconnected()
 {
     m_connected = false;
     m_ready = false;
+    m_meterController->reset();
     emit connectionChanged(false);
     emit readyChanged(false);
     onPttChanged(false);
@@ -113,6 +118,7 @@ void RadioModel::onBackendError(const QString& msg)
     {
         m_connected = false;
         m_ready = false;
+        m_meterController->reset();
         emit connectionChanged(false);
         emit readyChanged(false);
     }
@@ -147,25 +153,45 @@ void RadioModel::onModeChanged(const QString& mode)
     m_vfo->applyMode(mode);
 }
 
-void RadioModel::onSmeterChanged(int s)
+void RadioModel::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
 {
-    m_smeter = s;
-    emit smeterChanged(s);
-}
-
-void RadioModel::onSwrChanged(double swr)
-{
-    emit swrChanged(swr);
-}
-
-void RadioModel::onAlcChanged(double alc)
-{
-    emit alcChanged(alc);
+    m_smeter = snapshot.sMeter;
+    emit smeterChanged(snapshot.sMeter);
+    if (snapshot.powerValid)
+    {
+        emit powerMeterChanged(snapshot.powerWatts);
+    }
+    if (snapshot.swrValid)
+    {
+        emit swrChanged(snapshot.swr);
+    }
+    if (snapshot.alcValid)
+    {
+        emit alcChanged(snapshot.alc);
+    }
+    if (snapshot.compressionValid)
+    {
+        emit compressionMeterChanged(snapshot.compressionDb);
+    }
+    if (snapshot.voltageValid)
+    {
+        emit voltageMeterChanged(snapshot.voltageVolts);
+    }
+    if (snapshot.currentValid)
+    {
+        emit currentMeterChanged(snapshot.currentAmps);
+    }
+    emit txAudioLevelChanged(snapshot.txAudioPeak, snapshot.txAudioRms);
+    emit meterSnapshotChanged(snapshot);
 }
 
 void RadioModel::onPttChanged(bool on)
 {
     m_vfo->applyPtt(on);
+    if (!on)
+    {
+        m_meterController->resetTransmitMeters();
+    }
     if (m_transmitting == on)
     {
         return;

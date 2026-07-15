@@ -725,58 +725,11 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
 
     connect(m_model, &RadioModel::connectionChanged, this, &MainWindow::onConnectionChanged);
     connect(m_model, &RadioModel::readyChanged, this, &MainWindow::onRadioReadyChanged);
-    connect(m_model, &RadioModel::smeterChanged, this, &MainWindow::onSmeterChanged);
-    connect(m_model, &RadioModel::powerMeterChanged, this,
-            [this](double watts)
-            {
-                m_txPowerMeterWatts = qBound(0.0, watts, 120.0);
-                m_txPowerMeterValid = true;
-                if (m_vfoPanel && m_txActive)
-                {
-                    m_vfoPanel->setTransmitPowerMeter(m_txPowerMeterWatts);
-                }
-                if (m_metersDialog)
-                {
-                    m_metersDialog->setPowerMeter(m_txPowerMeterWatts);
-                }
-            });
-    connect(m_model, &RadioModel::swrChanged, this, &MainWindow::onSwrChanged);
-    connect(m_model, &RadioModel::alcChanged, this, &MainWindow::onAlcChanged);
-    connect(m_model, &RadioModel::compressionMeterChanged, this,
-            [this](double db)
-            {
-                m_txCompressionDb = qBound(0.0, db, 25.5);
-                m_txCompressionValid = true;
-                if (m_metersDialog)
-                {
-                    m_metersDialog->setCompressionMeter(m_txCompressionDb);
-                }
-            });
-    connect(m_model, &RadioModel::voltageMeterChanged, this,
-            [this](double volts)
-            {
-                m_txVoltageVolts = qBound(0.0, volts, 16.0);
-                m_txVoltageValid = true;
-                if (m_metersDialog)
-                {
-                    m_metersDialog->setVoltageMeter(m_txVoltageVolts);
-                }
-            });
-    connect(m_model, &RadioModel::currentMeterChanged, this,
-            [this](double amps)
-            {
-                m_txCurrentAmps = qBound(0.0, amps, 20.0);
-                m_txCurrentValid = true;
-                if (m_metersDialog)
-                {
-                    m_metersDialog->setCurrentMeter(m_txCurrentAmps);
-                }
-            });
+    connect(m_model, &RadioModel::meterSnapshotChanged, this, &MainWindow::onMeterSnapshotChanged);
     connect(m_model, &RadioModel::pttChanged, this, &MainWindow::onPttChanged);
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
     connect(m_model, &RadioModel::errorOccurred, this, &MainWindow::onError);
     connect(m_model, &RadioModel::networkQualityChanged, this, &MainWindow::updateNetworkQuality);
-    connect(m_model, &RadioModel::txAudioLevelChanged, this, &MainWindow::updateTxAudioMeter);
 
     connect(m_vfo, &VfoModel::frequencyChanged, this, &MainWindow::onFrequencyChanged);
     connect(m_vfo, &VfoModel::modeChanged, this, &MainWindow::onModeChanged);
@@ -866,14 +819,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         // Command 25/26 unselected data is the inactive VFO inside the MAIN band,
                         // not the SUB band. Do not paint the right-hand SUB VFO from it.
                         break;
-                    case funcSMeter:
-                    {
-                        if (receiverPanel && !m_txActive && m_model->isReady())
-                        {
-                            receiverPanel->setSMeterValue(qBound(0, value.toInt(), 255) * 100 / 255);
-                        }
-                        break;
-                    }
                     case funcRFPower:
                     {
                         const int level = qBound(0, value.toInt(), 255);
@@ -883,15 +828,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                         }
                         m_txPowerValue = level;
                         updateTxPowerButton();
-                        break;
-                    }
-                    case funcPowerMeter:
-                    {
-                        if (!receiverPanel || !m_txActive)
-                        {
-                            break;
-                        }
-                        receiverPanel->setTransmitPowerMeter(value.toDouble());
                         break;
                     }
                     case funcSquelch:
@@ -2480,7 +2416,7 @@ void MainWindow::updateTxIndicator(bool on)
         }
         else
         {
-            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
+            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_meterSnapshot.sMeter * 100 / 255), 100));
         }
     }
     if (on)
@@ -2514,27 +2450,28 @@ void MainWindow::updateTxIndicator(bool on)
         {
             m_titleBar->setTxDurationActive(false);
         }
-        m_txPowerMeterWatts = 0.0;
-        m_txSwr = 1.0;
-        m_txAlc = 0.0;
-        m_txCompressionDb = 0.0;
-        m_txVoltageVolts = 0.0;
-        m_txCurrentAmps = 0.0;
-        m_txPowerMeterValid = false;
-        m_txSwrValid = false;
-        m_txAlcValid = false;
-        m_txCompressionValid = false;
-        m_txVoltageValid = false;
-        m_txCurrentValid = false;
+        m_meterSnapshot.powerWatts = 0.0;
+        m_meterSnapshot.swr = 1.0;
+        m_meterSnapshot.alc = 0.0;
+        m_meterSnapshot.compressionDb = 0.0;
+        m_meterSnapshot.voltageVolts = 0.0;
+        m_meterSnapshot.currentAmps = 0.0;
+        m_meterSnapshot.powerValid = false;
+        m_meterSnapshot.swrValid = false;
+        m_meterSnapshot.alcValid = false;
+        m_meterSnapshot.compressionValid = false;
+        m_meterSnapshot.voltageValid = false;
+        m_meterSnapshot.currentValid = false;
+        m_meterSnapshot.txAudioPeak = 0;
+        m_meterSnapshot.txAudioRms = 0;
         if (m_metersDialog)
         {
             m_metersDialog->resetMeters();
             if (m_model && m_model->isReady())
             {
-                m_metersDialog->setSMeter(m_lastSMeter);
+                m_metersDialog->setSMeter(m_meterSnapshot.sMeter);
             }
         }
-        updateTxAudioMeter(0, 0);
     }
 }
 
@@ -3135,7 +3072,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
 void MainWindow::resetRadioOwnedControlsForSync()
 {
     m_vfoFrequencyHz = 0;
-    m_lastSMeter = 0;
+    m_meterSnapshot = {};
     m_txPowerValue = 0;
     m_rfGainValue = 0;
     m_squelchValue = 0;
@@ -3144,18 +3081,6 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_toneAccessMode = ratrNN;
     m_toneFrequency = 670;
     m_dtcsCode = 23;
-    m_txPowerMeterWatts = 0.0;
-    m_txSwr = 1.0;
-    m_txAlc = 0.0;
-    m_txCompressionDb = 0.0;
-    m_txVoltageVolts = 0.0;
-    m_txCurrentAmps = 0.0;
-    m_txPowerMeterValid = false;
-    m_txSwrValid = false;
-    m_txAlcValid = false;
-    m_txCompressionValid = false;
-    m_txVoltageValid = false;
-    m_txCurrentValid = false;
 
     if (m_vfoPanel)
     {
@@ -3191,7 +3116,6 @@ void MainWindow::resetRadioOwnedControlsForSync()
     updateTxPowerButton();
     updateRfGainButton();
     updateTxIndicator(false);
-    updateTxAudioMeter(0, 0);
     if (m_metersDialog)
     {
         m_metersDialog->resetMeters();
@@ -4156,68 +4080,83 @@ void MainWindow::onModeChanged(const QString& mode)
     }
 }
 
-void MainWindow::onSmeterChanged(int s)
+void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
 {
     if (!m_model->isReady())
     {
         return;
     }
 
-    m_lastSMeter = qBound(0, s, 255);
+    m_meterSnapshot = snapshot;
     if (m_metersDialog)
     {
-        m_metersDialog->setSMeter(m_lastSMeter);
-    }
-    if (!m_txActive)
-    {
-        if (m_vfoPanel)
+        const bool hasAnyMeterValue =
+            m_meterSnapshot.sMeterValid || m_meterSnapshot.powerValid || m_meterSnapshot.swrValid ||
+            m_meterSnapshot.alcValid || m_meterSnapshot.compressionValid || m_meterSnapshot.voltageValid ||
+            m_meterSnapshot.currentValid || m_meterSnapshot.txAudioPeak > 0 || m_meterSnapshot.txAudioRms > 0;
+        if (!hasAnyMeterValue)
         {
-            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_lastSMeter * 100 / 255), 100));
+            m_metersDialog->resetMeters();
+        }
+        else
+        {
+            if (m_meterSnapshot.sMeterValid)
+            {
+                m_metersDialog->setSMeter(m_meterSnapshot.sMeter);
+            }
+            if (m_meterSnapshot.powerValid)
+            {
+                m_metersDialog->setPowerMeter(m_meterSnapshot.powerWatts);
+            }
+            if (m_meterSnapshot.swrValid)
+            {
+                m_metersDialog->setSwr(m_meterSnapshot.swr);
+            }
+            if (m_meterSnapshot.alcValid)
+            {
+                m_metersDialog->setAlc(m_meterSnapshot.alc);
+            }
+            if (m_meterSnapshot.compressionValid)
+            {
+                m_metersDialog->setCompressionMeter(m_meterSnapshot.compressionDb);
+            }
+            if (m_meterSnapshot.voltageValid)
+            {
+                m_metersDialog->setVoltageMeter(m_meterSnapshot.voltageVolts);
+            }
+            if (m_meterSnapshot.currentValid)
+            {
+                m_metersDialog->setCurrentMeter(m_meterSnapshot.currentAmps);
+            }
+            m_metersDialog->setTransmitAudioLevel(m_meterSnapshot.txAudioPeak, m_meterSnapshot.txAudioRms);
         }
     }
-}
-
-void MainWindow::onSwrChanged(double swr)
-{
-    m_txSwr = qBound(1.0, swr, 6.0);
-    m_txSwrValid = true;
-    if (m_metersDialog)
+    if (m_vfoPanel)
     {
-        m_metersDialog->setSwr(m_txSwr);
+        if (m_txActive)
+        {
+            if (m_meterSnapshot.powerValid)
+            {
+                m_vfoPanel->setTransmitPowerMeter(m_meterSnapshot.powerWatts);
+            }
+        }
+        else if (m_meterSnapshot.sMeterValid)
+        {
+            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_meterSnapshot.sMeter * 100 / 255), 100));
+        }
     }
-    if (!m_vfoPanel || !m_txActive)
+
+    if (!m_meterSnapshot.swrValid || !m_txActive || !m_txSwrLabel)
     {
         return;
     }
+
+    const double swr = m_meterSnapshot.swr;
     const char* swrColor = swr <= 1.7   ? UiTheme::Color::Success
                            : swr <= 2.7 ? UiTheme::Color::Warning
                                         : UiTheme::Color::Danger;
-    if (m_txSwrLabel)
-    {
-        m_txSwrLabel->setText(QStringLiteral("<span style='color:%1'>SWR %2</span>")
-                                  .arg(QString::fromLatin1(swrColor))
-                                  .arg(swr, 0, 'f', 2));
-    }
-}
-
-void MainWindow::onAlcChanged(double alc)
-{
-    m_txAlc = qBound(0.0, alc, 2.0);
-    m_txAlcValid = true;
-    if (m_metersDialog)
-    {
-        m_metersDialog->setAlc(m_txAlc);
-    }
-}
-
-void MainWindow::updateTxAudioMeter(int peak, int rms)
-{
-    m_txAudioPeak = qBound(0, peak, 255);
-    m_txAudioRms = qBound(0, rms, 255);
-    if (m_metersDialog)
-    {
-        m_metersDialog->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
-    }
+    m_txSwrLabel->setText(
+        QStringLiteral("<span style='color:%1'>SWR %2</span>").arg(QString::fromLatin1(swrColor)).arg(swr, 0, 'f', 2));
 }
 
 void MainWindow::onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange)
@@ -4363,32 +4302,35 @@ void MainWindow::showMetersDialog()
     if (m_model && m_model->isReady())
     {
         m_metersDialog->resetMeters();
-        m_metersDialog->setSMeter(m_lastSMeter);
-        if (m_txPowerMeterValid)
+        if (m_meterSnapshot.sMeterValid)
         {
-            m_metersDialog->setPowerMeter(m_txPowerMeterWatts);
+            m_metersDialog->setSMeter(m_meterSnapshot.sMeter);
         }
-        if (m_txSwrValid)
+        if (m_meterSnapshot.powerValid)
         {
-            m_metersDialog->setSwr(m_txSwr);
+            m_metersDialog->setPowerMeter(m_meterSnapshot.powerWatts);
         }
-        if (m_txAlcValid)
+        if (m_meterSnapshot.swrValid)
         {
-            m_metersDialog->setAlc(m_txAlc);
+            m_metersDialog->setSwr(m_meterSnapshot.swr);
         }
-        if (m_txCompressionValid)
+        if (m_meterSnapshot.alcValid)
         {
-            m_metersDialog->setCompressionMeter(m_txCompressionDb);
+            m_metersDialog->setAlc(m_meterSnapshot.alc);
         }
-        if (m_txVoltageValid)
+        if (m_meterSnapshot.compressionValid)
         {
-            m_metersDialog->setVoltageMeter(m_txVoltageVolts);
+            m_metersDialog->setCompressionMeter(m_meterSnapshot.compressionDb);
         }
-        if (m_txCurrentValid)
+        if (m_meterSnapshot.voltageValid)
         {
-            m_metersDialog->setCurrentMeter(m_txCurrentAmps);
+            m_metersDialog->setVoltageMeter(m_meterSnapshot.voltageVolts);
         }
-        m_metersDialog->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
+        if (m_meterSnapshot.currentValid)
+        {
+            m_metersDialog->setCurrentMeter(m_meterSnapshot.currentAmps);
+        }
+        m_metersDialog->setTransmitAudioLevel(m_meterSnapshot.txAudioPeak, m_meterSnapshot.txAudioRms);
     }
     else
     {

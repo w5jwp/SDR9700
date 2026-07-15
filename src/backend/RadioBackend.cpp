@@ -1,8 +1,9 @@
 #include "RadioBackend.h"
-#include "ScopeAdapter.h"
 
 #include "Commander.h"
 #include "CachingQueue.h"
+#include "RadioRouter.h"
+#include "ScopeController.h"
 #include "Types.h"
 #include "AppSettings.h"
 #include "LogCategories.h"
@@ -14,11 +15,9 @@
 #include <QThread>
 #include <QTimer>
 #include <QDebug>
-#include <QElapsedTimer>
 #include <algorithm>
 #include <cmath>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <optional>
 
@@ -204,6 +203,122 @@ RadioBackend::RadioBackend(QObject* parent) : IRadioBackend(parent), m_workerThr
     m_workerThread->setObjectName("radio-worker");
     m_workerThread->start();
 
+    m_scopeController = new ScopeController(this);
+    m_radioRouter = new RadioRouter(this);
+    connect(m_scopeController, &ScopeController::scopeDataReceived, this,
+            [this]()
+            {
+                m_scopeDataReceived = true;
+                updateReadyState();
+            });
+    connect(m_scopeController, &ScopeController::spectrumDataReady, this, &IRadioBackend::spectrumDataReady);
+
+    connect(m_radioRouter, &RadioRouter::radioValueUpdated, this, &IRadioBackend::radioValueUpdated);
+    connect(m_radioRouter, &RadioRouter::frequencyReported, this,
+            [this](quint64 hz)
+            {
+                m_initialMainFrequencyReceived = true;
+                m_initialFrequencyReceived = true;
+                handleReportedFrequency(hz);
+                emit frequencyChanged(hz);
+                updateReadyState();
+            });
+    connect(m_radioRouter, &RadioRouter::modeReported, this,
+            [this](const QString& mode, int filter)
+            {
+                if (filter >= 1 && filter <= 3)
+                {
+                    m_currentMainFilter = filter;
+                }
+                m_initialMainModeReceived = true;
+                m_initialModeReceived = true;
+                emit modeChanged(mode);
+                updateReadyState();
+            });
+    connect(m_radioRouter, &RadioRouter::vfoBandMSRequested, this,
+            [this]()
+            {
+                invokeOnCurrentCommander(
+                    [](Commander* commandSession)
+                    {
+                        commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+                        commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+                    });
+            });
+    connect(m_radioRouter, &RadioRouter::repeaterOffsetChanged, this, &IRadioBackend::repeaterOffsetChanged);
+    connect(m_radioRouter, &RadioRouter::toneAccessModeChanged, this, &IRadioBackend::toneAccessModeChanged);
+    connect(m_radioRouter, &RadioRouter::toneFrequencyChanged, this, &IRadioBackend::toneFrequencyChanged);
+    connect(m_radioRouter, &RadioRouter::dtcsCodeChanged, this, &IRadioBackend::dtcsCodeChanged);
+    connect(m_radioRouter, &RadioRouter::smeterChanged, this, &IRadioBackend::smeterChanged);
+    connect(m_radioRouter, &RadioRouter::nrChanged, this, &IRadioBackend::nrChanged);
+    connect(m_radioRouter, &RadioRouter::nbChanged, this, &IRadioBackend::nbChanged);
+    connect(m_radioRouter, &RadioRouter::preampChanged, this, &IRadioBackend::preampChanged);
+    connect(m_radioRouter, &RadioRouter::preampLevelChanged, this, &IRadioBackend::preampLevelChanged);
+    connect(m_radioRouter, &RadioRouter::attenuatorChanged, this, &IRadioBackend::attenuatorChanged);
+    connect(m_radioRouter, &RadioRouter::autoNotchChanged, this, &IRadioBackend::autoNotchChanged);
+    connect(m_radioRouter, &RadioRouter::manualNotchChanged, this, &IRadioBackend::manualNotchChanged);
+    connect(m_radioRouter, &RadioRouter::compressorChanged, this, &IRadioBackend::compressorChanged);
+    connect(m_radioRouter, &RadioRouter::xfcChanged, this, &IRadioBackend::xfcChanged);
+    connect(m_radioRouter, &RadioRouter::ritEnabledChanged, this, &IRadioBackend::ritEnabledChanged);
+    connect(m_radioRouter, &RadioRouter::ritOffsetChanged, this, &IRadioBackend::ritOffsetChanged);
+    connect(m_radioRouter, &RadioRouter::agcModeChanged, this, &IRadioBackend::agcModeChanged);
+    connect(m_radioRouter, &RadioRouter::rfGainChanged, this, &IRadioBackend::rfGainChanged);
+    connect(m_radioRouter, &RadioRouter::txPowerChanged, this, &IRadioBackend::txPowerChanged);
+    connect(m_radioRouter, &RadioRouter::squelchChanged, this, &IRadioBackend::squelchChanged);
+    connect(m_radioRouter, &RadioRouter::swrMeterChanged, this, &RadioBackend::handleTransmitSwr);
+    connect(m_radioRouter, &RadioRouter::powerMeterChanged, this, &IRadioBackend::powerMeterChanged);
+    connect(m_radioRouter, &RadioRouter::alcChanged, this, &IRadioBackend::alcChanged);
+    connect(m_radioRouter, &RadioRouter::compressionMeterChanged, this, &IRadioBackend::compressionMeterChanged);
+    connect(m_radioRouter, &RadioRouter::voltageMeterChanged, this, &IRadioBackend::voltageMeterChanged);
+    connect(m_radioRouter, &RadioRouter::currentMeterChanged, this, &IRadioBackend::currentMeterChanged);
+    connect(m_radioRouter, &RadioRouter::duplexModeChanged, this, &IRadioBackend::duplexModeChanged);
+    connect(m_radioRouter, &RadioRouter::dataOffModChanged, this,
+            [this](const radioInput& input)
+            {
+                if (!m_originalDataOffMod.has_value())
+                {
+                    m_originalDataOffMod = input.reg;
+                    qInfo(logRadio()) << "Captured original DATA OFF MOD source register" << *m_originalDataOffMod;
+                }
+            });
+    connect(m_radioRouter, &RadioRouter::data1ModChanged, this,
+            [this](const radioInput& input)
+            {
+                if (!m_originalData1Mod.has_value())
+                {
+                    m_originalData1Mod = input.reg;
+                    qInfo(logRadio()) << "Captured original DATA1 MOD source register" << *m_originalData1Mod;
+                }
+            });
+    connect(m_radioRouter, &RadioRouter::pttChanged, this,
+            [this](bool on)
+            {
+                if (on && !m_pttActive && m_pttStaleOnGuardTimer && m_pttStaleOnGuardTimer->isActive())
+                {
+                    qDebug(logRadio()) << "Ignoring stale PTT-on status after PTT-off request";
+                    return;
+                }
+                if (!on && m_pttStaleOnGuardTimer)
+                {
+                    m_pttStaleOnGuardTimer->stop();
+                }
+                if (!on && m_pttReleaseDelayTimer)
+                {
+                    m_pttReleaseDelayTimer->stop();
+                }
+                if (on)
+                {
+                    armTransmitSafety();
+                }
+                else
+                {
+                    disarmTransmitSafety();
+                }
+                m_pttActive = on;
+                emit pttChanged(on);
+            });
+    connect(m_radioRouter, &RadioRouter::scopeDataReady, m_scopeController, &ScopeController::acceptScopeData);
+
     m_pttStaleOnGuardTimer = new QTimer(this);
     m_pttStaleOnGuardTimer->setSingleShot(true);
 
@@ -355,288 +470,9 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             {
                 return;
             }
-            switch (item.command)
+            if (m_radioRouter)
             {
-            case funcFreqGet:
-            case funcFreqSet:
-            case funcSelectedFreq:
-            case funcUnselectedFreq:
-            {
-                if (item.command == funcUnselectedFreq || item.receiver != kMainReceiver)
-                {
-                    break;
-                }
-
-                emit radioValueUpdated(item.command, item.value, kMainReceiver);
-                auto f = item.value.value<Frequency>();
-                if (f.Hz > 0)
-                {
-                    m_initialMainFrequencyReceived = true;
-                    m_initialFrequencyReceived = true;
-                    handleReportedFrequency(f.Hz);
-                    emit frequencyChanged(f.Hz);
-                    updateReadyState();
-                }
-                break;
-            }
-            case funcModeGet:
-            case funcModeSet:
-            case funcSelectedMode:
-            case funcUnselectedMode:
-            {
-                if (item.command == funcUnselectedMode || item.receiver != kMainReceiver)
-                {
-                    break;
-                }
-
-                emit radioValueUpdated(item.command, item.value, kMainReceiver);
-                auto mi = item.value.value<ModeInfo>();
-                if (mi.filter >= 1 && mi.filter <= 3)
-                {
-                    m_currentMainFilter = mi.filter;
-                }
-                m_initialMainModeReceived = true;
-                m_initialModeReceived = true;
-                emit modeChanged(modeInfoToString(mi));
-                updateReadyState();
-                break;
-            }
-            case funcSplitStatus:
-                emit duplexModeChanged(item.value.value<duplexMode_t>());
-                break;
-            case funcVFOBandMS:
-                emit radioValueUpdated(item.command, QVariant::fromValue<bool>(false), kMainReceiver);
-                if (item.value.toBool())
-                {
-                    invokeOnCurrentCommander(
-                        [](Commander* commandSession)
-                        {
-                            commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-                            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-                        });
-                }
-                break;
-            case funcReadFreqOffset:
-                emit repeaterOffsetChanged(item.value.value<Frequency>().Hz);
-                break;
-            case funcToneSquelchType:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit toneAccessModeChanged(item.value.value<RptrAccessData>().accessMode);
-                break;
-            case funcToneFreq:
-            case funcTSQLFreq:
-                emit toneFrequencyChanged(item.value.value<ToneInfo>().tone);
-                break;
-            case funcDTCSCode:
-                emit dtcsCodeChanged(item.value.value<ToneInfo>().tone);
-                break;
-            case funcSMeter:
-            {
-                static constexpr double kS0Dbm = -147.0;
-                static constexpr double kS9Dbm = -93.0;
-                static constexpr double kS9p60Dbm = -33.0;
-                static constexpr double kS9MeterFraction = 4.0 / 7.0;
-
-                const double dbm = item.value.toDouble();
-                double fraction = 0.0;
-                if (dbm <= kS0Dbm)
-                {
-                    fraction = 0.0;
-                }
-                else if (dbm <= kS9Dbm)
-                {
-                    fraction = kS9MeterFraction * (dbm - kS0Dbm) / (kS9Dbm - kS0Dbm);
-                }
-                else
-                {
-                    fraction = kS9MeterFraction + (1.0 - kS9MeterFraction) * (dbm - kS9Dbm) / (kS9p60Dbm - kS9Dbm);
-                }
-
-                const int s = qBound(0, static_cast<int>(fraction * 255.0 + 0.5), 255);
-                if (item.receiver == kMainReceiver)
-                {
-                    emit radioValueUpdated(item.command, QVariant(s), kMainReceiver);
-                    emit smeterChanged(s);
-                }
-                break;
-            }
-            case funcNoiseReduction:
-                emit nrChanged(item.value.toBool());
-                break;
-            case funcNoiseBlanker:
-                emit nbChanged(item.value.toBool());
-                break;
-            case funcPreamp:
-            {
-                const int level = qBound(0, item.value.toInt(), 3);
-                emit preampLevelChanged(level);
-                emit preampChanged(level != 0);
-                break;
-            }
-            case funcAttenuator:
-                emit attenuatorChanged(item.value.toInt() != 0);
-                break;
-            case funcAutoNotch:
-                emit autoNotchChanged(item.value.toBool());
-                break;
-            case funcManualNotch:
-                emit manualNotchChanged(item.value.toBool());
-                break;
-            case funcCompressor:
-                emit compressorChanged(item.value.toBool());
-                break;
-            case funcXFCStatus:
-                emit xfcChanged(item.value.toBool());
-                break;
-            case funcRitStatus:
-                emit ritEnabledChanged(item.value.toBool());
-                break;
-            case funcRitFreq:
-                emit ritOffsetChanged(item.value.value<short>());
-                break;
-            case funcAGCTimeConstant:
-            {
-                static const char* const kAgcModes[] = {"off", "fast", "mid", "slow"};
-                const int idx = qBound(0, item.value.toInt(), 3);
-                emit agcModeChanged(QString::fromLatin1(kAgcModes[idx]));
-                break;
-            }
-            case funcRfGain:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit rfGainChanged(qBound(0, item.value.toInt(), 255));
-                break;
-            case funcRFPower:
-            {
-                const int level = qBound(0, item.value.toInt(), 255);
-                emit radioValueUpdated(item.command, QVariant(level), item.receiver);
-                emit txPowerChanged(level);
-                break;
-            }
-            case funcDATAOffMod:
-            {
-                if (!m_originalDataOffMod.has_value() && item.value.userType() == qMetaTypeId<radioInput>())
-                {
-                    const radioInput input = item.value.value<radioInput>();
-                    m_originalDataOffMod = input.reg;
-                    qInfo(logRadio()) << "Captured original DATA OFF MOD source register" << *m_originalDataOffMod;
-                }
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                break;
-            }
-            case funcDATA1Mod:
-            {
-                if (!m_originalData1Mod.has_value() && item.value.userType() == qMetaTypeId<radioInput>())
-                {
-                    const radioInput input = item.value.value<radioInput>();
-                    m_originalData1Mod = input.reg;
-                    qInfo(logRadio()) << "Captured original DATA1 MOD source register" << *m_originalData1Mod;
-                }
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                break;
-            }
-            case funcSquelch:
-            {
-                const int level = qBound(0, item.value.toInt(), 255);
-                emit radioValueUpdated(item.command, QVariant(level), item.receiver);
-                emit squelchChanged(level > 0, level);
-                break;
-            }
-            case funcSWRMeter:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                handleTransmitSwr(item.value.toDouble());
-                break;
-            case funcPowerMeter:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit powerMeterChanged(item.value.toDouble());
-                break;
-            case funcALCMeter:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit alcChanged(item.value.toDouble());
-                break;
-            case funcCompMeter:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit compressionMeterChanged(item.value.toDouble());
-                break;
-            case funcVdMeter:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit voltageMeterChanged(item.value.toDouble());
-                break;
-            case funcIdMeter:
-                emit radioValueUpdated(item.command, item.value, item.receiver);
-                emit currentMeterChanged(item.value.toDouble());
-                break;
-            case funcTransceiverStatus:
-            {
-                const bool on = item.value.toBool();
-                if (on && !m_pttActive && m_pttStaleOnGuardTimer && m_pttStaleOnGuardTimer->isActive())
-                {
-                    qDebug(logRadio()) << "Ignoring stale PTT-on status after PTT-off request";
-                    break;
-                }
-                if (!on && m_pttStaleOnGuardTimer)
-                {
-                    m_pttStaleOnGuardTimer->stop();
-                }
-                if (!on && m_pttReleaseDelayTimer)
-                {
-                    m_pttReleaseDelayTimer->stop();
-                }
-                if (on)
-                {
-                    armTransmitSafety();
-                }
-                else
-                {
-                    disarmTransmitSafety();
-                }
-                m_pttActive = on;
-                emit pttChanged(on);
-                break;
-            }
-            case funcScopeWaveData:
-            {
-                auto d = item.value.value<ScopeData>();
-                qDebug(logBandscope()) << "ScopeWaveData: valid=" << d.valid << "dataLen=" << d.data.size()
-                                       << "start=" << d.startFreq << "end=" << d.endFreq;
-                if (d.valid && !d.data.isEmpty())
-                {
-                    m_scopeDataReceived = true;
-                    QVector<float> levels = ScopeAdapter::toLevels(d.data);
-                    if (logBandscope().isDebugEnabled())
-                    {
-                        static QElapsedTimer statsTimer;
-                        if (!statsTimer.isValid() || statsTimer.elapsed() >= 1000)
-                        {
-                            int rawMin = std::numeric_limits<int>::max();
-                            int rawMax = std::numeric_limits<int>::min();
-                            int rawZeros = 0;
-                            qint64 rawTotal = 0;
-                            for (const unsigned char raw : d.data)
-                            {
-                                const int value = static_cast<int>(raw);
-                                rawMin = qMin(rawMin, value);
-                                rawMax = qMax(rawMax, value);
-                                rawTotal += value;
-                                if (value == 0)
-                                {
-                                    ++rawZeros;
-                                }
-                            }
-                            qDebug(logBandscope()).nospace()
-                                << "Bandscope stats: range=" << d.startFreq << "-" << d.endFreq << "MHz"
-                                << " levels[min=" << rawMin << " max=" << rawMax
-                                << " avg=" << (double(rawTotal) / double(d.data.size())) << " zeros=" << rawZeros << "/"
-                                << d.data.size() << "]";
-                            statsTimer.restart();
-                        }
-                    }
-                    emit spectrumDataReady(levels, d.startFreq, d.endFreq, d.oor);
-                    updateReadyState();
-                }
-                break;
-            }
-            default:
-                break;
+                m_radioRouter->route(item);
             }
         },
         Qt::AutoConnection);
@@ -817,6 +653,10 @@ void RadioBackend::shutdownConnection()
     m_commander = nullptr;
     m_radioReady = false;
     m_scopeDataReceived = false;
+    if (m_scopeController)
+    {
+        m_scopeController->reset();
+    }
     m_initialFrequencyReceived = false;
     m_initialModeReceived = false;
     m_initialMainFrequencyReceived = false;
@@ -1595,6 +1435,10 @@ void RadioBackend::onLanReady()
 
     m_radioReady = false;
     m_scopeDataReceived = false;
+    if (m_scopeController)
+    {
+        m_scopeController->reset();
+    }
     m_initialFrequencyReceived = false;
     m_initialModeReceived = false;
     m_initialMainFrequencyReceived = false;
@@ -1670,7 +1514,7 @@ void RadioBackend::onLanReady()
     // established and scope data actually starts flowing.  The CIV stream
     // opens asynchronously after the control handshake; a fixed one-shot
     // delay races against that timing.  We stop as soon as scope data
-    // arrives (m_scopeDataReceived set in funcScopeWaveData handler).
+    // arrives (m_scopeDataReceived set by ScopeController).
     if (m_scopeRetryTimer)
     {
         m_scopeRetryTimer->stop();
@@ -1817,42 +1661,4 @@ void RadioBackend::onHaveAudioData(const audioPacket& pkt)
 {
     // IC-9700 delivers LPCM16 audio; sampleRate comes from rxSetup.
     emit audioDataReady(pkt.data, static_cast<int>(m_rxSampleRate));
-}
-
-
-QString RadioBackend::modeInfoToString(const ModeInfo& mi) const
-{
-    radioMode_t mode = mi.mk;
-    if (mode == modeUnknown && mi.reg != 0xff)
-    {
-        mode = static_cast<radioMode_t>(mi.reg);
-    }
-
-    switch (mode)
-    {
-    case modeUSB:
-        return "USB";
-    case modeLSB:
-        return "LSB";
-    case modeAM:
-        return "AM";
-    case modeFM:
-        return "FM";
-    case modeCW:
-        return "CW";
-    case modeCW_R:
-        return "CW-R";
-    case modeRTTY:
-        return "RTTY";
-    case modeRTTY_R:
-        return "RTTY-R";
-    case modeDV:
-        return "DV";
-    case modeDD:
-        return "DD";
-    default:
-        qWarning(logRadio()) << "modeInfoToString: unrecognised mode" << mode << "reg" << mi.reg
-                             << "- defaulting to FM";
-        return "FM";
-    }
 }

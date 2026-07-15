@@ -10,6 +10,7 @@ class BandscopeCanvas;
 class QComboBox;
 class QScrollBar;
 class WaterfallCanvas;
+class WaterfallController;
 
 class BandscopeDisplay : public QWidget
 {
@@ -68,6 +69,7 @@ class BandscopeDisplay : public QWidget
     BandscopeCanvas* m_bandscopeCanvas{nullptr};
     QScrollBar* m_panScrollBar{nullptr};
     WaterfallCanvas* m_waterfallCanvas{nullptr};
+    WaterfallController* m_waterfallController{nullptr};
     QComboBox* m_spanCombo{nullptr};
     double m_visibleStartMhz{144.0};
     double m_visibleEndMhz{146.0};

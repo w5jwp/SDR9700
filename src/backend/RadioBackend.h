@@ -13,6 +13,8 @@
 #include <optional>
 
 class Commander;
+class ScopeController;
+class RadioRouter;
 
 class RadioBackend : public IRadioBackend
 {
@@ -74,7 +76,6 @@ class RadioBackend : public IRadioBackend
     void onNetworkStatus(networkStatus status);
 
   private:
-    QString modeInfoToString(const ModeInfo& mi) const;
     void shutdownConnection();
     void requestInitialRadioState();
     void updateReadyState();
@@ -92,6 +93,8 @@ class RadioBackend : public IRadioBackend
 
     QThread* m_workerThread{nullptr};
     Commander* m_commander{nullptr};
+    ScopeController* m_scopeController{nullptr};
+    RadioRouter* m_radioRouter{nullptr};
     std::atomic<quint64> m_sessionId{0};
     QString m_connectionHost;
     quint16 m_connectionPort{0};
