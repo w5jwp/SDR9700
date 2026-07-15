@@ -127,10 +127,6 @@ void RadioModel::onBackendReadyChanged(bool ready)
 void RadioModel::onFrequencyChanged(quint64 hz)
 {
     m_vfo->applyFrequency(hz);
-    if (m_bandscope->isUserZoomed())
-    {
-        return;
-    }
     double freqMhz = hz / 1e6;
     double start = m_bandscope->startMhz();
     double end = m_bandscope->endMhz();

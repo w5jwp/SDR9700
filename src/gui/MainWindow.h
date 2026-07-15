@@ -10,7 +10,7 @@
 class RadioModel;
 class VfoModel;
 class BandscopeModel;
-class SpectrumCanvas;
+class BandscopeDisplay;
 class VfoPanel;
 class MemoryPanel;
 class QLabel;
@@ -141,7 +141,7 @@ class MainWindow : public QMainWindow
     VfoModel* m_vfo{nullptr};
     BandscopeModel* m_bandscope{nullptr};
 
-    SpectrumCanvas* m_spectrumCanvas{nullptr};
+    BandscopeDisplay* m_bandscopeDisplay{nullptr};
 
     VfoPanel* m_vfoPanel{nullptr};
     MemoryPanel* m_memoryPanel{nullptr};

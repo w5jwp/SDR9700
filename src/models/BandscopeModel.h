@@ -20,11 +20,8 @@ class BandscopeModel : public QObject
     double endMhz() const { return m_centerMhz + m_bandwidthMhz / 2.0; }
     double sourceStartMhz() const { return m_sourceCenterMhz - m_sourceBandwidthMhz / 2.0; }
     double sourceEndMhz() const { return m_sourceCenterMhz + m_sourceBandwidthMhz / 2.0; }
-    bool isUserZoomed() const { return m_userZoomed; }
 
     void centerOnFrequency(double freqMhz);
-    void zoomInAt(double focusMhz);
-    void zoomOut();
     void setFrequencyLimits(double startMhz, double endMhz);
     void clearFrequencyLimits();
     void holdDisplayCenter(double centerMhz);
@@ -49,6 +46,5 @@ class BandscopeModel : public QObject
     double m_limitEndMhz{0.0};
     double m_heldCenterMhz{0.0};
     bool m_hasFrequencyLimits{false};
-    bool m_userZoomed{false};
     bool m_hasDisplayCenterHold{false};
 };

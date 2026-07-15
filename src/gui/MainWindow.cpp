@@ -1,5 +1,5 @@
 #include "MainWindow.h"
-#include "SpectrumCanvas.h"
+#include "BandscopeDisplay.h"
 #include "RadioChooserDialog.h"
 #include "SettingsDialog.h"
 #include "AboutDialog.h"
@@ -624,16 +624,16 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
 
     buildToolBar();
     buildControlPanel(vbox);
-    auto* spectrumDivider = new QWidget(central);
-    spectrumDivider->setObjectName(QStringLiteral("spectrumDivider"));
-    spectrumDivider->setFixedHeight(6);
-    spectrumDivider->setStyleSheet(
-        QStringLiteral("QWidget#spectrumDivider { background: %1; }").arg(UiTheme::Color::PanelDark));
-    vbox->addWidget(spectrumDivider);
-    m_spectrumCanvas = new SpectrumCanvas(central);
-    m_spectrumCanvas->setInvertMouseWheel(
+    auto* bandscopeDivider = new QWidget(central);
+    bandscopeDivider->setObjectName(QStringLiteral("bandscopeDivider"));
+    bandscopeDivider->setFixedHeight(6);
+    bandscopeDivider->setStyleSheet(
+        QStringLiteral("QWidget#bandscopeDivider { background: %1; }").arg(UiTheme::Color::PanelDark));
+    vbox->addWidget(bandscopeDivider);
+    m_bandscopeDisplay = new BandscopeDisplay(central);
+    m_bandscopeDisplay->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
-    vbox->addWidget(m_spectrumCanvas, 1);
+    vbox->addWidget(m_bandscopeDisplay, 1);
     m_bandscopeTuneCommitTimer = new QTimer(this);
     m_bandscopeTuneCommitTimer->setSingleShot(true);
     m_bandscopeTuneCommitTimer->setInterval(kBandscopeTuneCommitDelayMs);
@@ -678,7 +678,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_vfo, &VfoModel::frequencyChanged, this, &MainWindow::onFrequencyChanged);
     connect(m_vfo, &VfoModel::modeChanged, this, &MainWindow::onModeChanged);
     connect(m_vfo, &VfoModel::filterChanged, this,
-            [this](int low, int high) { m_spectrumCanvas->setFilterWidth(low, high); });
+            [this](int low, int high) { m_bandscopeDisplay->setFilterWidth(low, high); });
     connect(m_vfo, &VfoModel::duplexModeChanged, this, &MainWindow::onDuplexModeChanged);
     connect(m_vfo, &VfoModel::repeaterOffsetChanged, this, &MainWindow::onRepeaterOffsetChanged);
     connect(m_vfo, &VfoModel::toneAccessModeChanged, this, &MainWindow::onToneAccessModeChanged);
@@ -808,37 +808,21 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     }
 
     resetRadioOwnedControlsForSync();
-    m_spectrumCanvas->setFilterWidth(m_vfo->filterLow(), m_vfo->filterHigh());
+    m_bandscopeDisplay->setFilterWidth(m_vfo->filterLow(), m_vfo->filterHigh());
     updateSpectrumVfoMarker();
 
     connect(m_bandscope, &BandscopeModel::spectrumReady, this, &MainWindow::onSpectrumReady);
     connect(m_bandscope, &BandscopeModel::rangeChanged, this,
             [this](double center, double bw)
             {
-                m_spectrumCanvas->setFrequencyRange(center - bw / 2, center + bw / 2);
+                m_bandscopeDisplay->setFrequencyRange(center - bw / 2, center + bw / 2);
                 updateSpectrumVfoMarker();
             });
 
-    connect(m_spectrumCanvas, &SpectrumCanvas::frequencyClicked, this, &MainWindow::onSpectrumClicked);
-    connect(m_spectrumCanvas, &SpectrumCanvas::tuneStepRequested, this, &MainWindow::tuneBandscopeBySteps);
-    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragStarted, this, &MainWindow::beginBandscopeDragTune);
-    connect(m_spectrumCanvas, &SpectrumCanvas::tuneDragRequested, this, &MainWindow::tuneBandscopeByDragDelta);
-    connect(m_spectrumCanvas, &SpectrumCanvas::zoomInRequested, this,
-            [this]()
-            {
-                if (!m_controlsLocked)
-                {
-                    m_bandscope->zoomInAt(m_vfo->frequencyHz() / 1e6);
-                }
-            });
-    connect(m_spectrumCanvas, &SpectrumCanvas::zoomOutRequested, this,
-            [this]()
-            {
-                if (!m_controlsLocked)
-                {
-                    m_bandscope->zoomOut();
-                }
-            });
+    connect(m_bandscopeDisplay, &BandscopeDisplay::frequencyClicked, this, &MainWindow::onSpectrumClicked);
+    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneStepRequested, this, &MainWindow::tuneBandscopeBySteps);
+    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragStarted, this, &MainWindow::beginBandscopeDragTune);
+    connect(m_bandscopeDisplay, &BandscopeDisplay::tuneDragRequested, this, &MainWindow::tuneBandscopeByDragDelta);
 
     onConnectionChanged(false);
 
@@ -1260,8 +1244,8 @@ void MainWindow::showSettingsDialog()
     SettingsDialog dlg(this);
 #endif
     connect(m_model, &RadioModel::txAudioLevelChanged, &dlg, &SettingsDialog::setTransmitAudioLevel);
-    connect(&dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_spectrumCanvas,
-            &SpectrumCanvas::setInvertMouseWheel);
+    connect(&dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_bandscopeDisplay,
+            &BandscopeDisplay::setInvertMouseWheel);
 #ifdef HAVE_HIDAPI
     connect(&dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
             [this](const QString&, const QString&)
@@ -1283,7 +1267,7 @@ void MainWindow::showSettingsDialog()
         m_vfoPanel->setLanMod(m_lanModValue);
     }
     m_model->setLanModLevel(m_lanModValue);
-    m_spectrumCanvas->setInvertMouseWheel(
+    m_bandscopeDisplay->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
 #ifdef HAVE_HIDAPI
     refreshIcomRC28EncoderSettings();
@@ -2976,7 +2960,7 @@ void MainWindow::restoreWindowLayout()
         }
     }
 
-    if (m_spectrumCanvas)
+    if (m_bandscopeDisplay)
     {
         int spectrumHeight = AppSettings::instance().value("BandscopeSpectrumHeight", -1).toInt();
         const QString migrationKey = QStringLiteral("BandscopeSpectrumHeight680Migrated");
@@ -2993,7 +2977,7 @@ void MainWindow::restoreWindowLayout()
             {
                 spectrumHeight += kBandscopeSpectrumHeight760Increase;
             }
-            m_spectrumCanvas->setSpectrumPaneHeight(spectrumHeight);
+            m_bandscopeDisplay->setSpectrumPaneHeight(spectrumHeight);
         }
         if (needsSpectrumHeightMigration)
         {
@@ -3010,15 +2994,15 @@ void MainWindow::saveWindowLayout() const
 {
     AppSettings::instance().setValue("MainWindowX", normalGeometry().x());
     AppSettings::instance().setValue("MainWindowY", normalGeometry().y());
-    if (m_spectrumCanvas)
+    if (m_bandscopeDisplay)
     {
-        AppSettings::instance().setValue("BandscopeSpectrumHeight", m_spectrumCanvas->spectrumPaneHeight());
+        AppSettings::instance().setValue("BandscopeSpectrumHeight", m_bandscopeDisplay->spectrumPaneHeight());
     }
 }
 
 void MainWindow::updateSpectrumVfoMarker()
 {
-    if (!m_spectrumCanvas || !m_vfo || !m_bandscope)
+    if (!m_bandscopeDisplay || !m_vfo || !m_bandscope)
     {
         return;
     }
@@ -3028,7 +3012,7 @@ void MainWindow::updateSpectrumVfoMarker()
                                     : (m_vfoFrequencyHz > 0 ? m_vfoFrequencyHz : m_vfo->frequencyHz());
     const double vfoMhz = displayedHz / 1e6;
     const bool vfoInBandscope = vfoMhz >= m_bandscope->startMhz() && vfoMhz <= m_bandscope->endMhz();
-    m_spectrumCanvas->setVfoFrequency(vfoInBandscope ? vfoMhz : m_bandscope->centerMhz());
+    m_bandscopeDisplay->setVfoFrequency(vfoInBandscope ? vfoMhz : m_bandscope->centerMhz());
 }
 
 void MainWindow::setRadioControlsEnabled(bool enabled)
@@ -3069,9 +3053,9 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
         m_rfGainBtn->setEnabled(controlsEnabled);
     }
 
-    if (m_spectrumCanvas)
+    if (m_bandscopeDisplay)
     {
-        m_spectrumCanvas->setInteractionLocked(m_controlsLocked);
+        m_bandscopeDisplay->setInteractionLocked(m_controlsLocked);
     }
 }
 
@@ -3899,7 +3883,7 @@ void MainWindow::onConnectionChanged(bool connected)
             m_bandscope->clearDisplayCenterHold();
         }
         clearActiveMemory();
-        m_spectrumCanvas->clearDisplay();
+        m_bandscopeDisplay->clearDisplay();
 #ifdef HAVE_HIDAPI
         m_icomRC28PttLatched = false;
 #endif
@@ -4115,9 +4099,9 @@ void MainWindow::onSpectrumReady(const QVector<float>& levels, double start, dou
     {
         updateBandscopeBandLimits(referenceHz);
     }
-    m_spectrumCanvas->setDataFrequencyRange(start, end);
+    m_bandscopeDisplay->setDataFrequencyRange(start, end);
     updateSpectrumVfoMarker();
-    m_spectrumCanvas->updateSpectrum(levels, outOfRange);
+    m_bandscopeDisplay->updateSpectrum(levels, outOfRange);
 }
 
 void MainWindow::showToast(const QString& msg, int durationMs)

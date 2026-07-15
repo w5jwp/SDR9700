@@ -111,8 +111,12 @@ set(SDR9700_SOURCES
     models/BandscopeModel.h
     models/BandscopeModel.cpp
 
-    gui/SpectrumCanvas.h
-    gui/SpectrumCanvas.cpp
+    gui/BandscopeCanvas.h
+    gui/BandscopeCanvas.cpp
+    gui/BandscopeDisplay.h
+    gui/BandscopeDisplay.cpp
+    gui/WaterfallCanvas.h
+    gui/WaterfallCanvas.cpp
     gui/DialogPlacement.h
     gui/UiTheme.h
     gui/MemoryStore.h

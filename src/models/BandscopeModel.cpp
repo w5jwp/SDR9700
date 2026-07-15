@@ -6,7 +6,6 @@
 
 namespace
 {
-constexpr double kZoomFactor = 1.5;
 constexpr double kMinSourceBandwidthMhz = 0.001;
 constexpr double kScopeRangeToleranceMhz = 0.000001;
 
@@ -106,45 +105,6 @@ void BandscopeModel::clearDisplayCenterHold()
     m_heldCenterMhz = 0.0;
 }
 
-void BandscopeModel::zoomInAt(double focusMhz)
-{
-    static constexpr double kMinBandwidthMhz = 0.010;
-    const double sourceBandwidth = constrainedBandwidth(m_sourceBandwidthMhz);
-    const double minimumBandwidth = qMin(kMinBandwidthMhz, sourceBandwidth);
-    const double nextBandwidth = qBound(minimumBandwidth, m_bandwidthMhz / kZoomFactor, sourceBandwidth);
-    if (qAbs(nextBandwidth - m_bandwidthMhz) < 1e-9)
-    {
-        return;
-    }
-
-    m_userZoomed = true;
-    m_bandwidthMhz = nextBandwidth;
-    m_centerMhz = constrainedCenter(focusMhz, m_bandwidthMhz);
-    emit rangeChanged(m_centerMhz, m_bandwidthMhz);
-}
-
-void BandscopeModel::zoomOut()
-{
-    const double sourceBandwidth = constrainedBandwidth(m_sourceBandwidthMhz);
-    const double nextBandwidth = qMin(sourceBandwidth, m_bandwidthMhz * kZoomFactor);
-    if (qAbs(nextBandwidth - m_bandwidthMhz) < 1e-9)
-    {
-        return;
-    }
-
-    m_bandwidthMhz = nextBandwidth;
-    m_userZoomed = m_bandwidthMhz < sourceBandwidth - 1e-9;
-    if (m_userZoomed)
-    {
-        m_centerMhz = constrainedCenter(m_centerMhz, m_bandwidthMhz);
-    }
-    else
-    {
-        m_centerMhz = constrainedCenter(m_sourceCenterMhz, m_bandwidthMhz);
-    }
-    emit rangeChanged(m_centerMhz, m_bandwidthMhz);
-}
-
 void BandscopeModel::setFrequencyLimits(double startMhz, double endMhz)
 {
     if (!normalizeRange(&startMhz, &endMhz))
@@ -200,7 +160,7 @@ void BandscopeModel::ingestSpectrum(const QVector<float>& levels, double startMh
 
     double displayCenter = m_centerMhz;
     double displayBandwidth = m_bandwidthMhz;
-    if (!m_userZoomed && !m_hasDisplayCenterHold)
+    if (!m_hasDisplayCenterHold)
     {
         displayCenter = incomingCenter;
         displayBandwidth = incomingBw;
@@ -209,10 +169,6 @@ void BandscopeModel::ingestSpectrum(const QVector<float>& levels, double startMh
     {
         displayCenter = m_heldCenterMhz;
         displayBandwidth = incomingBw;
-    }
-    else
-    {
-        displayBandwidth = qMin(displayBandwidth, incomingBw);
     }
     displayBandwidth = constrainedBandwidth(displayBandwidth);
     displayCenter = constrainedCenter(displayCenter, displayBandwidth);

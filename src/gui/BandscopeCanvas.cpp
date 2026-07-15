@@ -1,33 +1,27 @@
-#include "SpectrumCanvas.h"
+#include "BandscopeCanvas.h"
 #include "LogCategories.h"
 
-#include <QPainter>
-#include <QPainterPath>
+#include <QCursor>
+#include <QFontMetrics>
 #include <QLinearGradient>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
 #include <QWheelEvent>
-#include <QPushButton>
-#include <QResizeEvent>
-#include <QFontMetrics>
-#include <QCursor>
 #include <algorithm>
 #include <cmath>
 #include <iterator>
-#include <limits>
-
-static constexpr float kPeakDecayLevelPerSec = 25.0f;
-static constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
-static constexpr int kLevelScalePanelWidth = 30;
-static constexpr int kMinSpectrumHeight = 150;
-static constexpr int kMinWaterfallHeight = 180;
-static constexpr int kSpectrumVerticalPadding = 10;
-static constexpr int kBandscopeDragThresholdPx = 6;
-static constexpr int kDefaultBandscopeHeightBias = 0;
-static constexpr double kWheelStepAngleDelta = 120.0;
-static constexpr double kMinFrequencyRangeMhz = 0.001;
 
 namespace
 {
+constexpr float kPeakDecayLevelPerSec = 25.0f;
+constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
+constexpr int kLevelScalePanelWidth = 30;
+constexpr int kSpectrumVerticalPadding = 10;
+constexpr int kBandscopeDragThresholdPx = 6;
+constexpr double kWheelStepAngleDelta = 120.0;
+constexpr double kMinFrequencyRangeMhz = 0.001;
+
 bool normalizeFrequencyRange(double* startMhz, double* endMhz)
 {
     if (!startMhz || !endMhz || !std::isfinite(*startMhz) || !std::isfinite(*endMhz))
@@ -52,29 +46,10 @@ double highFrequencyMhz(double startMhz, double endMhz)
 }
 } // namespace
 
-SpectrumCanvas::SpectrumCanvas(QWidget* parent) : QWidget(parent)
+BandscopeCanvas::BandscopeCanvas(QWidget* parent) : QWidget(parent)
 {
-    setMinimumSize(640, 320);
     setMouseTracking(true);
     setFocusPolicy(Qt::ClickFocus);
-
-    m_zoomOutButton = new QPushButton(QStringLiteral("Zoom\nOut"), this);
-    m_zoomInButton = new QPushButton(QStringLiteral("Zoom\nIn"), this);
-    for (auto* button : {m_zoomOutButton, m_zoomInButton})
-    {
-        button->setFixedSize(56, 34);
-        button->setCursor(Qt::PointingHandCursor);
-        button->setFocusPolicy(Qt::NoFocus);
-        button->setStyleSheet("QPushButton { background: rgba(16, 22, 30, 210); border: 1px solid #566576; "
-                              "border-radius: 3px; color: #e8f2f8; font-size: 10px; font-weight: bold; "
-                              "line-height: 11px; padding: 1px 3px; }"
-                              "QPushButton:hover { background: rgba(32, 42, 55, 230); border-color: #7f96ad; }");
-    }
-    m_zoomOutButton->setAccessibleName("Zoom out");
-    m_zoomInButton->setAccessibleName("Zoom in");
-    connect(m_zoomOutButton, &QPushButton::clicked, this, &SpectrumCanvas::zoomOutRequested);
-    connect(m_zoomInButton, &QPushButton::clicked, this, &SpectrumCanvas::zoomInRequested);
-    repositionZoomButtons();
 
     m_peakDecayTimer.setInterval(50);
     connect(&m_peakDecayTimer, &QTimer::timeout, this,
@@ -101,67 +76,21 @@ SpectrumCanvas::SpectrumCanvas(QWidget* parent) : QWidget(parent)
     m_peakDecayTimer.start();
     m_repaintTimer.setSingleShot(true);
     m_repaintTimer.setInterval(16);
-    connect(&m_repaintTimer, &QTimer::timeout, this, qOverload<>(&SpectrumCanvas::update));
+    connect(&m_repaintTimer, &QTimer::timeout, this, qOverload<>(&BandscopeCanvas::update));
     m_lastFrameTimer.start();
 }
 
-int SpectrumCanvas::spectrumHeight() const
+int BandscopeCanvas::plotHeight() const
 {
-    if (m_spectrumHeight < 0)
-    {
-        return defaultSpectrumHeight();
-    }
-    return constrainedSpectrumHeight(m_spectrumHeight);
+    return qMax(1, height() - scaleHeight());
 }
 
-int SpectrumCanvas::waterfallTop() const
+int BandscopeCanvas::spectrumPaneHeight() const
 {
-    return spectrumHeight() + scaleHeight() + splitterHeight();
+    return plotHeight();
 }
 
-QRect SpectrumCanvas::splitterRect() const
-{
-    return QRect(0, spectrumHeight() + scaleHeight(), width(), splitterHeight());
-}
-
-int SpectrumCanvas::defaultSpectrumHeight() const
-{
-    return constrainedSpectrumHeight(((height() - scaleHeight() - splitterHeight()) / 2) + kDefaultBandscopeHeightBias);
-}
-
-int SpectrumCanvas::constrainedSpectrumHeight(int requested) const
-{
-    const int available = qMax(0, height() - scaleHeight() - splitterHeight());
-    const int maxSpectrumHeight = qMax(kMinSpectrumHeight, available - kMinWaterfallHeight);
-    return qBound(qMin(kMinSpectrumHeight, maxSpectrumHeight), requested, maxSpectrumHeight);
-}
-
-bool SpectrumCanvas::applySpectrumPaneHeight(int requested)
-{
-    const int constrained = constrainedSpectrumHeight(requested);
-    if (m_spectrumHeight == constrained)
-    {
-        return false;
-    }
-
-    m_spectrumHeight = constrained;
-    rebuildWaterfallImage();
-    scheduleRepaint();
-    return true;
-}
-
-void SpectrumCanvas::updateBandscopeCursor(const QPoint&)
-{
-    if (m_interactionLocked)
-    {
-        setCursor(Qt::ArrowCursor);
-        return;
-    }
-
-    setCursor((m_bandscopeButtonPressed || m_draggingBandscope) ? Qt::ClosedHandCursor : Qt::ArrowCursor);
-}
-
-double SpectrumCanvas::xToFreq(int x) const
+double BandscopeCanvas::xToFreq(int x) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
@@ -172,7 +101,7 @@ double SpectrumCanvas::xToFreq(int x) const
     return startMhz + (double(x) / width()) * (endMhz - startMhz);
 }
 
-int SpectrumCanvas::freqToX(double mhz) const
+int BandscopeCanvas::freqToX(double mhz) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
@@ -183,7 +112,16 @@ int SpectrumCanvas::freqToX(double mhz) const
     return int((mhz - startMhz) / (endMhz - startMhz) * width());
 }
 
-int SpectrumCanvas::binForFrequency(double mhz, int binCount) const
+int BandscopeCanvas::levelToY(float level, int topY, int h) const
+{
+    float norm = (level - m_minLevel) / (m_maxLevel - m_minLevel);
+    norm = std::max(0.0f, std::min(1.0f, norm));
+    const int pad = qMin(kSpectrumVerticalPadding, qMax(0, h / 4));
+    const int plotH = qMax(1, h - pad * 2);
+    return topY + pad + int((1.0f - norm) * plotH);
+}
+
+int BandscopeCanvas::binForFrequency(double mhz, int binCount) const
 {
     const double dataStartMhz = lowFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
     const double dataEndMhz = highFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
@@ -200,50 +138,12 @@ int SpectrumCanvas::binForFrequency(double mhz, int binCount) const
     return qBound(0, int(normalized * binCount), binCount - 1);
 }
 
-int SpectrumCanvas::binForDisplayX(int x, int binCount) const
+int BandscopeCanvas::binForDisplayX(int x, int binCount) const
 {
     return binForFrequency(xToFreq(x), binCount);
 }
 
-int SpectrumCanvas::levelToY(float level, int topY, int h) const
-{
-    float norm = (level - m_minLevel) / (m_maxLevel - m_minLevel);
-    norm = std::max(0.0f, std::min(1.0f, norm));
-    const int pad = qMin(kSpectrumVerticalPadding, qMax(0, h / 4));
-    const int plotH = qMax(1, h - pad * 2);
-    return topY + pad + int((1.0f - norm) * plotH);
-}
-
-QRgb SpectrumCanvas::levelToColor(float level) const
-{
-    static const struct
-    {
-        float pos;
-        int r, g, b;
-    } stops[] = {
-        {0.00f, 0, 20, 120},  {0.18f, 0, 58, 205},  {0.34f, 0, 150, 255}, {0.50f, 0, 220, 105},
-        {0.66f, 165, 245, 0}, {0.78f, 255, 230, 0}, {0.90f, 255, 92, 0},  {1.00f, 255, 255, 210},
-    };
-    static constexpr int N = static_cast<int>(std::size(stops));
-
-    float t = (level - m_minLevel) / (m_maxLevel - m_minLevel);
-    t = std::max(0.0f, std::min(1.0f, t));
-
-    for (int i = 1; i < N; ++i)
-    {
-        if (t <= stops[i].pos)
-        {
-            float f = (t - stops[i - 1].pos) / (stops[i].pos - stops[i - 1].pos);
-            int r = int(stops[i - 1].r + f * (stops[i].r - stops[i - 1].r));
-            int g = int(stops[i - 1].g + f * (stops[i].g - stops[i - 1].g));
-            int b = int(stops[i - 1].b + f * (stops[i].b - stops[i - 1].b));
-            return qRgb(r, g, b);
-        }
-    }
-    Q_UNREACHABLE();
-}
-
-void SpectrumCanvas::setFrequencyRange(double startMhz, double endMhz)
+void BandscopeCanvas::setFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
     {
@@ -255,11 +155,10 @@ void SpectrumCanvas::setFrequencyRange(double startMhz, double endMhz)
     }
     m_startMhz = startMhz;
     m_endMhz = endMhz;
-    rebuildWaterfallImage();
     scheduleRepaint();
 }
 
-void SpectrumCanvas::setDataFrequencyRange(double startMhz, double endMhz)
+void BandscopeCanvas::setDataFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
     {
@@ -273,20 +172,20 @@ void SpectrumCanvas::setDataFrequencyRange(double startMhz, double endMhz)
     m_dataEndMhz = endMhz;
 }
 
-void SpectrumCanvas::setVfoFrequency(double freqMhz)
+void BandscopeCanvas::setVfoFrequency(double freqMhz)
 {
     m_vfoMhz = freqMhz;
     scheduleRepaint();
 }
 
-void SpectrumCanvas::setFilterWidth(int lowHz, int highHz)
+void BandscopeCanvas::setFilterWidth(int lowHz, int highHz)
 {
     m_filterLowHz = lowHz;
     m_filterHighHz = highHz;
     scheduleRepaint();
 }
 
-void SpectrumCanvas::setInteractionLocked(bool locked)
+void BandscopeCanvas::setInteractionLocked(bool locked)
 {
     if (m_interactionLocked == locked)
     {
@@ -296,41 +195,16 @@ void SpectrumCanvas::setInteractionLocked(bool locked)
     m_interactionLocked = locked;
     m_draggingBandscope = false;
     m_bandscopeButtonPressed = false;
-    if (m_zoomInButton)
-    {
-        m_zoomInButton->setEnabled(!locked);
-    }
-    if (m_zoomOutButton)
-    {
-        m_zoomOutButton->setEnabled(!locked);
-    }
     updateBandscopeCursor(mapFromGlobal(QCursor::pos()));
     scheduleRepaint();
 }
 
-void SpectrumCanvas::setInvertMouseWheel(bool invert)
+void BandscopeCanvas::setInvertMouseWheel(bool invert)
 {
     m_invertMouseWheel = invert;
 }
 
-int SpectrumCanvas::spectrumPaneHeight() const
-{
-    return spectrumHeight();
-}
-
-void SpectrumCanvas::setSpectrumPaneHeight(int height)
-{
-    if (height <= 0 || m_spectrumHeight == height)
-    {
-        return;
-    }
-
-    m_spectrumHeight = height;
-    rebuildWaterfallImage();
-    scheduleRepaint();
-}
-
-void SpectrumCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRange)
+void BandscopeCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
     m_spectrumBins = levels;
     m_scopeOutOfRange = outOfRange;
@@ -350,20 +224,29 @@ void SpectrumCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRang
         }
     }
 
-    appendWaterfallRow(levels);
     scheduleRepaint();
 }
 
-void SpectrumCanvas::clearDisplay()
+void BandscopeCanvas::clearDisplay()
 {
     m_spectrumBins.clear();
     m_peakHold.clear();
     m_scopeOutOfRange = false;
-    m_waterfall.fill(Qt::black);
     scheduleRepaint();
 }
 
-void SpectrumCanvas::scheduleRepaint()
+void BandscopeCanvas::updateBandscopeCursor(const QPoint&)
+{
+    if (m_interactionLocked)
+    {
+        setCursor(Qt::ArrowCursor);
+        return;
+    }
+
+    setCursor((m_bandscopeButtonPressed || m_draggingBandscope) ? Qt::ClosedHandCursor : Qt::ArrowCursor);
+}
+
+void BandscopeCanvas::scheduleRepaint()
 {
     if (!m_repaintTimer.isActive())
     {
@@ -371,77 +254,7 @@ void SpectrumCanvas::scheduleRepaint()
     }
 }
 
-void SpectrumCanvas::rebuildWaterfallImage()
-{
-    const int wfH = height() - waterfallTop();
-    if (wfH <= 0 || width() <= 0)
-    {
-        return;
-    }
-    m_waterfall = QImage(width(), wfH, QImage::Format_RGB32);
-    m_waterfall.fill(Qt::black);
-}
-
-void SpectrumCanvas::appendWaterfallRow(const QVector<float>& levels)
-{
-    if (m_waterfall.isNull() || m_waterfall.height() == 0)
-    {
-        return;
-    }
-
-    const int w = m_waterfall.width();
-    const int h = m_waterfall.height();
-    Q_ASSERT(m_waterfall.format() == QImage::Format_RGB32);
-    if (h > 1)
-    {
-        memmove(m_waterfall.bits() + w * 4, m_waterfall.bits(), size_t(w * (h - 1) * 4));
-    }
-
-    QRgb* row = reinterpret_cast<QRgb*>(m_waterfall.bits());
-    if (levels.isEmpty())
-    {
-        for (int x = 0; x < w; ++x)
-        {
-            row[x] = qRgb(0, 0, 0);
-        }
-        return;
-    }
-
-    if (logWaterfall().isDebugEnabled())
-    {
-        static QElapsedTimer waterfallLogTimer;
-        if (!waterfallLogTimer.isValid() || waterfallLogTimer.elapsed() >= 1000)
-        {
-            float minLevel = std::numeric_limits<float>::max();
-            float maxLevel = std::numeric_limits<float>::lowest();
-            double totalLevel = 0.0;
-            int zeroCount = 0;
-            for (const float level : levels)
-            {
-                minLevel = std::min(minLevel, level);
-                maxLevel = std::max(maxLevel, level);
-                totalLevel += level;
-                if (level <= m_minLevel)
-                {
-                    ++zeroCount;
-                }
-            }
-            qDebug(logWaterfall()).nospace()
-                << "Waterfall row: image=" << w << "x" << h << " bins=" << levels.size() << " levels[min=" << minLevel
-                << " max=" << maxLevel << " avg=" << (totalLevel / double(levels.size())) << " floor=" << zeroCount
-                << "/" << levels.size() << "]";
-            waterfallLogTimer.restart();
-        }
-    }
-
-    for (int x = 0; x < w; ++x)
-    {
-        const int bin = binForDisplayX(x, levels.size());
-        row[x] = bin >= 0 ? levelToColor(levels[bin]) : qRgb(0x02, 0x0c, 0x14);
-    }
-}
-
-void SpectrumCanvas::paintEvent(QPaintEvent* event)
+void BandscopeCanvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
@@ -449,7 +262,6 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
     static const QColor kBgSpecMid(0x12, 0x63, 0x85);
     static const QColor kBgSpecBottom(0x06, 0x2b, 0x3c);
     static const QColor kBgScale(0x06, 0x11, 0x16);
-    static const QColor kWaterfallBg(0x00, 0x24, 0xd8);
     static const QColor kGridMinor(0x9c, 0xd9, 0xe5, 46);
     static const QColor kGridMajor(0xc8, 0xf1, 0xf5, 86);
     static const QColor kGridText(0xc6, 0xe0, 0xe8);
@@ -461,9 +273,7 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);
 
-    const int specH = spectrumHeight();
-    const int wfTop = waterfallTop();
-    const int wfH = height() - wfTop;
+    const int specH = plotHeight();
     const int w = width();
 
     QLinearGradient specBg(0, 0, 0, specH);
@@ -471,7 +281,6 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
     specBg.setColorAt(0.52, kBgSpecMid);
     specBg.setColorAt(1.00, kBgSpecBottom);
     p.fillRect(0, 0, w, specH, specBg);
-    p.fillRect(0, wfTop, w, wfH, kWaterfallBg);
 
     const int specTop = 0;
     const int specDrawH = specH;
@@ -537,7 +346,7 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
         QFont f = p.font();
         f.setPointSize(9);
         p.setFont(f);
-        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, "No bandscope data — waiting for radio stream");
+        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, "No bandscope data - waiting for radio stream");
     }
 
     if (!m_spectrumBins.isEmpty())
@@ -614,18 +423,6 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
         p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, QStringLiteral("OUT OF RANGE"));
     }
 
-    if (!m_waterfall.isNull() && wfH > 0)
-    {
-        p.drawImage(QRect(0, wfTop, w, wfH), m_waterfall,
-                    QRect(0, 0, m_waterfall.width(), std::min(wfH, m_waterfall.height())));
-    }
-
-    {
-        const QRect split = splitterRect();
-        p.fillRect(split, kBgScale);
-        p.fillRect(split.left(), split.top(), split.width(), 1, QColor(0x9a, 0x24, 0x24));
-    }
-
     const double visibleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double visibleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
     if (m_vfoMhz >= visibleStartMhz && m_vfoMhz <= visibleEndMhz && m_filterHighHz > m_filterLowHz)
@@ -664,7 +461,7 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
     }
 
     {
-        int scaleY = spectrumHeight() - 1;
+        const int scaleY = specH - 1;
         p.fillRect(0, scaleY, w, scaleHeight(), kBgScale);
         p.fillRect(0, scaleY, w, 1, QColor(0x9a, 0x24, 0x24));
         p.setPen(kGridText);
@@ -713,35 +510,13 @@ void SpectrumCanvas::paintEvent(QPaintEvent* event)
     if (m_vfoMhz >= visibleStartMhz && m_vfoMhz <= visibleEndMhz)
     {
         const int vx = freqToX(m_vfoMhz);
-        const int scaleY = spectrumHeight() - 1;
+        const int scaleY = specH - 1;
         p.setPen(QPen(QColor(0xf5, 0xf7, 0xf8, 230), 1, Qt::SolidLine));
         p.drawLine(vx, 0, vx, scaleY - 1);
     }
 }
 
-void SpectrumCanvas::resizeEvent(QResizeEvent*)
-{
-    rebuildWaterfallImage();
-    repositionZoomButtons();
-}
-
-void SpectrumCanvas::repositionZoomButtons()
-{
-    if (!m_zoomInButton || !m_zoomOutButton)
-    {
-        return;
-    }
-
-    static constexpr int kMargin = 8;
-    static constexpr int kGap = 4;
-    const int y = kMargin;
-    const int zoomInX = qMax(kMargin, width() - kMargin - m_zoomInButton->width());
-    const int zoomOutX = qMax(kMargin, zoomInX - kGap - m_zoomOutButton->width());
-    m_zoomOutButton->move(zoomOutX, y);
-    m_zoomInButton->move(zoomInX, y);
-}
-
-void SpectrumCanvas::mousePressEvent(QMouseEvent* ev)
+void BandscopeCanvas::mousePressEvent(QMouseEvent* ev)
 {
     if (m_interactionLocked)
     {
@@ -758,7 +533,7 @@ void SpectrumCanvas::mousePressEvent(QMouseEvent* ev)
     }
 }
 
-void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
+void BandscopeCanvas::mouseMoveEvent(QMouseEvent* ev)
 {
     updateBandscopeCursor(ev->pos());
 
@@ -792,7 +567,7 @@ void SpectrumCanvas::mouseMoveEvent(QMouseEvent* ev)
     }
 }
 
-void SpectrumCanvas::mouseReleaseEvent(QMouseEvent* ev)
+void BandscopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
 {
     if (ev->button() == Qt::LeftButton && m_draggingBandscope)
     {
@@ -811,7 +586,7 @@ void SpectrumCanvas::mouseReleaseEvent(QMouseEvent* ev)
     }
 }
 
-void SpectrumCanvas::wheelEvent(QWheelEvent* ev)
+void BandscopeCanvas::wheelEvent(QWheelEvent* ev)
 {
     if (m_interactionLocked)
     {
@@ -863,7 +638,7 @@ void SpectrumCanvas::wheelEvent(QWheelEvent* ev)
     ev->accept();
 }
 
-void SpectrumCanvas::leaveEvent(QEvent*)
+void BandscopeCanvas::leaveEvent(QEvent*)
 {
     if (!m_draggingBandscope && !m_bandscopeButtonPressed)
     {
