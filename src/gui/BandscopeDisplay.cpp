@@ -313,6 +313,11 @@ void BandscopeDisplay::setVfoFrequency(double freqMhz)
     m_bandscopeCanvas->setVfoFrequency(freqMhz);
 }
 
+void BandscopeDisplay::setVfoMarkerColor(const QColor& color)
+{
+    m_bandscopeCanvas->setVfoMarkerColor(color);
+}
+
 void BandscopeDisplay::setInteractionLocked(bool locked)
 {
     m_interactionLocked = locked;

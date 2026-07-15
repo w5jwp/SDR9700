@@ -1,77 +1,215 @@
 #include "RadioChooserDialog.h"
 #include "AppSettings.h"
 #include "DialogPlacement.h"
-#include "SettingsDialog.h"
+#include "FramelessTitleBar.h"
 #include "RadioProfile.h"
+#include "UiTheme.h"
 
-#include <QListWidget>
-#include <QPushButton>
-#include <QLabel>
+#include <QAbstractItemView>
 #include <QCheckBox>
+#include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
-#include <QVBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QMessageBox>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QShowEvent>
+#include <QSpinBox>
+#include <QTimer>
+#include <QVBoxLayout>
 
-RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent)
+RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_centerHost(parent)
 {
-    setWindowTitle("Radio Chooser");
-    setMinimumWidth(360);
+    const QString titleText = QStringLiteral("Radio Chooser");
+    setWindowTitle(titleText);
+    setMinimumSize(720, 430);
+    setWindowFlags(Qt::FramelessWindowHint);
+    setStyleSheet(QStringLiteral("RadioChooserDialog { background: %1; border: 1px solid %2; }")
+                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(16, 16, 16, 16);
-    root->setSpacing(10);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
 
-    auto* title = new QLabel("Select a saved radio:");
-    root->addWidget(title);
+    auto* titleBar = new FramelessTitleBar(titleText, this);
+    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QDialog::reject);
+    root->addWidget(titleBar);
 
-    m_list = new QListWidget;
+    auto* content = new QWidget(this);
+    auto* contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(16, 14, 16, 16);
+    contentLayout->setSpacing(12);
+
+    auto* title = new QLabel("Select and manage radio targets:", content);
+    title->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 14px; font-weight: bold; }")
+                             .arg(QLatin1String(UiTheme::Color::TextPrimary)));
+    contentLayout->addWidget(title);
+
+    auto* body = new QHBoxLayout;
+    body->setSpacing(12);
+
+    auto* leftPanel = new QWidget(content);
+    auto* leftVbox = new QVBoxLayout(leftPanel);
+    leftVbox->setContentsMargins(0, 0, 0, 0);
+    leftVbox->setSpacing(6);
+    leftPanel->setFixedWidth(240);
+
+    m_list = new QListWidget(leftPanel);
     m_list->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_list->setMinimumHeight(140);
-    root->addWidget(m_list, 1);
+    m_list->setMinimumHeight(220);
+    m_list->setStyleSheet(QStringLiteral("QListWidget { background: %1; border: 1px solid %2; color: %3; outline: 0; }"
+                                         "QListWidget::item { border-bottom: 1px solid %2; padding: 7px 6px; }"
+                                         "QListWidget::item:selected { background: %4; color: %5; }")
+                              .arg(QLatin1String(UiTheme::Color::Field), QLatin1String(UiTheme::Color::Border),
+                                   QLatin1String(UiTheme::Color::TextStatusPrimary),
+                                   QLatin1String(UiTheme::Color::AccentDark),
+                                   QLatin1String(UiTheme::Color::TextBright)));
+    leftVbox->addWidget(m_list, 1);
+
+    auto* listBtns = new QHBoxLayout;
+    m_addBtn = new QPushButton("Add", leftPanel);
+    m_removeBtn = new QPushButton("Remove", leftPanel);
+    m_removeBtn->setEnabled(false);
+    listBtns->addWidget(m_addBtn);
+    listBtns->addWidget(m_removeBtn);
+    leftVbox->addLayout(listBtns);
+
+    body->addWidget(leftPanel);
+
+    auto* line = new QFrame(content);
+    line->setFrameShape(QFrame::VLine);
+    line->setFrameShadow(QFrame::Sunken);
+    body->addWidget(line);
+
+    auto* rightVbox = new QVBoxLayout;
+    rightVbox->setSpacing(8);
+
+    auto* form = new QFormLayout;
+    form->setLabelAlignment(Qt::AlignRight);
+    form->setSpacing(8);
+
+    m_nameEdit = new QLineEdit(content);
+    m_nameEdit->setPlaceholderText("e.g. Home IC-9700");
+    form->addRow("Name:", m_nameEdit);
+
+    m_hostEdit = new QLineEdit(content);
+    m_hostEdit->setPlaceholderText("192.168.1.x");
+    form->addRow("Host / IP:", m_hostEdit);
+
+    m_portSpin = new QSpinBox(content);
+    m_portSpin->setRange(1, 65535);
+    m_portSpin->setValue(50001);
+    form->addRow("Control port:", m_portSpin);
+
+    m_userEdit = new QLineEdit(content);
+    form->addRow("Username:", m_userEdit);
+
+    auto* passRow = new QHBoxLayout;
+    m_passEdit = new QLineEdit(content);
+    m_passEdit->setEchoMode(QLineEdit::Password);
+    m_showPassBtn = new QPushButton("Show", content);
+    m_showPassBtn->setFixedWidth(52);
+    m_showPassBtn->setCheckable(true);
+    passRow->addWidget(m_passEdit);
+    passRow->addWidget(m_showPassBtn);
+    form->addRow("Password:", passRow);
+
+    rightVbox->addLayout(form);
+
+    auto* saveRow = new QHBoxLayout;
+    saveRow->addStretch(1);
+    m_saveBtn = new QPushButton("Save Target", content);
+    m_saveBtn->setEnabled(false);
+    m_saveBtn->setStyleSheet(
+        QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
+                       " color: %3; padding: 4px 14px; }"
+                       "QPushButton:hover { background: %4; border-color: %5; }"
+                       "QPushButton:disabled { background: %6; border-color: %7; color: %8; }")
+            .arg(QLatin1String(UiTheme::Color::Accent), QLatin1String(UiTheme::Color::AccentBright),
+                 QLatin1String(UiTheme::Color::PanelDark), QLatin1String(UiTheme::Color::AccentHover),
+                 QLatin1String(UiTheme::Color::AccentBright), QLatin1String(UiTheme::Color::Button),
+                 QLatin1String(UiTheme::Color::Border), QLatin1String(UiTheme::Color::TextMuted)));
+    saveRow->addWidget(m_saveBtn);
+    rightVbox->addLayout(saveRow);
+
+    rightVbox->addStretch(1);
+    body->addLayout(rightVbox, 1);
+    contentLayout->addLayout(body, 1);
+
+    m_autoConnectCheck = new QCheckBox("Auto-connect previous radio on startup", content);
+    m_autoConnectCheck->setChecked(AppSettings::instance().value("AutoConnect", "True").toBool());
+    contentLayout->addWidget(m_autoConnectCheck);
+
+    auto* footerLine = new QWidget(content);
+    footerLine->setFixedHeight(1);
+    footerLine->setStyleSheet(QStringLiteral("background: %1;").arg(QLatin1String(UiTheme::Color::Border)));
+    contentLayout->addWidget(footerLine);
 
     auto* btnRow = new QHBoxLayout;
-
-    auto* settingsBtn = new QPushButton("Radio Setup");
-    btnRow->addWidget(settingsBtn);
     btnRow->addStretch(1);
-
-    auto* cancelBtn = new QPushButton("Cancel");
-    m_connectBtn = new QPushButton("Connect");
+    auto* cancelBtn = new QPushButton("Cancel", content);
+    m_connectBtn = new QPushButton("Connect", content);
     m_connectBtn->setDefault(true);
     m_connectBtn->setEnabled(false);
     btnRow->addWidget(cancelBtn);
     btnRow->addWidget(m_connectBtn);
+    contentLayout->addLayout(btnRow);
+    root->addWidget(content, 1);
 
-    root->addLayout(btnRow);
+    setFormEnabled(false);
 
     connect(m_list, &QListWidget::currentRowChanged, this, &RadioChooserDialog::onSelectionChanged);
     connect(m_list, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) { onConnect(); });
+    connect(m_addBtn, &QPushButton::clicked, this, &RadioChooserDialog::onAddProfile);
+    connect(m_removeBtn, &QPushButton::clicked, this, &RadioChooserDialog::onRemoveProfile);
+    connect(m_saveBtn, &QPushButton::clicked, this, &RadioChooserDialog::onSaveProfile);
     connect(m_connectBtn, &QPushButton::clicked, this, &RadioChooserDialog::onConnect);
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
-    connect(settingsBtn, &QPushButton::clicked, this, &RadioChooserDialog::onOpenSettings);
-
-    m_autoConnectCheck = new QCheckBox("Auto-connect previous radio on startup");
-    m_autoConnectCheck->setChecked(AppSettings::instance().value("AutoConnect", "True").toBool());
     connect(m_autoConnectCheck, &QCheckBox::toggled, this, &RadioChooserDialog::onAutoConnectToggled);
-    root->addWidget(m_autoConnectCheck);
+    connect(m_showPassBtn, &QPushButton::toggled, this,
+            [this](bool on)
+            {
+                m_passEdit->setEchoMode(on ? QLineEdit::Normal : QLineEdit::Password);
+                m_showPassBtn->setText(on ? "Hide" : "Show");
+            });
+
+    const auto markDirty = [this]() { setFormDirty(true); };
+    connect(m_nameEdit, &QLineEdit::textChanged, this, markDirty);
+    connect(m_hostEdit, &QLineEdit::textChanged, this, markDirty);
+    connect(m_portSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, markDirty);
+    connect(m_userEdit, &QLineEdit::textChanged, this, markDirty);
+    connect(m_passEdit, &QLineEdit::textChanged, this, markDirty);
 
     rebuildList();
+}
+
+void RadioChooserDialog::showEvent(QShowEvent* event)
+{
+    QDialog::showEvent(event);
+
+    sdr9700::ui::centerWindowOn(this, m_centerHost);
+    QTimer::singleShot(0, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
+    QTimer::singleShot(50, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
 }
 
 void RadioChooserDialog::rebuildList()
 {
     const QUuid lastId = RadioProfileStore::instance().lastProfileId();
+    const QUuid selectedId = m_currentId.isNull() ? lastId : m_currentId;
 
     m_list->blockSignals(true);
     m_list->clear();
     for (const RadioProfile& p : RadioProfileStore::instance().profiles())
     {
         const QString label =
-            QString("%1  —  %2").arg(p.name.isEmpty() ? "(unnamed)" : p.name, p.host.isEmpty() ? "?" : p.host);
+            QString("%1\n%2").arg(p.name.isEmpty() ? "(unnamed)" : p.name, p.host.isEmpty() ? "No host" : p.host);
         auto* item = new QListWidgetItem(label);
         item->setData(Qt::UserRole, p.id.toString());
         m_list->addItem(item);
-        if (p.id == lastId)
+        if (p.id == selectedId)
         {
             m_list->setCurrentItem(item);
         }
@@ -88,7 +226,29 @@ void RadioChooserDialog::rebuildList()
 
 void RadioChooserDialog::onSelectionChanged()
 {
-    m_connectBtn->setEnabled(m_list->currentItem() != nullptr);
+    auto* item = m_list->currentItem();
+    m_connectBtn->setEnabled(item != nullptr);
+    if (!item)
+    {
+        m_currentId = QUuid();
+        setFormEnabled(false);
+        QSignalBlocker b1(m_nameEdit), b2(m_hostEdit), b3(m_portSpin), b4(m_userEdit), b5(m_passEdit);
+        m_nameEdit->clear();
+        m_hostEdit->clear();
+        m_portSpin->setValue(50001);
+        m_userEdit->clear();
+        m_passEdit->clear();
+        setFormDirty(false);
+        return;
+    }
+
+    m_currentId = QUuid(item->data(Qt::UserRole).toString());
+    const RadioProfile* profile = RadioProfileStore::instance().profileById(m_currentId);
+    if (profile)
+    {
+        loadProfileIntoForm(*profile);
+        setFormEnabled(true);
+    }
 }
 
 void RadioChooserDialog::onConnect()
@@ -99,7 +259,16 @@ void RadioChooserDialog::onConnect()
         return;
     }
 
-    const QUuid id(item->data(Qt::UserRole).toString());
+    if (m_formDirty)
+    {
+        onSaveProfile();
+        if (m_formDirty)
+        {
+            return;
+        }
+    }
+
+    const QUuid id = m_currentId.isNull() ? QUuid(item->data(Qt::UserRole).toString()) : m_currentId;
     const RadioProfile* p = RadioProfileStore::instance().profileById(id);
     if (!p)
     {
@@ -108,21 +277,124 @@ void RadioChooserDialog::onConnect()
 
     if (!RadioProfileStore::instance().setLastProfileId(id))
     {
-        QMessageBox::warning(this, "Radio Chooser", "Could not save the last selected radio profile.");
+        QMessageBox::warning(this, "Radio Chooser", "Could not save the last selected radio target.");
     }
     emit connectRequested(id);
     accept();
 }
 
-void RadioChooserDialog::onOpenSettings()
+void RadioChooserDialog::onAddProfile()
 {
-    SettingsDialog settings(this);
-    sdr9700::ui::centerWindowOn(&settings, parentWidget() ? parentWidget()->window() : this);
-    settings.exec();
+    RadioProfile profile;
+    profile.id = QUuid::createUuid();
+    profile.name = "New Radio";
+    profile.port = 50001;
+    if (!RadioProfileStore::instance().addProfile(profile))
+    {
+        QMessageBox::warning(this, "Save Radio", "Could not save the new radio target.");
+        return;
+    }
+
+    m_currentId = profile.id;
+    rebuildList();
+    m_nameEdit->setFocus();
+    m_nameEdit->selectAll();
+}
+
+void RadioChooserDialog::onRemoveProfile()
+{
+    if (m_currentId.isNull())
+    {
+        return;
+    }
+
+    const RadioProfile* profile = RadioProfileStore::instance().profileById(m_currentId);
+    const QString name = profile ? profile->name : "this radio";
+    if (QMessageBox::question(this, "Remove Radio", QString("Remove \"%1\"?").arg(name),
+                              QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+    {
+        return;
+    }
+
+    if (!RadioProfileStore::instance().removeProfile(m_currentId))
+    {
+        QMessageBox::warning(this, "Remove Radio", "Could not remove the selected radio target.");
+        return;
+    }
+
+    m_currentId = QUuid();
+    rebuildList();
+}
+
+void RadioChooserDialog::onSaveProfile()
+{
+    if (m_currentId.isNull())
+    {
+        return;
+    }
+
+    RadioProfile profile = profileFromForm();
+    if (profile.name.isEmpty())
+    {
+        profile.name = profile.host.isEmpty() ? "Unnamed" : profile.host;
+    }
+
+    if (!RadioProfileStore::instance().updateProfile(profile))
+    {
+        QMessageBox::warning(this, "Save Radio", "Could not save the radio target.");
+        return;
+    }
+
+    setFormDirty(false);
     rebuildList();
 }
 
 void RadioChooserDialog::onAutoConnectToggled(bool on)
 {
     AppSettings::instance().setValue("AutoConnect", on);
+}
+
+void RadioChooserDialog::loadProfileIntoForm(const RadioProfile& profile)
+{
+    QSignalBlocker b1(m_nameEdit), b2(m_hostEdit), b3(m_portSpin), b4(m_userEdit), b5(m_passEdit);
+    m_nameEdit->setText(profile.name);
+    m_hostEdit->setText(profile.host);
+    m_portSpin->setValue(profile.port);
+    m_userEdit->setText(profile.username);
+    m_passEdit->setText(profile.password);
+    setFormDirty(false);
+}
+
+RadioProfile RadioChooserDialog::profileFromForm() const
+{
+    RadioProfile profile;
+    profile.id = m_currentId;
+    profile.name = m_nameEdit->text().trimmed();
+    profile.host = m_hostEdit->text().trimmed();
+    profile.port = static_cast<quint16>(m_portSpin->value());
+    profile.username = m_userEdit->text().trimmed();
+    profile.password = m_passEdit->text();
+    return profile;
+}
+
+void RadioChooserDialog::setFormEnabled(bool enabled)
+{
+    m_nameEdit->setEnabled(enabled);
+    m_hostEdit->setEnabled(enabled);
+    m_portSpin->setEnabled(enabled);
+    m_userEdit->setEnabled(enabled);
+    m_passEdit->setEnabled(enabled);
+    m_showPassBtn->setEnabled(enabled);
+    m_removeBtn->setEnabled(enabled);
+    m_connectBtn->setEnabled(enabled);
+    if (!enabled)
+    {
+        setFormDirty(false);
+    }
+}
+
+void RadioChooserDialog::setFormDirty(bool dirty)
+{
+    m_formDirty = dirty && !m_currentId.isNull();
+    m_saveBtn->setEnabled(m_formDirty);
 }

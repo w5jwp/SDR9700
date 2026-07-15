@@ -48,6 +48,7 @@
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QColor>
 #include <QFormLayout>
 #include <QFile>
 #include <QFileDialog>
@@ -111,8 +112,10 @@ constexpr auto kCloseMemoryWindowOnSelectSettingsKey = "CloseMemoryWindowOnSelec
 constexpr auto kReverseMouseWheelTuningSettingsKey = "ReverseMouseWheelTuning";
 constexpr auto kTuningStepHzSettingsKey = "TuningStepHz";
 constexpr auto kBandscopeSpanHzSettingsKey = "BandscopeSpanHz";
+constexpr auto kBandscopeCenterLineColorSettingsKey = "BandscopeCenterLineColor";
 constexpr int kDefaultTuningStepHz = 100;
 constexpr quint64 kDefaultBandscopeSpanHz = 500000;
+const QColor kDefaultBandscopeCenterLineColor(0xf5, 0xf7, 0xf8);
 
 struct StepPreset
 {
@@ -185,6 +188,15 @@ QString statusLabelStyle(const char* color, bool bold = false)
 {
     return QString("QLabel { color: %1; font-size: 12px;%2 }")
         .arg(QString::fromLatin1(color), bold ? QStringLiteral(" font-weight: bold;") : QString());
+}
+
+QColor bandscopeCenterLineColorSetting()
+{
+    const QColor color(AppSettings::instance()
+                           .value(QString::fromLatin1(kBandscopeCenterLineColorSettingsKey),
+                                  kDefaultBandscopeCenterLineColor.name(QColor::HexRgb))
+                           .toString());
+    return color.isValid() ? color : kDefaultBandscopeCenterLineColor;
 }
 
 bool availableScreenContains(const QRect& rect)
@@ -631,6 +643,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     m_bandscopeDisplay = new BandscopeDisplay(central);
     m_bandscopeDisplay->setInvertMouseWheel(
         AppSettings::instance().value(QString::fromLatin1(kReverseMouseWheelTuningSettingsKey), "False").toBool());
+    m_bandscopeDisplay->setVfoMarkerColor(bandscopeCenterLineColorSetting());
     QVector<BandscopeDisplay::SpanChoice> spanChoices;
     spanChoices.reserve(static_cast<int>(std::size(kBandscopeSpanPresets)));
     for (const BandscopeSpanPreset& preset : kBandscopeSpanPresets)
@@ -910,6 +923,8 @@ void MainWindow::buildToolBar()
 
     auto* fileMenu = new QMenu(this);
     fileMenu->setStyleSheet(menuStyle);
+    fileMenu->addAction("Connect to Radio", this, [this]() { showRadioChooserDialog(); });
+    fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction("Quit", this, &QWidget::close);
     quitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Q")));
     m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
@@ -1204,18 +1219,56 @@ void MainWindow::centerPopupWindow(QWidget* popup) const
     sdr9700::ui::centerWindowOn(popup, this);
 }
 
+void MainWindow::bringDialogToFront(QWidget* dialog) const
+{
+    if (!dialog)
+    {
+        return;
+    }
+
+    if (dialog->isMinimized())
+    {
+        dialog->showNormal();
+    }
+    else
+    {
+        dialog->show();
+    }
+
+    centerPopupWindow(dialog);
+    dialog->raise();
+    dialog->activateWindow();
+}
+
 void MainWindow::showSettingsDialog()
 {
+    if (m_settingsDialog)
+    {
+        bringDialogToFront(m_settingsDialog);
+        return;
+    }
+
 #ifdef HAVE_HIDAPI
-    SettingsDialog dlg(SettingsDialog::Page::RadioSetup, this, m_icomRC28Manager);
+    auto* dlg = new SettingsDialog(SettingsDialog::Page::AudioInput, this, m_icomRC28Manager);
 #else
-    SettingsDialog dlg(this);
+    auto* dlg = new SettingsDialog(this);
 #endif
-    connect(m_model, &RadioModel::txAudioLevelChanged, &dlg, &SettingsDialog::setTransmitAudioLevel);
-    connect(&dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_bandscopeDisplay,
+    m_settingsDialog = dlg;
+    connect(dlg, &QObject::destroyed, this,
+            [this, dlg]()
+            {
+                if (m_settingsDialog == dlg)
+                {
+                    m_settingsDialog = nullptr;
+                }
+            });
+    connect(m_model, &RadioModel::txAudioLevelChanged, dlg, &SettingsDialog::setTransmitAudioLevel);
+    connect(dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_bandscopeDisplay,
             &BandscopeDisplay::setInvertMouseWheel);
+    connect(dlg, &SettingsDialog::bandscopeCenterLineColorChanged, m_bandscopeDisplay,
+            &BandscopeDisplay::setVfoMarkerColor);
 #ifdef HAVE_HIDAPI
-    connect(&dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
+    connect(dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
             [this](const QString&, const QString&)
             {
                 refreshIcomRC28EncoderSettings();
@@ -1225,10 +1278,19 @@ void MainWindow::showSettingsDialog()
                 }
             });
 #endif
-    centerPopupWindow(&dlg);
-    dlg.setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
-    QTimer::singleShot(0, &dlg, [this, &dlg]() { centerPopupWindow(&dlg); });
-    dlg.exec();
+    centerPopupWindow(dlg);
+    dlg->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
+    QTimer::singleShot(0, dlg, [this, dlg]() { centerPopupWindow(dlg); });
+    QPointer<SettingsDialog> dlgGuard = dlg;
+    dlg->exec();
+    if (m_settingsDialog == dlgGuard)
+    {
+        m_settingsDialog = nullptr;
+    }
+    if (dlgGuard)
+    {
+        dlgGuard->deleteLater();
+    }
     m_lanModValue = qBound(0, AppSettings::instance().value("LanModLevel", 128).toInt(), 255);
     if (m_vfoPanel)
     {
@@ -2829,8 +2891,22 @@ void MainWindow::buildStatusBar()
 
 void MainWindow::showRadioChooserDialog()
 {
+    if (m_radioChooserDialog)
+    {
+        bringDialogToFront(m_radioChooserDialog);
+        return;
+    }
+
     auto* dlg = new RadioChooserDialog(this);
-    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    m_radioChooserDialog = dlg;
+    connect(dlg, &QObject::destroyed, this,
+            [this, dlg]()
+            {
+                if (m_radioChooserDialog == dlg)
+                {
+                    m_radioChooserDialog = nullptr;
+                }
+            });
     connect(dlg, &RadioChooserDialog::connectRequested, this,
             [this](const QUuid& id)
             {
@@ -2841,7 +2917,16 @@ void MainWindow::showRadioChooserDialog()
                 }
             });
     centerPopupWindow(dlg);
+    QPointer<RadioChooserDialog> dlgGuard = dlg;
     dlg->exec();
+    if (m_radioChooserDialog == dlgGuard)
+    {
+        m_radioChooserDialog = nullptr;
+    }
+    if (dlgGuard)
+    {
+        dlgGuard->deleteLater();
+    }
 }
 
 void MainWindow::onConnectToProfile(const RadioProfile& profile)
@@ -4189,10 +4274,7 @@ void MainWindow::showDtmfDialog()
         return;
     }
 
-    centerPopupWindow(m_dtmfDialog);
-    m_dtmfDialog->show();
-    m_dtmfDialog->raise();
-    m_dtmfDialog->activateWindow();
+    bringDialogToFront(m_dtmfDialog);
 }
 
 void MainWindow::onDtmfSendRequested(const QString& digits)

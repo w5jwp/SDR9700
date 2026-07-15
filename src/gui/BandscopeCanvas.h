@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QColor>
 #include <QPoint>
 #include <QTimer>
 #include <QVector>
@@ -19,6 +20,7 @@ class BandscopeCanvas : public QWidget
     void setFrequencyRange(double startMhz, double endMhz);
     void setDataFrequencyRange(double startMhz, double endMhz);
     void setVfoFrequency(double freqMhz);
+    void setVfoMarkerColor(const QColor& color);
     void setInteractionLocked(bool locked);
     void setInvertMouseWheel(bool invert);
     void setFilterWidth(int lowHz, int highHz);
@@ -51,6 +53,7 @@ class BandscopeCanvas : public QWidget
     double m_dataStartMhz{144.0};
     double m_dataEndMhz{146.0};
     double m_vfoMhz{145.0};
+    QColor m_vfoMarkerColor{0xf5, 0xf7, 0xf8, 230};
     float m_minLevel{0.0f};
     float m_maxLevel{160.0f};
 

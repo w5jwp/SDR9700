@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QCloseEvent>
 #include <QElapsedTimer>
+#include <QPointer>
 #include "RadioProfile.h"
 #include "Types.h"
 
@@ -32,6 +33,8 @@ class QTableWidget;
 class QTimer;
 class DtmfDialog;
 class MainTitleBar;
+class RadioChooserDialog;
+class SettingsDialog;
 #ifdef HAVE_HIDAPI
 class IcomRC28Manager;
 #endif
@@ -82,6 +85,7 @@ class MainWindow : public QMainWindow
     void buildControlPanel(QVBoxLayout* vbox);
     void buildStatusBar();
     void centerPopupWindow(QWidget* popup) const;
+    void bringDialogToFront(QWidget* dialog) const;
     void updateWindowTitle();
     void showSettingsDialog();
     void showRadioChooserDialog();
@@ -167,6 +171,8 @@ class MainWindow : public QMainWindow
     QPushButton* m_toneBtn{nullptr};
     QPushButton* m_pttBtn{nullptr};
     DtmfDialog* m_dtmfDialog{nullptr};
+    QPointer<SettingsDialog> m_settingsDialog;
+    QPointer<RadioChooserDialog> m_radioChooserDialog;
     QTimer* m_dtmfPttOffTimer{nullptr};
     bool m_dtmfSendActive{false};
 

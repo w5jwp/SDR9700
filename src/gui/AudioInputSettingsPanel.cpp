@@ -55,7 +55,7 @@ AudioInputSettingsPanel::AudioInputSettingsPanel(QWidget* parent) : QWidget(pare
         }
     }
 
-    inputForm->addRow("Input device:", m_inputCombo);
+    inputForm->addRow("Device:", m_inputCombo);
     vbox->addWidget(inputGroup);
 
     auto* txMeterGroup = new QGroupBox("Audio Level", this);

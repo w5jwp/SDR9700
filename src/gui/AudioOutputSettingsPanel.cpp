@@ -48,8 +48,8 @@ AudioOutputSettingsPanel::AudioOutputSettingsPanel(QWidget* parent) : QWidget(pa
         m_outputChannelsCombo->setCurrentIndex(idx);
     }
 
-    outputForm->addRow("Output device:", m_outputCombo);
-    outputForm->addRow("Output codec:", m_outputChannelsCombo);
+    outputForm->addRow("Device:", m_outputCombo);
+    outputForm->addRow("Codec:", m_outputChannelsCombo);
     vbox->addWidget(outputGroup);
     vbox->addStretch(1);
 

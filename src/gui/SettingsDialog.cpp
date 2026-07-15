@@ -1,21 +1,24 @@
 #include "SettingsDialog.h"
 #include "AudioInputSettingsPanel.h"
 #include "AudioOutputSettingsPanel.h"
+#include "BandScopeSettingsPanel.h"
 #include "DialogPlacement.h"
 #include "FramelessTitleBar.h"
 #include "MouseSettingsPanel.h"
-#include "RadioSetupSettingsPanel.h"
 #ifdef HAVE_HIDAPI
 #include "IcomRC28SettingsPanel.h"
 #endif
 
 #include <QAbstractItemView>
 #include <QAction>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QShowEvent>
 #include <QStackedWidget>
 #include <QTimer>
@@ -31,7 +34,7 @@ int pageKey(SettingsDialog::Page page)
 }
 } // namespace
 
-SettingsDialog::SettingsDialog(QWidget* parent) : SettingsDialog(Page::RadioSetup, parent) {}
+SettingsDialog::SettingsDialog(QWidget* parent) : SettingsDialog(Page::AudioInput, parent) {}
 
 #ifdef HAVE_HIDAPI
 SettingsDialog::SettingsDialog(Page page, QWidget* parent, IcomRC28Manager* icomRC28Manager)
@@ -76,12 +79,15 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     m_navigation = new QTreeWidget(content);
     m_navigation->setObjectName(QStringLiteral("settingsNavigation"));
     m_navigation->setHeaderHidden(true);
-    m_navigation->setRootIsDecorated(false);
-    m_navigation->setIndentation(0);
+    m_navigation->setRootIsDecorated(true);
+    m_navigation->setItemsExpandable(false);
+    m_navigation->setIndentation(16);
     m_navigation->setMinimumWidth(190);
     m_navigation->setMaximumWidth(245);
     m_navigation->setUniformRowHeights(false);
     m_navigation->setAccessibleName(QStringLiteral("Settings pages"));
+    m_navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     body->addWidget(m_navigation);
 
     auto* divider = new QWidget(content);
@@ -99,35 +105,20 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     pageLayout->addWidget(m_pageTitle);
     m_pages = new QStackedWidget(pageHost);
     pageLayout->addWidget(m_pages, 1);
-    body->addWidget(pageHost, 1);
+
+    m_pageScroll = new QScrollArea(content);
+    m_pageScroll->setWidgetResizable(true);
+    m_pageScroll->setFrameShape(QFrame::NoFrame);
+    m_pageScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_pageScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_pageScroll->setWidget(pageHost);
+    body->addWidget(m_pageScroll, 1);
     contentLayout->addLayout(body, 1);
 
-    addPage(Page::RadioSetup, QStringLiteral("Radio Setup"),
-            QStringLiteral("profile connection host port username password auto connect radio lan"),
-            []() { return new RadioSetupSettingsPanel; });
-    addPage(Page::AudioInput, QStringLiteral("Audio Input"),
-            QStringLiteral("audio input device microphone local level peak average rms transmit"),
-            [this]()
-            {
-                auto* panel = new AudioInputSettingsPanel;
-                m_audioInputPanel = panel;
-                panel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
-                return panel;
-            });
-    addPage(Page::AudioOutput, QStringLiteral("Audio Output"),
-            QStringLiteral("audio output device speaker codec channels receive playback"),
-            []() { return new AudioOutputSettingsPanel; });
-    addPage(Page::Application, QStringLiteral("Mouse"),
-            QStringLiteral("application local mouse wheel reverse tuning direction"),
-            [this]()
-            {
-                auto* panel = new MouseSettingsPanel;
-                connect(panel, &MouseSettingsPanel::reverseMouseWheelTuningChanged, this,
-                        &SettingsDialog::reverseMouseWheelTuningChanged);
-                return panel;
-            });
+    QTreeWidgetItem* accessoriesCategory = addCategory(
+        QStringLiteral("ACCESSORIES"), QStringLiteral("accessories hardware controller remote encoder mouse"));
 #ifdef HAVE_HIDAPI
-    addPage(Page::IcomRC28, QStringLiteral("Icom RC-28 Remote Encoder"),
+    addPage(accessoriesCategory, Page::IcomRC28, QStringLiteral("Icom RC-28 Remote Encoder"),
             QStringLiteral("hardware icom icomRC28 rc-28 remote encoder controller knob button f1 f2 ptt mapping"),
             [this]()
             {
@@ -137,7 +128,48 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                 return panel;
             });
 #endif
+    addPage(accessoriesCategory, Page::Application, QStringLiteral("Mouse"),
+            QStringLiteral("application local mouse wheel reverse tuning direction"),
+            [this]()
+            {
+                auto* panel = new MouseSettingsPanel;
+                connect(panel, &MouseSettingsPanel::reverseMouseWheelTuningChanged, this,
+                        &SettingsDialog::reverseMouseWheelTuningChanged);
+                return panel;
+            });
+
+    QTreeWidgetItem* appearanceCategory =
+        addCategory(QStringLiteral("APPEARANCE"), QStringLiteral("appearance display visual band scope bandscope"));
+    addPage(appearanceCategory, Page::BandScope, QStringLiteral("Band Scope"),
+            QStringLiteral("appearance display visual bandscope band scope center line color vfo marker"),
+            [this]()
+            {
+                auto* panel = new BandScopeSettingsPanel;
+                connect(panel, &BandScopeSettingsPanel::centerLineColorChanged, this,
+                        &SettingsDialog::bandscopeCenterLineColorChanged);
+                return panel;
+            });
+
+    QTreeWidgetItem* audioCategory =
+        addCategory(QStringLiteral("AUDIO"), QStringLiteral("audio input output computer radio"));
+    addPage(audioCategory, Page::AudioInput, QStringLiteral("Input (Computer to Radio)"),
+            QStringLiteral("audio input device microphone local level peak average rms transmit"),
+            [this]()
+            {
+                auto* panel = new AudioInputSettingsPanel;
+                m_audioInputPanel = panel;
+                panel->setTransmitAudioLevel(m_txAudioPeak, m_txAudioRms);
+                return panel;
+            });
+    addPage(audioCategory, Page::AudioOutput, QStringLiteral("Output (Radio to Computer)"),
+            QStringLiteral("audio output device speaker codec channels receive playback"),
+            []() { return new AudioOutputSettingsPanel; });
+    for (int i = 0; i < m_navigation->topLevelItemCount(); ++i)
+    {
+        m_navigation->topLevelItem(i)->sortChildren(0, Qt::AscendingOrder);
+    }
     m_navigation->sortItems(0, Qt::AscendingOrder);
+    m_navigation->expandAll();
 
     connect(m_navigation, &QTreeWidget::currentItemChanged, this,
             [this](QTreeWidgetItem* current)
@@ -147,10 +179,33 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                     return;
                 }
 
+                if (!current->data(0, Qt::UserRole).isValid())
+                {
+                    if (current->childCount() > 0)
+                    {
+                        m_navigation->setCurrentItem(current->child(0));
+                    }
+                    return;
+                }
+
                 const auto selectedPage = static_cast<Page>(current->data(0, Qt::UserRole).toInt());
                 buildDeferredPage(selectedPage);
                 m_pages->setCurrentIndex(m_pageIndexes.value(pageKey(selectedPage)));
                 m_pageTitle->setText(current->text(0));
+                if (m_pageScroll)
+                {
+                    m_pageScroll->verticalScrollBar()->setValue(0);
+                    m_pageScroll->horizontalScrollBar()->setValue(0);
+                    QTimer::singleShot(0, this,
+                                       [this]()
+                                       {
+                                           if (m_pageScroll)
+                                           {
+                                               m_pageScroll->verticalScrollBar()->setValue(0);
+                                               m_pageScroll->horizontalScrollBar()->setValue(0);
+                                           }
+                                       });
+                }
             });
     connect(search, &QLineEdit::textChanged, this, &SettingsDialog::filterNavigation);
 
@@ -193,14 +248,25 @@ void SettingsDialog::setTransmitAudioLevel(int peak, int rms)
     }
 }
 
-void SettingsDialog::addPage(Page page, const QString& title, const QString& keywords,
+QTreeWidgetItem* SettingsDialog::addCategory(const QString& title, const QString& keywords)
+{
+    auto* item = new QTreeWidgetItem(m_navigation, {title});
+    item->setData(0, Qt::UserRole + 1, keywords);
+    item->setToolTip(0, keywords);
+    QFont font = item->font(0);
+    font.setBold(true);
+    item->setFont(0, font);
+    return item;
+}
+
+void SettingsDialog::addPage(QTreeWidgetItem* parent, Page page, const QString& title, const QString& keywords,
                              std::function<QWidget*()> builder)
 {
     auto* placeholder = new QWidget;
     const int stackIndex = m_pages->addWidget(placeholder);
     const int key = pageKey(page);
 
-    auto* item = new QTreeWidgetItem(m_navigation, {title});
+    auto* item = parent ? new QTreeWidgetItem(parent, {title}) : new QTreeWidgetItem(m_navigation, {title});
     item->setData(0, Qt::UserRole, key);
     item->setData(0, Qt::UserRole + 1, keywords);
     item->setToolTip(0, keywords);
@@ -243,10 +309,24 @@ void SettingsDialog::filterNavigation(const QString& text)
     for (int i = 0; i < m_navigation->topLevelItemCount(); ++i)
     {
         QTreeWidgetItem* item = m_navigation->topLevelItem(i);
-        const QString haystack = item->text(0) + QLatin1Char(' ') + item->data(0, Qt::UserRole + 1).toString();
-        const bool visible = needle.isEmpty() || haystack.contains(needle, Qt::CaseInsensitive);
+        const bool selfVisible = needle.isEmpty() || itemSearchText(item).contains(needle, Qt::CaseInsensitive);
+        bool childVisible = false;
+        for (int childIndex = 0; childIndex < item->childCount(); ++childIndex)
+        {
+            QTreeWidgetItem* child = item->child(childIndex);
+            const bool visible =
+                selfVisible || needle.isEmpty() || itemSearchText(child).contains(needle, Qt::CaseInsensitive);
+            child->setHidden(!visible);
+            childVisible = childVisible || visible;
+            if (visible && !firstVisible)
+            {
+                firstVisible = child;
+            }
+        }
+
+        const bool visible = selfVisible || childVisible;
         item->setHidden(!visible);
-        if (visible && !firstVisible)
+        if (item->childCount() == 0 && visible && !firstVisible)
         {
             firstVisible = item;
         }
@@ -268,4 +348,9 @@ void SettingsDialog::selectPage(Page page)
 
     m_navigation->setCurrentItem(item);
     m_navigation->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+}
+
+QString SettingsDialog::itemSearchText(QTreeWidgetItem* item)
+{
+    return item ? item->text(0) + QLatin1Char(' ') + item->data(0, Qt::UserRole + 1).toString() : QString();
 }

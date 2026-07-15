@@ -5,6 +5,7 @@
 #include <QVector>
 #include <QWidget>
 
+class QColor;
 class BandscopeCanvas;
 class QComboBox;
 class QScrollBar;
@@ -30,6 +31,7 @@ class BandscopeDisplay : public QWidget
     void clearFrequencyPanRange();
     void setDataFrequencyRange(double startMhz, double endMhz);
     void setVfoFrequency(double freqMhz);
+    void setVfoMarkerColor(const QColor& color);
     void setInteractionLocked(bool locked);
     void setInvertMouseWheel(bool invert);
     int spectrumPaneHeight() const;

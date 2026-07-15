@@ -19,7 +19,7 @@ MouseSettingsPanel::MouseSettingsPanel(QWidget* parent) : QWidget(parent)
     vbox->setContentsMargins(12, 4, 12, 0);
     vbox->setSpacing(8);
 
-    auto* group = new QGroupBox("Mouse Wheel", this);
+    auto* group = new QGroupBox("Wheel", this);
     group->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* layout = new QVBoxLayout(group);
     layout->setContentsMargins(10, 12, 10, 10);

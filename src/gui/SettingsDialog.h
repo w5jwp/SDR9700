@@ -1,15 +1,18 @@
 // cppcheck-suppress-file unusedStructMember
 #pragma once
 
+#include <QColor>
 #include <QHash>
 #include <QDialog>
 #include <QPointer>
+#include <QString>
 
 #include <functional>
 
 class QWidget;
 class QLabel;
 class QShowEvent;
+class QScrollArea;
 class QStackedWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -25,9 +28,9 @@ class SettingsDialog : public QDialog
   public:
     enum class Page
     {
-        RadioSetup,
         AudioInput,
         AudioOutput,
+        BandScope,
         Application,
 #ifdef HAVE_HIDAPI
         IcomRC28,
@@ -42,6 +45,7 @@ class SettingsDialog : public QDialog
 #endif
 
   signals:
+    void bandscopeCenterLineColorChanged(const QColor& color);
     void reverseMouseWheelTuningChanged(bool reversed);
 #ifdef HAVE_HIDAPI
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);
@@ -54,16 +58,20 @@ class SettingsDialog : public QDialog
     void showEvent(QShowEvent* event) override;
 
   private:
-    void addPage(Page page, const QString& title, const QString& keywords, std::function<QWidget*()> builder);
+    QTreeWidgetItem* addCategory(const QString& title, const QString& keywords);
+    void addPage(QTreeWidgetItem* parent, Page page, const QString& title, const QString& keywords,
+                 std::function<QWidget*()> builder);
     void buildDeferredPage(Page page);
     void filterNavigation(const QString& text);
     void selectPage(Page page);
+    static QString itemSearchText(QTreeWidgetItem* item);
 
 #ifdef HAVE_HIDAPI
     IcomRC28Manager* m_icomRC28Manager{nullptr};
 #endif
     QPointer<QWidget> m_centerHost;
     QTreeWidget* m_navigation{nullptr};
+    QScrollArea* m_pageScroll{nullptr};
     QStackedWidget* m_pages{nullptr};
     QLabel* m_pageTitle{nullptr};
     QHash<int, std::function<QWidget*()>> m_deferredBuilders;

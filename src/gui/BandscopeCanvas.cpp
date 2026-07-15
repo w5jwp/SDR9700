@@ -177,6 +177,24 @@ void BandscopeCanvas::setVfoFrequency(double freqMhz)
     scheduleRepaint();
 }
 
+void BandscopeCanvas::setVfoMarkerColor(const QColor& color)
+{
+    if (!color.isValid())
+    {
+        return;
+    }
+
+    QColor markerColor = color;
+    markerColor.setAlpha(230);
+    if (m_vfoMarkerColor == markerColor)
+    {
+        return;
+    }
+
+    m_vfoMarkerColor = markerColor;
+    scheduleRepaint();
+}
+
 void BandscopeCanvas::setFilterWidth(int lowHz, int highHz)
 {
     m_filterLowHz = lowHz;
@@ -497,7 +515,7 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
     {
         const int vx = freqToX(m_vfoMhz);
         const int scaleY = specH - 1;
-        p.setPen(QPen(QColor(0xf5, 0xf7, 0xf8, 230), 1, Qt::SolidLine));
+        p.setPen(QPen(m_vfoMarkerColor, 1, Qt::SolidLine));
         p.drawLine(vx, 0, vx, scaleY - 1);
     }
 }
