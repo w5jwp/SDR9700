@@ -167,7 +167,7 @@ constexpr QMargins kMemoryToolbarGroupMargins(8, 6, 8, 6);
 constexpr int kMemoryPanelSpacing = 6;
 constexpr int kMemoryToolbarSpacing = 8;
 constexpr int kMemoryToolbarGroupSpacing = 6;
-constexpr QMargins kControlStripMargins(8, 14, 8, 16);
+constexpr QMargins kControlStripMargins(16, 14, 16, 16);
 constexpr int kControlRowSpacing = 8;
 constexpr int kControlGroupMargin = 8;
 constexpr int kControlGroupSpacing = 6;
