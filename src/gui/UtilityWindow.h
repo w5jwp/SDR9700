@@ -5,6 +5,7 @@
 
 #include <QDialog>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPointer>
@@ -44,9 +45,9 @@ class UtilityWindow : public QDialog
         }
 
         centerOnHost();
-        raise();
-        activateWindow();
+        bringToFront();
         scheduleCenterOnHost();
+        scheduleBringToFront();
     }
 
     void centerOnHost()
@@ -108,12 +109,40 @@ class UtilityWindow : public QDialog
         scheduleCenterOnHost();
     }
 
+    void keyPressEvent(QKeyEvent* event) override
+    {
+        if (event->key() == Qt::Key_Escape)
+        {
+            close();
+            event->accept();
+            return;
+        }
+
+        QDialog::keyPressEvent(event);
+    }
+
   private:
     void scheduleCenterOnHost()
     {
         QTimer::singleShot(0, this, [this]() { centerOnHost(); });
         QTimer::singleShot(50, this, [this]() { centerOnHost(); });
         QTimer::singleShot(150, this, [this]() { centerOnHost(); });
+    }
+
+    void bringToFront()
+    {
+        raise();
+        activateWindow();
+        if (QWindow* handle = windowHandle())
+        {
+            handle->requestActivate();
+        }
+    }
+
+    void scheduleBringToFront()
+    {
+        QTimer::singleShot(0, this, [this]() { bringToFront(); });
+        QTimer::singleShot(50, this, [this]() { bringToFront(); });
     }
 
     QSize preparedSize() const

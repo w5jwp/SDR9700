@@ -5,6 +5,8 @@
 #include <QString>
 #include <memory>
 
+#include "Types.h"
+
 class IRadioBackend;
 class VfoModel;
 class BandscopeModel;
@@ -43,6 +45,8 @@ class RadioModel : public QObject
     void setTxAudioDevice(const QAudioDevice& dev);
     void setLanModLevel(int level);
     void setTuningStep(int step);
+    void requestRadioMemory(quint16 group, quint16 channel);
+    void writeRadioMemory(MemoryType memory);
 
   signals:
     void connectionChanged(bool connected);
@@ -62,6 +66,7 @@ class RadioModel : public QObject
     void statusMessage(const QString& message);
     void networkQualityChanged(int rttMs);
     void txAudioLevelChanged(int peak, int rms);
+    void radioMemoryReceived(MemoryType memory);
 
   private slots:
     void onBackendConnected();

@@ -57,6 +57,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::pttChanged, this, &RadioModel::onPttChanged);
     connect(m_backend, &IRadioBackend::networkQualityChanged, this, &RadioModel::networkQualityChanged);
     connect(m_backend, &IRadioBackend::txAudioLevelChanged, m_meterController, &MeterController::setTransmitAudioLevel);
+    connect(m_backend, &IRadioBackend::radioMemoryReceived, this, &RadioModel::radioMemoryReceived);
     connect(m_meterController, &MeterController::snapshotChanged, this, &RadioModel::onMeterSnapshotChanged);
 }
 
@@ -90,6 +91,16 @@ void RadioModel::setLanModLevel(int level)
 void RadioModel::setTuningStep(int step)
 {
     m_backend->setTuningStep(step);
+}
+
+void RadioModel::requestRadioMemory(quint16 group, quint16 channel)
+{
+    m_backend->requestRadioMemory(group, channel);
+}
+
+void RadioModel::writeRadioMemory(MemoryType memory)
+{
+    m_backend->writeRadioMemory(memory);
 }
 
 void RadioModel::onBackendConnected()

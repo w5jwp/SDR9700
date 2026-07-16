@@ -99,7 +99,7 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
         QStringLiteral("QComboBox { background: rgba(16, 22, 30, 220); "
                        "border: 1px solid #566576; border-radius: 3px; "
                        "color: #e8f2f8; font-size: 10px; font-weight: bold; "
-                       "padding: 1px 18px 1px 6px; }"
+                       "padding: 1px 22px 1px 10px; }"
                        "QComboBox:hover { background: rgba(32, 42, 55, 235); "
                        "border-color: #7f96ad; }"
                        "QComboBox::drop-down { border: none; width: 16px; }"
@@ -108,7 +108,8 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
                        "border-top: 5px solid #e8f2f8; margin-right: 5px; }"
                        "QComboBox QAbstractItemView { background: #10161e; "
                        "border: 1px solid #566576; color: #e8f2f8; "
-                       "selection-background-color: #2a82da; }"));
+                       "selection-background-color: #2a82da; }"
+                       "QComboBox QAbstractItemView::item { padding: 4px 10px; }"));
     m_spanCombo->raise();
 
     connect(m_bandscopeCanvas, &BandscopeCanvas::frequencyClicked, this, &BandscopeDisplay::frequencyClicked);

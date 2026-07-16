@@ -12,6 +12,7 @@
 
 #include <QMediaDevices>
 #include <QHostAddress>
+#include <QMetaType>
 #include <QSemaphore>
 #include <QThread>
 #include <QTimer>
@@ -26,6 +27,7 @@ namespace
 {
 constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 500;
+constexpr int kMemoryWriteReadbackDelayMs = 250;
 constexpr int kPttReleaseTailMs = 150;
 constexpr int kMaxTransmitDurationMs = 180000;
 constexpr int kHighSwrConsecutiveReadings = 3;
@@ -202,6 +204,8 @@ QByteArray generateDtmfPcm(const QString& digits)
 RadioBackend::RadioBackend(QObject* parent)
     : IRadioBackend(parent), m_workerThread(new QThread(this)), m_radioDataThread(new QThread(this))
 {
+    qRegisterMetaType<MemoryType>("MemoryType");
+
     m_workerThread->setObjectName("radio-worker");
     m_workerThread->start();
 
@@ -282,6 +286,7 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_radioRouter, &RadioRouter::voltageMeterChanged, this, &IRadioBackend::voltageMeterChanged);
     connect(m_radioRouter, &RadioRouter::currentMeterChanged, this, &IRadioBackend::currentMeterChanged);
     connect(m_radioRouter, &RadioRouter::duplexModeChanged, this, &IRadioBackend::duplexModeChanged);
+    connect(m_radioRouter, &RadioRouter::radioMemoryReceived, this, &IRadioBackend::radioMemoryReceived);
     connect(m_radioRouter, &RadioRouter::dataOffModChanged, this,
             [this](const radioInput& input)
             {
@@ -1266,6 +1271,27 @@ void RadioBackend::pollFrequency()
 {
     invokeOnCurrentCommander([](Commander* commandSession)
                              { commandSession->receiveCommand(funcFreqGet, QVariant(), 0); });
+}
+
+void RadioBackend::requestRadioMemory(quint16 group, quint16 channel)
+{
+    const uint memoryAddress = (static_cast<uint>(group) << 16) | static_cast<uint>(channel);
+    invokeOnCurrentCommander(
+        [memoryAddress](Commander* commandSession)
+        { commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0); });
+}
+
+void RadioBackend::writeRadioMemory(MemoryType memory)
+{
+    const uint memoryAddress = (static_cast<uint>(memory.group) << 16) | static_cast<uint>(memory.channel);
+    invokeOnCurrentCommander(
+        [memory, memoryAddress](Commander* commandSession)
+        {
+            commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memory), 0);
+            QTimer::singleShot(
+                kMemoryWriteReadbackDelayMs, commandSession, [commandSession, memoryAddress]()
+                { commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0); });
+        });
 }
 
 void RadioBackend::requestInitialRadioState()

@@ -159,14 +159,8 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     QTreeWidgetItem* applicationCategory =
         addCategory(QStringLiteral("APPLICATION"), QStringLiteral("application configuration backup restore reset"));
     addPage(applicationCategory, Page::ApplicationConfiguration, QStringLiteral("Configuration"),
-            QStringLiteral("application configuration backup restore export import reset memories settings"),
-            [this]()
-            {
-                auto* panel = new ApplicationConfigurationSettingsPanel;
-                connect(panel, &ApplicationConfigurationSettingsPanel::memoriesChanged, this,
-                        &SettingsDialog::memoriesChanged);
-                return panel;
-            });
+            QStringLiteral("application configuration backup restore reset settings"),
+            [] { return new ApplicationConfigurationSettingsPanel; });
 
     QTreeWidgetItem* appearanceCategory =
         addCategory(QStringLiteral("APPEARANCE"), QStringLiteral("appearance display visual band scope bandscope"));

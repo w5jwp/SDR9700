@@ -118,6 +118,10 @@ void RadioRouter::route(const CacheItem& item)
     case funcDTCSCode:
         emit dtcsCodeChanged(item.value.value<ToneInfo>().tone);
         break;
+    case funcMemoryContents:
+        emit radioValueUpdated(item.command, item.value, item.receiver);
+        emit radioMemoryReceived(item.value.value<MemoryType>());
+        break;
     case funcSMeter:
     {
         static constexpr double kS0Dbm = -147.0;

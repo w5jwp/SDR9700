@@ -54,6 +54,7 @@ class RadioRouter : public QObject
     void duplexModeChanged(duplexMode_t mode);
     void dataOffModChanged(const radioInput& input);
     void data1ModChanged(const radioInput& input);
+    void radioMemoryReceived(MemoryType memory);
     void scopeDataReady(const ScopeData& data);
 
   private:

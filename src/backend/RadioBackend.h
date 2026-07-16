@@ -66,6 +66,8 @@ class RadioBackend : public IRadioBackend
     void setTxPower(int level) override;
     void setTuningStep(int step) override;
     void pollFrequency() override;
+    void requestRadioMemory(quint16 group, quint16 channel) override;
+    void writeRadioMemory(MemoryType memory) override;
     void setRxAudioDevice(const QAudioDevice& dev) override { m_rxDevice = dev; }
     void setTxAudioDevice(const QAudioDevice& dev) override { m_txDevice = dev; }
     void setLanModLevel(int level) override;

@@ -513,11 +513,11 @@ void RadioCommandController::showToneMenu()
         submenu->addAction(action);
     };
 
-    addCtcssMenu(&menu, QStringLiteral("TONE"), ratrTN);
-    addCtcssMenu(&menu, QStringLiteral("CTCSS"), ratrNT);
+    addCtcssMenu(&menu, QStringLiteral("TONE (TX)"), ratrTN);
+    addCtcssMenu(&menu, QStringLiteral("TONE (TX/RX)"), ratrTT);
     menu.addSeparator();
-    addDtcsMenu(&menu, QStringLiteral("DCS"), ratrDN);
-    addDtcsMenu(&menu, QStringLiteral("DTCS"), ratrDD);
+    addDtcsMenu(&menu, QStringLiteral("DTCS (TX)"), ratrDN);
+    addDtcsMenu(&menu, QStringLiteral("DTCS (TX/RX)"), ratrDD);
     menu.addSeparator();
     const auto* offAction = menu.addAction(QStringLiteral("OFF"));
 

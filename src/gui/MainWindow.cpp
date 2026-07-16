@@ -53,7 +53,6 @@
 #include <QDebug>
 #include <QDoubleSpinBox>
 #include <QComboBox>
-#include <QCheckBox>
 #include <QColor>
 #include <QFormLayout>
 #include <QFile>
@@ -379,12 +378,6 @@ void MainWindow::showSettingsDialog()
     connect(dlg, &SettingsDialog::bandscopeGridLineColorChanged, m_bandscopeDisplay,
             &BandscopeDisplay::setGridLineColor);
     connect(dlg, &SettingsDialog::bandscopeGridDensityChanged, m_bandscopeDisplay, &BandscopeDisplay::setGridDensity);
-    connect(dlg, &SettingsDialog::memoriesChanged, this,
-            [this](const QString& message)
-            {
-                reloadMemoryTable();
-                showToast(message);
-            });
 #ifdef HAVE_HIDAPI
     connect(dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
             [this](const QString&, const QString&)
@@ -605,8 +598,8 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
     m_offsetBtn =
         makeSelectorButton("OFFSET", QStringLiteral("SIMPLEX"), "Repeater offset", "Select repeater duplex offset.");
     m_offsetBtn->setToolTip("Select repeater duplex offset.");
-    m_toneBtn = makeSelectorButton("TONE", QStringLiteral("OFF"), "Tone settings", "Select tone, CTCSS, or DTCS.");
-    m_toneBtn->setToolTip("Select tone, CTCSS, or DTCS.");
+    m_toneBtn = makeSelectorButton("TONE", QStringLiteral("OFF"), "Tone settings", "Select tone or DTCS.");
+    m_toneBtn->setToolTip("Select tone or DTCS.");
     m_xfcBtn = makeSelectorButton("XFC", QStringLiteral("OFF"), "XFC", "Toggle transmit frequency check.");
     m_xfcBtn->setCheckable(true);
     m_xfcBtn->setProperty("toggleLabel", "XFC");

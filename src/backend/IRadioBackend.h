@@ -57,6 +57,8 @@ class IRadioBackend : public QObject
     virtual void setTuningStep(int step) = 0;
 
     virtual void pollFrequency() = 0;
+    virtual void requestRadioMemory(quint16 group, quint16 channel) = 0;
+    virtual void writeRadioMemory(MemoryType memory) = 0;
 
     virtual void setRxAudioDevice(const QAudioDevice& dev) { Q_UNUSED(dev) }
     virtual void setTxAudioDevice(const QAudioDevice& dev) { Q_UNUSED(dev) }
@@ -101,6 +103,7 @@ class IRadioBackend : public QObject
     void toneAccessModeChanged(rptAccessTxRx_t mode);
     void toneFrequencyChanged(ushort tone);
     void dtcsCodeChanged(ushort code);
+    void radioMemoryReceived(MemoryType memory);
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
 
     void spectrumDataReady(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange);

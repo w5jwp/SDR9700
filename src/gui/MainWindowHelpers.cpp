@@ -251,10 +251,14 @@ QString toneOptionLabel(rptAccessTxRx_t mode)
     case ratrTN:
         return QStringLiteral("TONE");
     case ratrNT:
-        return QStringLiteral("CTCSS");
+        return QStringLiteral("TONE");
+    case ratrTT:
+        return QStringLiteral("TONE");
     case ratrDN:
-        return QStringLiteral("DCS");
+        return QStringLiteral("DTCS");
     case ratrDD:
+        return QStringLiteral("DTCS");
+    case ratrDT:
         return QStringLiteral("DTCS");
     default:
         return QStringLiteral("Off");
@@ -267,9 +271,11 @@ QString memoryToneFrequencyLabel(rptAccessTxRx_t mode, ushort value)
     {
     case ratrTN:
     case ratrNT:
+    case ratrTT:
         return toneFrequencyLabel(value);
     case ratrDN:
     case ratrDD:
+    case ratrDT:
         return dtcsCodeLabel(value);
     default:
         return QString();
@@ -296,6 +302,35 @@ QString memoryToneDisplayLabel(const MemoryRecord& memory)
         return option;
     }
     return QStringLiteral("%1 (%2)").arg(option, value);
+}
+
+QString memoryModeLabel(int mode)
+{
+    switch (static_cast<radioMode_t>(mode))
+    {
+    case modeLSB:
+        return QStringLiteral("LSB");
+    case modeUSB:
+        return QStringLiteral("USB");
+    case modeAM:
+        return QStringLiteral("AM");
+    case modeCW:
+        return QStringLiteral("CW");
+    case modeRTTY:
+        return QStringLiteral("RTTY");
+    case modeFM:
+        return QStringLiteral("FM");
+    case modeCW_R:
+        return QStringLiteral("CW-R");
+    case modeRTTY_R:
+        return QStringLiteral("RTTY-R");
+    case modeDV:
+        return QStringLiteral("DV");
+    case modeDD:
+        return QStringLiteral("DD");
+    default:
+        return QStringLiteral("0x%1").arg(mode, 2, 16, QLatin1Char('0')).toUpper();
+    }
 }
 
 QString memoryFrequencyLabel(quint64 hz)

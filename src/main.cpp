@@ -307,6 +307,8 @@ int main(int argc, char* argv[])
     dark.setColor(QPalette::Highlight, QColor(42, 130, 218));
     dark.setColor(QPalette::HighlightedText, Qt::black);
     app.setPalette(dark);
+    app.setStyleSheet(QStringLiteral("QComboBox { padding-left: 10px; padding-right: 24px; }"
+                                     "QComboBox QAbstractItemView::item { padding: 4px 10px; }"));
 
     auto* model = new RadioModel;
     MainWindow win(model);

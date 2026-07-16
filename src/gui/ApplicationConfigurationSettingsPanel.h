@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QString>
 #include <QWidget>
 
 class ApplicationConfigurationSettingsPanel : public QWidget
@@ -9,7 +8,4 @@ class ApplicationConfigurationSettingsPanel : public QWidget
 
   public:
     explicit ApplicationConfigurationSettingsPanel(QWidget* parent = nullptr);
-
-  signals:
-    void memoriesChanged(const QString& message);
 };

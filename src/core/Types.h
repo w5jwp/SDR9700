@@ -129,7 +129,7 @@ enum duplexMode_t
     dmDupAutoOff = 0x36
 };
 
-// Repeater access mode names use transmit/receive order: T=tone, D=DCS, N=none.
+// Repeater access mode names use transmit/receive order: T=tone, D=DTCS, N=none.
 enum rptAccessTxRx_t
 {
     ratrNN = 0x00,
@@ -149,7 +149,7 @@ enum rptAccessTxRx_t
 // Modes where toneValue holds a DTCS code; all other non-ratrNN modes use a tone frequency.
 inline bool isDtcsToneMode(rptAccessTxRx_t m)
 {
-    return m == ratrDN || m == ratrDD;
+    return m == ratrDN || m == ratrDD || m == ratrDT;
 }
 
 enum pttType_t

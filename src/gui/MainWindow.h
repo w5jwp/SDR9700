@@ -24,7 +24,6 @@ class QPushButton;
 class QLineEdit;
 class QProgressBar;
 class QStatusBar;
-class QCheckBox;
 class QPixmap;
 class QVBoxLayout;
 class QGroupBox;
@@ -195,7 +194,6 @@ class MainWindow : public QMainWindow
     QDialog* m_memoryWindow{nullptr};
     QComboBox* m_memoryBandFilter{nullptr};
     QTableWidget* m_memoryTable{nullptr};
-    QCheckBox* m_closeMemoryWindowOnSelectCheck{nullptr};
     QLabel* m_memoryCountLabel{nullptr};
     int m_currentAfGain{128};
     int m_savedAfGain{128};

@@ -1,5 +1,6 @@
 #include "MemoryPanel.h"
 
+#include "MainWindowHelpers.h"
 #include "UiTheme.h"
 
 #include <QAbstractItemView>
@@ -12,16 +13,18 @@
 
 namespace
 {
-constexpr int kMemoryPanelWidth = 380;
+constexpr int kMemoryPanelWidth = 430;
 constexpr int kControlGroupMargin = 5;
 constexpr int kMemoryItemHeight = 28;
 constexpr int kHeaderHeight = 18;
 constexpr int kNumberColumnWidth = 34;
+constexpr int kModeColumnWidth = 48;
 constexpr int kFrequencyColumnWidth = 100;
-constexpr int kMemoryColumn = 1;
-constexpr int kMemoryColumnCount = 3;
 constexpr int kMemoryNumberColumn = 0;
-constexpr int kMemoryFrequencyColumn = 2;
+constexpr int kMemoryColumn = 1;
+constexpr int kMemoryModeColumn = 2;
+constexpr int kMemoryFrequencyColumn = 3;
+constexpr int kMemoryColumnCount = 4;
 
 QString memoryFrequencyLabel(quint64 hz)
 {
@@ -63,7 +66,8 @@ MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
     m_table->setAccessibleName(QStringLiteral("Memory browser"));
     m_table->setAccessibleDescription(QStringLiteral("Double-click a memory to tune the active VFO."));
     m_table->setColumnCount(kMemoryColumnCount);
-    m_table->setHorizontalHeaderLabels({QStringLiteral("CH"), QStringLiteral("Memory"), QStringLiteral("Frequency")});
+    m_table->setHorizontalHeaderLabels(
+        {QStringLiteral("CH"), QStringLiteral("Memory"), QStringLiteral("Mode"), QStringLiteral("Frequency")});
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -80,8 +84,10 @@ MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
     m_table->horizontalHeader()->setStretchLastSection(false);
     m_table->horizontalHeader()->setSectionResizeMode(kMemoryNumberColumn, QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(kMemoryColumn, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(kMemoryModeColumn, QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(kMemoryFrequencyColumn, QHeaderView::Fixed);
     m_table->setColumnWidth(kMemoryNumberColumn, kNumberColumnWidth);
+    m_table->setColumnWidth(kMemoryModeColumn, kModeColumnWidth);
     m_table->setColumnWidth(kMemoryFrequencyColumn, kFrequencyColumnWidth);
     m_table->setStyleSheet(
         QStringLiteral("QTableWidget#memoryBrowserTable { background: %1; border: 1px solid %2; "
@@ -128,7 +134,7 @@ void MemoryPanel::rebuildList()
     {
         m_table->setRowCount(1);
         m_table->setSpan(0, 0, 1, kMemoryColumnCount);
-        auto* item = makeCellItem(QStringLiteral("No memories saved"), Qt::AlignCenter);
+        auto* item = makeCellItem(QStringLiteral("No radio memories loaded"), Qt::AlignCenter);
         item->setFlags(Qt::ItemIsEnabled);
         m_table->setItem(0, 0, item);
         m_table->setRowHeight(0, kMemoryItemHeight);
@@ -142,13 +148,19 @@ void MemoryPanel::rebuildList()
         const QString name = memory.name.isEmpty() ? QStringLiteral("(unnamed)") : memory.name;
         auto* numberItem = makeCellItem(memoryNumberLabel(memory.number), Qt::AlignRight | Qt::AlignVCenter, memory.id);
         auto* nameItem = makeCellItem(name, Qt::AlignLeft | Qt::AlignVCenter, memory.id);
+        auto* modeItem =
+            makeCellItem(sdr9700::ui::main_window::memoryModeLabel(memory.mode), Qt::AlignCenter, memory.id);
         auto* frequencyItem =
             makeCellItem(memoryFrequencyLabel(memory.receiveHz), Qt::AlignRight | Qt::AlignVCenter, memory.id);
-        numberItem->setToolTip(QStringLiteral("%1\n%2").arg(name, memoryFrequencyLabel(memory.receiveHz)));
+        numberItem->setToolTip(QStringLiteral("%1\n%2  %3")
+                                   .arg(name, sdr9700::ui::main_window::memoryModeLabel(memory.mode),
+                                        memoryFrequencyLabel(memory.receiveHz)));
         nameItem->setToolTip(numberItem->toolTip());
+        modeItem->setToolTip(numberItem->toolTip());
         frequencyItem->setToolTip(numberItem->toolTip());
         m_table->setItem(row, kMemoryNumberColumn, numberItem);
         m_table->setItem(row, kMemoryColumn, nameItem);
+        m_table->setItem(row, kMemoryModeColumn, modeItem);
         m_table->setItem(row, kMemoryFrequencyColumn, frequencyItem);
         m_table->setRowHeight(row, kMemoryItemHeight);
     }

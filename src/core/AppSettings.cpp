@@ -49,14 +49,6 @@ bool mainWindowSetting(const QString& key)
     return kMainWindowSettings.contains(key);
 }
 
-bool memoryWindowSetting(const QString& key)
-{
-    static const QStringList kMemoryWindowSettings = {
-        QStringLiteral("memoryWindowCloseOnSelect"),
-    };
-    return kMemoryWindowSettings.contains(key);
-}
-
 bool radioSetting(const QString& key)
 {
     static const QStringList kRadioSettings = {
@@ -178,15 +170,6 @@ QString mainWindowStoredKey(const QString& key)
     return {};
 }
 
-QString memoryWindowStoredKey(const QString& key)
-{
-    if (key == QStringLiteral("memoryWindowCloseOnSelect"))
-    {
-        return QStringLiteral("closeOnSelect");
-    }
-    return {};
-}
-
 void loadStoredSetting(QHash<QString, QString>* values, const QString& key, const QJsonValue& value)
 {
     if (value.isUndefined() || value.isNull())
@@ -285,7 +268,6 @@ bool AppSettings::save() const
     QJsonObject audioSettings;
     QJsonObject bandscopeSettings;
     QJsonObject mainWindowSettings;
-    QJsonObject memoryWindowSettings;
     QJsonObject radioSettings;
     QJsonObject radioChooserSettings;
     QJsonObject accessoriesSettings;
@@ -307,11 +289,6 @@ bool AppSettings::save() const
         if (mainWindowSetting(key))
         {
             insertStoredSetting(&mainWindowSettings, mainWindowStoredKey(key), storedValue);
-            continue;
-        }
-        if (memoryWindowSetting(key))
-        {
-            insertStoredSetting(&memoryWindowSettings, memoryWindowStoredKey(key), storedValue);
             continue;
         }
         if (radioSetting(key))
@@ -344,10 +321,6 @@ bool AppSettings::save() const
     if (!mainWindowSettings.isEmpty())
     {
         settings.insert(QStringLiteral("mainWindow"), mainWindowSettings);
-    }
-    if (!memoryWindowSettings.isEmpty())
-    {
-        settings.insert(QStringLiteral("memoryWindow"), memoryWindowSettings);
     }
     if (!radioSettings.isEmpty())
     {
@@ -438,14 +411,6 @@ bool AppSettings::loadJson(const QString& path)
                               mainWindow.value(QStringLiteral("positionY")));
             loadStoredSetting(&m_values, QStringLiteral("statusClockUTC"),
                               mainWindow.value(QStringLiteral("statusClockUTC")));
-            continue;
-        }
-
-        if (it.key() == QStringLiteral("memoryWindow") && it.value().isObject())
-        {
-            const QJsonObject memoryWindow = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("memoryWindowCloseOnSelect"),
-                              memoryWindow.value(QStringLiteral("closeOnSelect")));
             continue;
         }
 
