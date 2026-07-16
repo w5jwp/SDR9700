@@ -6,6 +6,8 @@
 namespace
 {
 constexpr int kAudioThreadShutdownWaitMs = 500;
+constexpr int kTxAudioFrameMs = 20;
+constexpr int kMaxQueuedTxAudioFrames = 8;
 constexpr quint8 kLpcmMono16Codec = 0x04;
 } // namespace
 
@@ -46,9 +48,15 @@ UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint
     areYouThereTimer->start(AREYOUTHERE_PERIOD);
 
     m_dtmfTimer = new QTimer(this);
-    m_dtmfTimer->setInterval(20);
+    m_dtmfTimer->setInterval(kTxAudioFrameMs);
     m_dtmfTimer->setSingleShot(false);
     connect(m_dtmfTimer, &QTimer::timeout, this, &UdpAudio::sendNextDtmfFrame);
+
+    txAudioTimer = new QTimer(this);
+    txAudioTimer->setInterval(kTxAudioFrameMs);
+    txAudioTimer->setTimerType(Qt::PreciseTimer);
+    txAudioTimer->setSingleShot(false);
+    connect(txAudioTimer, &QTimer::timeout, this, &UdpAudio::sendNextTxAudioFrame);
 }
 
 UdpAudio::~UdpAudio()
@@ -161,12 +169,23 @@ void UdpAudio::receiveAudioData(audioPacket audio)
             return;
         }
 
-        sendAudioBuffer(audio.data);
+        if (!m_txActive.load())
+        {
+            m_txAudioQueue.clear();
+            return;
+        }
+
+        m_txAudioQueue.enqueue(audio.data);
+        while (m_txAudioQueue.size() > kMaxQueuedTxAudioFrames)
+        {
+            m_txAudioQueue.dequeue();
+        }
     }
 }
 
 void UdpAudio::queueDtmfPcm(const QByteArray& pcm)
 {
+    m_txAudioQueue.clear();
     m_dtmfPcm = pcm;
     m_dtmfPcmOffset = 0;
     if (!pcm.isEmpty())
@@ -174,6 +193,35 @@ void UdpAudio::queueDtmfPcm(const QByteArray& pcm)
         m_dtmfTimerActive = true;
         m_dtmfTimer->start();
     }
+}
+
+void UdpAudio::sendNextTxAudioFrame()
+{
+    if (!m_txActive.load())
+    {
+        if (txAudioTimer)
+        {
+            txAudioTimer->stop();
+        }
+        m_txAudioQueue.clear();
+        return;
+    }
+
+    if (m_dtmfTimerActive)
+    {
+        return;
+    }
+
+    QByteArray frame;
+    if (!m_txAudioQueue.isEmpty())
+    {
+        frame = m_txAudioQueue.dequeue();
+    }
+    else
+    {
+        frame = QByteArray(m_txSilencePacketBytes, '\0');
+    }
+    sendAudioBuffer(frame);
 }
 
 void UdpAudio::sendNextDtmfFrame()
@@ -412,12 +460,22 @@ void UdpAudio::startAudio()
 void UdpAudio::setTxActive(bool active)
 {
     m_txActive.store(active);
+    m_txAudioQueue.clear();
     if (!active)
     {
+        if (txAudioTimer)
+        {
+            txAudioTimer->stop();
+        }
         m_dtmfTimer->stop();
         m_dtmfTimerActive = false;
         m_dtmfPcm.clear();
         m_dtmfPcmOffset = 0;
+    }
+    else if (txAudioTimer && !txAudioTimer->isActive())
+    {
+        txAudioTimer->start();
+        sendNextTxAudioFrame();
     }
     qDebug(logUdp()) << "UdpAudio: TX audio" << (active ? "ENABLED (PTT on)" : "DISABLED (PTT off)");
 }

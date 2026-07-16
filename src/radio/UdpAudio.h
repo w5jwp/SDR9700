@@ -15,6 +15,7 @@
 #include <QtEndian>
 
 #include <QBuffer>
+#include <QQueue>
 #include <QThread>
 #include <QElapsedTimer>
 
@@ -63,6 +64,7 @@ class UdpAudio : public UdpBase
   private slots:
     void onRxAudioInitFailed();
     void onTxAudioInitFailed();
+    void sendNextTxAudioFrame();
     void sendNextDtmfFrame();
 
   private:
@@ -88,6 +90,7 @@ class UdpAudio : public UdpBase
     QMutex audioMutex;
 
     std::atomic_bool m_txActive{false};
+    QQueue<QByteArray> m_txAudioQueue;
     QByteArray m_dtmfPcm;
     int m_dtmfPcmOffset{0};
     QTimer* m_dtmfTimer{nullptr};
