@@ -9,7 +9,7 @@
 namespace
 {
 constexpr int kControlGroupMargin = 5;
-constexpr int kControlGroupSpacing = 8;
+constexpr int kControlGroupSpacing = 5;
 } // namespace
 
 ReceivePanel::ReceivePanel(const Buttons& buttons, QWidget* parent) : QGroupBox(parent)
