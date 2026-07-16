@@ -7,8 +7,6 @@ class MainWindow;
 
 class MemoryController : public QObject
 {
-    Q_OBJECT
-
   public:
     explicit MemoryController(MainWindow* window);
 

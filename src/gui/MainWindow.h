@@ -65,7 +65,6 @@ class MainWindow : public QMainWindow
     void onFrequencyChanged(quint64 hz);
     void onModeChanged(const QString& mode);
     void onMeterSnapshotChanged(const MeterSnapshot& snapshot);
-    void onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange);
     void onStatusMessage(const QString& msg);
     void onError(const QString& msg);
 
@@ -78,7 +77,6 @@ class MainWindow : public QMainWindow
     void updateTxPowerButton();
     void onPttPressed();
     void onPttReleased();
-    void onSpectrumClicked(double freqMhz);
     void onPttChanged(bool on);
     void onDuplexModeChanged(duplexMode_t mode);
     void onRepeaterOffsetChanged(quint64 hz);

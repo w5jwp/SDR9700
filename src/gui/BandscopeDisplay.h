@@ -61,7 +61,6 @@ class BandscopeDisplay : public QWidget
     static int panScrollBarHeight() { return 16; }
     void updateSpanComboGeometry();
     void updatePanScrollBar();
-    void panScrollBarBySteps(int steps);
     int defaultSpectrumHeight() const;
     int constrainedSpectrumHeight(int requested) const;
     int currentSpectrumHeight() const;

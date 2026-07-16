@@ -218,17 +218,6 @@ void BandscopeDisplay::updatePanScrollBar()
     m_panScrollBar->setEnabled(!m_interactionLocked && canPan);
 }
 
-void BandscopeDisplay::panScrollBarBySteps(int steps)
-{
-    if (steps == 0 || !m_panScrollBar || !m_panScrollBar->isEnabled())
-    {
-        return;
-    }
-
-    const int stepSize = qMax(1, m_panScrollBar->singleStep());
-    m_panScrollBar->setValue(m_panScrollBar->value() + steps * stepSize);
-}
-
 int BandscopeDisplay::defaultSpectrumHeight() const
 {
     return constrainedSpectrumHeight(((height() - BandscopeCanvas::scaleHeight() - panScrollBarHeight()) / 2) +

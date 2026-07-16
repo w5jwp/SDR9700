@@ -7,8 +7,6 @@ class MainWindow;
 
 class IcomRC28Controller : public QObject
 {
-    Q_OBJECT
-
   public:
     explicit IcomRC28Controller(MainWindow* window);
 

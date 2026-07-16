@@ -8,8 +8,6 @@ class QVBoxLayout;
 
 class BandscopeController : public QObject
 {
-    Q_OBJECT
-
   public:
     explicit BandscopeController(MainWindow* window);
 

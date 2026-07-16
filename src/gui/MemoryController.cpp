@@ -36,42 +36,21 @@
 
 using namespace sdr9700::ui::main_window;
 
-#define m_memoryWindow m_window->m_memoryWindow
-#define m_memoryBandFilter m_window->m_memoryBandFilter
-#define m_memoryTable m_window->m_memoryTable
-#define m_closeMemoryWindowOnSelectCheck m_window->m_closeMemoryWindowOnSelectCheck
-#define m_memoryCountLabel m_window->m_memoryCountLabel
-#define m_memoryPanel m_window->m_memoryPanel
-#define m_activeMemoryId m_window->m_activeMemoryId
-#define m_controlsLocked m_window->m_controlsLocked
-#define m_model m_window->m_model
-#define m_vfo m_window->m_vfo
-#define m_applyingMemorySelection m_window->m_applyingMemorySelection
-#define m_memorySelectionGeneration m_window->m_memorySelectionGeneration
-#define m_duplexMode m_window->m_duplexMode
-#define m_repeaterOffsetHz m_window->m_repeaterOffsetHz
-#define m_toneAccessMode m_window->m_toneAccessMode
-#define m_dtcsCode m_window->m_dtcsCode
-#define m_toneFrequency m_window->m_toneFrequency
-#define centerPopupWindow m_window->centerPopupWindow
-#define showToast m_window->showToast
-#define setActiveMemory m_window->setActiveMemory
-#define checkIfMemorySelectionComplete m_window->checkIfMemorySelectionComplete
 
 MemoryController::MemoryController(MainWindow* window) : QObject(window), m_window(window) {}
 
 void MemoryController::buildMemoryWindow()
 {
-    m_memoryWindow = new sdr9700::ui::UtilityWindow(QStringLiteral("Memory Manager"), m_window);
-    m_memoryWindow->setStyleSheet(
+    m_window->m_memoryWindow = new sdr9700::ui::UtilityWindow(QStringLiteral("Memory Manager"), m_window);
+    m_window->m_memoryWindow->setStyleSheet(
         QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
             .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-    m_memoryWindow->setObjectName("memoryWindow");
-    m_memoryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
-    m_memoryWindow->resize(kMemoryWindowSize);
-    m_memoryWindow->setFixedSize(kMemoryWindowSize);
+    m_window->m_memoryWindow->setObjectName("memoryWindow");
+    m_window->m_memoryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+    m_window->m_memoryWindow->resize(kMemoryWindowSize);
+    m_window->m_memoryWindow->setFixedSize(kMemoryWindowSize);
 
-    auto* panel = new QWidget(m_memoryWindow);
+    auto* panel = new QWidget(m_window->m_memoryWindow);
     auto* root = new QVBoxLayout(panel);
     root->setContentsMargins(kMemoryPanelMargins);
     root->setSpacing(kMemoryPanelSpacing);
@@ -84,14 +63,14 @@ void MemoryController::buildMemoryWindow()
     auto* filterLayout = new QHBoxLayout(filterGroup);
     filterLayout->setContentsMargins(kMemoryToolbarGroupMargins);
     filterLayout->setSpacing(kMemoryToolbarGroupSpacing);
-    m_memoryBandFilter = new QComboBox(panel);
-    m_memoryBandFilter->addItem("All", QString());
+    m_window->m_memoryBandFilter = new QComboBox(panel);
+    m_window->m_memoryBandFilter->addItem(QStringLiteral("All"), QString());
     for (const availableBands band : sdr9700::kRadioUiBandOrder)
     {
         const QString label = sdr9700::radioBandShortLabel(band);
-        m_memoryBandFilter->addItem(label, label);
+        m_window->m_memoryBandFilter->addItem(label, label);
     }
-    filterLayout->addWidget(m_memoryBandFilter);
+    filterLayout->addWidget(m_window->m_memoryBandFilter);
     toolbar->addWidget(filterGroup);
 
     auto* selectGroup = new QGroupBox(panel);
@@ -139,68 +118,69 @@ void MemoryController::buildMemoryWindow()
     toolbar->addWidget(transferGroup);
     root->addLayout(toolbar);
 
-    m_memoryTable = new QTableWidget(panel);
-    m_memoryTable->setColumnCount(kMemoryTableColumnCount);
-    m_memoryTable->setHorizontalHeaderLabels(
+    m_window->m_memoryTable = new QTableWidget(panel);
+    m_window->m_memoryTable->setColumnCount(kMemoryTableColumnCount);
+    m_window->m_memoryTable->setHorizontalHeaderLabels(
         {QStringLiteral("#"), QStringLiteral("Name"), QStringLiteral("Frequency (RX)"), QStringLiteral("Shift"),
          QStringLiteral("Tone"), QStringLiteral("Notes"), QStringLiteral("Band Key"), QStringLiteral("ID")});
-    m_memoryTable->setColumnHidden(kMemoryBandKeyColumn, true);
-    m_memoryTable->setColumnHidden(kMemoryIdColumn, true);
-    m_memoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_memoryTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_memoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_memoryTable->setSortingEnabled(false);
-    m_memoryTable->setDragDropMode(QAbstractItemView::NoDragDrop);
-    m_memoryTable->setShowGrid(true);
-    m_memoryTable->setGridStyle(Qt::SolidLine);
-    m_memoryTable->setStyleSheet(QStringLiteral("QTableWidget { gridline-color: %1; }").arg(UiTheme::Color::Border));
-    m_memoryTable->verticalHeader()->setVisible(false);
-    m_memoryTable->horizontalHeader()->setStretchLastSection(false);
-    m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNumberColumn, QHeaderView::Interactive);
-    m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNameColumn, QHeaderView::Interactive);
-    m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFrequencyColumn, QHeaderView::Interactive);
-    m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryShiftColumn, QHeaderView::Interactive);
-    m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryToneColumn, QHeaderView::Interactive);
-    m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNotesColumn, QHeaderView::Stretch);
-    m_memoryTable->setColumnWidth(kMemoryNumberColumn, kMemoryNumberColumnWidth);
-    m_memoryTable->setColumnWidth(kMemoryNameColumn, kMemoryNameColumnWidth);
-    m_memoryTable->setColumnWidth(kMemoryFrequencyColumn, kMemoryFrequencyColumnWidth);
-    m_memoryTable->setColumnWidth(kMemoryShiftColumn, kMemoryShiftColumnWidth);
-    m_memoryTable->setColumnWidth(kMemoryToneColumn, kMemoryToneColumnWidth);
-    root->addWidget(m_memoryTable, 1);
+    m_window->m_memoryTable->setColumnHidden(kMemoryBandKeyColumn, true);
+    m_window->m_memoryTable->setColumnHidden(kMemoryIdColumn, true);
+    m_window->m_memoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_window->m_memoryTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_window->m_memoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_window->m_memoryTable->setSortingEnabled(false);
+    m_window->m_memoryTable->setDragDropMode(QAbstractItemView::NoDragDrop);
+    m_window->m_memoryTable->setShowGrid(true);
+    m_window->m_memoryTable->setGridStyle(Qt::SolidLine);
+    m_window->m_memoryTable->setStyleSheet(
+        QStringLiteral("QTableWidget { gridline-color: %1; }").arg(UiTheme::Color::Border));
+    m_window->m_memoryTable->verticalHeader()->setVisible(false);
+    m_window->m_memoryTable->horizontalHeader()->setStretchLastSection(false);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNumberColumn, QHeaderView::Interactive);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNameColumn, QHeaderView::Interactive);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFrequencyColumn, QHeaderView::Interactive);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryShiftColumn, QHeaderView::Interactive);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryToneColumn, QHeaderView::Interactive);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNotesColumn, QHeaderView::Stretch);
+    m_window->m_memoryTable->setColumnWidth(kMemoryNumberColumn, kMemoryNumberColumnWidth);
+    m_window->m_memoryTable->setColumnWidth(kMemoryNameColumn, kMemoryNameColumnWidth);
+    m_window->m_memoryTable->setColumnWidth(kMemoryFrequencyColumn, kMemoryFrequencyColumnWidth);
+    m_window->m_memoryTable->setColumnWidth(kMemoryShiftColumn, kMemoryShiftColumnWidth);
+    m_window->m_memoryTable->setColumnWidth(kMemoryToneColumn, kMemoryToneColumnWidth);
+    root->addWidget(m_window->m_memoryTable, 1);
 
     auto* footer = new QHBoxLayout;
     footer->setContentsMargins(kNoMargins);
     auto* localNote = new QLabel("These memories are local to SDR9700 and are not saved in the radio.", panel);
     localNote->setStyleSheet("QLabel { color: palette(mid); }");
-    m_closeMemoryWindowOnSelectCheck = new QCheckBox("Close after selection", panel);
-    m_closeMemoryWindowOnSelectCheck->setChecked(
+    m_window->m_closeMemoryWindowOnSelectCheck = new QCheckBox("Close after selection", panel);
+    m_window->m_closeMemoryWindowOnSelectCheck->setChecked(
         AppSettings::instance().value(QString::fromLatin1(kMemoryWindowCloseOnSelectSettingsKey), "True").toBool());
-    m_closeMemoryWindowOnSelectCheck->setToolTip("Close the Memories window after selecting a memory.");
-    m_closeMemoryWindowOnSelectCheck->setStyleSheet("QCheckBox { color: palette(mid); }");
-    m_memoryCountLabel = new QLabel(panel);
-    m_memoryCountLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
+    m_window->m_closeMemoryWindowOnSelectCheck->setToolTip("Close the Memories window after selecting a memory.");
+    m_window->m_closeMemoryWindowOnSelectCheck->setStyleSheet("QCheckBox { color: palette(mid); }");
+    m_window->m_memoryCountLabel = new QLabel(panel);
+    m_window->m_memoryCountLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
     auto* closeButton = new QPushButton("Close", panel);
     footer->addWidget(localNote, 1);
-    footer->addWidget(m_closeMemoryWindowOnSelectCheck);
-    footer->addWidget(m_memoryCountLabel);
+    footer->addWidget(m_window->m_closeMemoryWindowOnSelectCheck);
+    footer->addWidget(m_window->m_memoryCountLabel);
     footer->addWidget(closeButton);
     root->addLayout(footer);
 
-    auto* memTitleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("Memory Manager"), m_memoryWindow);
-    connect(memTitleBar->closeButton(), &QPushButton::clicked, m_memoryWindow, &QWidget::hide);
-    connect(closeButton, &QPushButton::clicked, m_memoryWindow, &QWidget::hide);
+    auto* memTitleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("Memory Manager"), m_window->m_memoryWindow);
+    connect(memTitleBar->closeButton(), &QPushButton::clicked, m_window->m_memoryWindow, &QWidget::hide);
+    connect(closeButton, &QPushButton::clicked, m_window->m_memoryWindow, &QWidget::hide);
 
-    auto* windowLayout = new QVBoxLayout(m_memoryWindow);
+    auto* windowLayout = new QVBoxLayout(m_window->m_memoryWindow);
     windowLayout->setContentsMargins(kNoMargins);
     windowLayout->setSpacing(0);
     windowLayout->addWidget(memTitleBar);
     windowLayout->addWidget(panel, 1);
 
-    connect(m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+    connect(m_window->m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &MemoryController::reloadMemoryTable);
-    connect(m_closeMemoryWindowOnSelectCheck, &QCheckBox::toggled, this, [](bool checked)
+    connect(m_window->m_closeMemoryWindowOnSelectCheck, &QCheckBox::toggled, this, [](bool checked)
             { AppSettings::instance().setValue(QString::fromLatin1(kMemoryWindowCloseOnSelectSettingsKey), checked); });
     connect(selectButton, &QPushButton::clicked, this, &MemoryController::selectCheckedMemory);
     connect(upButton, &QPushButton::clicked, this, &MemoryController::moveSelectedMemoryUp);
@@ -216,7 +196,7 @@ void MemoryController::buildMemoryWindow()
                 if (result.success)
                 {
                     reloadMemoryTable();
-                    showToast(QString("Imported %1 memories").arg(result.importedCount));
+                    m_window->showToast(QStringLiteral("Imported %1 memories").arg(result.importedCount));
                 }
             });
     connect(exportButton, &QPushButton::clicked, this,
@@ -224,7 +204,7 @@ void MemoryController::buildMemoryWindow()
             {
                 if (ConfigurationManager::exportMemories(m_window))
                 {
-                    showToast("Memories exported");
+                    m_window->showToast(QStringLiteral("Memories exported"));
                 }
             });
 
@@ -233,28 +213,28 @@ void MemoryController::buildMemoryWindow()
 
 void MemoryController::showMemoryWindow()
 {
-    if (!m_memoryWindow)
+    if (!m_window->m_memoryWindow)
     {
         return;
     }
     reloadMemoryTable();
-    static_cast<sdr9700::ui::UtilityWindow*>(m_memoryWindow)->showCentered();
+    static_cast<sdr9700::ui::UtilityWindow*>(m_window->m_memoryWindow)->showCentered();
 }
 
 QString MemoryController::selectedMemoryId() const
 {
-    if (!m_memoryTable)
+    if (!m_window->m_memoryTable)
     {
         return QString();
     }
 
-    const int row = m_memoryTable->currentRow();
+    const int row = m_window->m_memoryTable->currentRow();
     if (row < 0)
     {
         return QString();
     }
 
-    const auto* idItem = m_memoryTable->item(row, kMemoryIdColumn);
+    const auto* idItem = m_window->m_memoryTable->item(row, kMemoryIdColumn);
     return idItem ? idItem->text() : QString();
 }
 
@@ -276,7 +256,7 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
     {
         return;
     }
-    if (m_controlsLocked)
+    if (m_window->m_controlsLocked)
     {
         if (showDialogOnFailure)
         {
@@ -284,7 +264,7 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
         }
         else
         {
-            showToast("Controls are locked", 4000, MainWindow::ToastKind::Warning);
+            m_window->showToast(QStringLiteral("Controls are locked"), 4000, MainWindow::ToastKind::Warning);
         }
         return;
     }
@@ -296,7 +276,7 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
     {
         return;
     }
-    if (!m_model->isReady() || !m_vfo)
+    if (!m_window->m_model->isReady() || !m_window->m_vfo)
     {
         if (showDialogOnFailure)
         {
@@ -305,44 +285,46 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
         }
         else
         {
-            showToast("Connect to the radio before selecting a memory", 4000, MainWindow::ToastKind::Warning);
+            m_window->showToast(QStringLiteral("Connect to the radio before selecting a memory"), 4000,
+                                MainWindow::ToastKind::Warning);
         }
         return;
     }
 
     const MemoryRecord& memory = *it;
-    setActiveMemory(memory.id, memory.name, memory.receiveHz, memory.duplexMode, memory.offsetHz, memory.toneMode,
-                    memory.toneValue);
-    m_applyingMemorySelection = true;
-    const int generation = ++m_memorySelectionGeneration;
-    m_vfo->setFrequencyHz(memory.receiveHz);
-    m_vfo->setRepeaterOffsetHz(memory.offsetHz);
-    m_vfo->setDuplexMode(static_cast<duplexMode_t>(memory.duplexMode));
+    m_window->setActiveMemory(memory.id, memory.name, memory.receiveHz, memory.duplexMode, memory.offsetHz,
+                              memory.toneMode, memory.toneValue);
+    m_window->m_applyingMemorySelection = true;
+    const int generation = ++m_window->m_memorySelectionGeneration;
+    m_window->m_vfo->setFrequencyHz(memory.receiveHz);
+    m_window->m_vfo->setRepeaterOffsetHz(memory.offsetHz);
+    m_window->m_vfo->setDuplexMode(static_cast<duplexMode_t>(memory.duplexMode));
     if (isDtcsToneMode(static_cast<rptAccessTxRx_t>(memory.toneMode)))
     {
-        m_vfo->setDtcsCode(memory.toneValue);
+        m_window->m_vfo->setDtcsCode(memory.toneValue);
     }
     else if (memory.toneMode != ratrNN)
     {
-        m_vfo->setToneFrequency(memory.toneValue);
+        m_window->m_vfo->setToneFrequency(memory.toneValue);
     }
-    m_vfo->setToneAccessMode(static_cast<rptAccessTxRx_t>(memory.toneMode));
+    m_window->m_vfo->setToneAccessMode(static_cast<rptAccessTxRx_t>(memory.toneMode));
     // Release immediately if the radio was already at every correct setting (no callbacks will fire).
-    checkIfMemorySelectionComplete();
+    m_window->checkIfMemorySelectionComplete();
     // Fallback: release the guard after 3 s in case the radio never confirms.
     QTimer::singleShot(3000, this,
                        [this, generation]()
                        {
-                           if (m_memorySelectionGeneration != generation)
+                           if (m_window->m_memorySelectionGeneration != generation)
                            {
                                return;
                            }
-                           m_applyingMemorySelection = false;
+                           m_window->m_applyingMemorySelection = false;
                        });
-    showToast(QString("Selected memory: %1").arg(memory.name));
-    if (m_memoryWindow && m_closeMemoryWindowOnSelectCheck && m_closeMemoryWindowOnSelectCheck->isChecked())
+    m_window->showToast(QStringLiteral("Selected memory: %1").arg(memory.name));
+    if (m_window->m_memoryWindow && m_window->m_closeMemoryWindowOnSelectCheck &&
+        m_window->m_closeMemoryWindowOnSelectCheck->isChecked())
     {
-        m_memoryWindow->hide();
+        m_window->m_memoryWindow->hide();
     }
 }
 
@@ -388,16 +370,16 @@ void MemoryController::copySelectedMemory()
     }
     reloadMemoryTable();
 
-    for (int row = 0; row < m_memoryTable->rowCount(); ++row)
+    for (int row = 0; row < m_window->m_memoryTable->rowCount(); ++row)
     {
-        const auto* idItem = m_memoryTable->item(row, kMemoryIdColumn);
+        const auto* idItem = m_window->m_memoryTable->item(row, kMemoryIdColumn);
         if (idItem && idItem->text() == copy.id)
         {
-            m_memoryTable->selectRow(row);
+            m_window->m_memoryTable->selectRow(row);
             break;
         }
     }
-    showToast(QString("Copied memory: %1").arg(copy.name));
+    m_window->showToast(QStringLiteral("Copied memory: %1").arg(copy.name));
 }
 
 void MemoryController::removeSelectedMemory()
@@ -417,7 +399,7 @@ void MemoryController::removeSelectedMemory()
         return;
     }
 
-    if (QMessageBox::question(m_window, "Remove Memory", QString("Remove memory \"%1\"?").arg(it->name)) !=
+    if (QMessageBox::question(m_window, "Remove Memory", QStringLiteral("Remove memory \"%1\"?").arg(it->name)) !=
         QMessageBox::Yes)
     {
         return;
@@ -430,7 +412,7 @@ void MemoryController::removeSelectedMemory()
         return;
     }
     reloadMemoryTable();
-    showToast("Memory removed");
+    m_window->showToast(QStringLiteral("Memory removed"));
 }
 
 void MemoryController::moveSelectedMemoryUp()
@@ -453,7 +435,8 @@ void MemoryController::moveSelectedMemory(int direction)
     }
 
     QVector<MemoryRecord> memories = loadMemories();
-    const QString bandFilter = m_memoryBandFilter ? m_memoryBandFilter->currentData().toString() : QString();
+    const QString bandFilter =
+        m_window->m_memoryBandFilter ? m_window->m_memoryBandFilter->currentData().toString() : QString();
     if (!bandFilter.isEmpty())
     {
         QMessageBox::information(m_window, "Move Memory", "Switch to All memories before reordering.");
@@ -490,12 +473,12 @@ void MemoryController::moveSelectedMemory(int direction)
     }
     reloadMemoryTable();
 
-    for (int row = 0; row < m_memoryTable->rowCount(); ++row)
+    for (int row = 0; row < m_window->m_memoryTable->rowCount(); ++row)
     {
-        const auto* idItem = m_memoryTable->item(row, kMemoryIdColumn);
+        const auto* idItem = m_window->m_memoryTable->item(row, kMemoryIdColumn);
         if (idItem && idItem->text() == id)
         {
-            m_memoryTable->selectRow(row);
+            m_window->m_memoryTable->selectRow(row);
             break;
         }
     }
@@ -646,26 +629,26 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
                                 toneOptionCombo, setTonePick, populateToneValues, populateOffsetOptions,
                                 setOffsetSelection, updateCustomOffsetVisibility, updateToneValueVisibility]()
     {
-        if (!m_model->isReady() || !m_vfo)
+        if (!m_window->m_model->isReady() || !m_window->m_vfo)
         {
             QMessageBox::information(m_window, "Copy Current Settings",
                                      "Connect to the radio and wait for sync before copying current settings.");
             return;
         }
 
-        frequencyEdit->setText(memoryFrequencyLabel(m_vfo->frequencyHz()));
+        frequencyEdit->setText(memoryFrequencyLabel(m_window->m_vfo->frequencyHz()));
         if (nameEdit->text().trimmed().isEmpty())
         {
-            nameEdit->setText(memoryFrequencyLabel(m_vfo->frequencyHz()));
+            nameEdit->setText(memoryFrequencyLabel(m_window->m_vfo->frequencyHz()));
         }
         populateOffsetOptions();
-        setOffsetSelection(m_duplexMode, m_repeaterOffsetHz);
+        setOffsetSelection(m_window->m_duplexMode, m_window->m_repeaterOffsetHz);
         updateCustomOffsetVisibility();
-        toneOptionCombo->setCurrentIndex(qMax(0, toneOptionCombo->findData(m_toneAccessMode)));
+        toneOptionCombo->setCurrentIndex(qMax(0, toneOptionCombo->findData(m_window->m_toneAccessMode)));
         populateToneValues();
         updateToneValueVisibility();
-        const bool isDtcs = isDtcsToneMode(m_toneAccessMode);
-        const ushort toneValue = isDtcs ? m_dtcsCode : m_toneFrequency;
+        const bool isDtcs = isDtcsToneMode(m_window->m_toneAccessMode);
+        const ushort toneValue = isDtcs ? m_window->m_dtcsCode : m_window->m_toneFrequency;
         const QString toneText = isDtcs ? dtcsCodeLabel(toneValue) : toneFrequencyLabel(toneValue);
         setTonePick(toneValue, toneText);
     };
@@ -849,7 +832,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
                 {
                     QMessageBox::warning(
                         &dialog, "Add/Edit Memory",
-                        QString("Memory names are limited to %1 characters.").arg(kMemoryNameMaxChars));
+                        QStringLiteral("Memory names are limited to %1 characters.").arg(kMemoryNameMaxChars));
                     nameEdit->setFocus();
                     nameEdit->selectAll();
                     return;
@@ -892,7 +875,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
                 dialog.accept();
             });
 
-    centerPopupWindow(&dialog);
+    m_window->centerPopupWindow(&dialog);
     if (dialog.exec() != QDialog::Accepted || !submitted)
     {
         return;
@@ -919,25 +902,26 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     }
     reloadMemoryTable();
     showMemoryWindow();
-    showToast(editing ? "Memory updated" : "Memory stored");
+    m_window->showToast(editing ? QStringLiteral("Memory updated") : QStringLiteral("Memory stored"));
 }
 
 void MemoryController::reloadMemoryTable()
 {
-    const QString bandFilter = m_memoryBandFilter ? m_memoryBandFilter->currentData().toString() : QString();
+    const QString bandFilter =
+        m_window->m_memoryBandFilter ? m_window->m_memoryBandFilter->currentData().toString() : QString();
     const QVector<MemoryRecord> memories = loadMemories();
-    if (m_memoryPanel)
+    if (m_window->m_memoryPanel)
     {
-        m_memoryPanel->setMemories(memories, m_activeMemoryId);
+        m_window->m_memoryPanel->setMemories(memories, m_window->m_activeMemoryId);
     }
 
-    if (!m_memoryTable)
+    if (!m_window->m_memoryTable)
     {
         return;
     }
 
-    m_memoryTable->setSortingEnabled(false);
-    m_memoryTable->setRowCount(0);
+    m_window->m_memoryTable->setSortingEnabled(false);
+    m_window->m_memoryTable->setRowCount(0);
     int visibleCount = 0;
     for (const MemoryRecord& memory : memories)
     {
@@ -946,13 +930,13 @@ void MemoryController::reloadMemoryTable()
             continue;
         }
 
-        const int row = m_memoryTable->rowCount();
-        m_memoryTable->insertRow(row);
+        const int row = m_window->m_memoryTable->rowCount();
+        m_window->m_memoryTable->insertRow(row);
 
         auto setItem = [this, row](int column, const QString& text)
         {
             auto* item = new QTableWidgetItem(text);
-            m_memoryTable->setItem(row, column, item);
+            m_window->m_memoryTable->setItem(row, column, item);
             return item;
         };
 
@@ -973,17 +957,20 @@ void MemoryController::reloadMemoryTable()
         setItem(kMemoryIdColumn, memory.id);
         ++visibleCount;
     }
-    if (m_memoryCountLabel)
+    if (m_window->m_memoryCountLabel)
     {
         const int totalCount = memories.size();
         if (bandFilter.isEmpty())
         {
-            m_memoryCountLabel->setText(
-                QString("%1 %2 total").arg(totalCount).arg(totalCount == 1 ? "memory" : "memories"));
+            m_window->m_memoryCountLabel->setText(
+                QStringLiteral("%1 %2 total")
+                    .arg(totalCount)
+                    .arg(totalCount == 1 ? QStringLiteral("memory") : QStringLiteral("memories")));
         }
         else
         {
-            m_memoryCountLabel->setText(QString("%1 filtered / %2 total").arg(visibleCount).arg(totalCount));
+            m_window->m_memoryCountLabel->setText(
+                QStringLiteral("%1 filtered / %2 total").arg(visibleCount).arg(totalCount));
         }
     }
 }

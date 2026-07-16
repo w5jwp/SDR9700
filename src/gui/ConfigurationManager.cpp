@@ -150,21 +150,6 @@ bool objectValue(const QJsonValue& value, QJsonValue* normalized)
     return false;
 }
 
-QJsonObject sourceSettingsObject(const QJsonDocument& doc)
-{
-    if (!doc.isObject())
-    {
-        return {};
-    }
-
-    const QJsonObject root = doc.object();
-    if (root.value(QStringLiteral("settings")).isObject())
-    {
-        return root.value(QStringLiteral("settings")).toObject();
-    }
-    return root;
-}
-
 void insertCleanSetting(QJsonObject* group, const QJsonObject& source, const QString& key,
                         bool (*validator)(const QJsonValue&, QJsonValue*))
 {
@@ -261,7 +246,7 @@ QJsonObject cleanIcomRC28ButtonMapping(const QJsonObject& source)
 
 QJsonObject cleanConfigurationSettings(const QJsonDocument& doc)
 {
-    const QJsonObject source = sourceSettingsObject(doc);
+    const QJsonObject source = doc.isObject() ? doc.object() : QJsonObject{};
     QJsonObject settings;
 
     const QJsonObject radioChooserSource = source.value(QStringLiteral("radioChooser")).toObject();

@@ -8,8 +8,6 @@ class MainWindow;
 
 class RadioCommandController : public QObject
 {
-    Q_OBJECT
-
   public:
     explicit RadioCommandController(MainWindow* window);
 

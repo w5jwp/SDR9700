@@ -19,121 +19,93 @@
 
 using namespace sdr9700::ui::main_window;
 
-#define statusBar m_window->statusBar
-#define m_txIndicator m_window->m_txIndicator
-#define m_txActive m_window->m_txActive
-#define m_txDurationTimer m_window->m_txDurationTimer
-#define m_titleBar m_window->m_titleBar
-#define m_vfoPanel m_window->m_vfoPanel
-#define m_meterSnapshot m_window->m_meterSnapshot
-#define m_txSwrLabel m_window->m_txSwrLabel
-#define m_metersDialog m_window->m_metersDialog
-#define m_model m_window->m_model
-#define m_dateLabel m_window->m_dateLabel
-#define m_timeLabel m_window->m_timeLabel
-#define m_statusClockUtc m_window->m_statusClockUtc
-#define m_cpuLabel m_window->m_cpuLabel
-#define m_memLabel m_window->m_memLabel
-#define m_prevCpuTotal m_window->m_prevCpuTotal
-#define m_prevCpuIdle m_window->m_prevCpuIdle
-#define m_toastLabel m_window->m_toastLabel
-#define m_statusLabel m_window->m_statusLabel
-#define m_connDetailLabel m_window->m_connDetailLabel
-#define m_connStateName m_window->m_connStateName
-#define m_connStateLabel m_window->m_connStateLabel
-#define m_netTitleLabel m_window->m_netTitleLabel
-#define m_netQualLabel m_window->m_netQualLabel
-#define m_toastTimer m_window->m_toastTimer
-#define m_txElapsed m_window->m_txElapsed
-#define updateIcomRC28Leds m_window->updateIcomRC28Leds
-#define showRadioChooserDialog m_window->showRadioChooserDialog
-#define updateConnectionTooltip m_window->updateConnectionTooltip
 
 StatusBarController::StatusBarController(MainWindow* window) : QObject(window), m_window(window) {}
 
 void StatusBarController::updateTxIndicator(bool on)
 {
-    if (!m_txIndicator)
+    if (!m_window->m_txIndicator)
     {
         return;
     }
-    if (m_txActive == on && !m_txIndicator->styleSheet().isEmpty())
+    if (m_window->m_txActive == on && !m_window->m_txIndicator->styleSheet().isEmpty())
     {
-        if (!on && m_txDurationTimer && m_txDurationTimer->isActive())
+        if (!on && m_window->m_txDurationTimer && m_window->m_txDurationTimer->isActive())
         {
-            m_txDurationTimer->stop();
-            if (m_titleBar)
+            m_window->m_txDurationTimer->stop();
+            if (m_window->m_titleBar)
             {
-                m_titleBar->setTxDurationActive(false);
+                m_window->m_titleBar->setTxDurationActive(false);
             }
         }
         return;
     }
-    m_txActive = on;
-    updateIcomRC28Leds();
-    if (m_vfoPanel)
+    m_window->m_txActive = on;
+    m_window->updateIcomRC28Leds();
+    if (m_window->m_vfoPanel)
     {
-        m_vfoPanel->setTransmitPowerMode(on);
+        m_window->m_vfoPanel->setTransmitPowerMode(on);
         if (on)
         {
-            m_vfoPanel->setTransmitPowerMeter(0.0);
+            m_window->m_vfoPanel->setTransmitPowerMeter(0.0);
         }
         else
         {
-            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_meterSnapshot.sMeter * 100 / 255), 100));
+            m_window->m_vfoPanel->setSMeterValue(
+                qBound(0, static_cast<int>(m_window->m_meterSnapshot.sMeter * 100 / 255), 100));
         }
     }
     if (on)
     {
-        m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::Danger, true));
-        if (m_txSwrLabel)
+        m_window->m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::Danger, true));
+        if (m_window->m_txSwrLabel)
         {
-            m_txSwrLabel->setText(
+            m_window->m_txSwrLabel->setText(
                 QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusSecondary));
         }
-        m_txElapsed.start();
+        m_window->m_txElapsed.start();
         updateTxDurationLabel();
-        if (m_txDurationTimer)
+        if (m_window->m_txDurationTimer)
         {
-            m_txDurationTimer->start();
+            m_window->m_txDurationTimer->start();
         }
     }
     else
     {
-        m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
-        if (m_txDurationTimer)
+        m_window->m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
+        if (m_window->m_txDurationTimer)
         {
-            m_txDurationTimer->stop();
+            m_window->m_txDurationTimer->stop();
         }
-        if (m_txSwrLabel)
+        if (m_window->m_txSwrLabel)
         {
-            m_txSwrLabel->setText(
+            m_window->m_txSwrLabel->setText(
                 QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusLabel));
         }
-        if (m_titleBar)
+        if (m_window->m_titleBar)
         {
-            m_titleBar->setTxDurationActive(false);
+            m_window->m_titleBar->setTxDurationActive(false);
         }
-        m_meterSnapshot.powerWatts = 0.0;
-        m_meterSnapshot.swr = 1.0;
-        m_meterSnapshot.alc = 0.0;
-        m_meterSnapshot.compressionDb = 0.0;
-        m_meterSnapshot.voltageVolts = 0.0;
-        m_meterSnapshot.currentAmps = 0.0;
-        m_meterSnapshot.powerValid = false;
-        m_meterSnapshot.swrValid = false;
-        m_meterSnapshot.alcValid = false;
-        m_meterSnapshot.compressionValid = false;
-        m_meterSnapshot.voltageValid = false;
-        m_meterSnapshot.currentValid = false;
-        m_meterSnapshot.txAudioPeak = 0;
-        m_meterSnapshot.txAudioRms = 0;
-        if (m_metersDialog)
+        m_window->m_meterSnapshot.powerWatts = 0.0;
+        m_window->m_meterSnapshot.swr = 1.0;
+        m_window->m_meterSnapshot.alc = 0.0;
+        m_window->m_meterSnapshot.compressionDb = 0.0;
+        m_window->m_meterSnapshot.voltageVolts = 0.0;
+        m_window->m_meterSnapshot.currentAmps = 0.0;
+        m_window->m_meterSnapshot.powerValid = false;
+        m_window->m_meterSnapshot.swrValid = false;
+        m_window->m_meterSnapshot.alcValid = false;
+        m_window->m_meterSnapshot.compressionValid = false;
+        m_window->m_meterSnapshot.voltageValid = false;
+        m_window->m_meterSnapshot.currentValid = false;
+        m_window->m_meterSnapshot.txAudioPeak = 0;
+        m_window->m_meterSnapshot.txAudioRms = 0;
+        if (m_window->m_metersDialog)
         {
-            m_metersDialog->resetMeters();
-            if (m_model && m_model->isReady())
+            m_window->m_metersDialog->resetMeters();
+            if (m_window->m_model && m_window->m_model->isReady())
             {
-                m_metersDialog->setSMeter(m_meterSnapshot.sMeter);
+                m_window->m_metersDialog->setSMeter(m_window->m_meterSnapshot.sMeter);
             }
         }
     }
@@ -141,49 +113,50 @@ void StatusBarController::updateTxIndicator(bool on)
 
 void StatusBarController::updateTxDurationLabel()
 {
-    if (!m_titleBar)
+    if (!m_window->m_titleBar)
     {
         return;
     }
 
-    const qint64 secs = m_txElapsed.elapsed() / 1000;
+    const qint64 secs = m_window->m_txElapsed.elapsed() / 1000;
     const int h = int(secs / 3600);
     const int m = int((secs % 3600) / 60);
     const int s = int(secs % 60);
-    m_titleBar->setTxDuration(QStringLiteral("%1:%2:%3")
-                                  .arg(h, 2, 10, QLatin1Char('0'))
-                                  .arg(m, 2, 10, QLatin1Char('0'))
-                                  .arg(s, 2, 10, QLatin1Char('0')),
-                              m_txActive);
+    m_window->m_titleBar->setTxDuration(QStringLiteral("%1:%2:%3")
+                                            .arg(h, 2, 10, QLatin1Char('0'))
+                                            .arg(m, 2, 10, QLatin1Char('0'))
+                                            .arg(s, 2, 10, QLatin1Char('0')),
+                                        m_window->m_txActive);
 }
 
 void StatusBarController::updateStatusClock()
 {
-    if (!m_dateLabel || !m_timeLabel)
+    if (!m_window->m_dateLabel || !m_window->m_timeLabel)
     {
         return;
     }
 
-    const QDateTime now = m_statusClockUtc ? QDateTime::currentDateTimeUtc() : QDateTime::currentDateTime();
-    m_dateLabel->setText(now.toString("yyyy-MM-dd"));
-    m_timeLabel->setText(m_statusClockUtc ? now.toString("HH:mm:ss") + "Z" : now.toString("HH:mm:ss"));
+    const QDateTime now = m_window->m_statusClockUtc ? QDateTime::currentDateTimeUtc() : QDateTime::currentDateTime();
+    m_window->m_dateLabel->setText(now.toString("yyyy-MM-dd"));
+    m_window->m_timeLabel->setText(m_window->m_statusClockUtc ? now.toString("HH:mm:ss") + "Z"
+                                                              : now.toString("HH:mm:ss"));
 
-    const QString tooltip = m_statusClockUtc ? QStringLiteral("UTC Time Mode\nClick to show local time.")
-                                             : QStringLiteral("Local Time Mode\nClick to show UTC time.");
-    m_dateLabel->setToolTip(tooltip);
-    m_timeLabel->setToolTip(tooltip);
+    const QString tooltip = m_window->m_statusClockUtc ? QStringLiteral("UTC Time Mode\nClick to show local time.")
+                                                       : QStringLiteral("Local Time Mode\nClick to show UTC time.");
+    m_window->m_dateLabel->setToolTip(tooltip);
+    m_window->m_timeLabel->setToolTip(tooltip);
 }
 
 void StatusBarController::toggleStatusClockMode()
 {
-    m_statusClockUtc = !m_statusClockUtc;
-    AppSettings::instance().setValue("statusClockUTC", m_statusClockUtc);
+    m_window->m_statusClockUtc = !m_window->m_statusClockUtc;
+    AppSettings::instance().setValue("statusClockUTC", m_window->m_statusClockUtc);
     updateStatusClock();
 }
 
 void StatusBarController::updateSystemStats()
 {
-    if (!m_cpuLabel || !m_memLabel)
+    if (!m_window->m_cpuLabel || !m_window->m_memLabel)
     {
         return;
     }
@@ -225,19 +198,20 @@ void StatusBarController::updateSystemStats()
                 const quint64 total = std::accumulate(vals.cbegin(), vals.cend(), quint64{0});
 
                 double cpuPct = 0.0;
-                if (m_prevCpuTotal > 0 && total > m_prevCpuTotal)
+                if (m_window->m_prevCpuTotal > 0 && total > m_window->m_prevCpuTotal)
                 {
-                    const quint64 dTotal = total - m_prevCpuTotal;
-                    const quint64 dIdle = idle - m_prevCpuIdle;
+                    const quint64 dTotal = total - m_window->m_prevCpuTotal;
+                    const quint64 dIdle = idle - m_window->m_prevCpuIdle;
                     cpuPct = 100.0 * static_cast<double>(dTotal - dIdle) / static_cast<double>(dTotal);
                     cpuPct = qBound(0.0, cpuPct, 100.0);
                 }
-                m_prevCpuTotal = total;
-                m_prevCpuIdle = idle;
+                m_window->m_prevCpuTotal = total;
+                m_window->m_prevCpuIdle = idle;
 
                 const int cpuPctInt = static_cast<int>(cpuPct);
-                m_cpuLabel->setText(QStringLiteral("<span style='color:%1'>%2%</span>")
-                                        .arg(QLatin1String(cpuColor(cpuPctInt)), QString::number(cpuPct, 'f', 1)));
+                m_window->m_cpuLabel->setText(
+                    QStringLiteral("<span style='color:%1'>%2%</span>")
+                        .arg(QLatin1String(cpuColor(cpuPctInt)), QString::number(cpuPct, 'f', 1)));
             }
         }
     }
@@ -259,8 +233,8 @@ void StatusBarController::updateSystemStats()
                     const double rssGb = parts[1].toDouble() / (1024.0 * 1024.0);
                     const QString rssStr = rssGb >= 1.0 ? QStringLiteral("%1G").arg(rssGb, 0, 'f', 1)
                                                         : QStringLiteral("%1M").arg(static_cast<int>(rssGb * 1024));
-                    m_memLabel->setText(QStringLiteral("<span style='color:%1'>%2</span>")
-                                            .arg(QLatin1String(UiTheme::Color::TextStatusSecondary), rssStr));
+                    m_window->m_memLabel->setText(QStringLiteral("<span style='color:%1'>%2</span>")
+                                                      .arg(QLatin1String(UiTheme::Color::TextStatusSecondary), rssStr));
                 }
             }
         }
@@ -269,12 +243,12 @@ void StatusBarController::updateSystemStats()
 
 void StatusBarController::buildStatusBar()
 {
-    statusBar()->setFixedHeight(46);
-    statusBar()->setSizeGripEnabled(false);
-    statusBar()->setStyleSheet(QStringLiteral("QStatusBar { background: %1; border-top: 1px solid %2; }"
-                                              "QStatusBar::item { border: none; }"
-                                              "QLabel { background: transparent; }")
-                                   .arg(UiTheme::Color::MenuBar, UiTheme::Color::StatusBorder));
+    m_window->statusBar()->setFixedHeight(46);
+    m_window->statusBar()->setSizeGripEnabled(false);
+    m_window->statusBar()->setStyleSheet(QStringLiteral("QStatusBar { background: %1; border-top: 1px solid %2; }"
+                                                        "QStatusBar::item { border: none; }"
+                                                        "QLabel { background: transparent; }")
+                                             .arg(UiTheme::Color::MenuBar, UiTheme::Color::StatusBorder));
 
     auto* container = new QWidget(m_window);
     auto* hbox = new QHBoxLayout(container);
@@ -362,32 +336,32 @@ void StatusBarController::buildStatusBar()
     transmitStatusLayout->setSpacing(0);
     transmitStatusLayout->setAlignment(Qt::AlignVCenter);
 
-    m_txIndicator = new QLabel("TX", m_window);
-    m_txIndicator->setAlignment(Qt::AlignCenter);
-    m_txIndicator->setToolTip(txTooltip);
+    m_window->m_txIndicator = new QLabel(QStringLiteral("TX"), m_window);
+    m_window->m_txIndicator->setAlignment(Qt::AlignCenter);
+    m_window->m_txIndicator->setToolTip(txTooltip);
     updateTxIndicator(false);
 
-    m_txSwrLabel = new QLabel(
+    m_window->m_txSwrLabel = new QLabel(
         QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusLabel), m_window);
-    m_txSwrLabel->setTextFormat(Qt::RichText);
-    m_txSwrLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
-    m_txSwrLabel->setAlignment(Qt::AlignCenter);
-    m_txSwrLabel->setToolTip(QStringLiteral("Transmit SWR from the radio."));
+    m_window->m_txSwrLabel->setTextFormat(Qt::RichText);
+    m_window->m_txSwrLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
+    m_window->m_txSwrLabel->setAlignment(Qt::AlignCenter);
+    m_window->m_txSwrLabel->setToolTip(QStringLiteral("Transmit SWR from the radio."));
 
-    transmitStatusLayout->addWidget(m_txIndicator);
-    transmitStatusLayout->addWidget(m_txSwrLabel);
+    transmitStatusLayout->addWidget(m_window->m_txIndicator);
+    transmitStatusLayout->addWidget(m_window->m_txSwrLabel);
     hbox->addWidget(transmitStatusPanel);
     hbox->addSpacing(16);
 
-    m_txDurationTimer = new QTimer(m_window);
-    m_txDurationTimer->setInterval(250);
-    connect(m_txDurationTimer, &QTimer::timeout, this, &StatusBarController::updateTxDurationLabel);
+    m_window->m_txDurationTimer = new QTimer(m_window);
+    m_window->m_txDurationTimer->setInterval(250);
+    connect(m_window->m_txDurationTimer, &QTimer::timeout, this, &StatusBarController::updateTxDurationLabel);
 
-    m_toastLabel = new QLabel("", m_window);
-    m_toastLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusPrimary));
-    m_toastLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    hbox->addWidget(m_toastLabel);
-    m_statusLabel = m_toastLabel;
+    m_window->m_toastLabel = new QLabel(QString(), m_window);
+    m_window->m_toastLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusPrimary));
+    m_window->m_toastLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    hbox->addWidget(m_window->m_toastLabel);
+    m_window->m_statusLabel = m_window->m_toastLabel;
 
     hbox->addStretch(1);
 
@@ -398,26 +372,26 @@ void StatusBarController::buildStatusBar()
     connectionStatusLayout->setSpacing(0);
     connectionStatusLayout->setAlignment(Qt::AlignVCenter);
 
-    m_connDetailLabel = new QLabel("Radio", m_window);
-    m_connDetailLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
-    m_connDetailLabel->setAlignment(Qt::AlignCenter);
+    m_window->m_connDetailLabel = new QLabel(QStringLiteral("Radio"), m_window);
+    m_window->m_connDetailLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
+    m_window->m_connDetailLabel->setAlignment(Qt::AlignCenter);
 
-    m_connStateName = QStringLiteral("Disconnected");
-    m_connStateLabel = new QLabel(
+    m_window->m_connStateName = QStringLiteral("Disconnected");
+    m_window->m_connStateLabel = new QLabel(
         QStringLiteral("<span style='color:%1'>Disconnected</span>").arg(UiTheme::Color::TextStatusLabel), m_window);
-    m_connStateLabel->setTextFormat(Qt::RichText);
-    m_connStateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
-    m_connStateLabel->setAlignment(Qt::AlignCenter);
+    m_window->m_connStateLabel->setTextFormat(Qt::RichText);
+    m_window->m_connStateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
+    m_window->m_connStateLabel->setAlignment(Qt::AlignCenter);
 
     connectionStatusPanel->setCursor(Qt::PointingHandCursor);
     connectionStatusPanel->setAccessibleName("Radio connection");
     connectionStatusPanel->setAccessibleDescription("Click to open the radio chooser.");
-    connectionStatusPanel->onClicked = [this]() { showRadioChooserDialog(); };
+    connectionStatusPanel->onClicked = [this]() { m_window->showRadioChooserDialog(); };
 
-    connectionStatusLayout->addWidget(m_connDetailLabel);
-    connectionStatusLayout->addWidget(m_connStateLabel);
+    connectionStatusLayout->addWidget(m_window->m_connDetailLabel);
+    connectionStatusLayout->addWidget(m_window->m_connStateLabel);
     hbox->addWidget(connectionStatusPanel);
-    updateConnectionTooltip();
+    m_window->updateConnectionTooltip();
 
     hbox->addWidget(makeSep());
 
@@ -427,15 +401,15 @@ void StatusBarController::buildStatusBar()
     networkStatusLayout->setContentsMargins(0, 0, 0, 0);
     networkStatusLayout->setSpacing(0);
     networkStatusLayout->setAlignment(Qt::AlignVCenter);
-    m_netTitleLabel = new QLabel("Network", m_window);
-    m_netTitleLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
-    m_netTitleLabel->setAlignment(Qt::AlignCenter);
-    m_netQualLabel = new QLabel("—", m_window);
-    m_netQualLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
-    m_netQualLabel->setAlignment(Qt::AlignCenter);
-    m_netQualLabel->setTextFormat(Qt::RichText);
-    networkStatusLayout->addWidget(m_netTitleLabel);
-    networkStatusLayout->addWidget(m_netQualLabel);
+    m_window->m_netTitleLabel = new QLabel(QStringLiteral("Network"), m_window);
+    m_window->m_netTitleLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
+    m_window->m_netTitleLabel->setAlignment(Qt::AlignCenter);
+    m_window->m_netQualLabel = new QLabel("—", m_window);
+    m_window->m_netQualLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
+    m_window->m_netQualLabel->setAlignment(Qt::AlignCenter);
+    m_window->m_netQualLabel->setTextFormat(Qt::RichText);
+    networkStatusLayout->addWidget(m_window->m_netTitleLabel);
+    networkStatusLayout->addWidget(m_window->m_netQualLabel);
     hbox->addWidget(networkStatusPanel);
 
     hbox->addWidget(makeSep());
@@ -467,9 +441,9 @@ void StatusBarController::buildStatusBar()
         cpuStatusLayout->setAlignment(Qt::AlignVCenter);
 
         auto* cpuTitleLabel = makeStatusTitle(QStringLiteral("Processor"));
-        m_cpuLabel = makeStatusValue();
+        m_window->m_cpuLabel = makeStatusValue();
         cpuStatusLayout->addWidget(cpuTitleLabel);
-        cpuStatusLayout->addWidget(m_cpuLabel);
+        cpuStatusLayout->addWidget(m_window->m_cpuLabel);
         hbox->addWidget(cpuStatusPanel);
     }
 
@@ -485,9 +459,9 @@ void StatusBarController::buildStatusBar()
         memoryStatusLayout->setAlignment(Qt::AlignVCenter);
 
         auto* memoryTitleLabel = makeStatusTitle(QStringLiteral("Memory"));
-        m_memLabel = makeStatusValue();
+        m_window->m_memLabel = makeStatusValue();
         memoryStatusLayout->addWidget(memoryTitleLabel);
-        memoryStatusLayout->addWidget(m_memLabel);
+        memoryStatusLayout->addWidget(m_window->m_memLabel);
         hbox->addWidget(memoryStatusPanel);
     }
 
@@ -504,35 +478,35 @@ void StatusBarController::buildStatusBar()
     clockStatusLayout->setSpacing(0);
     clockStatusLayout->setAlignment(Qt::AlignVCenter);
 
-    m_dateLabel = new QLabel("", m_window);
-    m_dateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
-    m_dateLabel->setAlignment(Qt::AlignCenter);
-    m_timeLabel = new QLabel("", m_window);
-    m_timeLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
-    m_timeLabel->setAlignment(Qt::AlignCenter);
+    m_window->m_dateLabel = new QLabel(QString(), m_window);
+    m_window->m_dateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
+    m_window->m_dateLabel->setAlignment(Qt::AlignCenter);
+    m_window->m_timeLabel = new QLabel(QString(), m_window);
+    m_window->m_timeLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
+    m_window->m_timeLabel->setAlignment(Qt::AlignCenter);
 
-    clockStatusLayout->addWidget(m_dateLabel);
-    clockStatusLayout->addWidget(m_timeLabel);
+    clockStatusLayout->addWidget(m_window->m_dateLabel);
+    clockStatusLayout->addWidget(m_window->m_timeLabel);
     hbox->addWidget(clockStatusPanel);
 
     // Never use showMessage(); it hides permanent widgets. All transient
-    // messages go through showToast() which overlays m_statusLabel directly.
-    statusBar()->addWidget(container, 1);
+    // messages go through showToast() which overlays m_window->m_statusLabel directly.
+    m_window->statusBar()->addWidget(container, 1);
 
     // Toast timer restores connection status after a toast expires.
-    m_toastTimer = new QTimer(m_window);
-    m_toastTimer->setSingleShot(true);
-    connect(m_toastTimer, &QTimer::timeout, this,
+    m_window->m_toastTimer = new QTimer(m_window);
+    m_window->m_toastTimer->setSingleShot(true);
+    connect(m_window->m_toastTimer, &QTimer::timeout, this,
             [this]()
             {
-                if (m_toastLabel)
+                if (m_window->m_toastLabel)
                 {
-                    m_toastLabel->setText("");
+                    m_window->m_toastLabel->setText(QString());
                 }
             });
 
     // AppSettings stores booleans as "True"/"False" strings per CONVENTIONS.md.
-    m_statusClockUtc =
+    m_window->m_statusClockUtc =
         AppSettings::instance().value("statusClockUTC", "True").toString().compare("True", Qt::CaseInsensitive) == 0;
     updateStatusClock();
     updateNetworkQuality(0);
@@ -548,7 +522,7 @@ void StatusBarController::buildStatusBar()
 
 void StatusBarController::showToast(const QString& msg, int durationMs, MainWindow::ToastKind kind)
 {
-    if (!m_toastLabel || !m_toastTimer)
+    if (!m_window->m_toastLabel || !m_window->m_toastTimer)
     {
         return;
     }
@@ -566,15 +540,15 @@ void StatusBarController::showToast(const QString& msg, int durationMs, MainWind
         bold = true;
     }
 
-    m_toastTimer->stop();
-    m_toastLabel->setText(msg);
-    m_toastLabel->setStyleSheet(statusLabelStyle(color, bold));
-    m_toastTimer->start(durationMs);
+    m_window->m_toastTimer->stop();
+    m_window->m_toastLabel->setText(msg);
+    m_window->m_toastLabel->setStyleSheet(statusLabelStyle(color, bold));
+    m_window->m_toastTimer->start(durationMs);
 }
 
 void StatusBarController::updateNetworkQuality(int rttMs)
 {
-    if (!m_netQualLabel)
+    if (!m_window->m_netQualLabel)
     {
         return;
     }
@@ -605,13 +579,13 @@ void StatusBarController::updateNetworkQuality(int rttMs)
         color = UiTheme::Color::Danger;
     }
 
-    const QString text = QString("<span style='color:%1'>%2</span>").arg(color, label);
-    m_netQualLabel->setText(text);
+    const QString text = QStringLiteral("<span style='color:%1'>%2</span>").arg(color, label);
+    m_window->m_netQualLabel->setText(text);
     const QString tooltip = rttMs > 0 ? QStringLiteral("Network Performance\nRTT: %1 ms").arg(rttMs)
                                       : QStringLiteral("Network Performance\nRTT: unavailable");
-    if (m_netTitleLabel)
+    if (m_window->m_netTitleLabel)
     {
-        m_netTitleLabel->setToolTip(tooltip);
+        m_window->m_netTitleLabel->setToolTip(tooltip);
     }
-    m_netQualLabel->setToolTip(tooltip);
+    m_window->m_netQualLabel->setToolTip(tooltip);
 }

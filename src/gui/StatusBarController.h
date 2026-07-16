@@ -6,8 +6,6 @@
 
 class StatusBarController : public QObject
 {
-    Q_OBJECT
-
   public:
     explicit StatusBarController(MainWindow* window);
 

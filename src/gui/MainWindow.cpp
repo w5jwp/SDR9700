@@ -1671,11 +1671,6 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
         QStringLiteral("<span style='color:%1'>SWR %2</span>").arg(QString::fromLatin1(swrColor)).arg(swr, 0, 'f', 2));
 }
 
-void MainWindow::onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange)
-{
-    m_bandscopeController->onSpectrumReady(levels, start, end, outOfRange);
-}
-
 void MainWindow::showToast(const QString& msg, int durationMs, ToastKind kind)
 {
     m_statusBarController->showToast(msg, durationMs, kind);
@@ -1950,11 +1945,6 @@ void MainWindow::onDtcsCodeChanged(ushort code)
         }
     }
     updateToneButton();
-}
-
-void MainWindow::onSpectrumClicked(double freqMhz)
-{
-    m_bandscopeController->onSpectrumClicked(freqMhz);
 }
 
 void MainWindow::commitFrequencyEdit(VfoPanel* panel)
