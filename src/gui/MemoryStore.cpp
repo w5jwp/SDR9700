@@ -14,20 +14,19 @@
 #include <QJsonValue>
 #include <QSaveFile>
 #include <QUuid>
-#include <algorithm>
 
 namespace
 {
 const QStringList& memoryCsvHeaders()
 {
     static const QStringList headers{
-        QStringLiteral("number"),       QStringLiteral("name"),       QStringLiteral("receiveHZ"),
-        QStringLiteral("mode"),         QStringLiteral("filter"),     QStringLiteral("dataMode"),
-        QStringLiteral("scan"),         QStringLiteral("duplexMode"), QStringLiteral("offsetHZ"),
-        QStringLiteral("toneMode"),     QStringLiteral("tone"),       QStringLiteral("tsql"),
-        QStringLiteral("toneValue"),    QStringLiteral("dsql"),       QStringLiteral("dtcs"),
-        QStringLiteral("dtcsPolarity"), QStringLiteral("dtcsB"),      QStringLiteral("dtcsPolarityB"),
-        QStringLiteral("dvSql"),        QStringLiteral("urCall"),     QStringLiteral("r1Call"),
+        QStringLiteral("band"),         QStringLiteral("channel"),  QStringLiteral("name"),
+        QStringLiteral("receiveHZ"),    QStringLiteral("mode"),     QStringLiteral("filter"),
+        QStringLiteral("dataMode"),     QStringLiteral("scan"),     QStringLiteral("duplexMode"),
+        QStringLiteral("offsetHZ"),     QStringLiteral("toneMode"), QStringLiteral("tone"),
+        QStringLiteral("tsql"),         QStringLiteral("dsql"),     QStringLiteral("dtcs"),
+        QStringLiteral("dtcsPolarity"), QStringLiteral("dtcsB"),    QStringLiteral("dtcsPolarityB"),
+        QStringLiteral("dvSql"),        QStringLiteral("urCall"),   QStringLiteral("r1Call"),
         QStringLiteral("r2Call")};
     return headers;
 }
@@ -35,6 +34,30 @@ const QStringList& memoryCsvHeaders()
 QString memoryBandLabelForHz(quint64 hz)
 {
     return sdr9700::radioBandShortLabel(sdr9700::radioBandForFrequency(hz));
+}
+
+quint16 memoryGroupForBandLabel(QString band)
+{
+    band = band.trimmed().toLower();
+    bool ok = false;
+    const uint numericBand = band.toUInt(&ok);
+    if (ok && numericBand >= 1 && numericBand <= 3)
+    {
+        return static_cast<quint16>(numericBand);
+    }
+    if (band == QLatin1String("2m"))
+    {
+        return 1;
+    }
+    if (band == QLatin1String("70cm"))
+    {
+        return 2;
+    }
+    if (band == QLatin1String("23cm"))
+    {
+        return 3;
+    }
+    return 0;
 }
 
 QString csvEscaped(QString value)
@@ -136,6 +159,46 @@ int csvInt(const QStringList& row, const QHash<QString, int>& indexes, const QSt
     return ok ? value : defaultValue;
 }
 
+ushort toneValueFromRadioText(const QString& text)
+{
+    bool ok = false;
+    const double value = text.toDouble(&ok);
+    if (!ok)
+    {
+        return 0;
+    }
+    return static_cast<ushort>(value * 10.0 + 0.5);
+}
+
+ushort memoryToneValueFromFields(rptAccessTxRx_t toneMode, const QString& tone, const QString& tsql, ushort dtcs)
+{
+    if (isDtcsToneMode(toneMode))
+    {
+        return dtcs;
+    }
+    if (toneMode == ratrNN)
+    {
+        return 0;
+    }
+    if (toneMode == ratrNT)
+    {
+        return toneValueFromRadioText(!tsql.isEmpty() ? tsql : tone);
+    }
+    return toneValueFromRadioText(!tone.isEmpty() ? tone : tsql);
+}
+
+QString normalizedToneText(QString text)
+{
+    text = text.trimmed();
+    if (text.isEmpty())
+    {
+        return QString();
+    }
+
+    const ushort value = toneValueFromRadioText(text);
+    return value > 0 ? sdr9700::ui::main_window::toneFrequencyLabel(value) : text;
+}
+
 quint64 csvUInt64(const QStringList& row, const QHash<QString, int>& indexes, const QString& key)
 {
     bool ok = false;
@@ -147,7 +210,8 @@ QJsonObject memoryToJson(const MemoryRecord& memory)
 {
     QJsonObject object;
     object.insert(QStringLiteral("ID"), memory.id);
-    object.insert(QStringLiteral("number"), memoryNumberLabel(memory.number));
+    object.insert(QStringLiteral("group"), memory.group);
+    object.insert(QStringLiteral("channel"), memory.channel);
     object.insert(QStringLiteral("name"), memory.name);
     object.insert(QStringLiteral("band"), memory.band);
     object.insert(QStringLiteral("bandKey"), memory.bandKey);
@@ -188,7 +252,8 @@ MemoryRecord memoryFromJson(const QJsonObject& object)
 {
     MemoryRecord memory;
     memory.id = object.value(QStringLiteral("ID")).toString();
-    memory.number = intFromJson(object, QStringLiteral("number"));
+    memory.group = static_cast<quint16>(intFromJson(object, QStringLiteral("group")));
+    memory.channel = static_cast<quint16>(intFromJson(object, QStringLiteral("channel")));
     memory.name = object.value(QStringLiteral("name")).toString();
     memory.band = object.value(QStringLiteral("band")).toString();
     memory.bandKey = intFromJson(object, QStringLiteral("bandKey"), -1);
@@ -218,14 +283,6 @@ MemoryRecord memoryFromJson(const QJsonObject& object)
     memory.r1Call = object.value(QStringLiteral("r1Call")).toString();
     memory.r2Call = object.value(QStringLiteral("r2Call")).toString();
     memory.notes = object.value(QStringLiteral("notes")).toString();
-    if (memory.tone.isEmpty() && !memory.toneFrequency.isEmpty())
-    {
-        memory.tone = memory.toneFrequency;
-    }
-    if (memory.tsql.isEmpty() && !memory.toneFrequency.isEmpty())
-    {
-        memory.tsql = memory.toneFrequency;
-    }
     return memory;
 }
 
@@ -239,31 +296,6 @@ QJsonArray memoriesArray(const QVector<MemoryRecord>& memories)
     return array;
 }
 
-QJsonArray memoriesArrayFromValue(const QJsonValue& value)
-{
-    if (value.isArray())
-    {
-        return value.toArray();
-    }
-    if (value.isString())
-    {
-        const QJsonDocument doc = QJsonDocument::fromJson(value.toString().toUtf8());
-        if (doc.isArray())
-        {
-            return doc.array();
-        }
-        if (doc.isObject())
-        {
-            return memoriesArrayFromValue(doc.object());
-        }
-    }
-    if (value.isObject())
-    {
-        const QJsonObject object = value.toObject();
-        return memoriesArrayFromValue(object.value(QStringLiteral("memories")));
-    }
-    return {};
-}
 } // namespace
 
 int memoryBandKeyForHz(quint64 hz)
@@ -271,33 +303,25 @@ int memoryBandKeyForHz(quint64 hz)
     return sdr9700::radioBandMemoryKey(sdr9700::radioBandForFrequency(hz));
 }
 
-QString memoryNumberLabel(int number)
+QString memoryBandLabelForGroup(quint16 group)
 {
-    return QString::number(std::max(0, number)).rightJustified(3, QLatin1Char('0'));
-}
-
-QVector<MemoryRecord> normalizedMemoryNumbers(QVector<MemoryRecord> memories)
-{
-    std::stable_sort(memories.begin(), memories.end(),
-                     [](const MemoryRecord& left, const MemoryRecord& right)
-                     {
-                         static constexpr int kMissingNumberSortValue = 1000000000;
-                         const int leftNumber = left.number > 0 ? left.number : kMissingNumberSortValue;
-                         const int rightNumber = right.number > 0 ? right.number : kMissingNumberSortValue;
-                         return leftNumber < rightNumber;
-                     });
-
-    for (int i = 0; i < memories.size(); ++i)
+    switch (group)
     {
-        memories[i].number = i + 1;
+    case 1:
+        return QStringLiteral("2M");
+    case 2:
+        return QStringLiteral("70CM");
+    case 3:
+        return QStringLiteral("23CM");
+    default:
+        return QString();
     }
-    return memories;
 }
 
 QJsonDocument memoriesExportDocument(const QVector<MemoryRecord>& memories)
 {
     QJsonObject root;
-    root.insert(QStringLiteral("memories"), memoriesArray(normalizedMemoryNumbers(memories)));
+    root.insert(QStringLiteral("memories"), memoriesArray(memories));
     return QJsonDocument(root);
 }
 
@@ -305,9 +329,10 @@ QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories)
 {
     QStringList lines;
     lines.append(csvLine(memoryCsvHeaders()));
-    for (const MemoryRecord& memory : normalizedMemoryNumbers(memories))
+    for (const MemoryRecord& memory : memories)
     {
-        lines.append(csvLine({QString::number(memory.number),
+        lines.append(csvLine({QString::number(memory.group),
+                              QString::number(memory.channel),
                               memory.name,
                               QString::number(memory.receiveHz),
                               QString::number(memory.mode),
@@ -319,7 +344,6 @@ QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories)
                               QString::number(memory.toneMode),
                               memory.tone,
                               memory.tsql,
-                              QString::number(memory.toneValue),
                               QString::number(memory.dsql),
                               QString::number(memory.dtcs),
                               QString::number(memory.dtcsPolarity),
@@ -335,16 +359,12 @@ QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories)
 
 QVector<MemoryRecord> memoriesFromDocument(const QJsonDocument& doc)
 {
-    QJsonArray array;
-    if (doc.isArray())
+    if (!doc.isObject())
     {
-        array = doc.array();
-    }
-    else if (doc.isObject())
-    {
-        array = memoriesArrayFromValue(doc.object());
+        return {};
     }
 
+    const QJsonArray array = doc.object().value(QStringLiteral("memories")).toArray();
     QVector<MemoryRecord> memories;
     memories.reserve(array.size());
     for (const QJsonValue& value : array)
@@ -366,7 +386,7 @@ QVector<MemoryRecord> memoriesFromDocument(const QJsonDocument& doc)
         {
             memory.band = memoryBandLabelForHz(memory.receiveHz);
         }
-        if (memory.receiveHz > 0)
+        if (memory.group > 0 && memory.channel > 0 && memory.receiveHz > 0)
         {
             memories.append(memory);
         }
@@ -396,7 +416,8 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
         const QStringList& row = rows.at(i);
         MemoryRecord memory;
         memory.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        memory.number = csvInt(row, indexes, QStringLiteral("number"));
+        memory.group = memoryGroupForBandLabel(csvValue(row, indexes, QStringLiteral("band")));
+        memory.channel = static_cast<quint16>(csvInt(row, indexes, QStringLiteral("channel")));
         memory.name = csvValue(row, indexes, QStringLiteral("name"));
         memory.receiveHz = csvUInt64(row, indexes, QStringLiteral("receiveHZ"));
         memory.mode = csvInt(row, indexes, QStringLiteral("mode"), modeFM);
@@ -406,14 +427,15 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
         memory.duplexMode = csvInt(row, indexes, QStringLiteral("duplexMode"), dmSimplex);
         memory.offsetHz = csvUInt64(row, indexes, QStringLiteral("offsetHZ"));
         memory.toneMode = csvInt(row, indexes, QStringLiteral("toneMode"), ratrNN);
-        memory.tone = csvValue(row, indexes, QStringLiteral("tone"));
-        memory.tsql = csvValue(row, indexes, QStringLiteral("tsql"));
-        memory.toneValue = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("toneValue")));
+        memory.tone = normalizedToneText(csvValue(row, indexes, QStringLiteral("tone")));
+        memory.tsql = normalizedToneText(csvValue(row, indexes, QStringLiteral("tsql")));
         memory.dsql = csvInt(row, indexes, QStringLiteral("dsql"));
         memory.dtcs = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcs"), 23));
         memory.dtcsPolarity = csvInt(row, indexes, QStringLiteral("dtcsPolarity"));
         memory.dtcsB = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcsB"), memory.dtcs));
         memory.dtcsPolarityB = csvInt(row, indexes, QStringLiteral("dtcsPolarityB"), memory.dtcsPolarity);
+        memory.toneValue = memoryToneValueFromFields(static_cast<rptAccessTxRx_t>(memory.toneMode), memory.tone,
+                                                     memory.tsql, memory.dtcs);
         memory.dvSql = csvInt(row, indexes, QStringLiteral("dvSql"));
         memory.urCall = csvValue(row, indexes, QStringLiteral("urCall"));
         memory.r1Call = csvValue(row, indexes, QStringLiteral("r1Call"));
@@ -425,12 +447,12 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
         memory.toneOption = sdr9700::ui::main_window::toneOptionLabel(static_cast<rptAccessTxRx_t>(memory.toneMode));
         memory.toneFrequency = sdr9700::ui::main_window::memoryToneFrequencyLabel(
             static_cast<rptAccessTxRx_t>(memory.toneMode), memory.toneValue);
-        if (memory.receiveHz > 0)
+        if (memory.group > 0 && memory.channel > 0 && memory.receiveHz > 0)
         {
             memories.append(memory);
         }
     }
-    return normalizedMemoryNumbers(memories);
+    return memories;
 }
 
 QString memoriesPath()
@@ -447,17 +469,16 @@ QVector<MemoryRecord> loadMemories()
     }
 
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    if (!doc.isArray() && !doc.isObject())
+    if (!doc.isObject())
     {
         return {};
     }
 
-    return normalizedMemoryNumbers(memoriesFromDocument(doc));
+    return memoriesFromDocument(doc);
 }
 
 bool saveMemories(const QVector<MemoryRecord>& memories)
 {
-    const QVector<MemoryRecord> normalized = normalizedMemoryNumbers(memories);
     const QString path = memoriesPath();
     QDir().mkpath(QFileInfo(path).absolutePath());
 
@@ -467,7 +488,7 @@ bool saveMemories(const QVector<MemoryRecord>& memories)
         return false;
     }
 
-    const QByteArray data = memoriesExportDocument(normalized).toJson(QJsonDocument::Indented);
+    const QByteArray data = memoriesExportDocument(memories).toJson(QJsonDocument::Indented);
     if (file.write(data) != static_cast<qint64>(data.size()))
     {
         return false;

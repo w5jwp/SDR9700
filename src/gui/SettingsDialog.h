@@ -30,6 +30,7 @@ class SettingsDialog : public QDialog
     {
         AudioDevices,
         ApplicationConfiguration,
+        MemoryManager,
         BandScope,
 #ifdef HAVE_HIDAPI
         IcomRC28,
@@ -49,6 +50,7 @@ class SettingsDialog : public QDialog
     void bandscopeGridLineColorChanged(const QColor& color);
     void bandscopeGridDensityChanged(int density);
     void reverseMouseWheelTuningChanged(bool reversed);
+    void memoryPollIntervalSecondsChanged(int seconds);
 #ifdef HAVE_HIDAPI
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);
 #endif

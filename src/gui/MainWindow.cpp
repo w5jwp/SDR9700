@@ -378,6 +378,8 @@ void MainWindow::showSettingsDialog()
     connect(dlg, &SettingsDialog::bandscopeGridLineColorChanged, m_bandscopeDisplay,
             &BandscopeDisplay::setGridLineColor);
     connect(dlg, &SettingsDialog::bandscopeGridDensityChanged, m_bandscopeDisplay, &BandscopeDisplay::setGridDensity);
+    connect(dlg, &SettingsDialog::memoryPollIntervalSecondsChanged, m_memoryController,
+            &MemoryController::setMemoryPollIntervalSeconds);
 #ifdef HAVE_HIDAPI
     connect(dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
             [this](const QString&, const QString&)

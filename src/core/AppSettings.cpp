@@ -49,6 +49,14 @@ bool mainWindowSetting(const QString& key)
     return kMainWindowSettings.contains(key);
 }
 
+bool memoryManagerSetting(const QString& key)
+{
+    static const QStringList kMemoryManagerSettings = {
+        QStringLiteral("memoryPollIntervalSeconds"),
+    };
+    return kMemoryManagerSettings.contains(key);
+}
+
 bool radioSetting(const QString& key)
 {
     static const QStringList kRadioSettings = {
@@ -170,6 +178,15 @@ QString mainWindowStoredKey(const QString& key)
     return {};
 }
 
+QString memoryManagerStoredKey(const QString& key)
+{
+    if (key == QStringLiteral("memoryPollIntervalSeconds"))
+    {
+        return QStringLiteral("pollIntervalSeconds");
+    }
+    return {};
+}
+
 void loadStoredSetting(QHash<QString, QString>* values, const QString& key, const QJsonValue& value)
 {
     if (value.isUndefined() || value.isNull())
@@ -268,6 +285,7 @@ bool AppSettings::save() const
     QJsonObject audioSettings;
     QJsonObject bandscopeSettings;
     QJsonObject mainWindowSettings;
+    QJsonObject memoryManagerSettings;
     QJsonObject radioSettings;
     QJsonObject radioChooserSettings;
     QJsonObject accessoriesSettings;
@@ -289,6 +307,11 @@ bool AppSettings::save() const
         if (mainWindowSetting(key))
         {
             insertStoredSetting(&mainWindowSettings, mainWindowStoredKey(key), storedValue);
+            continue;
+        }
+        if (memoryManagerSetting(key))
+        {
+            insertStoredSetting(&memoryManagerSettings, memoryManagerStoredKey(key), storedValue);
             continue;
         }
         if (radioSetting(key))
@@ -321,6 +344,10 @@ bool AppSettings::save() const
     if (!mainWindowSettings.isEmpty())
     {
         settings.insert(QStringLiteral("mainWindow"), mainWindowSettings);
+    }
+    if (!memoryManagerSettings.isEmpty())
+    {
+        settings.insert(QStringLiteral("memoryManager"), memoryManagerSettings);
     }
     if (!radioSettings.isEmpty())
     {
@@ -411,6 +438,14 @@ bool AppSettings::loadJson(const QString& path)
                               mainWindow.value(QStringLiteral("positionY")));
             loadStoredSetting(&m_values, QStringLiteral("statusClockUTC"),
                               mainWindow.value(QStringLiteral("statusClockUTC")));
+            continue;
+        }
+
+        if (it.key() == QStringLiteral("memoryManager") && it.value().isObject())
+        {
+            const QJsonObject memoryManager = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("memoryPollIntervalSeconds"),
+                              memoryManager.value(QStringLiteral("pollIntervalSeconds")));
             continue;
         }
 

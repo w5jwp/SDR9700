@@ -292,6 +292,16 @@ QJsonObject cleanConfigurationSettings(const QJsonDocument& doc)
         settings.insert(QStringLiteral("mainWindow"), mainWindow);
     }
 
+    const QJsonObject memoryManagerSource = source.value(QStringLiteral("memoryManager")).toObject();
+    QJsonObject memoryManager;
+    insertCleanSetting(&memoryManager, memoryManagerSource, QStringLiteral("pollIntervalSeconds"),
+                       [](const QJsonValue& value, QJsonValue* normalized)
+                       { return intStringValue(value, 30, 3600, normalized); });
+    if (!memoryManager.isEmpty())
+    {
+        settings.insert(QStringLiteral("memoryManager"), memoryManager);
+    }
+
     const QJsonObject radioSource = source.value(QStringLiteral("radio")).toObject();
     QJsonObject radio;
     insertCleanSetting(&radio, radioSource, QStringLiteral("LANModLevel"),

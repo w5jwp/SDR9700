@@ -12,6 +12,7 @@
 #include "models/VfoModel.h"
 
 #include <QAbstractItemView>
+#include <QApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QDateTime>
@@ -28,11 +29,15 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStringList>
+#include <QStyle>
+#include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -52,13 +57,21 @@ constexpr quint16 kRadioMemoryLastChannel = 99;
 constexpr int kRadioMemorySyncTotal =
     (kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1);
 constexpr int kRadioMemoryRefreshIntervalMs = 25;
-constexpr int kRadioMemoryPeriodicRefreshMs = 120000;
 constexpr int kRadioMemorySyncTimeoutMs = 30000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
 constexpr int kRadioMemoryNameMaxChars = 16;
 constexpr int kMemoryEditorPaneWidth = 420;
 constexpr int kMemoryEditorFieldHeight = 30;
 constexpr int kMemoryEditorGutter = 10;
+constexpr int kMemoryEditorLabelFieldSpacing = 6;
+constexpr int kMemoryFooterTopPadding = 8;
+constexpr int kMemoryFooterBottomPadding = 10;
+constexpr int kMemoryFooterTextLeftPadding = 6;
+constexpr int kMemoryToneCellTextPadding = 8;
+constexpr int kMemoryToneTypeSectionWidth = 62;
+constexpr int kMemoryToneTypeRole = Qt::UserRole + 1;
+constexpr int kMemoryToneRxRole = Qt::UserRole + 2;
+constexpr int kMemoryToneTxRole = Qt::UserRole + 3;
 constexpr auto kMemoryFileFilter = "SDR9700 Memories (*.csv);;CSV Files (*.csv);;All Files (*)";
 constexpr auto kMemoryBackupFilter = "SDR9700 memory backups (sdr9700-memories-backup-*.json);;JSON Files (*.json)";
 
@@ -67,6 +80,57 @@ enum MemoryToneFamily
     MemoryToneOff = 0,
     MemoryToneTone,
     MemoryToneDtcs
+};
+
+class ToneCellDelegate : public QStyledItemDelegate
+{
+  public:
+    explicit ToneCellDelegate(QObject* parent = nullptr) : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        const QString type = index.data(kMemoryToneTypeRole).toString();
+        if (type.isEmpty() || type == QLatin1String("OFF"))
+        {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QStyleOptionViewItem itemOption(option);
+        initStyleOption(&itemOption, index);
+        itemOption.text.clear();
+        const QWidget* widget = itemOption.widget;
+        QStyle* style = widget ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &itemOption, painter, widget);
+
+        const QString rx = index.data(kMemoryToneRxRole).toString();
+        const QString tx = index.data(kMemoryToneTxRole).toString();
+        const bool selected = option.state.testFlag(QStyle::State_Selected);
+        const QColor textColor =
+            selected ? option.palette.color(QPalette::HighlightedText) : option.palette.color(QPalette::Text);
+        QRect rect = option.rect.adjusted(5, 0, -5, 0);
+        if (rect.width() < 24 || rect.height() < 8)
+        {
+            return;
+        }
+
+        const int typeWidth = qMin(kMemoryToneTypeSectionWidth, rect.width() / 3);
+        const int valueWidth = (rect.width() - typeWidth) / 2;
+        const QRect typeRect(rect.left(), rect.top(), typeWidth, rect.height());
+        const QRect txRect(typeRect.right() + 1, rect.top(), valueWidth, rect.height());
+        const QRect rxRect(txRect.right() + 1, rect.top(), rect.right() - txRect.right(), rect.height());
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, false);
+        painter->setPen(textColor);
+        painter->drawText(typeRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                          type);
+        painter->drawText(txRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                          QStringLiteral("TX: %1").arg(tx.isEmpty() ? QStringLiteral("OFF") : tx));
+        painter->drawText(rxRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                          QStringLiteral("RX: %1").arg(rx.isEmpty() ? QStringLiteral("OFF") : rx));
+        painter->restore();
+    }
 };
 
 QSize memoryManagerWindowSize()
@@ -135,11 +199,6 @@ quint16 radioMemoryGroupForHz(quint64 hz)
         }
     }
     return kRadioMemoryFirstGroup;
-}
-
-int flattenedRadioMemoryNumber(quint16 group, quint16 channel)
-{
-    return static_cast<int>(group) * 100 + static_cast<int>(channel);
 }
 
 int recordDuplexModeFromRadio(quint8 duplex)
@@ -216,6 +275,18 @@ ushort toneValueFromRadioText(const QString& text)
     return static_cast<ushort>(value * 10.0 + 0.5);
 }
 
+QString normalizedToneText(QString text)
+{
+    text = text.trimmed();
+    if (text.isEmpty())
+    {
+        return QString();
+    }
+
+    const ushort value = toneValueFromRadioText(text);
+    return value > 0 ? toneFrequencyLabel(value) : text;
+}
+
 QString modeLabelFromRegister(int mode)
 {
     switch (static_cast<radioMode_t>(mode))
@@ -266,7 +337,8 @@ MemoryRecord recordFromRadioMemory(const MemoryType& radioMemory)
 {
     MemoryRecord memory;
     memory.id = radioMemoryId(radioMemory.group, radioMemory.channel);
-    memory.number = flattenedRadioMemoryNumber(radioMemory.group, radioMemory.channel);
+    memory.group = radioMemory.group;
+    memory.channel = radioMemory.channel;
     memory.name = radioMemoryName(radioMemory);
     if (memory.name.isEmpty())
     {
@@ -336,8 +408,8 @@ MemoryType radioMemoryFromRecord(const MemoryRecord& memory, quint16 group, quin
     else if (toneMode != ratrNN)
     {
         const QString fallbackTone = toneFrequencyLabel(memory.toneValue);
-        radioMemory.tone = memory.tone.isEmpty() ? fallbackTone : memory.tone;
-        radioMemory.tsql = memory.tsql.isEmpty() ? fallbackTone : memory.tsql;
+        radioMemory.tone = normalizedToneText(memory.tone.isEmpty() ? fallbackTone : memory.tone);
+        radioMemory.tsql = normalizedToneText(memory.tsql.isEmpty() ? fallbackTone : memory.tsql);
     }
     const QByteArray name = memory.name.toLatin1().left(kRadioMemoryNameMaxChars);
     std::copy(name.cbegin(), name.cend(), radioMemory.name);
@@ -359,6 +431,20 @@ MemoryType deletedRadioMemory(quint16 group, quint16 channel)
     return memory;
 }
 
+QVector<MemoryType> deletedUserRadioMemories()
+{
+    QVector<MemoryType> deletes;
+    deletes.reserve((kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * kRadioMemoryLastChannel);
+    for (quint16 group = kRadioMemoryFirstGroup; group <= kRadioMemoryLastGroup; ++group)
+    {
+        for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
+        {
+            deletes.append(deletedRadioMemory(group, channel));
+        }
+    }
+    return deletes;
+}
+
 QString backupDirectoryPath()
 {
     return QDir(QFileInfo(AppSettings::configPath()).absolutePath()).filePath(QStringLiteral("backups"));
@@ -370,53 +456,57 @@ QString memoryBackupPath()
     return QDir(backupDirectoryPath()).filePath(QStringLiteral("sdr9700-memories-backup-%1.json").arg(timestamp));
 }
 
-QString memoryToneTableLabel(const MemoryRecord& memory)
+QString dtcsMemoryValue(ushort code, int polarity)
+{
+    return QStringLiteral("%1%2").arg(dtcsCodeLabel(code), polarity == 3 ? QStringLiteral("R") : QStringLiteral("N"));
+}
+
+QString memoryToneTypeLabel(const MemoryRecord& memory)
 {
     const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
     if (toneMode == ratrNN)
     {
         return QStringLiteral("OFF");
     }
-
-    return isDtcsToneMode(toneMode) ? QStringLiteral("DTCS") : toneOptionLabel(toneMode).toUpper();
+    return isDtcsToneMode(toneMode) ? QStringLiteral("DTCS") : QStringLiteral("TONE");
 }
 
-QString memoryToneFrequencyTableValue(const MemoryRecord& memory)
+QString memoryToneRxLabel(const MemoryRecord& memory)
 {
     const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
-    if (toneMode == ratrNN)
+    if (toneMode == ratrNN || toneMode == ratrTN || toneMode == ratrDN)
     {
-        return QStringLiteral("-");
+        return QStringLiteral("OFF");
     }
-
     if (isDtcsToneMode(toneMode))
     {
-        auto polarityLabel = [](int polarityValue)
-        { return polarityValue == 3 ? QStringLiteral("R") : QStringLiteral("N"); };
-        if (toneMode == ratrDD || toneMode == ratrDT)
-        {
-            return QStringLiteral("%1 / %2").arg(
-                QStringLiteral("%1%2").arg(dtcsCodeLabel(memory.dtcsB), polarityLabel(memory.dtcsPolarityB)),
-                QStringLiteral("%1%2").arg(dtcsCodeLabel(memory.dtcs), polarityLabel(memory.dtcsPolarity)));
-        }
-        return QStringLiteral("- / %1%2").arg(dtcsCodeLabel(memory.dtcs), polarityLabel(memory.dtcsPolarity));
+        return dtcsMemoryValue(memory.dtcsB, memory.dtcsPolarityB);
     }
-    if (toneMode == ratrNT)
-    {
-        return QStringLiteral("%1 / -").arg(memory.tsql.isEmpty() ? memory.tone : memory.tsql);
-    }
-    if (toneMode == ratrTT)
-    {
-        return QStringLiteral("%1 / %2").arg(memory.tsql.isEmpty() ? memory.tone : memory.tsql,
-                                             memory.tone.isEmpty() ? memory.tsql : memory.tone);
-    }
-    if (toneMode == ratrTN)
-    {
-        return QStringLiteral("- / %1").arg(memory.tone.isEmpty() ? memory.tsql : memory.tone);
-    }
+    return memory.tsql.isEmpty() ? memory.tone : memory.tsql;
+}
 
-    const QString value = memoryToneFrequencyLabel(toneMode, memory.toneValue);
-    return value.isEmpty() ? QStringLiteral("-") : value;
+QString memoryToneTxLabel(const MemoryRecord& memory)
+{
+    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
+    if (toneMode == ratrNN || toneMode == ratrNT)
+    {
+        return QStringLiteral("OFF");
+    }
+    if (isDtcsToneMode(toneMode))
+    {
+        return dtcsMemoryValue(memory.dtcs, memory.dtcsPolarity);
+    }
+    return memory.tone.isEmpty() ? memory.tsql : memory.tone;
+}
+
+QString memoryToneTableLabel(const MemoryRecord& memory)
+{
+    const QString type = memoryToneTypeLabel(memory);
+    if (type == QLatin1String("OFF"))
+    {
+        return QStringLiteral("OFF");
+    }
+    return QStringLiteral("%1: %2/%3").arg(type, memoryToneTxLabel(memory), memoryToneRxLabel(memory));
 }
 
 QString memoryFilterLabel(int filter)
@@ -426,21 +516,6 @@ QString memoryFilterLabel(int filter)
         return QStringLiteral("FIL%1").arg(filter);
     }
     return QString::number(filter);
-}
-
-QString memoryScanGroupLabel(int scan)
-{
-    switch (scan)
-    {
-    case 1:
-        return QStringLiteral("Group 1");
-    case 2:
-        return QStringLiteral("Group 2");
-    case 3:
-        return QStringLiteral("Group 3");
-    default:
-        return QStringLiteral("OFF");
-    }
 }
 
 bool modeSupportsMemoryOffset(int mode)
@@ -456,7 +531,10 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
     connect(m_radioMemoryRefreshTimer, &QTimer::timeout, this, &MemoryController::requestNextRadioMemory);
 
     m_radioMemoryPeriodicRefreshTimer = new QTimer(this);
-    m_radioMemoryPeriodicRefreshTimer->setInterval(kRadioMemoryPeriodicRefreshMs);
+    setMemoryPollIntervalSeconds(
+        AppSettings::instance()
+            .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
+            .toInt());
     connect(m_radioMemoryPeriodicRefreshTimer, &QTimer::timeout, this, &MemoryController::requestRadioMemoryRefresh);
 
     m_radioMemorySyncTimeoutTimer = new QTimer(this);
@@ -536,6 +614,7 @@ void MemoryController::buildMemoryWindow()
     syncLayout->setSpacing(kMemoryToolbarGroupSpacing);
     auto* syncButton = new QPushButton("Sync", panel);
     syncButton->setToolTip("Immediately read radio memories into SDR9700.");
+    m_window->m_memoryBandFilter->setFixedHeight(syncButton->sizeHint().height());
     syncLayout->addWidget(syncButton);
     toolbar->addWidget(syncGroup);
     toolbar->addStretch(1);
@@ -586,9 +665,9 @@ void MemoryController::buildMemoryWindow()
     m_window->m_memoryTable->setObjectName(QStringLiteral("memoryManagerTable"));
     m_window->m_memoryTable->setColumnCount(kMemoryTableColumnCount);
     m_window->m_memoryTable->setHorizontalHeaderLabels(
-        {QStringLiteral("Channel"), QStringLiteral("Name"), QStringLiteral("Frequency"), QStringLiteral("Offset"),
-         QStringLiteral("Mode"), QStringLiteral("Tone"), QStringLiteral("RX / TX"), QStringLiteral("Filter"),
-         QStringLiteral("Scan Group"), QStringLiteral("ID")});
+        {QStringLiteral("Band"), QStringLiteral("Channel"), QStringLiteral("Name"), QStringLiteral("Frequency"),
+         QStringLiteral("Offset"), QStringLiteral("Mode"), QStringLiteral("Tone (TX/RX)"), QStringLiteral("Filter"),
+         QStringLiteral("ID")});
     m_window->m_memoryTable->setColumnHidden(kMemoryIdColumn, true);
     m_window->m_memoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_window->m_memoryTable->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -604,26 +683,24 @@ void MemoryController::buildMemoryWindow()
                                                .arg(UiTheme::Color::Border));
     m_window->m_memoryTable->verticalHeader()->setVisible(false);
     m_window->m_memoryTable->horizontalHeader()->setStretchLastSection(false);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryBandColumn, QHeaderView::Interactive);
     m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNumberColumn, QHeaderView::Interactive);
     m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNameColumn, QHeaderView::Interactive);
     m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFrequencyColumn, QHeaderView::Interactive);
     m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryDuplexColumn, QHeaderView::Interactive);
     m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryModeColumn, QHeaderView::Interactive);
     m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryToneColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryToneFrequencyColumn,
-                                                                      QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFilterColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryScanColumn, QHeaderView::Stretch);
+    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFilterColumn, QHeaderView::Stretch);
     m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryIdColumn, QHeaderView::Fixed);
+    m_window->m_memoryTable->setColumnWidth(kMemoryBandColumn, kMemoryBandColumnWidth);
     m_window->m_memoryTable->setColumnWidth(kMemoryNumberColumn, kMemoryNumberColumnWidth);
     m_window->m_memoryTable->setColumnWidth(kMemoryNameColumn, kMemoryNameColumnWidth);
     m_window->m_memoryTable->setColumnWidth(kMemoryFrequencyColumn, kMemoryFrequencyColumnWidth);
     m_window->m_memoryTable->setColumnWidth(kMemoryDuplexColumn, kMemoryDuplexColumnWidth);
     m_window->m_memoryTable->setColumnWidth(kMemoryModeColumn, kMemoryModeColumnWidth);
     m_window->m_memoryTable->setColumnWidth(kMemoryToneColumn, kMemoryToneColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryToneFrequencyColumn, kMemoryToneFrequencyColumnWidth);
     m_window->m_memoryTable->setColumnWidth(kMemoryFilterColumn, kMemorySmallColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryScanColumn, kMemoryScanColumnWidth);
+    m_window->m_memoryTable->setItemDelegateForColumn(kMemoryToneColumn, new ToneCellDelegate(m_window->m_memoryTable));
     leftRoot->addWidget(m_window->m_memoryTable, 1);
 
     m_memoryEditorSeparator = new QWidget(panel);
@@ -637,13 +714,24 @@ void MemoryController::buildMemoryWindow()
     m_memoryEditorPane->setFixedWidth(kMemoryEditorPaneWidth);
     m_memoryEditorPane->hide();
 
-    auto* footer = new QHBoxLayout;
-    footer->setContentsMargins(kNoMargins);
+    auto* footerRow = new QWidget(panel);
+    auto* footer = new QHBoxLayout(footerRow);
+    footer->setContentsMargins(0, kMemoryFooterTopPadding, 0, kMemoryFooterBottomPadding);
     m_window->m_memoryCountLabel = new QLabel(panel);
     m_window->m_memoryCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_window->m_memoryCountLabel->setContentsMargins(kMemoryFooterTextLeftPadding, 0, 0, 0);
     m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
+    m_window->m_memoryProgressBar = new QProgressBar(panel);
+    m_window->m_memoryProgressBar->setFixedWidth(220);
+    m_window->m_memoryProgressBar->setTextVisible(false);
+    m_window->m_memoryProgressBar->setVisible(false);
+    m_window->m_memoryProgressBar->setStyleSheet(
+        QStringLiteral("QProgressBar { background: %1; border: 1px solid %2; border-radius: 3px; height: 8px; }"
+                       "QProgressBar::chunk { background: %3; border-radius: 2px; }")
+            .arg(UiTheme::Color::Field, UiTheme::Color::BorderMedium, UiTheme::Color::Accent));
     auto* closeButton = new QPushButton("Close", panel);
     footer->addWidget(m_window->m_memoryCountLabel, 1);
+    footer->addWidget(m_window->m_memoryProgressBar);
     footer->addWidget(closeButton);
     leftRoot->addSpacing(kMemoryEditorGutter);
     auto* leftFooterSeparator = new QWidget(panel);
@@ -652,8 +740,7 @@ void MemoryController::buildMemoryWindow()
     leftFooterSeparator->setStyleSheet(
         QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
     leftRoot->addWidget(leftFooterSeparator);
-    leftRoot->addSpacing(kMemoryEditorGutter);
-    leftRoot->addLayout(footer);
+    leftRoot->addWidget(footerRow);
 
     root->addWidget(leftPane, 1);
     root->addWidget(m_memoryEditorSeparator);
@@ -796,10 +883,22 @@ void MemoryController::forceRadioMemorySync()
     {
         finishRadioMemoryRefresh(false);
     }
+    if (!m_memoryProgressLabel.isEmpty())
+    {
+        QMessageBox::information(popupParent(), QStringLiteral("Sync Memories"),
+                                 QStringLiteral("Wait for the current memory operation to finish before syncing."));
+        return;
+    }
 
     requestRadioMemoryRefresh();
     reloadMemoryTable();
     m_window->showToast(QStringLiteral("Radio memory sync started"));
+}
+
+void MemoryController::setMemoryPollIntervalSeconds(int seconds)
+{
+    const int boundedSeconds = qBound(kMemoryPollIntervalMinSeconds, seconds, kMemoryPollIntervalMaxSeconds);
+    m_radioMemoryPeriodicRefreshTimer->setInterval(boundedSeconds * 1000);
 }
 
 void MemoryController::requestRadioMemoryRefresh()
@@ -841,6 +940,13 @@ void MemoryController::requestNextRadioMemory()
 
     m_currentSyncGroup = m_refreshGroup;
     m_currentSyncChannel = m_refreshChannel;
+    const int syncIndex =
+        (m_currentSyncGroup - kRadioMemoryFirstGroup) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1) +
+        (m_currentSyncChannel - kRadioMemoryFirstChannel + 1);
+    setMemoryProgress(QStringLiteral("Syncing %1 channel %2")
+                          .arg(memoryBandLabelForGroup(m_currentSyncGroup))
+                          .arg(m_currentSyncChannel, 3, 10, QLatin1Char('0')),
+                      syncIndex, kRadioMemorySyncTotal);
     m_window->m_model->requestRadioMemory(m_refreshGroup, m_refreshChannel);
     ++m_refreshChannel;
     if (m_refreshChannel > kRadioMemoryLastChannel)
@@ -855,14 +961,68 @@ void MemoryController::finishRadioMemoryRefresh(bool timedOut)
     m_radioMemoryRefreshTimer->stop();
     m_radioMemorySyncTimeoutTimer->stop();
     const bool wasInProgress = m_refreshInProgress;
+    const bool resetAfterSync = m_resetAfterSync;
+    m_resetAfterSync = false;
     m_refreshInProgress = false;
     m_currentSyncGroup = 0;
     m_currentSyncChannel = 0;
+    clearMemoryProgress();
     if (timedOut && wasInProgress)
     {
         m_window->showToast(QStringLiteral("Radio memory sync timed out"), 5000, MainWindow::ToastKind::Warning);
+        if (resetAfterSync)
+        {
+            m_window->showToast(QStringLiteral("Memory reset canceled because sync timed out"), 5000,
+                                MainWindow::ToastKind::Warning);
+        }
     }
     rebuildMemoryViews();
+    if (resetAfterSync && !timedOut && wasInProgress)
+    {
+        QTimer::singleShot(500, this, &MemoryController::resetStoredRadioMemoriesAfterSync);
+    }
+}
+
+void MemoryController::resetStoredRadioMemoriesAfterSync()
+{
+    if (!m_window->m_model || !m_window->m_model->isConnected())
+    {
+        return;
+    }
+    if (m_refreshInProgress || !m_memoryProgressLabel.isEmpty())
+    {
+        return;
+    }
+
+    QVector<MemoryType> deletes;
+    deletes.reserve(m_radioMemoriesByKey.size());
+    for (const MemoryType& memory : m_radioMemoriesByKey)
+    {
+        deletes.append(deletedRadioMemory(memory.group, memory.channel));
+    }
+    std::sort(deletes.begin(), deletes.end(),
+              [](const MemoryType& left, const MemoryType& right)
+              {
+                  if (left.group == right.group)
+                  {
+                      return left.channel < right.channel;
+                  }
+                  return left.group < right.group;
+              });
+
+    if (deletes.isEmpty())
+    {
+        m_window->showToast(QStringLiteral("No stored memories to reset"));
+        rebuildMemoryViews();
+        return;
+    }
+
+    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing stored memories"));
+    m_radioMemoriesByKey.clear();
+    m_receivedRadioMemoryKeys.clear();
+    rebuildMemoryViews();
+    QTimer::singleShot(deletes.size() * kRadioMemoryWriteIntervalMs + 1000, this,
+                       &MemoryController::requestRadioMemoryRefresh);
 }
 
 void MemoryController::updateMemoryTableInteraction()
@@ -872,7 +1032,7 @@ void MemoryController::updateMemoryTableInteraction()
         return;
     }
 
-    const bool locked = m_refreshInProgress;
+    const bool locked = m_refreshInProgress || !m_memoryProgressLabel.isEmpty();
     m_window->m_memoryTable->setSelectionMode(locked ? QAbstractItemView::NoSelection
                                                      : QAbstractItemView::SingleSelection);
     m_window->m_memoryTable->setFocusPolicy(locked ? Qt::NoFocus : Qt::StrongFocus);
@@ -919,25 +1079,11 @@ QVector<MemoryRecord> MemoryController::currentMemories() const
     std::sort(memories.begin(), memories.end(),
               [](const MemoryRecord& left, const MemoryRecord& right)
               {
-                  const auto parse = [](const QString& id)
+                  if (left.group == right.group)
                   {
-                      quint16 group = 0;
-                      quint16 channel = 0;
-                      const QStringList parts = id.split(QLatin1Char(':'));
-                      if (parts.size() == 3)
-                      {
-                          group = static_cast<quint16>(parts.at(1).toUInt());
-                          channel = static_cast<quint16>(parts.at(2).toUInt());
-                      }
-                      return std::pair<quint16, quint16>(group, channel);
-                  };
-                  const auto [leftGroup, leftChannel] = parse(left.id);
-                  const auto [rightGroup, rightChannel] = parse(right.id);
-                  if (leftGroup == rightGroup)
-                  {
-                      return leftChannel < rightChannel;
+                      return left.channel < right.channel;
                   }
-                  return leftGroup < rightGroup;
+                  return left.group < right.group;
               });
     return memories;
 }
@@ -1036,7 +1182,8 @@ void MemoryController::deleteRadioMemory(quint16 group, quint16 channel)
     m_window->m_model->writeRadioMemory(deletedRadioMemory(group, channel));
 }
 
-void MemoryController::queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs)
+void MemoryController::queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs,
+                                              const QString& progressLabel)
 {
     if (!m_window->m_model || !m_window->m_model->isConnected())
     {
@@ -1044,14 +1191,25 @@ void MemoryController::queueRadioMemoryWrites(const QVector<MemoryType>& memorie
     }
 
     int delayMs = qMax(0, startDelayMs);
-    for (const MemoryType& memory : memories)
+    if (!progressLabel.isEmpty() && !memories.isEmpty())
     {
+        QTimer::singleShot(delayMs, this, [this, progressLabel, total = memories.size()]()
+                           { setMemoryProgress(progressLabel, 0, total); });
+    }
+
+    for (int i = 0; i < memories.size(); ++i)
+    {
+        const MemoryType memory = memories.at(i);
         QTimer::singleShot(delayMs, this,
-                           [this, memory]()
+                           [this, memory, progressLabel, i, total = memories.size()]()
                            {
                                if (m_window->m_model && m_window->m_model->isConnected())
                                {
                                    m_window->m_model->writeRadioMemory(memory);
+                                   if (!progressLabel.isEmpty())
+                                   {
+                                       setMemoryProgress(progressLabel, i + 1, total);
+                                   }
                                }
                            });
         delayMs += kRadioMemoryWriteIntervalMs;
@@ -1084,26 +1242,8 @@ bool MemoryController::firstOpenChannelForGroup(quint16 group, quint16* channel)
     return false;
 }
 
-bool MemoryController::targetForMemoryFrequency(quint64 hz, quint16* group, quint16* channel) const
-{
-    const quint16 targetGroup = radioMemoryGroupForHz(hz);
-    quint16 targetChannel = 0;
-    if (!firstOpenChannelForGroup(targetGroup, &targetChannel))
-    {
-        return false;
-    }
-    if (group)
-    {
-        *group = targetGroup;
-    }
-    if (channel)
-    {
-        *channel = targetChannel;
-    }
-    return true;
-}
-
-int MemoryController::queueRecordsToRadio(const QVector<MemoryRecord>& records, int* skippedCount, int startDelayMs)
+int MemoryController::queueRecordsToRadio(const QVector<MemoryRecord>& records, int* skippedCount, int startDelayMs,
+                                          const QString& progressLabel)
 {
     QSet<quint32> occupied;
     for (auto it = m_radioMemoriesByKey.cbegin(); it != m_radioMemoriesByKey.cend(); ++it)
@@ -1117,42 +1257,65 @@ int MemoryController::queueRecordsToRadio(const QVector<MemoryRecord>& records, 
     writes.reserve(records.size());
     for (const MemoryRecord& memory : records)
     {
-        const quint16 group = radioMemoryGroupForHz(memory.receiveHz);
-        quint16 targetChannel = 0;
-        bool foundChannel = false;
-        for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
+        if (memory.group < kRadioMemoryFirstGroup || memory.group > kRadioMemoryLastGroup ||
+            memory.channel < kRadioMemoryFirstChannel || memory.channel > kRadioMemoryLastChannel)
         {
-            const quint32 key = radioMemoryKey(group, channel);
-            if (!m_receivedRadioMemoryKeys.contains(key))
-            {
-                break;
-            }
-            if (!occupied.contains(key))
-            {
-                targetChannel = channel;
-                occupied.insert(key);
-                foundChannel = true;
-                break;
-            }
+            ++skipped;
+            continue;
         }
-
-        if (!foundChannel)
+        const quint32 key = radioMemoryKey(memory.group, memory.channel);
+        if (occupied.contains(key))
         {
             ++skipped;
             continue;
         }
 
-        writes.append(radioMemoryFromRecord(memory, group, targetChannel));
+        occupied.insert(key);
+        writes.append(radioMemoryFromRecord(memory, memory.group, memory.channel));
         ++queuedCount;
     }
 
-    queueRadioMemoryWrites(writes, startDelayMs);
+    queueRadioMemoryWrites(writes, startDelayMs, progressLabel);
 
     if (skippedCount)
     {
         *skippedCount = skipped;
     }
     return queuedCount;
+}
+
+void MemoryController::setMemoryProgress(const QString& label, int value, int maximum)
+{
+    m_memoryProgressLabel = label;
+    m_memoryProgressValue = qBound(0, value, maximum);
+    m_memoryProgressMaximum = qMax(0, maximum);
+    if (m_window->m_memoryCountLabel)
+    {
+        m_window->m_memoryCountLabel->setText(QStringLiteral("%1 (%2/%3)")
+                                                  .arg(m_memoryProgressLabel)
+                                                  .arg(m_memoryProgressValue)
+                                                  .arg(m_memoryProgressMaximum));
+    }
+    if (m_window->m_memoryProgressBar)
+    {
+        m_window->m_memoryProgressBar->setRange(0, m_memoryProgressMaximum);
+        m_window->m_memoryProgressBar->setValue(m_memoryProgressValue);
+        m_window->m_memoryProgressBar->setVisible(m_memoryProgressMaximum > 0);
+    }
+    updateMemoryTableInteraction();
+}
+
+void MemoryController::clearMemoryProgress()
+{
+    m_memoryProgressLabel.clear();
+    m_memoryProgressValue = 0;
+    m_memoryProgressMaximum = 0;
+    if (m_window->m_memoryProgressBar)
+    {
+        m_window->m_memoryProgressBar->setVisible(false);
+        m_window->m_memoryProgressBar->setValue(0);
+    }
+    updateMemoryTableInteraction();
 }
 
 bool MemoryController::backupRadioMemories()
@@ -1195,6 +1358,12 @@ void MemoryController::restoreRadioMemories()
                                  QStringLiteral("Wait for the current radio memory sync to finish before restoring."));
         return;
     }
+    if (!m_memoryProgressLabel.isEmpty())
+    {
+        QMessageBox::information(popupParent(), QStringLiteral("Restore Memories"),
+                                 QStringLiteral("Wait for the current memory operation to finish before restoring."));
+        return;
+    }
 
     const QString path = QFileDialog::getOpenFileName(popupParent(), QStringLiteral("Restore Memories"),
                                                       backupDirectoryPath(), QString::fromLatin1(kMemoryBackupFilter));
@@ -1203,10 +1372,10 @@ void MemoryController::restoreRadioMemories()
         return;
     }
 
-    if (QMessageBox::question(popupParent(), QStringLiteral("Restore Memories"),
-                              QStringLiteral("Restore this memory backup to the radio?\n\n"
-                                             "Current user memories in groups 1-3 will be cleared first.\n"
-                                             "Factory scan-edge and call memories are left untouched.")) !=
+    if (QMessageBox::question(
+            popupParent(), QStringLiteral("Restore Memories"),
+            QStringLiteral("Restore this memory backup to the radio?\n\n"
+                           "User memory channels 1-99 on 2M, 70CM, and 23CM will be cleared first.")) !=
         QMessageBox::Yes)
     {
         return;
@@ -1229,28 +1398,17 @@ void MemoryController::restoreRadioMemories()
         return;
     }
 
-    QVector<MemoryType> deletes;
-    deletes.reserve((kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * kRadioMemoryLastChannel);
-    for (quint16 group = kRadioMemoryFirstGroup; group <= kRadioMemoryLastGroup; ++group)
-    {
-        for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
-        {
-            deletes.append(deletedRadioMemory(group, channel));
-        }
-    }
-    queueRadioMemoryWrites(deletes);
+    const QVector<MemoryType> deletes = deletedUserRadioMemories();
+    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing existing memories"));
     m_radioMemoriesByKey.clear();
 
     int skipped = 0;
     const int restoreStartDelayMs = deletes.size() * kRadioMemoryWriteIntervalMs + 500;
-    const int queued = queueRecordsToRadio(memoriesFromDocument(doc), &skipped, restoreStartDelayMs);
-    QMessageBox::information(
-        popupParent(), QStringLiteral("Restore Memories Successful"),
-        QStringLiteral("Queued %1 memories for radio restore.%2")
-            .arg(queued)
-            .arg(skipped > 0 ? QStringLiteral("\n\nSkipped %1 memories because the target group is full or not synced.")
-                                   .arg(skipped)
-                             : QString()));
+    const int queued = queueRecordsToRadio(memoriesFromDocument(doc), &skipped, restoreStartDelayMs,
+                                           QStringLiteral("Uploading memories"));
+    m_window->showToast(skipped > 0
+                            ? QStringLiteral("Queued %1 memories for restore, skipped %2").arg(queued).arg(skipped)
+                            : QStringLiteral("Queued %1 memories for restore").arg(queued));
     QTimer::singleShot(restoreStartDelayMs + queued * kRadioMemoryWriteIntervalMs + 1000, this,
                        &MemoryController::requestRadioMemoryRefresh);
 }
@@ -1282,7 +1440,7 @@ bool MemoryController::exportRadioMemories()
     }
 
     QMessageBox::information(popupParent(), QStringLiteral("Export Memories Successful"),
-                             QStringLiteral("Memory export successful.\n\nSaved to:\n%1").arg(path));
+                             QStringLiteral("Memory export successful."));
     return true;
 }
 
@@ -1298,6 +1456,12 @@ void MemoryController::importRadioMemories()
     {
         QMessageBox::information(popupParent(), QStringLiteral("Import Memories"),
                                  QStringLiteral("Wait for the current radio memory sync to finish before importing."));
+        return;
+    }
+    if (!m_memoryProgressLabel.isEmpty())
+    {
+        QMessageBox::information(popupParent(), QStringLiteral("Import Memories"),
+                                 QStringLiteral("Wait for the current memory operation to finish before importing."));
         return;
     }
 
@@ -1325,19 +1489,29 @@ void MemoryController::importRadioMemories()
         return;
     }
 
-    int skippedCount = 0;
-    const int importedCount = queueRecordsToRadio(records, &skippedCount);
+    if (QMessageBox::question(
+            popupParent(), QStringLiteral("Import Memories"),
+            QStringLiteral("Import these memories to the radio?\n\n"
+                           "User memory channels 1-99 on 2M, 70CM, and 23CM will be cleared first.")) !=
+        QMessageBox::Yes)
+    {
+        return;
+    }
 
-    QMessageBox::information(
-        popupParent(), QStringLiteral("Import Memories Successful"),
-        QStringLiteral("Queued %1 memories for radio import.%2")
-            .arg(importedCount)
-            .arg(skippedCount > 0
-                     ? QStringLiteral("\n\nSkipped %1 memories because the target group is full or not synced.")
-                           .arg(skippedCount)
-                     : QString()));
-    m_window->showToast(QStringLiteral("Queued %1 memories for radio import").arg(importedCount));
-    QTimer::singleShot(importedCount * kRadioMemoryWriteIntervalMs + 1000, this,
+    const QVector<MemoryType> deletes = deletedUserRadioMemories();
+    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing existing memories"));
+    m_radioMemoriesByKey.clear();
+
+    int skippedCount = 0;
+    const int importStartDelayMs = deletes.size() * kRadioMemoryWriteIntervalMs + 500;
+    const int importedCount =
+        queueRecordsToRadio(records, &skippedCount, importStartDelayMs, QStringLiteral("Uploading memories"));
+
+    m_window->showToast(
+        skippedCount > 0
+            ? QStringLiteral("Queued %1 memories for import, skipped %2").arg(importedCount).arg(skippedCount)
+            : QStringLiteral("Queued %1 memories for import").arg(importedCount));
+    QTimer::singleShot(importStartDelayMs + importedCount * kRadioMemoryWriteIntervalMs + 1000, this,
                        &MemoryController::requestRadioMemoryRefresh);
 }
 
@@ -1349,30 +1523,23 @@ bool MemoryController::resetRadioMemories()
                                  QStringLiteral("Connect to the radio before resetting memories."));
         return false;
     }
+    if (m_refreshInProgress || !m_memoryProgressLabel.isEmpty())
+    {
+        QMessageBox::information(popupParent(), QStringLiteral("Reset Memories"),
+                                 QStringLiteral("Wait for the current memory operation to finish before resetting."));
+        return false;
+    }
 
     if (QMessageBox::question(popupParent(), QStringLiteral("Reset Memories"),
-                              QStringLiteral("Clear user radio memories in groups 1-3?\n\n"
-                                             "Factory scan-edge and call memories are left untouched.")) !=
-        QMessageBox::Yes)
+                              QStringLiteral("Sync radio memories and clear only stored memory channels 1-99 on 2M, "
+                                             "70CM, and 23CM?")) != QMessageBox::Yes)
     {
         return false;
     }
 
-    QVector<MemoryType> deletes;
-    deletes.reserve((kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * kRadioMemoryLastChannel);
-    for (quint16 group = kRadioMemoryFirstGroup; group <= kRadioMemoryLastGroup; ++group)
-    {
-        for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
-        {
-            deletes.append(deletedRadioMemory(group, channel));
-        }
-    }
-    queueRadioMemoryWrites(deletes);
-    m_radioMemoriesByKey.clear();
-    m_receivedRadioMemoryKeys.clear();
-    rebuildMemoryViews();
-    QTimer::singleShot(deletes.size() * kRadioMemoryWriteIntervalMs + 1000, this,
-                       &MemoryController::requestRadioMemoryRefresh);
+    m_resetAfterSync = true;
+    requestRadioMemoryRefresh();
+    m_window->showToast(QStringLiteral("Syncing memories before reset"));
     return true;
 }
 
@@ -1412,12 +1579,11 @@ void MemoryController::rebuildMemoryViews()
             return item;
         };
 
-        quint16 group = 0;
-        quint16 channel = 0;
-        parseRadioMemoryId(memory.id, &group, &channel);
+        auto* bandItem = setItem(kMemoryBandColumn, memoryBandLabelForGroup(memory.group));
+        bandItem->setTextAlignment(Qt::AlignCenter);
         auto* numberItem =
-            setItem(kMemoryNumberColumn, QStringLiteral("%1-%2").arg(group).arg(channel, 3, 10, QLatin1Char('0')));
-        numberItem->setData(Qt::UserRole, channel);
+            setItem(kMemoryNumberColumn, QString::number(memory.channel).rightJustified(3, QLatin1Char('0')));
+        numberItem->setData(Qt::UserRole, memory.channel);
         numberItem->setTextAlignment(Qt::AlignCenter);
         setItem(kMemoryNameColumn, memory.name);
         auto* frequencyItem = setItem(kMemoryFrequencyColumn, memoryFrequencyLabel(memory.receiveHz));
@@ -1426,13 +1592,12 @@ void MemoryController::rebuildMemoryViews()
         setItem(kMemoryDuplexColumn, memory.shift)->setTextAlignment(Qt::AlignCenter);
         setItem(kMemoryModeColumn, memoryModeLabel(memory.mode))->setTextAlignment(Qt::AlignCenter);
         auto* toneItem = setItem(kMemoryToneColumn, memoryToneTableLabel(memory));
+        toneItem->setData(kMemoryToneTypeRole, memoryToneTypeLabel(memory));
+        toneItem->setData(kMemoryToneRxRole, memoryToneRxLabel(memory));
+        toneItem->setData(kMemoryToneTxRole, memoryToneTxLabel(memory));
         toneItem->setToolTip(toneItem->text());
         toneItem->setTextAlignment(Qt::AlignCenter);
-        auto* toneFrequencyItem = setItem(kMemoryToneFrequencyColumn, memoryToneFrequencyTableValue(memory));
-        toneFrequencyItem->setToolTip(toneFrequencyItem->text());
-        toneFrequencyItem->setTextAlignment(Qt::AlignCenter);
         setItem(kMemoryFilterColumn, memoryFilterLabel(memory.filter))->setTextAlignment(Qt::AlignCenter);
-        setItem(kMemoryScanColumn, memoryScanGroupLabel(memory.scan))->setTextAlignment(Qt::AlignCenter);
         setItem(kMemoryIdColumn, memory.id);
         ++visibleCount;
     }
@@ -1446,18 +1611,23 @@ void MemoryController::rebuildMemoryViews()
             const int syncIndex = (m_currentSyncGroup - kRadioMemoryFirstGroup) *
                                       (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1) +
                                   (m_currentSyncChannel - kRadioMemoryFirstChannel + 1);
-            m_window->m_memoryCountLabel->setText(QStringLiteral("Syncing group %1 channel %2 (%3/%4)")
-                                                      .arg(m_currentSyncGroup)
-                                                      .arg(m_currentSyncChannel, 3, 10, QLatin1Char('0'))
-                                                      .arg(syncIndex)
-                                                      .arg(kRadioMemorySyncTotal));
+            setMemoryProgress(QStringLiteral("Syncing %1 channel %2")
+                                  .arg(memoryBandLabelForGroup(m_currentSyncGroup))
+                                  .arg(m_currentSyncChannel, 3, 10, QLatin1Char('0')),
+                              syncIndex, kRadioMemorySyncTotal);
             return;
         }
         if (m_refreshInProgress)
         {
-            m_window->m_memoryCountLabel->setText(QStringLiteral("Syncing memories"));
+            setMemoryProgress(QStringLiteral("Syncing memories"), 0, kRadioMemorySyncTotal);
             return;
         }
+        if (!m_memoryProgressLabel.isEmpty())
+        {
+            setMemoryProgress(m_memoryProgressLabel, m_memoryProgressValue, m_memoryProgressMaximum);
+            return;
+        }
+        clearMemoryProgress();
         if (bandFilter.isEmpty())
         {
             m_window->m_memoryCountLabel->setText(
@@ -1614,12 +1784,11 @@ void MemoryController::copySelectedMemory()
     copy.name = (copy.name.isEmpty() ? QStringLiteral("Copy") : QStringLiteral("%1 Copy").arg(copy.name))
                     .left(kRadioMemoryNameMaxChars);
 
-    quint16 group = 0;
+    quint16 group = kRadioMemoryFirstGroup;
     quint16 channel = 0;
-    if (!targetForMemoryFrequency(copy.receiveHz, &group, &channel))
+    if (!parseRadioMemoryId(id, &group, nullptr) || !firstOpenChannelForGroup(group, &channel))
     {
-        QMessageBox::warning(popupParent(), "Copy Memory",
-                             "No empty radio memory channel is available in the target group.");
+        QMessageBox::warning(popupParent(), "Copy Memory", "No empty user memory channel is available on this band.");
         return;
     }
 
@@ -1643,18 +1812,18 @@ void MemoryController::removeSelectedMemory()
         return;
     }
 
-    if (QMessageBox::question(popupParent(), "Remove Memory",
-                              QStringLiteral("Remove memory \"%1\"?").arg(memory.name)) != QMessageBox::Yes)
-    {
-        return;
-    }
-
     quint16 group = 0;
     quint16 channel = 0;
     if (!parseRadioMemoryId(id, &group, &channel))
     {
         return;
     }
+    if (QMessageBox::question(popupParent(), "Remove Memory",
+                              QStringLiteral("Remove memory \"%1\"?").arg(memory.name)) != QMessageBox::Yes)
+    {
+        return;
+    }
+
     deleteRadioMemory(group, channel);
     m_window->showToast(QStringLiteral("Memory removed"));
 }
@@ -1720,12 +1889,6 @@ void MemoryController::moveSelectedMemory(int direction)
     {
         return;
     }
-    if (sourceGroup != targetGroup)
-    {
-        QMessageBox::information(popupParent(), "Move Memory",
-                                 "Radio memories can only move within the same band group.");
-        return;
-    }
     writeMemoryRecord(source, targetGroup, targetChannel);
     writeMemoryRecord(target, sourceGroup, sourceChannel);
 }
@@ -1756,7 +1919,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
 
     auto* root = new QVBoxLayout(editor);
     root->setSpacing(8);
-    root->setContentsMargins(10, 8, 0, 0);
+    root->setContentsMargins(kMemoryEditorGutter, 8, kMemoryEditorGutter, 0);
 
     auto* editorTitle = new QLabel(editing ? QStringLiteral("Edit Memory") : QStringLiteral("Add Memory"), editor);
     editorTitle->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 12px; font-weight: bold; }")
@@ -1784,25 +1947,11 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
         configureSectionForm(*form);
         return group;
     };
-    auto* groupCombo = new QComboBox(editor);
-    for (quint16 group = kRadioMemoryFirstGroup; group <= kRadioMemoryLastGroup; ++group)
-    {
-        groupCombo->addItem(QString::number(group), group);
-    }
     auto* channelCombo = new QComboBox(editor);
     for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
     {
         channelCombo->addItem(QString::number(channel).rightJustified(3, QLatin1Char('0')), channel);
     }
-    auto* channelRow = new QWidget(editor);
-    auto* channelRowLayout = new QHBoxLayout(channelRow);
-    channelRowLayout->setContentsMargins(0, 0, 0, 0);
-    channelRowLayout->setSpacing(6);
-    channelRowLayout->addWidget(groupCombo, 1);
-    auto* channelSeparator = new QLabel(QStringLiteral("-"), channelRow);
-    channelSeparator->setAlignment(Qt::AlignCenter);
-    channelRowLayout->addWidget(channelSeparator);
-    channelRowLayout->addWidget(channelCombo, 2);
     auto* nameEdit = new QLineEdit(editor);
     nameEdit->setMaxLength(kRadioMemoryNameMaxChars);
     nameEdit->setPlaceholderText(QStringLiteral("Maximum %1 characters").arg(kRadioMemoryNameMaxChars));
@@ -1835,11 +1984,25 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     auto* modeOffsetRow = new QWidget(editor);
     auto* modeOffsetLayout = new QHBoxLayout(modeOffsetRow);
     modeOffsetLayout->setContentsMargins(0, 0, 0, 0);
-    modeOffsetLayout->setSpacing(8);
-    auto* offsetLabel = new QLabel(QStringLiteral("Offset:"), modeOffsetRow);
-    modeOffsetLayout->addWidget(modeCombo, 1);
-    modeOffsetLayout->addWidget(offsetLabel);
-    modeOffsetLayout->addWidget(offsetCombo, 1);
+    modeOffsetLayout->setSpacing(10);
+    auto* modeColumn = new QWidget(modeOffsetRow);
+    auto* modeColumnLayout = new QVBoxLayout(modeColumn);
+    modeColumnLayout->setContentsMargins(0, 0, 0, 0);
+    modeColumnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
+    auto* modeLabel = new QLabel(QStringLiteral("Mode"), modeColumn);
+    modeLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    modeColumnLayout->addWidget(modeLabel);
+    modeColumnLayout->addWidget(modeCombo);
+    auto* offsetColumn = new QWidget(modeOffsetRow);
+    auto* offsetColumnLayout = new QVBoxLayout(offsetColumn);
+    offsetColumnLayout->setContentsMargins(0, 0, 0, 0);
+    offsetColumnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
+    auto* offsetLabel = new QLabel(QStringLiteral("Offset"), offsetColumn);
+    offsetLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    offsetColumnLayout->addWidget(offsetLabel);
+    offsetColumnLayout->addWidget(offsetCombo);
+    modeOffsetLayout->addWidget(modeColumn, 1);
+    modeOffsetLayout->addWidget(offsetColumn, 1);
     auto* customOffsetRow = new QWidget(editor);
     auto* customOffsetLayout = new QHBoxLayout(customOffsetRow);
     customOffsetLayout->setContentsMargins(0, 0, 0, 0);
@@ -1853,6 +2016,14 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     customOffsetSpin->setSuffix(" MHz");
     customOffsetLayout->addWidget(customOffsetModeCombo);
     customOffsetLayout->addWidget(customOffsetSpin, 1);
+    auto* customOffsetField = new QWidget(editor);
+    auto* customOffsetFieldLayout = new QVBoxLayout(customOffsetField);
+    customOffsetFieldLayout->setContentsMargins(0, 0, 0, 0);
+    customOffsetFieldLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
+    auto* customOffsetLabel = new QLabel(QStringLiteral("Custom Offset"), customOffsetField);
+    customOffsetLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    customOffsetFieldLayout->addWidget(customOffsetLabel);
+    customOffsetFieldLayout->addWidget(customOffsetRow);
     auto* toneOptionCombo = new QComboBox(editor);
     toneOptionCombo->addItem("OFF", MemoryToneOff);
     toneOptionCombo->addItem("TONE", MemoryToneTone);
@@ -1897,11 +2068,10 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     auto* dtcsRxPresetBtn = new QPushButton(QStringLiteral("NONE"), editor);
     auto setEditorFieldHeight = [](QWidget* widget) { widget->setMinimumHeight(kMemoryEditorFieldHeight); };
     for (QWidget* widget : std::initializer_list<QWidget*>{
-             groupCombo,     channelCombo,   nameEdit,    frequencyEdit,         modeCombo,           filterCombo,
-             dataModeCombo,  scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin,    toneOptionCombo,
-             dsqlCombo,      dtcsSpin,       dtcsRxSpin,  dtcsPolarityCombo,     dtcsRxPolarityCombo, dvSqlSpin,
-             urEdit,         r1Edit,         r2Edit,      tonePresetBtn,         ctcssPresetBtn,      dtcsPresetBtn,
-             dtcsRxPresetBtn})
+             channelCombo,   nameEdit,    frequencyEdit,         modeCombo,           filterCombo,     dataModeCombo,
+             scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin,    toneOptionCombo, dsqlCombo,
+             dtcsSpin,       dtcsRxSpin,  dtcsPolarityCombo,     dtcsRxPolarityCombo, dvSqlSpin,       urEdit,
+             r1Edit,         r2Edit,      tonePresetBtn,         ctcssPresetBtn,      dtcsPresetBtn,   dtcsRxPresetBtn})
     {
         setEditorFieldHeight(widget);
     }
@@ -1916,7 +2086,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     auto* dtcsCodeColumn = new QWidget(dtcsRow);
     auto* dtcsCodeColumnLayout = new QVBoxLayout(dtcsCodeColumn);
     dtcsCodeColumnLayout->setContentsMargins(0, 0, 0, 0);
-    dtcsCodeColumnLayout->setSpacing(3);
+    dtcsCodeColumnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
     auto* dtcsCodeTextLabel = new QLabel(QStringLiteral("TX Code"), dtcsCodeColumn);
     dtcsCodeTextLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     dtcsCodeColumnLayout->addWidget(dtcsCodeTextLabel);
@@ -1924,7 +2094,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     auto* dtcsPolarityColumn = new QWidget(dtcsRow);
     auto* dtcsPolarityColumnLayout = new QVBoxLayout(dtcsPolarityColumn);
     dtcsPolarityColumnLayout->setContentsMargins(0, 0, 0, 0);
-    dtcsPolarityColumnLayout->setSpacing(3);
+    dtcsPolarityColumnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
     auto* dtcsPolarityLabel = new QLabel(QStringLiteral("Polarity"), dtcsPolarityColumn);
     dtcsPolarityLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     dtcsPolarityColumnLayout->addWidget(dtcsPolarityLabel);
@@ -1939,7 +2109,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     auto* dtcsRxCodeColumn = new QWidget(dtcsRxRow);
     auto* dtcsRxCodeColumnLayout = new QVBoxLayout(dtcsRxCodeColumn);
     dtcsRxCodeColumnLayout->setContentsMargins(0, 0, 0, 0);
-    dtcsRxCodeColumnLayout->setSpacing(3);
+    dtcsRxCodeColumnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
     auto* dtcsRxCodeTextLabel = new QLabel(QStringLiteral("RX Code"), dtcsRxCodeColumn);
     dtcsRxCodeTextLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     dtcsRxCodeColumnLayout->addWidget(dtcsRxCodeTextLabel);
@@ -1947,7 +2117,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     auto* dtcsRxPolarityColumn = new QWidget(dtcsRxRow);
     auto* dtcsRxPolarityColumnLayout = new QVBoxLayout(dtcsRxPolarityColumn);
     dtcsRxPolarityColumnLayout->setContentsMargins(0, 0, 0, 0);
-    dtcsRxPolarityColumnLayout->setSpacing(3);
+    dtcsRxPolarityColumnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
     auto* dtcsRxPolarityLabel = new QLabel(QStringLiteral("Polarity"), dtcsRxPolarityColumn);
     dtcsRxPolarityLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     dtcsRxPolarityColumnLayout->addWidget(dtcsRxPolarityLabel);
@@ -1967,7 +2137,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
         auto* column = new QWidget(parent);
         auto* columnLayout = new QVBoxLayout(column);
         columnLayout->setContentsMargins(0, 0, 0, 0);
-        columnLayout->setSpacing(3);
+        columnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
         auto* label = new QLabel(labelText, column);
         label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         columnLayout->addWidget(label);
@@ -2053,7 +2223,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
         auto* column = new QWidget(optionsRow);
         auto* columnLayout = new QVBoxLayout(column);
         columnLayout->setContentsMargins(0, 0, 0, 0);
-        columnLayout->setSpacing(3);
+        columnLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
         auto* label = new QLabel(labelText, column);
         label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         columnLayout->addWidget(label);
@@ -2064,15 +2234,36 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     addOptionColumn(QStringLiteral("Scan Group"), scanGroupCombo, 1);
     addOptionColumn(QStringLiteral("Filter"), filterCombo, 1);
 
-    memoryForm->addRow("Channel:", channelRow);
-    memoryForm->addRow("Frequency:", frequencyEdit);
-    memoryForm->addRow("Name:", nameEdit);
-    memoryForm->addRow("Mode:", modeOffsetRow);
-    memoryForm->addRow("Custom Offset:", customOffsetRow);
+    auto* memoryFields = new QWidget(memoryGroup);
+    auto* memoryGrid = new QGridLayout(memoryFields);
+    memoryGrid->setContentsMargins(0, 0, 0, 0);
+    memoryGrid->setHorizontalSpacing(10);
+    memoryGrid->setVerticalSpacing(6);
+    memoryGrid->setColumnStretch(0, 1);
+    memoryGrid->setColumnStretch(1, 1);
+    auto addMemoryField =
+        [memoryFields, memoryGrid](int row, int column, const QString& labelText, QWidget* field, int columnSpan = 1)
+    {
+        auto* fieldContainer = new QWidget(memoryFields);
+        auto* fieldLayout = new QVBoxLayout(fieldContainer);
+        fieldLayout->setContentsMargins(0, 0, 0, 0);
+        fieldLayout->setSpacing(kMemoryEditorLabelFieldSpacing);
+        auto* label = new QLabel(labelText, fieldContainer);
+        label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        fieldLayout->addWidget(label);
+        fieldLayout->addWidget(field);
+        memoryGrid->addWidget(fieldContainer, row, column, 1, columnSpan);
+    };
+    addMemoryField(0, 0, QStringLiteral("Channel"), channelCombo);
+    addMemoryField(0, 1, QStringLiteral("Frequency"), frequencyEdit);
+    addMemoryField(1, 0, QStringLiteral("Name"), nameEdit, 2);
+    memoryGrid->addWidget(modeOffsetRow, 2, 0, 1, 2);
+    memoryGrid->addWidget(customOffsetField, 3, 0, 1, 2);
+    memoryForm->addRow(memoryFields);
     optionsForm->addRow(optionsRow);
-    toneForm->addRow("Tone Mode:", toneOptionCombo);
-    toneForm->addRow(QString(), toneValueRow);
-    toneForm->addRow(QString(), dtcsValueRow);
+    toneForm->addRow(toneOptionCombo);
+    toneForm->addRow(toneValueRow);
+    toneForm->addRow(dtcsValueRow);
     dstarForm->addRow("Digital SQL (DSQL):", dsqlCombo);
     dstarForm->addRow("DV SQL:", dvSqlSpin);
     dstarForm->addRow("Your Call (UR):", urEdit);
@@ -2150,13 +2341,12 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     };
 
     auto updateCustomOffsetVisibility =
-        [memoryForm, modeCombo, offsetLabel, offsetCombo, customOffsetRow, resizeEditorToContents]()
+        [modeCombo, offsetColumn, offsetCombo, customOffsetField, resizeEditorToContents]()
     {
         const bool showOffset = modeSupportsMemoryOffset(modeCombo->currentData().toInt());
         const bool customSelected = offsetCombo->currentData(Qt::UserRole).toInt() == kMemoryOffsetCustom;
-        offsetLabel->setVisible(showOffset);
-        offsetCombo->setVisible(showOffset);
-        memoryForm->setRowVisible(customOffsetRow, showOffset && customSelected);
+        offsetColumn->setVisible(showOffset);
+        customOffsetField->setVisible(showOffset && customSelected);
         resizeEditorToContents();
     };
 
@@ -2190,10 +2380,11 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
             return;
         }
 
-        frequencyEdit->setText(memoryFrequencyLabel(m_window->m_vfo->frequencyHz()));
+        const quint64 currentFrequencyHz = m_window->m_vfo->frequencyHz();
+        frequencyEdit->setText(memoryFrequencyLabel(currentFrequencyHz));
         if (nameEdit->text().trimmed().isEmpty())
         {
-            nameEdit->setText(memoryFrequencyLabel(m_window->m_vfo->frequencyHz()));
+            nameEdit->setText(memoryFrequencyLabel(currentFrequencyHz));
         }
         modeCombo->setCurrentIndex(qMax(0, modeCombo->findData(modeRegisterFromLabel(m_window->m_vfo->mode()))));
         populateOffsetOptions();
@@ -2416,17 +2607,16 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
             });
     connect(offsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), editor, updateCustomOffsetVisibility);
 
-    auto applyMemoryToForm = [this, groupCombo, channelCombo, nameEdit, frequencyEdit, modeCombo, filterCombo,
-                              dataModeCombo, scanGroupCombo, populateOffsetOptions, setOffsetSelection,
-                              updateCustomOffsetVisibility, toneOptionCombo, toneEdit, tsqlEdit, dsqlCombo, dtcsSpin,
-                              dtcsRxSpin, dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit,
-                              setTonePick, setCtcssPick, setDtcsPick, setDtcsRxPick, populateToneValues,
+    auto applyMemoryToForm = [this, channelCombo, nameEdit, frequencyEdit, modeCombo, filterCombo, dataModeCombo,
+                              scanGroupCombo, populateOffsetOptions, setOffsetSelection, updateCustomOffsetVisibility,
+                              toneOptionCombo, toneEdit, tsqlEdit, dsqlCombo, dtcsSpin, dtcsRxSpin, dtcsPolarityCombo,
+                              dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, setTonePick, setCtcssPick,
+                              setDtcsPick, setDtcsRxPick, populateToneValues,
                               updateConditionalSections](const MemoryRecord& memory)
     {
         quint16 group = kRadioMemoryFirstGroup;
         quint16 channel = kRadioMemoryFirstChannel;
         parseRadioMemoryId(memory.id, &group, &channel);
-        groupCombo->setCurrentIndex(qMax(0, groupCombo->findData(group)));
         channelCombo->setCurrentIndex(qMax(0, channelCombo->findData(channel)));
         nameEdit->setText(memory.name);
         frequencyEdit->setText(memoryFrequencyLabel(memory.receiveHz));
@@ -2502,10 +2692,11 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     }
     else
     {
+        const quint16 defaultGroup =
+            m_window->m_vfo ? radioMemoryGroupForHz(m_window->m_vfo->frequencyHz()) : kRadioMemoryFirstGroup;
         quint16 firstOpenChannel = kRadioMemoryFirstChannel;
-        if (firstOpenChannelForGroup(kRadioMemoryFirstGroup, &firstOpenChannel))
+        if (firstOpenChannelForGroup(defaultGroup, &firstOpenChannel))
         {
-            groupCombo->setCurrentIndex(qMax(0, groupCombo->findData(kRadioMemoryFirstGroup)));
             channelCombo->setCurrentIndex(qMax(0, channelCombo->findData(firstOpenChannel)));
         }
     }
@@ -2521,16 +2712,20 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
 
     root->addStretch(1);
     root->addSpacing(kMemoryEditorGutter);
-    auto* footerSeparator = new QWidget(editor);
+    auto* footerContainer = new QWidget(editor);
+    auto* footerLayout = new QVBoxLayout(footerContainer);
+    footerLayout->setContentsMargins(0, 0, 0, 0);
+    footerLayout->setSpacing(0);
+    auto* footerSeparator = new QWidget(footerContainer);
     footerSeparator->setFixedHeight(1);
     footerSeparator->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     footerSeparator->setStyleSheet(
         QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    root->addWidget(footerSeparator);
-    root->addSpacing(kMemoryEditorGutter);
-    auto* buttonRow = new QWidget(editor);
+    footerLayout->addWidget(footerSeparator);
+    auto* buttonRow = new QWidget(footerContainer);
     auto* buttonRowLayout = new QHBoxLayout(buttonRow);
-    buttonRowLayout->setContentsMargins(0, 0, 0, 0);
+    buttonRowLayout->setContentsMargins(0, kMemoryPanelSpacing + kMemoryFooterTopPadding, 0,
+                                        kMemoryFooterBottomPadding);
     auto* copyButton = new QPushButton("Copy Current", buttonRow);
     copyButton->setMinimumWidth(copyButton->sizeHint().width() + 20);
     auto* saveButton = new QPushButton("Save", buttonRow);
@@ -2539,7 +2734,8 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     buttonRowLayout->addStretch(1);
     buttonRowLayout->addWidget(saveButton, 0, Qt::AlignRight);
     buttonRowLayout->addWidget(cancelButton, 0, Qt::AlignRight);
-    root->addWidget(buttonRow);
+    footerLayout->addWidget(buttonRow);
+    root->addWidget(footerContainer);
     resizeEditorToContents();
     connect(copyButton, &QPushButton::clicked, editor, copyCurrentSettings);
     connect(cancelButton, &QPushButton::clicked, this,
@@ -2549,13 +2745,23 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
         saveButton, &QPushButton::clicked, editor,
         [this, editor, frequencyEdit, toneOptionCombo, toneEdit, tsqlEdit, dtcsSpin, dtcsRxSpin, nameEdit, modeCombo,
          filterCombo, dataModeCombo, scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin, dsqlCombo,
-         dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, groupCombo, channelCombo, editing,
-         memoryId, parent]()
+         dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, channelCombo, editing, memoryId,
+         parent]()
         {
             quint64 receiveHz = 0;
             if (!parseFrequencyText(frequencyEdit->text(), &receiveHz))
             {
                 QMessageBox::warning(editor, "Add/Edit Memory", "Enter a valid receive frequency.");
+                frequencyEdit->setFocus();
+                frequencyEdit->selectAll();
+                return;
+            }
+            const availableBands inferredBand = sdr9700::radioBandForFrequency(receiveHz);
+            const sdr9700::RadioBandDef* bandDefinition = sdr9700::radioBandDefinition(inferredBand);
+            if (!bandDefinition || bandDefinition->memGroup < kRadioMemoryFirstGroup ||
+                bandDefinition->memGroup > kRadioMemoryLastGroup)
+            {
+                QMessageBox::warning(editor, "Add/Edit Memory", "Enter a frequency in the 2M, 70CM, or 23CM range.");
                 frequencyEdit->setFocus();
                 frequencyEdit->selectAll();
                 return;
@@ -2657,7 +2863,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
             memory.r1Call = r1Edit->text().trimmed().toUpper();
             memory.r2Call = r2Edit->text().trimmed().toUpper();
 
-            const quint16 group = static_cast<quint16>(groupCombo->currentData().toUInt());
+            const quint16 group = static_cast<quint16>(bandDefinition->memGroup);
             const quint16 channel = static_cast<quint16>(channelCombo->currentData().toUInt());
             if (editing)
             {
@@ -2676,8 +2882,8 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
             else if (m_radioMemoriesByKey.contains(radioMemoryKey(group, channel)))
             {
                 if (QMessageBox::question(parent, "Add/Edit Memory",
-                                          QStringLiteral("Overwrite radio memory group %1 channel %2?")
-                                              .arg(group)
+                                          QStringLiteral("Overwrite radio memory %1 channel %2?")
+                                              .arg(memoryBandLabelForGroup(group))
                                               .arg(channel, 3, 10, QLatin1Char('0'))) != QMessageBox::Yes)
                 {
                     return;

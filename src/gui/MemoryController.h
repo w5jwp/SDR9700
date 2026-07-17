@@ -24,6 +24,7 @@ class MemoryController : public QObject
     void buildMemoryWindow();
     void showMemoryWindow();
     void forceRadioMemorySync();
+    void setMemoryPollIntervalSeconds(int seconds);
     QString selectedMemoryId() const;
     void selectCheckedMemory();
     void selectMemoryById(const QString& id, bool showDialogOnFailure);
@@ -47,6 +48,7 @@ class MemoryController : public QObject
     void requestNextRadioMemory();
     void handleRadioMemoryReceived(MemoryType memory);
     void finishRadioMemoryRefresh(bool timedOut = false);
+    void resetStoredRadioMemoriesAfterSync();
     void updateMemoryTableInteraction();
     void rebuildMemoryViews();
     QVector<MemoryRecord> currentMemories() const;
@@ -55,10 +57,13 @@ class MemoryController : public QObject
     bool parseRadioMemoryId(const QString& id, quint16* group, quint16* channel) const;
     void writeMemoryRecord(const MemoryRecord& memory, quint16 group, quint16 channel);
     void deleteRadioMemory(quint16 group, quint16 channel);
-    void queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs = 0);
+    void queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs = 0,
+                                const QString& progressLabel = QString());
     bool firstOpenChannelForGroup(quint16 group, quint16* channel) const;
-    bool targetForMemoryFrequency(quint64 hz, quint16* group, quint16* channel) const;
-    int queueRecordsToRadio(const QVector<MemoryRecord>& records, int* skippedCount, int startDelayMs = 0);
+    int queueRecordsToRadio(const QVector<MemoryRecord>& records, int* skippedCount, int startDelayMs = 0,
+                            const QString& progressLabel = QString());
+    void setMemoryProgress(const QString& label, int value, int maximum);
+    void clearMemoryProgress();
     void closeMemoryEditorPane(bool resizeWindow = true);
     QWidget* popupParent() const;
 
@@ -77,4 +82,8 @@ class MemoryController : public QObject
     quint16 m_currentSyncGroup{0};
     quint16 m_currentSyncChannel{0};
     bool m_refreshInProgress{false};
+    bool m_resetAfterSync{false};
+    QString m_memoryProgressLabel;
+    int m_memoryProgressValue{0};
+    int m_memoryProgressMaximum{0};
 };

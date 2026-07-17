@@ -12,7 +12,8 @@ inline constexpr int kMemoryNameMaxChars = 22;
 struct MemoryRecord
 {
     QString id;
-    int number{0};
+    quint16 group{0};
+    quint16 channel{0};
     QString name;
     QString band;
     int bandKey{-1};
@@ -43,8 +44,7 @@ struct MemoryRecord
 };
 
 int memoryBandKeyForHz(quint64 hz);
-QString memoryNumberLabel(int number);
-QVector<MemoryRecord> normalizedMemoryNumbers(QVector<MemoryRecord> memories);
+QString memoryBandLabelForGroup(quint16 group);
 QJsonDocument memoriesExportDocument(const QVector<MemoryRecord>& memories);
 QVector<MemoryRecord> memoriesFromDocument(const QJsonDocument& doc);
 QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories);

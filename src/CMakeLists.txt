@@ -150,6 +150,8 @@ set(SDR9700_SOURCES
     gui/SettingsPanelStyle.h
     gui/ApplicationConfigurationSettingsPanel.h
     gui/ApplicationConfigurationSettingsPanel.cpp
+    gui/MemoryManagerSettingsPanel.h
+    gui/MemoryManagerSettingsPanel.cpp
     gui/BandScopeSettingsPanel.h
     gui/BandScopeSettingsPanel.cpp
     gui/AudioDevicesSettingsPanel.h

@@ -4,6 +4,7 @@
 #include "BandScopeSettingsPanel.h"
 #include "DialogPlacement.h"
 #include "FramelessTitleBar.h"
+#include "MemoryManagerSettingsPanel.h"
 #ifdef HAVE_HIDAPI
 #include "IcomRC28SettingsPanel.h"
 #endif
@@ -156,17 +157,24 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                 return panel;
             });
 #endif
-    QTreeWidgetItem* applicationCategory =
-        addCategory(QStringLiteral("APPLICATION"), QStringLiteral("application configuration backup restore reset"));
+    QTreeWidgetItem* applicationCategory = addCategory(
+        QStringLiteral("APPLICATION"),
+        QStringLiteral("application configuration backup restore reset memory manager bandscope band scope"));
     addPage(applicationCategory, Page::ApplicationConfiguration, QStringLiteral("Configuration"),
             QStringLiteral("application configuration backup restore reset settings"),
             [] { return new ApplicationConfigurationSettingsPanel; });
-
-    QTreeWidgetItem* appearanceCategory =
-        addCategory(QStringLiteral("APPEARANCE"), QStringLiteral("appearance display visual band scope bandscope"));
-    addPage(appearanceCategory, Page::BandScope, QStringLiteral("Band Scope"),
-            QStringLiteral("appearance display visual bandscope band scope center line color vfo marker background "
-                           "gridlines grid density fewer normal more"),
+    addPage(applicationCategory, Page::MemoryManager, QStringLiteral("Memory Manager"),
+            QStringLiteral("application memory manager memories radio sync poll polling interval refresh"),
+            [this]()
+            {
+                auto* panel = new MemoryManagerSettingsPanel;
+                connect(panel, &MemoryManagerSettingsPanel::pollIntervalSecondsChanged, this,
+                        &SettingsDialog::memoryPollIntervalSecondsChanged);
+                return panel;
+            });
+    addPage(applicationCategory, Page::BandScope, QStringLiteral("Band Scope"),
+            QStringLiteral("application appearance display visual bandscope band scope center line color vfo marker "
+                           "background gridlines grid density fewer normal more"),
             [this]()
             {
                 auto* panel = new BandScopeSettingsPanel;

@@ -195,6 +195,7 @@ class MainWindow : public QMainWindow
     QComboBox* m_memoryBandFilter{nullptr};
     QTableWidget* m_memoryTable{nullptr};
     QLabel* m_memoryCountLabel{nullptr};
+    QProgressBar* m_memoryProgressBar{nullptr};
     int m_currentAfGain{128};
     int m_savedAfGain{128};
     MeterSnapshot m_meterSnapshot;
