@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include "Types.h"
@@ -45,4 +46,4 @@ struct MemoryRecord
 int memoryBandKeyForHz(quint64 hz);
 QString memoryBandLabelForGroup(quint16 group);
 QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories);
-QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data);
+QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* errors = nullptr);

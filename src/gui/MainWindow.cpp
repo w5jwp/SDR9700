@@ -116,6 +116,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
 
     connect(m_model, &RadioModel::connectionChanged, this, &MainWindow::onConnectionChanged);
     connect(m_model, &RadioModel::readyChanged, this, &MainWindow::onRadioReadyChanged);
+    connect(m_model, &RadioModel::scopeSyncDegradedChanged, this,
+            [this](bool degraded) { m_bandscopeStillSyncingAfterReady = degraded; });
     connect(m_model, &RadioModel::meterSnapshotChanged, this, &MainWindow::onMeterSnapshotChanged);
     connect(m_model, &RadioModel::pttChanged, this, &MainWindow::onPttChanged);
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
@@ -1753,16 +1755,6 @@ void MainWindow::onStatusMessage(const QString& msg)
 {
     ToastKind kind = ToastKind::Info;
     const QString lower = msg.toLower();
-    if (lower.contains(QStringLiteral("radio control ready")) &&
-        lower.contains(QStringLiteral("bandscope still syncing")))
-    {
-        m_bandscopeStillSyncingAfterReady = true;
-    }
-    else if (lower.contains(QStringLiteral("radio connection ready")) ||
-             lower.contains(QStringLiteral("bandscope synced")))
-    {
-        m_bandscopeStillSyncingAfterReady = false;
-    }
     if ((lower.contains(QStringLiteral("radio connection ready")) ||
          lower.contains(QStringLiteral("radio control ready"))) &&
         !radioUiReady())

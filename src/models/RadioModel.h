@@ -53,6 +53,7 @@ class RadioModel : public QObject
   signals:
     void connectionChanged(bool connected);
     void readyChanged(bool ready);
+    void scopeSyncDegradedChanged(bool degraded);
     void infoChanged();
     void smeterChanged(int value);
     void powerMeterChanged(double watts);

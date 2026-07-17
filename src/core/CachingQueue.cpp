@@ -97,8 +97,11 @@ void CachingQueue::run()
 
     while (!aborted.load(std::memory_order_relaxed))
     {
-        const qint64 waitMs = queue.isEmpty() ? -1 : qMax<qint64>(0, deadline.remainingTime());
-        const bool woke = waiting.wait(&mutex, waitMs);
+        // With no queued commands, wait indefinitely for a cache/message update
+        // or a new command. When commands exist, wake on the normal queue
+        // interval so recurring polls keep their pacing.
+        const bool woke =
+            queue.isEmpty() ? waiting.wait(&mutex) : waiting.wait(&mutex, qMax<qint64>(0, deadline.remainingTime()));
         if (aborted.load(std::memory_order_relaxed))
         {
             break;

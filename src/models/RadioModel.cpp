@@ -21,6 +21,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::connected, this, &RadioModel::onBackendConnected);
     connect(m_backend, &IRadioBackend::disconnected, this, &RadioModel::onBackendDisconnected);
     connect(m_backend, &IRadioBackend::readyChanged, this, &RadioModel::onBackendReadyChanged);
+    connect(m_backend, &IRadioBackend::scopeSyncDegradedChanged, this, &RadioModel::scopeSyncDegradedChanged);
     connect(m_backend, &IRadioBackend::errorOccurred, this, &RadioModel::onBackendError);
     connect(m_backend, &IRadioBackend::statusMessage, this, &RadioModel::statusMessage);
     connect(m_backend, &IRadioBackend::frequencyChanged, this, &RadioModel::onFrequencyChanged);

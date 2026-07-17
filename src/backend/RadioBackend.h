@@ -85,6 +85,7 @@ class RadioBackend : public IRadioBackend
     void shutdownConnection();
     void requestInitialRadioState();
     void updateReadyState();
+    void setScopeSyncDegraded(bool degraded);
     void handleReportedFrequency(quint64 hz);
     void sendLanModLevel(int level);
     void sendPttOffNow();

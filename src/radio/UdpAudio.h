@@ -5,7 +5,6 @@
 #include <QNetworkDatagram>
 #include <QHostInfo>
 #include <QTimer>
-#include <QMutex>
 #include <QByteArray>
 #include <atomic>
 #include <QVector>
@@ -86,8 +85,6 @@ class UdpAudio : public UdpBase
 
     QTimer* txAudioTimer = nullptr;
     bool enableTx = true;
-
-    QMutex audioMutex;
 
     std::atomic_bool m_txActive{false};
     QQueue<QByteArray> m_txAudioQueue;

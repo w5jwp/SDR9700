@@ -92,14 +92,18 @@ class AudioConverter : public QObject
     // regressions: remove these members and restore local vectors in convert().
     Eigen::VectorXf scratchSamples;
     Eigen::VectorXf scratchChannelMix;
+    // Reusable output conversion buffers. These only replace per-packet local
+    // Eigen temporaries in the final float-to-device-format stage; if TX/RX
+    // audio quality regresses, the backout is to remove these members and
+    // restore the local vectors in the non-Opus output branch of convert().
+    Eigen::VectorXf scratchOutputFloat;
+    Eigen::Matrix<quint8, Eigen::Dynamic, 1> scratchOutputU8;
+    Eigen::Matrix<qint16, Eigen::Dynamic, 1> scratchOutputI16;
+    Eigen::Matrix<qint32, Eigen::Dynamic, 1> scratchOutputI32;
 
     void releaseCodecState();
 };
 
-using VectorXuint8 = Eigen::Matrix<quint8, Eigen::Dynamic, 1>;
-using VectorXint8 = Eigen::Matrix<qint8, Eigen::Dynamic, 1>;
-using VectorXint16 = Eigen::Matrix<qint16, Eigen::Dynamic, 1>;
-using VectorXint32 = Eigen::Matrix<qint32, Eigen::Dynamic, 1>;
 
 // Eigen vectors cross thread boundaries in queued Qt signal delivery.
 Q_DECLARE_METATYPE(Eigen::VectorXf)

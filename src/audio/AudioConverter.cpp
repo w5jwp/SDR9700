@@ -466,27 +466,36 @@ bool AudioConverter::convert(audioPacket audio)
 
                 if (outFormat.sampleFormat() == QAudioFormat::UInt8)
                 {
-                    const Eigen::VectorXf f = samplesF.array().max(-1.0f).min(1.0f);
-                    Eigen::VectorXf scaled = (f.array() * 127.0f) + 128.0f;
-                    VectorXuint8 u8 = scaled.array().round().cast<quint8>();
-                    scratchOut.resize(int(u8.size() * sizeof(quint8)));
-                    std::memcpy(scratchOut.data(), u8.data(), size_t(u8.size()));
+                    scratchOutputFloat.resize(samplesF.size());
+                    scratchOutputFloat = samplesF.array().max(-1.0f).min(1.0f);
+                    scratchOutputU8.resize(scratchOutputFloat.size());
+                    scratchOutputU8 = ((scratchOutputFloat.array() * 127.0f) + 128.0f).round().cast<quint8>();
+                    scratchOut.resize(int(scratchOutputU8.size() * sizeof(quint8)));
+                    std::memcpy(scratchOut.data(), scratchOutputU8.data(), size_t(scratchOutputU8.size()));
                     audio.data.swap(scratchOut);
                 }
                 else if (outFormat.sampleFormat() == QAudioFormat::Int16)
                 {
-                    const Eigen::VectorXf f = samplesF.array().max(-1.0f).min(1.0f);
-                    VectorXint16 s16 = (f * float(std::numeric_limits<qint16>::max())).array().round().cast<qint16>();
-                    scratchOut.resize(int(s16.size() * sizeof(qint16)));
-                    std::memcpy(scratchOut.data(), s16.data(), size_t(s16.size()) * sizeof(qint16));
+                    scratchOutputFloat.resize(samplesF.size());
+                    scratchOutputFloat = samplesF.array().max(-1.0f).min(1.0f);
+                    scratchOutputI16.resize(scratchOutputFloat.size());
+                    scratchOutputI16 =
+                        (scratchOutputFloat * float(std::numeric_limits<qint16>::max())).array().round().cast<qint16>();
+                    scratchOut.resize(int(scratchOutputI16.size() * sizeof(qint16)));
+                    std::memcpy(scratchOut.data(), scratchOutputI16.data(),
+                                size_t(scratchOutputI16.size()) * sizeof(qint16));
                     audio.data.swap(scratchOut);
                 }
                 else if (outFormat.sampleFormat() == QAudioFormat::Int32)
                 {
-                    const Eigen::VectorXf f = samplesF.array().max(-1.0f).min(1.0f);
-                    VectorXint32 s32 = (f * float(std::numeric_limits<qint32>::max())).array().round().cast<qint32>();
-                    scratchOut.resize(int(s32.size() * sizeof(qint32)));
-                    std::memcpy(scratchOut.data(), s32.data(), size_t(s32.size()) * sizeof(qint32));
+                    scratchOutputFloat.resize(samplesF.size());
+                    scratchOutputFloat = samplesF.array().max(-1.0f).min(1.0f);
+                    scratchOutputI32.resize(scratchOutputFloat.size());
+                    scratchOutputI32 =
+                        (scratchOutputFloat * float(std::numeric_limits<qint32>::max())).array().round().cast<qint32>();
+                    scratchOut.resize(int(scratchOutputI32.size() * sizeof(qint32)));
+                    std::memcpy(scratchOut.data(), scratchOutputI32.data(),
+                                size_t(scratchOutputI32.size()) * sizeof(qint32));
                     audio.data.swap(scratchOut);
                 }
                 else if (outFormat.sampleFormat() == QAudioFormat::Float)

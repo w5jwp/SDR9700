@@ -239,7 +239,7 @@ RadioBackend::RadioBackend(QObject* parent)
             {
                 if (m_scopeSyncDegraded)
                 {
-                    m_scopeSyncDegraded = false;
+                    setScopeSyncDegraded(false);
                     emit statusMessage("Bandscope synced");
                 }
                 m_scopeDataReceived = true;
@@ -739,6 +739,7 @@ void RadioBackend::shutdownConnection()
     m_commander = nullptr;
     m_radioReady = false;
     m_scopeDataReceived = false;
+    setScopeSyncDegraded(false);
     resetScopeController();
     m_initialFrequencyReceived = false;
     m_initialModeReceived = false;
@@ -1535,6 +1536,17 @@ void RadioBackend::updateReadyState()
     }
 }
 
+void RadioBackend::setScopeSyncDegraded(bool degraded)
+{
+    if (m_scopeSyncDegraded == degraded)
+    {
+        return;
+    }
+
+    m_scopeSyncDegraded = degraded;
+    emit scopeSyncDegradedChanged(degraded);
+}
+
 void RadioBackend::restartAfterSyncTimeout()
 {
     if (!m_commander || m_radioReady)
@@ -1547,7 +1559,7 @@ void RadioBackend::restartAfterSyncTimeout()
         // that SDR9700 must never become usable until bandscope packets arrive,
         // remove this degraded path and let the reconnect block below handle
         // all sync-watchdog timeouts.
-        m_scopeSyncDegraded = true;
+        setScopeSyncDegraded(true);
         qWarning(logRadio()) << "Radio control sync completed but bandscope data did not arrive within"
                              << kSyncWatchdogTimeoutMs << "ms; enabling controls while scope retry continues";
         updateReadyState();
@@ -1672,7 +1684,7 @@ void RadioBackend::onLanReady()
 
     m_radioReady = false;
     m_scopeDataReceived = false;
-    m_scopeSyncDegraded = false;
+    setScopeSyncDegraded(false);
     resetScopeController();
     m_initialFrequencyReceived = false;
     m_initialModeReceived = false;

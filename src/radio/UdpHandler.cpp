@@ -65,9 +65,10 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
     }
 
     // The IC-9700 LAN handshake needs the local IPv4 address encoded in its
-    // session ID. Prefer an address on the same subnet as the radio, then fall
-    // back to the first active non-loopback IPv4 address.
-    QHostAddress fallbackLocalIp;
+    // session ID. Prefer an address on the same subnet as the radio. If none is
+    // found, use the first active non-loopback IPv4 address as the best local
+    // candidate.
+    QHostAddress candidateLocalIp;
     const quint32 radioIpv4 = radioIP.toIPv4Address();
     for (const QNetworkInterface& iface : QNetworkInterface::allInterfaces())
     {
@@ -86,9 +87,9 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
                 continue;
             }
 
-            if (fallbackLocalIp.isNull())
+            if (candidateLocalIp.isNull())
             {
-                fallbackLocalIp = address;
+                candidateLocalIp = address;
             }
 
             const quint32 mask = entry.netmask().toIPv4Address();
@@ -107,7 +108,7 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
 
     if (localIP.isNull())
     {
-        localIP = fallbackLocalIp;
+        localIP = candidateLocalIp;
     }
 }
 

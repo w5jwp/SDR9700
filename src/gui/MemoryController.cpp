@@ -352,7 +352,8 @@ MemoryRecord recordFromRadioMemory(const MemoryType& radioMemory)
     }
     else if (memory.toneMode != ratrNN)
     {
-        memory.toneValue = toneValueFromRadioText(!memory.tone.isEmpty() ? memory.tone : memory.tsql);
+        const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
+        memory.toneValue = toneValueFromRadioText(toneMode == ratrNT || toneMode == ratrDT ? memory.tsql : memory.tone);
     }
     memory.toneFrequency = memoryToneFrequencyLabel(static_cast<rptAccessTxRx_t>(memory.toneMode), memory.toneValue);
     return memory;
@@ -385,9 +386,12 @@ MemoryType radioMemoryFromRecord(const MemoryRecord& memory, quint16 group, quin
     }
     else if (toneMode != ratrNN)
     {
-        const QString fallbackTone = toneFrequencyLabel(memory.toneValue);
-        radioMemory.tone = normalizedToneText(memory.tone.isEmpty() ? fallbackTone : memory.tone);
-        radioMemory.tsql = normalizedToneText(memory.tsql.isEmpty() ? fallbackTone : memory.tsql);
+        // CSV import and the editor validate required tone fields before a write
+        // is queued. Keep the radio payload faithful to those explicit fields so
+        // bad memory data fails at the schema boundary instead of being repaired
+        // here with hidden inferred values.
+        radioMemory.tone = normalizedToneText(memory.tone);
+        radioMemory.tsql = normalizedToneText(memory.tsql);
     }
     const QByteArray name = memory.name.toLatin1().left(kRadioMemoryNameMaxChars);
     std::copy(name.cbegin(), name.cend(), radioMemory.name);
@@ -1620,7 +1624,18 @@ void MemoryController::importRadioMemories()
         return;
     }
 
-    const QVector<MemoryRecord> records = memoriesFromCsv(file.readAll());
+    QStringList importErrors;
+    const QVector<MemoryRecord> records = memoriesFromCsv(file.readAll(), &importErrors);
+    if (!importErrors.isEmpty())
+    {
+        const QString details = importErrors.mid(0, 12).join(QLatin1Char('\n'));
+        const QString suffix =
+            importErrors.size() > 12 ? QStringLiteral("\n...and %1 more").arg(importErrors.size() - 12) : QString();
+        QMessageBox::warning(
+            popupParent(), QStringLiteral("Import Memories Failed"),
+            QStringLiteral("Memory import failed. Fix the CSV file and try again.\n\n%1%2").arg(details, suffix));
+        return;
+    }
     if (records.isEmpty())
     {
         QMessageBox::warning(
@@ -1841,7 +1856,8 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
                               memory.toneMode, memory.toneValue);
     m_window->m_model->selectRadioMemory(group, channel);
     m_window->checkIfMemorySelectionComplete();
-    // Fallback: release the guard after 3 s in case the radio never confirms.
+    // Timeout guard: release the memory-selection protection after 3 s in case
+    // the radio never confirms the selected channel.
     QTimer::singleShot(3000, this,
                        [this, generation]()
                        {
@@ -2774,8 +2790,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
             {
                 if (toneModeForEditor == ratrTN || toneModeForEditor == ratrTT || toneModeForEditor == ratrTD)
                 {
-                    const ushort txTone = toneValueFromRadioText(
-                        !memory.tone.isEmpty() ? memory.tone : toneFrequencyLabel(memory.toneValue));
+                    const ushort txTone = toneValueFromRadioText(memory.tone);
                     if (txTone > 0)
                     {
                         setTonePick(txTone, toneFrequencyLabel(txTone));
@@ -2783,8 +2798,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
                 }
                 if (toneModeForEditor == ratrNT || toneModeForEditor == ratrTT || toneModeForEditor == ratrDT)
                 {
-                    const ushort rxTone = toneValueFromRadioText(
-                        !memory.tsql.isEmpty() ? memory.tsql : toneFrequencyLabel(memory.toneValue));
+                    const ushort rxTone = toneValueFromRadioText(memory.tsql);
                     if (rxTone > 0)
                     {
                         setCtcssPick(rxTone, toneFrequencyLabel(rxTone));

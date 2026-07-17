@@ -6,8 +6,13 @@
 #include <QHash>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace
 {
+constexpr quint16 kCsvFirstRadioMemoryChannel = 1;
+constexpr quint16 kCsvLastUserRadioMemoryChannel = 99;
+
 const QStringList& memoryCsvHeaders()
 {
     static const QStringList headers{
@@ -150,6 +155,16 @@ int csvInt(const QStringList& row, const QHash<QString, int>& indexes, const QSt
     return ok ? value : defaultValue;
 }
 
+bool csvHasValue(const QStringList& row, const QHash<QString, int>& indexes, const QString& key)
+{
+    return !csvValue(row, indexes, key).trimmed().isEmpty();
+}
+
+bool csvRowIsBlank(const QStringList& row)
+{
+    return std::all_of(row.cbegin(), row.cend(), [](const QString& field) { return field.trimmed().isEmpty(); });
+}
+
 ushort toneValueFromRadioText(const QString& text)
 {
     bool ok = false;
@@ -173,9 +188,84 @@ ushort memoryToneValueFromFields(rptAccessTxRx_t toneMode, const QString& tone, 
     }
     if (toneMode == ratrNT)
     {
-        return toneValueFromRadioText(!tsql.isEmpty() ? tsql : tone);
+        return toneValueFromRadioText(tsql);
     }
-    return toneValueFromRadioText(!tone.isEmpty() ? tone : tsql);
+    // For TX-capable tone modes, toneValue tracks the TX tone shown in compact
+    // labels. Do not infer it from RX tone; CSV import rejects missing required
+    // tone fields instead of repairing them at runtime.
+    return toneValueFromRadioText(tone);
+}
+
+void validateMemoryRecord(const MemoryRecord& memory, const QStringList& row, const QHash<QString, int>& indexes,
+                          int rowNumber, QStringList* errors)
+{
+    if (!errors)
+    {
+        return;
+    }
+
+    auto addError = [errors, rowNumber](const QString& message)
+    { errors->append(QStringLiteral("Row %1: %2").arg(rowNumber).arg(message)); };
+
+    if (memory.group == 0)
+    {
+        addError(QStringLiteral("band must be 1, 2, 3, 2M, 70CM, or 23CM"));
+    }
+    if (memory.channel < kCsvFirstRadioMemoryChannel || memory.channel > kCsvLastUserRadioMemoryChannel)
+    {
+        addError(QStringLiteral("channel must be 1-99"));
+    }
+    if (memory.receiveHz == 0)
+    {
+        addError(QStringLiteral("receiveHZ must be a positive integer"));
+    }
+
+    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
+    switch (toneMode)
+    {
+    case ratrNN:
+        break;
+    case ratrTN:
+        if (!csvHasValue(row, indexes, QStringLiteral("tone")))
+        {
+            addError(QStringLiteral("tone is required when toneMode is TONE TX"));
+        }
+        break;
+    case ratrNT:
+        if (!csvHasValue(row, indexes, QStringLiteral("tsql")))
+        {
+            addError(QStringLiteral("tsql is required when toneMode is TONE RX"));
+        }
+        break;
+    case ratrTT:
+    case ratrTD:
+        if (!csvHasValue(row, indexes, QStringLiteral("tone")) || !csvHasValue(row, indexes, QStringLiteral("tsql")))
+        {
+            addError(QStringLiteral("tone and tsql are required when toneMode uses TX and RX tones"));
+        }
+        break;
+    case ratrDN:
+        if (!csvHasValue(row, indexes, QStringLiteral("dtcs")))
+        {
+            addError(QStringLiteral("dtcs is required when toneMode is DTCS TX"));
+        }
+        break;
+    case ratrDD:
+        if (!csvHasValue(row, indexes, QStringLiteral("dtcs")) || !csvHasValue(row, indexes, QStringLiteral("dtcsB")))
+        {
+            addError(QStringLiteral("dtcs and dtcsB are required when toneMode uses TX and RX DTCS"));
+        }
+        break;
+    case ratrDT:
+        if (!csvHasValue(row, indexes, QStringLiteral("dtcs")) || !csvHasValue(row, indexes, QStringLiteral("tsql")))
+        {
+            addError(QStringLiteral("dtcs and tsql are required when toneMode uses DTCS TX and tone RX"));
+        }
+        break;
+    default:
+        addError(QStringLiteral("toneMode is not supported by SDR9700 memory import"));
+        break;
+    }
 }
 
 QString normalizedToneText(QString text)
@@ -252,8 +342,13 @@ QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories)
 }
 
 
-QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
+QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* errors)
 {
+    if (errors)
+    {
+        errors->clear();
+    }
+
     const QVector<QStringList> rows = parseCsvRows(QString::fromUtf8(data));
     if (rows.isEmpty())
     {
@@ -266,12 +361,28 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
     {
         indexes.insert(headers.at(i).trimmed(), i);
     }
+    for (const QString& header : memoryCsvHeaders())
+    {
+        if (!indexes.contains(header) && errors)
+        {
+            errors->append(QStringLiteral("Missing CSV column: %1").arg(header));
+        }
+    }
+    if (errors && !errors->isEmpty())
+    {
+        return {};
+    }
 
     QVector<MemoryRecord> memories;
     memories.reserve(rows.size() - 1);
     for (int i = 1; i < rows.size(); ++i)
     {
         const QStringList& row = rows.at(i);
+        if (csvRowIsBlank(row))
+        {
+            continue;
+        }
+
         MemoryRecord memory;
         memory.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         memory.group = memoryGroupForBandLabel(csvValue(row, indexes, QStringLiteral("band")));
@@ -305,7 +416,8 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
         memory.toneOption = sdr9700::ui::main_window::toneOptionLabel(static_cast<rptAccessTxRx_t>(memory.toneMode));
         memory.toneFrequency = sdr9700::ui::main_window::memoryToneFrequencyLabel(
             static_cast<rptAccessTxRx_t>(memory.toneMode), memory.toneValue);
-        if (memory.group > 0 && memory.channel > 0 && memory.receiveHz > 0)
+        validateMemoryRecord(memory, row, indexes, i + 1, errors);
+        if (!errors || errors->isEmpty())
         {
             memories.append(memory);
         }
