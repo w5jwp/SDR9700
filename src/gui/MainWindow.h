@@ -142,6 +142,7 @@ class MainWindow : public QMainWindow
     QString selectedMemoryId() const;
     void showMemoryEditor(const QString& memoryId);
     void setRadioControlsEnabled(bool enabled);
+    bool radioUiReady() const;
     void resetRadioOwnedControlsForSync();
     void applyActiveVfoFromRadio();
     void updateConnectionTooltip();
@@ -214,6 +215,7 @@ class MainWindow : public QMainWindow
     rptAccessTxRx_t m_activeMemoryToneMode{ratrNN};
     ushort m_activeMemoryToneValue{0};
     bool m_applyingMemorySelection{false};
+    bool m_activeMemorySelectionReleaseScheduled{false};
     int m_memorySelectionGeneration{0};
     bool m_activeMemoryFrequencySettled{false};
     bool m_activeMemoryDuplexSettled{false};
@@ -306,6 +308,7 @@ class MainWindow : public QMainWindow
     void setActiveMemory(const QString& id, const QString& name, quint64 frequencyHz, int duplexMode, quint64 offsetHz,
                          int toneMode, ushort toneValue);
     void clearActiveMemory();
+    void leaveMemoryModeForManualFrequencyChange();
     void updateMemoryNameLabel();
     void commitFrequencyEdit(VfoPanel* panel);
 };

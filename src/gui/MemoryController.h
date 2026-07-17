@@ -42,6 +42,10 @@ class MemoryController : public QObject
     bool exportRadioMemories();
     void importRadioMemories();
     bool resetRadioMemories();
+    bool initialMemorySyncComplete() const { return m_initialMemorySyncComplete; }
+
+  signals:
+    void initialMemorySyncChanged(bool complete);
 
   private:
     void requestRadioMemoryRefresh();
@@ -55,6 +59,7 @@ class MemoryController : public QObject
     MemoryRecord memoryForId(const QString& id, bool* found = nullptr) const;
     MemoryType radioMemoryForId(const QString& id, bool* found = nullptr) const;
     bool parseRadioMemoryId(const QString& id, quint16* group, quint16* channel) const;
+    void applyMemoryToVfo(const MemoryRecord& memory);
     void writeMemoryRecord(const MemoryRecord& memory, quint16 group, quint16 channel);
     void deleteRadioMemory(quint16 group, quint16 channel);
     void queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs = 0,
@@ -86,4 +91,5 @@ class MemoryController : public QObject
     QString m_memoryProgressLabel;
     int m_memoryProgressValue{0};
     int m_memoryProgressMaximum{0};
+    bool m_initialMemorySyncComplete{false};
 };

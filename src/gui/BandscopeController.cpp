@@ -83,6 +83,7 @@ void BandscopeController::buildBandscope(QVBoxLayout* vbox)
                 {
                     return;
                 }
+                m_window->leaveMemoryModeForManualFrequencyChange();
                 m_window->m_vfo->setFrequencyHz(m_window->m_pendingBandscopeTuneHz);
             });
 
@@ -290,7 +291,7 @@ void BandscopeController::scheduleBandscopeTune(quint64 hz)
     hz = clampFrequencyHzToActiveBand(roundFrequencyToStep(hz));
     const quint64 displayCenterHz =
         clampBandscopeCenterHz(hz, m_window->m_bandscope ? m_window->m_bandscope->bandwidthMhz() : 0.0);
-    m_window->clearActiveMemory();
+    m_window->leaveMemoryModeForManualFrequencyChange();
     m_window->m_pendingBandscopeTuneHz = hz;
     m_window->m_displayBandscopeTuneHz = hz;
     m_window->m_vfoFrequencyHz = hz;
@@ -355,7 +356,6 @@ void BandscopeController::onSpectrumClicked(double freqMhz)
         return;
     }
 
-    m_window->clearActiveMemory();
     scheduleBandscopeTune(clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(freqMhz * 1e6))));
 }
 

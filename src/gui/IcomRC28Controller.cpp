@@ -282,7 +282,7 @@ void IcomRC28Controller::snapIcomRC28FrequencyToKhz()
     {
         m_window->m_bandscope->clearDisplayCenterHold();
     }
-    m_window->clearActiveMemory();
+    m_window->leaveMemoryModeForManualFrequencyChange();
     m_window->m_vfo->setFrequencyHz(snappedHz);
 }
 

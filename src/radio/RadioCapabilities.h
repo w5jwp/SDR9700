@@ -193,6 +193,7 @@ inline constexpr RadioCommandDef kRadioCommands[] = {
     {funcPowerControl, "18", 0, 1, false, false, true, true, 0, false},
     {funcTransceiverId, "1900", 0, 0, false, false, true, true, 0, false},
     {funcMemoryContents, "1a00", 1, 107, false, false, true, true, 0, false},
+    {funcBandStackReg, "1a01", 1, 3, false, false, true, true, 0, false},
     {funcFilterWidth, "1a03", 50, 10000, false, false, true, true, 0, false},
     {funcTimeOutTimer, "1a050041", 0, 5, false, false, true, true, 1, false},
     {funcQuickSplit, "1a050043", 0, 1, false, false, true, true, 0, false},

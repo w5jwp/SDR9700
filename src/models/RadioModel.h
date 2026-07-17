@@ -45,6 +45,8 @@ class RadioModel : public QObject
     void setTxAudioDevice(const QAudioDevice& dev);
     void setLanModLevel(int level);
     void setTuningStep(int step);
+    void selectVfoMode();
+    void selectRadioMemory(quint16 group, quint16 channel);
     void requestRadioMemory(quint16 group, quint16 channel);
     void writeRadioMemory(MemoryType memory);
 

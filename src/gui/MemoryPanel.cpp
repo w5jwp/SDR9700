@@ -108,6 +108,10 @@ MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
             [this](int row, int column)
             {
                 Q_UNUSED(column)
+                if (m_syncInProgress)
+                {
+                    return;
+                }
                 const auto* item = m_table->item(row, kMemoryNumberColumn);
                 const QString memoryId = item ? item->data(Qt::UserRole).toString() : QString();
                 if (!memoryId.isEmpty())
@@ -130,9 +134,40 @@ void MemoryPanel::setActiveMemoryId(const QString& activeMemoryId)
     applyActiveSelection();
 }
 
+void MemoryPanel::setSyncInProgress(bool syncing, const QString& message)
+{
+    if (m_syncInProgress == syncing && m_syncMessage == message)
+    {
+        return;
+    }
+
+    m_syncInProgress = syncing;
+    m_syncMessage = message;
+    m_table->setSelectionMode(syncing ? QAbstractItemView::NoSelection : QAbstractItemView::SingleSelection);
+    m_table->setFocusPolicy(syncing ? Qt::NoFocus : Qt::StrongFocus);
+    m_table->setAttribute(Qt::WA_TransparentForMouseEvents, syncing);
+    if (QWidget* viewport = m_table->viewport())
+    {
+        viewport->setAttribute(Qt::WA_TransparentForMouseEvents, syncing);
+    }
+    rebuildList();
+}
+
 void MemoryPanel::rebuildList()
 {
     m_table->setRowCount(0);
+
+    if (m_syncInProgress)
+    {
+        m_table->setRowCount(1);
+        m_table->setSpan(0, 0, 1, kMemoryColumnCount);
+        auto* item = makeCellItem(m_syncMessage.isEmpty() ? QStringLiteral("Syncing radio memories...") : m_syncMessage,
+                                  Qt::AlignCenter);
+        item->setFlags(Qt::ItemIsEnabled);
+        m_table->setItem(0, 0, item);
+        m_table->setRowHeight(0, kMemoryItemHeight);
+        return;
+    }
 
     if (m_memories.isEmpty())
     {
@@ -192,7 +227,7 @@ void MemoryPanel::applyActiveSelection()
         {
             m_table->selectRow(row);
             m_table->setCurrentCell(row, kMemoryNumberColumn);
-            m_table->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+            m_table->scrollToItem(item, QAbstractItemView::EnsureVisible);
             return;
         }
     }

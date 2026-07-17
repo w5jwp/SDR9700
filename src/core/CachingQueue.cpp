@@ -462,11 +462,11 @@ void CachingQueue::updateCache(bool reply, QueueItem item)
         {
             radioState.vfoMode = vfoModeType_t::vfoModeSat;
         }
-        if (item.command == funcMemoryMode && item.param.value<bool>())
+        if (item.command == funcMemoryMode && (!item.param.isValid() || item.param.value<bool>()))
         {
             radioState.vfoMode = vfoModeType_t::vfoModeMem;
         }
-        if (item.command == funcVFOMode && item.param.value<bool>())
+        if (item.command == funcVFOModeSelect || (item.command == funcVFOMode && item.param.value<bool>()))
         {
             radioState.vfoMode = vfoModeType_t::vfoModeVfo;
         }

@@ -36,6 +36,21 @@ constexpr uchar kMainReceiver = 0;
 constexpr quint32 kTxAudioSampleRate = 16000;
 constexpr double kHighSwrCutoff = 3.0;
 
+quint64 memoryGroupDefaultFrequencyHz(quint16 group)
+{
+    switch (group)
+    {
+    case 1:
+        return sdr9700::radioBandDefaultFrequency(band2m);
+    case 2:
+        return sdr9700::radioBandDefaultFrequency(band70cm);
+    case 3:
+        return sdr9700::radioBandDefaultFrequency(band23cm);
+    default:
+        return 0;
+    }
+}
+
 bool populateModeInfo(const QString& mode, ModeInfo* info)
 {
     if (!info)
@@ -456,6 +471,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     m_connectionPass = pass;
     m_originalDataOffMod.reset();
     m_originalData1Mod.reset();
+    m_selectedRadioMemory.reset();
     m_lastUserVisibleNetworkMessage.clear();
 
     const quint64 session = ++m_sessionId;
@@ -735,6 +751,8 @@ void RadioBackend::shutdownConnection()
 
 void RadioBackend::setFrequencyHz(quint64 hz)
 {
+    m_selectedRadioMemory.reset();
+
     Frequency f;
     f.Hz = hz;
     f.MHzDouble = hz / 1e6;
@@ -750,6 +768,8 @@ void RadioBackend::setFrequencyHz(quint64 hz)
 
 void RadioBackend::setMode(const QString& mode)
 {
+    m_selectedRadioMemory.reset();
+
     if (!m_commander)
     {
         return;
@@ -1015,6 +1035,42 @@ void RadioBackend::selectMainVfoForCommand(Commander* commandSession) const
     commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
 }
 
+void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16 group) const
+{
+    if (!commandSession)
+    {
+        return;
+    }
+
+    const quint64 hz = memoryGroupDefaultFrequencyHz(group);
+    if (hz == 0)
+    {
+        qWarning(logRadio()) << "Ignoring memory band selection for unsupported group" << group;
+        return;
+    }
+
+    Frequency frequency;
+    frequency.Hz = hz;
+    frequency.MHzDouble = hz / 1e6;
+    frequency.VFO = activeVFO;
+
+    selectMainVfoForCommand(commandSession);
+    commandSession->receiveCommand(funcVFOModeSelect, QVariant(), 0);
+    commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency), 0);
+}
+
+void RadioBackend::selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel) const
+{
+    Q_UNUSED(group)
+    if (!commandSession)
+    {
+        return;
+    }
+
+    commandSession->receiveCommand(funcMemoryMode, QVariant(), 0);
+    commandSession->receiveCommand(funcMemoryMode, QVariant::fromValue(static_cast<uint>(channel)), 0);
+}
+
 void RadioBackend::setScopeEnabled(bool on)
 {
     invokeOnCurrentCommander([=](Commander* commandSession)
@@ -1097,13 +1153,24 @@ void RadioBackend::setPtt(bool on)
         }
         m_pttActive = true;
         armTransmitSafety();
+        const auto selectedMemory = m_selectedRadioMemory;
         invokeOnCurrentCommander(
-            [](Commander* commandSession)
+            [this, selectedMemory](Commander* commandSession)
             {
-                commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-                commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+                if (selectedMemory)
+                {
+                    const auto [group, channel] = *selectedMemory;
+                    selectMemoryForCommand(commandSession, group, channel);
+                }
                 commandSession->setPttActive(true);
                 commandSession->receiveCommand(funcTransceiverStatus, QVariant::fromValue<bool>(true), 0);
+                if (selectedMemory)
+                {
+                    const auto [group, channel] = *selectedMemory;
+                    selectMemoryForCommand(commandSession, group, channel);
+                    commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
+                    commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
+                }
             });
     }
     else
@@ -1271,6 +1338,34 @@ void RadioBackend::pollFrequency()
 {
     invokeOnCurrentCommander([](Commander* commandSession)
                              { commandSession->receiveCommand(funcFreqGet, QVariant(), 0); });
+}
+
+void RadioBackend::selectVfoMode()
+{
+    m_selectedRadioMemory.reset();
+    invokeOnCurrentCommander([](Commander* commandSession)
+                             { commandSession->receiveCommand(funcVFOModeSelect, QVariant(), 0); });
+}
+
+void RadioBackend::selectRadioMemory(quint16 group, quint16 channel)
+{
+    m_selectedRadioMemory = std::make_pair(group, channel);
+    const uint memoryAddress = (static_cast<uint>(group) << 16) | static_cast<uint>(channel);
+    invokeOnCurrentCommander(
+        [this, group, channel, memoryAddress](Commander* commandSession)
+        {
+            selectMemoryBandForCommand(commandSession, group);
+            selectMemoryForCommand(commandSession, group, channel);
+            commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0);
+            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
+            commandSession->receiveCommand(funcSplitStatus, QVariant(), 0);
+            commandSession->receiveCommand(funcReadFreqOffset, QVariant(), 0);
+            commandSession->receiveCommand(funcToneSquelchType, QVariant(), 0);
+            commandSession->receiveCommand(funcToneFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcTSQLFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcDTCSCode, QVariant(), 0);
+        });
 }
 
 void RadioBackend::requestRadioMemory(quint16 group, quint16 channel)

@@ -93,6 +93,16 @@ void RadioModel::setTuningStep(int step)
     m_backend->setTuningStep(step);
 }
 
+void RadioModel::selectVfoMode()
+{
+    m_backend->selectVfoMode();
+}
+
+void RadioModel::selectRadioMemory(quint16 group, quint16 channel)
+{
+    m_backend->selectRadioMemory(group, channel);
+}
+
 void RadioModel::requestRadioMemory(quint16 group, quint16 channel)
 {
     m_backend->requestRadioMemory(group, channel);

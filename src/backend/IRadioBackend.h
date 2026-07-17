@@ -57,6 +57,8 @@ class IRadioBackend : public QObject
     virtual void setTuningStep(int step) = 0;
 
     virtual void pollFrequency() = 0;
+    virtual void selectVfoMode() = 0;
+    virtual void selectRadioMemory(quint16 group, quint16 channel) = 0;
     virtual void requestRadioMemory(quint16 group, quint16 channel) = 0;
     virtual void writeRadioMemory(MemoryType memory) = 0;
 

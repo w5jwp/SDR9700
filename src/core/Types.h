@@ -394,7 +394,7 @@ enum Funcs
     // CI-V group 1A00-1A04: memory and filter settings.
     funcSepF,
     funcMemoryContents,
-    funcMemoryKeyer,
+    funcBandStackReg,
     funcFilterWidth,
     funcAGCTimeConstant,
 

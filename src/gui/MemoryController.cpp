@@ -287,27 +287,6 @@ QString normalizedToneText(QString text)
     return value > 0 ? toneFrequencyLabel(value) : text;
 }
 
-QString modeLabelFromRegister(int mode)
-{
-    switch (static_cast<radioMode_t>(mode))
-    {
-    case modeLSB:
-        return QStringLiteral("LSB");
-    case modeUSB:
-        return QStringLiteral("USB");
-    case modeAM:
-        return QStringLiteral("AM");
-    case modeCW:
-        return QStringLiteral("CW");
-    case modeFM:
-        return QStringLiteral("FM");
-    case modeDV:
-        return QStringLiteral("DV");
-    default:
-        return QStringLiteral("FM");
-    }
-}
-
 int modeRegisterFromLabel(const QString& mode)
 {
     if (mode == QLatin1String("LSB"))
@@ -554,6 +533,12 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
             {
                 if (ready)
                 {
+                    if (m_initialMemorySyncComplete)
+                    {
+                        m_initialMemorySyncComplete = false;
+                        emit initialMemorySyncChanged(false);
+                    }
+                    m_window->showToast(QStringLiteral("Syncing radio memories..."));
                     requestRadioMemoryRefresh();
                     m_radioMemoryPeriodicRefreshTimer->start();
                     return;
@@ -561,6 +546,11 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
                 m_radioMemoryRefreshTimer->stop();
                 m_radioMemoryPeriodicRefreshTimer->stop();
                 finishRadioMemoryRefresh(false);
+                if (m_initialMemorySyncComplete)
+                {
+                    m_initialMemorySyncComplete = false;
+                    emit initialMemorySyncChanged(false);
+                }
                 m_radioMemoriesByKey.clear();
                 m_receivedRadioMemoryKeys.clear();
                 rebuildMemoryViews();
@@ -961,6 +951,7 @@ void MemoryController::finishRadioMemoryRefresh(bool timedOut)
     m_radioMemoryRefreshTimer->stop();
     m_radioMemorySyncTimeoutTimer->stop();
     const bool wasInProgress = m_refreshInProgress;
+    const bool completedFullSync = wasInProgress && !timedOut && m_refreshGroup > kRadioMemoryLastGroup;
     const bool resetAfterSync = m_resetAfterSync;
     m_resetAfterSync = false;
     m_refreshInProgress = false;
@@ -975,6 +966,11 @@ void MemoryController::finishRadioMemoryRefresh(bool timedOut)
             m_window->showToast(QStringLiteral("Memory reset canceled because sync timed out"), 5000,
                                 MainWindow::ToastKind::Warning);
         }
+    }
+    else if (completedFullSync && !m_initialMemorySyncComplete)
+    {
+        m_initialMemorySyncComplete = true;
+        emit initialMemorySyncChanged(true);
     }
     rebuildMemoryViews();
     if (resetAfterSync && !timedOut && wasInProgress)
@@ -1056,14 +1052,26 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
     if (radioMemoryIsStored(memory))
     {
         m_radioMemoriesByKey.insert(key, memory);
+        if (m_window->m_activeMemoryId == radioMemoryId(memory.group, memory.channel))
+        {
+            const MemoryRecord activeMemory = recordFromRadioMemory(memory);
+            m_window->setActiveMemory(activeMemory.id, activeMemory.name, activeMemory.receiveHz,
+                                      activeMemory.duplexMode, activeMemory.offsetHz, activeMemory.toneMode,
+                                      activeMemory.toneValue);
+            applyMemoryToVfo(activeMemory);
+        }
     }
     else
     {
-        m_radioMemoriesByKey.remove(key);
         if (m_window->m_activeMemoryId == radioMemoryId(memory.group, memory.channel))
         {
+            if (m_window->m_applyingMemorySelection)
+            {
+                return;
+            }
             m_window->clearActiveMemory();
         }
+        m_radioMemoriesByKey.remove(key);
     }
     rebuildMemoryViews();
 }
@@ -1162,6 +1170,28 @@ bool MemoryController::parseRadioMemoryId(const QString& id, quint16* group, qui
         *channel = static_cast<quint16>(parsedChannel);
     }
     return true;
+}
+
+void MemoryController::applyMemoryToVfo(const MemoryRecord& memory)
+{
+    if (!m_window->m_vfo)
+    {
+        return;
+    }
+
+    m_window->m_vfo->applyFrequency(memory.receiveHz);
+    m_window->m_vfo->applyMode(memoryModeLabel(memory.mode));
+    m_window->m_vfo->applyRepeaterOffsetHz(memory.offsetHz);
+    m_window->m_vfo->applyDuplexMode(static_cast<duplexMode_t>(memory.duplexMode));
+    if (isDtcsToneMode(static_cast<rptAccessTxRx_t>(memory.toneMode)))
+    {
+        m_window->m_vfo->applyDtcsCode(memory.toneValue);
+    }
+    else if (memory.toneMode != ratrNN)
+    {
+        m_window->m_vfo->applyToneFrequency(memory.toneValue);
+    }
+    m_window->m_vfo->applyToneAccessMode(static_cast<rptAccessTxRx_t>(memory.toneMode));
 }
 
 void MemoryController::writeMemoryRecord(const MemoryRecord& memory, quint16 group, quint16 channel)
@@ -1548,6 +1578,7 @@ void MemoryController::rebuildMemoryViews()
     const QVector<MemoryRecord> memories = currentMemories();
     if (m_window->m_memoryPanel)
     {
+        m_window->m_memoryPanel->setSyncInProgress(m_refreshInProgress, QStringLiteral("Syncing radio memories..."));
         m_window->m_memoryPanel->setMemories(memories, m_window->m_activeMemoryId);
     }
 
@@ -1712,24 +1743,19 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
         return;
     }
 
+    quint16 group = 0;
+    quint16 channel = 0;
+    if (!parseRadioMemoryId(memory.id, &group, &channel))
+    {
+        return;
+    }
+
+    m_window->m_applyingMemorySelection = true;
+    m_window->m_activeMemorySelectionReleaseScheduled = false;
+    const int generation = ++m_window->m_memorySelectionGeneration;
     m_window->setActiveMemory(memory.id, memory.name, memory.receiveHz, memory.duplexMode, memory.offsetHz,
                               memory.toneMode, memory.toneValue);
-    m_window->m_applyingMemorySelection = true;
-    const int generation = ++m_window->m_memorySelectionGeneration;
-    m_window->m_vfo->setFrequencyHz(memory.receiveHz);
-    m_window->m_vfo->setMode(modeLabelFromRegister(memory.mode));
-    m_window->m_vfo->setRepeaterOffsetHz(memory.offsetHz);
-    m_window->m_vfo->setDuplexMode(static_cast<duplexMode_t>(memory.duplexMode));
-    if (isDtcsToneMode(static_cast<rptAccessTxRx_t>(memory.toneMode)))
-    {
-        m_window->m_vfo->setDtcsCode(memory.toneValue);
-    }
-    else if (memory.toneMode != ratrNN)
-    {
-        m_window->m_vfo->setToneFrequency(memory.toneValue);
-    }
-    m_window->m_vfo->setToneAccessMode(static_cast<rptAccessTxRx_t>(memory.toneMode));
-    // Release immediately if the radio was already at every correct setting (no callbacks will fire).
+    m_window->m_model->selectRadioMemory(group, channel);
     m_window->checkIfMemorySelectionComplete();
     // Fallback: release the guard after 3 s in case the radio never confirms.
     QTimer::singleShot(3000, this,
@@ -1740,6 +1766,7 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
                                return;
                            }
                            m_window->m_applyingMemorySelection = false;
+                           m_window->m_activeMemorySelectionReleaseScheduled = false;
                        });
     m_window->showToast(QStringLiteral("Selected memory: %1").arg(memory.name));
 }

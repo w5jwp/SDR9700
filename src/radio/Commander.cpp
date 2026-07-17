@@ -780,7 +780,7 @@ void Commander::parseCommand()
         break;
     }
     case funcMemoryClear:
-    case funcMemoryKeyer:
+    case funcBandStackReg:
     case funcMemoryToVFO:
     case funcMemoryWrite:
         break;
@@ -2669,7 +2669,7 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
                 queue->addUnique(kPriorityImmediate, funcModeGet, false, receiver);
             }
             else if (cmd.getCmd && func != funcScopeFixedEdgeFreq && func != funcSpeech && func != funcMemoryContents &&
-                     func != funcSatelliteMemory && func != funcSendCW)
+                     func != funcSatelliteMemory && func != funcBandStackReg && func != funcSendCW)
             {
                 // Confirm radio-backed state by querying after the set command.
                 queue->addUnique(kPriorityImmediate, func, false, receiver);

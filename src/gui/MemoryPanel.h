@@ -17,6 +17,7 @@ class MemoryPanel : public QGroupBox
 
     void setMemories(const QVector<MemoryRecord>& memories, const QString& activeMemoryId);
     void setActiveMemoryId(const QString& activeMemoryId);
+    void setSyncInProgress(bool syncing, const QString& message = QString());
 
   signals:
     void memoryActivated(const QString& memoryId);
@@ -28,4 +29,6 @@ class MemoryPanel : public QGroupBox
     QTableWidget* m_table{nullptr};
     QVector<MemoryRecord> m_memories;
     QString m_activeMemoryId;
+    QString m_syncMessage;
+    bool m_syncInProgress{false};
 };

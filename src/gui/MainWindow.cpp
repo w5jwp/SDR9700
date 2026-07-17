@@ -81,6 +81,11 @@
 #include <iterator>
 #include <numeric>
 
+namespace
+{
+constexpr int kMemorySelectionSettleDelayMs = 3000;
+}
+
 using namespace sdr9700::ui::main_window;
 
 MainWindow::MainWindow(RadioModel* model, QWidget* parent)
@@ -116,6 +121,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
     connect(m_model, &RadioModel::errorOccurred, this, &MainWindow::onError);
     connect(m_model, &RadioModel::networkQualityChanged, this, &MainWindow::updateNetworkQuality);
+    connect(m_memoryController, &MemoryController::initialMemorySyncChanged, this,
+            [this](bool) { onRadioReadyChanged(m_model && m_model->isReady()); });
 
     connect(m_vfo, &VfoModel::frequencyChanged, this, &MainWindow::onFrequencyChanged);
     connect(m_vfo, &VfoModel::modeChanged, this, &MainWindow::onModeChanged);
@@ -785,6 +792,7 @@ void MainWindow::buildControlPanel(QVBoxLayout* vbox)
                 return;
             }
             qInfo(logGui()) << "VFO action: band selected" << sdr9700::radioBandShortLabel(band) << hz;
+            leaveMemoryModeForManualFrequencyChange();
             m_vfo->setFrequencyHz(hz);
         }
     };
@@ -1060,6 +1068,12 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     }
 }
 
+bool MainWindow::radioUiReady() const
+{
+    return m_model && m_model->isConnected() && m_model->isReady() && m_memoryController &&
+           m_memoryController->initialMemorySyncComplete();
+}
+
 void MainWindow::resetRadioOwnedControlsForSync()
 {
     m_vfoFrequencyHz = 0;
@@ -1122,7 +1136,7 @@ void MainWindow::toggleControlLock()
 {
     m_controlsLocked = !m_controlsLocked;
     updateControlLockIndicator();
-    setRadioControlsEnabled(m_model && m_model->isConnected() && m_model->isReady());
+    setRadioControlsEnabled(radioUiReady());
     updateIcomRC28Leds();
 }
 
@@ -1286,6 +1300,7 @@ void MainWindow::setActiveMemory(const QString& id, const QString& name, quint64
 void MainWindow::clearActiveMemory()
 {
     m_applyingMemorySelection = false;
+    m_activeMemorySelectionReleaseScheduled = false;
     m_activeMemoryFrequencySettled = false;
     m_activeMemoryDuplexSettled = false;
     m_activeMemoryOffsetSettled = false;
@@ -1310,6 +1325,15 @@ void MainWindow::clearActiveMemory()
     }
 }
 
+void MainWindow::leaveMemoryModeForManualFrequencyChange()
+{
+    if (!m_activeMemoryId.isEmpty() && m_model && m_model->isReady())
+    {
+        m_model->selectVfoMode();
+    }
+    clearActiveMemory();
+}
+
 void MainWindow::checkIfMemorySelectionComplete()
 {
     if (!m_applyingMemorySelection)
@@ -1319,7 +1343,23 @@ void MainWindow::checkIfMemorySelectionComplete()
     if (m_activeMemoryFrequencySettled && m_activeMemoryDuplexSettled && m_activeMemoryOffsetSettled &&
         m_activeMemoryToneModeSettled && m_activeMemoryToneValueSettled)
     {
-        m_applyingMemorySelection = false;
+        if (m_activeMemorySelectionReleaseScheduled)
+        {
+            return;
+        }
+
+        m_activeMemorySelectionReleaseScheduled = true;
+        const int generation = m_memorySelectionGeneration;
+        QTimer::singleShot(kMemorySelectionSettleDelayMs, this,
+                           [this, generation]()
+                           {
+                               if (m_memorySelectionGeneration != generation)
+                               {
+                                   return;
+                               }
+                               m_applyingMemorySelection = false;
+                               m_activeMemorySelectionReleaseScheduled = false;
+                           });
     }
 }
 
@@ -1366,7 +1406,7 @@ void MainWindow::updateConnectionTooltip()
 
 void MainWindow::onConnectionChanged(bool connected)
 {
-    setRadioControlsEnabled(connected && m_model->isReady());
+    setRadioControlsEnabled(radioUiReady());
     resetRadioOwnedControlsForSync();
 
     if (connected)
@@ -1495,11 +1535,12 @@ void MainWindow::onConnectionChanged(bool connected)
 void MainWindow::onRadioReadyChanged(bool ready)
 {
     const bool connected = m_model->isConnected();
-    setRadioControlsEnabled(connected && ready);
+    const bool uiReady = connected && ready && m_memoryController && m_memoryController->initialMemorySyncComplete();
+    setRadioControlsEnabled(uiReady);
     if (m_vfoPanel)
     {
-        m_vfoPanel->setMeterEnabled(ready);
-        if (!ready)
+        m_vfoPanel->setMeterEnabled(uiReady);
+        if (!uiReady)
         {
             m_vfoPanel->setTransmitPowerMode(false);
             m_vfoPanel->setSMeterValue(0);
@@ -1510,7 +1551,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
         return;
     }
 
-    if (ready)
+    if (uiReady)
     {
         applyRadioTuningStep();
         applyBandscopeSettings();
@@ -1537,7 +1578,20 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         }
         else if (m_activeMemoryFrequencySettled && !m_applyingMemorySelection)
         {
-            clearActiveMemory();
+            quint64 transmitMemoryHz = 0;
+            if (m_activeMemoryDuplexMode == dmDupMinus && m_activeMemoryFrequencyHz > m_activeMemoryOffsetHz)
+            {
+                transmitMemoryHz = m_activeMemoryFrequencyHz - m_activeMemoryOffsetHz;
+            }
+            else if (m_activeMemoryDuplexMode == dmDupPlus)
+            {
+                transmitMemoryHz = m_activeMemoryFrequencyHz + m_activeMemoryOffsetHz;
+            }
+            if (transmitMemoryHz > 0 && hz == transmitMemoryHz)
+            {
+                return;
+            }
+            leaveMemoryModeForManualFrequencyChange();
         }
     }
 
@@ -1680,6 +1734,10 @@ void MainWindow::onStatusMessage(const QString& msg)
 {
     ToastKind kind = ToastKind::Info;
     const QString lower = msg.toLower();
+    if (lower.contains(QStringLiteral("radio connection ready")) && !radioUiReady())
+    {
+        return;
+    }
     if (lower.contains(QStringLiteral("timed out")) || lower.contains(QStringLiteral("stopped")) ||
         lower.contains(QStringLiteral("blocked")) || lower.contains(QStringLiteral("locked")) ||
         lower.contains(QStringLiteral("disconnected")) || lower.contains(QStringLiteral("could not")) ||
@@ -1976,7 +2034,7 @@ void MainWindow::commitFrequencyEdit(VfoPanel* panel)
         return;
     }
 
-    clearActiveMemory();
+    leaveMemoryModeForManualFrequencyChange();
     backend->setFrequencyHz(hz);
     panel->clearFrequencyFocus();
 }

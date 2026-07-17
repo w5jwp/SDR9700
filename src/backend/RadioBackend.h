@@ -66,6 +66,8 @@ class RadioBackend : public IRadioBackend
     void setTxPower(int level) override;
     void setTuningStep(int step) override;
     void pollFrequency() override;
+    void selectVfoMode() override;
+    void selectRadioMemory(quint16 group, quint16 channel) override;
     void requestRadioMemory(quint16 group, quint16 channel) override;
     void writeRadioMemory(MemoryType memory) override;
     void setRxAudioDevice(const QAudioDevice& dev) override { m_rxDevice = dev; }
@@ -91,6 +93,8 @@ class RadioBackend : public IRadioBackend
     void forcePttOffForSafety(const QString& message);
     void handleTransmitSwr(double swr);
     void selectMainVfoForCommand(Commander* commandSession) const;
+    void selectMemoryBandForCommand(Commander* commandSession, quint16 group) const;
+    void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel) const;
     void resetScopeController();
     void routeRadioItemsForSession(quint64 session, const QVector<CacheItem>& items);
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;
@@ -132,6 +136,7 @@ class RadioBackend : public IRadioBackend
     bool m_initialMainModeReceived{false};
     bool m_initialStateRequested{false};
     bool m_radioReady{false};
+    std::optional<std::pair<quint16, quint16>> m_selectedRadioMemory;
     QTimer* m_smeterPollTimer{nullptr};
     QTimer* m_bandStateRefreshTimer{nullptr};
     int m_currentBandKey{-1};

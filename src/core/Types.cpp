@@ -39,7 +39,7 @@ const QString funcString[funcLastFunc]{
     "+<CMD17-19>", "Send CW", "Power Control", "Transceiver ID",
 
     // CI-V group 1A00-1A04: memory and filter settings.
-    "+CMD1A00-1A04", "Memory Contents", "Memory Keyer", "Filter Width", "AGC Time Constant",
+    "+CMD1A00-1A04", "Memory Contents", "Band Stacking Reg", "Filter Width", "AGC Time Constant",
 
     // CI-V group 1A0500: set-mode options.
     "+<CMD1A0500>", "SSB RX HPFLPF", "SSB RX Bass", "SSB RX Treble", "AM RX HPFLPF", "AM RX Bass", "AM RX Treble",
