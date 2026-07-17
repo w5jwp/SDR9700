@@ -1693,7 +1693,13 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
         fEnd = parseFreqData(payloadIn.mid(sequenceHeaderBytes + 1 + freqLen, freqLen), receiver);
         if (d.mode == 0)
         {
-            const double halfSpanMhz = fEnd.MHzDouble / 2.0;
+            // IC-9700 center-scope wave-info reports the center frequency and
+            // the selected half-span (for example, the "+/-500 kHz" span is
+            // reported as 0.500 MHz). Treating this as total width and halving
+            // it makes every displayed signal appear halfway between the VFO
+            // center and its real frequency, which in turn makes click-to-tune
+            // walk halfway toward a signal on every click.
+            const double halfSpanMhz = fEnd.MHzDouble;
             d.startFreq = fStart.MHzDouble - halfSpanMhz;
             d.endFreq = fStart.MHzDouble + halfSpanMhz;
         }
@@ -1765,7 +1771,9 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
 
         if (d.mode == 0)
         {
-            const double halfSpanMhz = d.endFreq / 2.0;
+            // In center mode the second frequency field is the half-span, not
+            // the right edge or total span. See the single-frame path above.
+            const double halfSpanMhz = d.endFreq;
             d.startFreq -= halfSpanMhz;
             d.endFreq = d.startFreq + (2 * halfSpanMhz);
         }

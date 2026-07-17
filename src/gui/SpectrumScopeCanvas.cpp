@@ -102,29 +102,50 @@ int SpectrumScopeCanvas::spectrumPaneHeight() const
     return plotHeight();
 }
 
+int SpectrumScopeCanvas::plotLeftX() const
+{
+    return levelScalePanelWidth();
+}
+
+int SpectrumScopeCanvas::plotRightX() const
+{
+    return qMax(plotLeftX(), width() - 1);
+}
+
+int SpectrumScopeCanvas::plotWidthPx() const
+{
+    return plotRightX() - plotLeftX();
+}
+
 double SpectrumScopeCanvas::xToFreq(int x) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
-    const int plotW = width() - levelScalePanelWidth();
+    const int plotLeft = plotLeftX();
+    const int plotRight = plotRightX();
+    const int plotW = plotWidthPx();
     if (plotW <= 0 || endMhz <= startMhz)
     {
         return startMhz;
     }
-    const int plotX = qBound(levelScalePanelWidth(), x, width());
-    return startMhz + (double(plotX - levelScalePanelWidth()) / plotW) * (endMhz - startMhz);
+    // Map the right edge to the last drawable pixel, not one pixel past the
+    // widget. Click-to-tune and trace drawing must share the same closed pixel
+    // range or signals near the edge appear slightly displaced after tuning.
+    const int plotX = qBound(plotLeft, x, plotRight);
+    return startMhz + (double(plotX - plotLeft) / plotW) * (endMhz - startMhz);
 }
 
 int SpectrumScopeCanvas::freqToX(double mhz) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
-    const int plotW = width() - levelScalePanelWidth();
+    const int plotLeft = plotLeftX();
+    const int plotW = plotWidthPx();
     if (plotW <= 0 || endMhz <= startMhz)
     {
-        return levelScalePanelWidth();
+        return plotLeft;
     }
-    return levelScalePanelWidth() + int((mhz - startMhz) / (endMhz - startMhz) * plotW);
+    return plotLeft + int((mhz - startMhz) / (endMhz - startMhz) * plotW);
 }
 
 int SpectrumScopeCanvas::levelToY(float level, int topY, int h) const
@@ -148,9 +169,13 @@ int SpectrumScopeCanvas::binForFrequency(double mhz, int binCount) const
     {
         return -1;
     }
+    if (binCount == 1)
+    {
+        return 0;
+    }
 
     const double normalized = (mhz - dataStartMhz) / (dataEndMhz - dataStartMhz);
-    return qBound(0, int(normalized * binCount), binCount - 1);
+    return qBound(0, int(std::llround(normalized * double(binCount - 1))), binCount - 1);
 }
 
 int SpectrumScopeCanvas::binForDisplayX(int x, int binCount) const
@@ -257,7 +282,7 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
 
         const double scaleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
         const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
-        const int plotW = qMax(1, w - levelScalePanelWidth());
+        const int plotW = qMax(1, plotWidthPx());
         const double mhzPerPx = (scaleEndMhz > scaleStartMhz) ? (scaleEndMhz - scaleStartMhz) / plotW : 1.0;
         double tickStep = 0.5;
         double minMajorGridPx = 80.0;
@@ -337,7 +362,7 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
 
         const double scaleStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
         const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
-        const int plotW = qMax(1, w - levelScalePanelWidth());
+        const int plotW = qMax(1, plotWidthPx());
         const double mhzPerPx = (scaleEndMhz > scaleStartMhz) ? (scaleEndMhz - scaleStartMhz) / plotW : 1.0;
         static constexpr double kNiceSteps[] = {100.0, 50.0, 25.0, 10.0, 5.0,   2.5,  1.0,
                                                 0.5,   0.25, 0.1,  0.05, 0.025, 0.01, 0.005};

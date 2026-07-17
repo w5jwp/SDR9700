@@ -1634,15 +1634,11 @@ void MainWindow::onFrequencyChanged(quint64 hz)
             return;
         }
         m_pendingSpectrumScopeTuneHz = 0;
-        m_displaySpectrumScopeTuneHz = 0;
-        m_spectrumScopeDisplayCenterHz = 0;
-        m_spectrumScopeFixedPanStartHz = 0;
-        m_spectrumScopeFixedPanEndHz = 0;
-        m_spectrumScopeTuneReleaseTimer->stop();
-        if (m_spectrumScope)
-        {
-            m_spectrumScope->clearDisplayCenterHold();
-        }
+        // Keep the Spectrum Scope hold active until the release timer expires.
+        // The VFO frequency readback can arrive before the radio's scope stream
+        // has produced a frame centered on that new frequency. Clearing the
+        // hold here lets near-frequency stale frames be drawn under the new
+        // scale, which is the operator-visible "signal moved away" symptom.
     }
 
     m_vfoFrequencyHz = hz;

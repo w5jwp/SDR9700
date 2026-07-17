@@ -48,6 +48,9 @@ class SpectrumScopeCanvas : public QWidget
 
   private:
     int plotHeight() const;
+    int plotLeftX() const;
+    int plotRightX() const;
+    int plotWidthPx() const;
     double xToFreq(int x) const;
     int levelToY(float level, int topY, int h) const;
     int binForFrequency(double mhz, int binCount) const;

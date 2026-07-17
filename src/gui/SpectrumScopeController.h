@@ -25,5 +25,7 @@ class SpectrumScopeController : public QObject
     void onWheelStepRequested(int steps);
 
   private:
+    void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay);
+
     MainWindow* m_window{nullptr};
 };

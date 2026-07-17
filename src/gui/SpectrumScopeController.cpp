@@ -19,7 +19,6 @@
 
 using namespace sdr9700::ui::main_window;
 
-
 SpectrumScopeController::SpectrumScopeController(MainWindow* window) : QObject(window), m_window(window) {}
 
 void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
@@ -58,7 +57,9 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                                                    .toULongLong();
     m_window->m_spectrumScopeDisplay->setCurrentSpanHz(initialSpectrumScopeSpanHz);
     const double initialSpectrumScopeCenterMhz = m_window->m_vfo->frequencyHz() / 1e6;
-    const double initialSpectrumScopeBandwidthMhz = initialSpectrumScopeSpanHz / 1e6;
+    // IC-9700 center-scope span choices are half-spans ("+/-500 kHz"). The
+    // display range is full width, so expand the stored/radio half-span here.
+    const double initialSpectrumScopeBandwidthMhz = (initialSpectrumScopeSpanHz * 2.0) / 1e6;
     m_window->m_spectrumScopeDisplay->setFrequencyRange(
         initialSpectrumScopeCenterMhz - initialSpectrumScopeBandwidthMhz / 2.0,
         initialSpectrumScopeCenterMhz + initialSpectrumScopeBandwidthMhz / 2.0);
@@ -293,7 +294,23 @@ quint64 SpectrumScopeController::clampFrequencyHzToActiveBand(quint64 hz) const
 
 void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz)
 {
-    hz = clampFrequencyHzToActiveBand(roundFrequencyToStep(hz));
+    scheduleSpectrumScopeTune(hz, true, false, false);
+}
+
+void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately,
+                                                        bool clearStaleDisplay)
+{
+    // Wheel and RC-28 tuning are step-based controls, but a mouse click on the
+    // Spectrum Scope is an absolute frequency selection. Snapping clicks to the
+    // current VFO step makes off-step signals appear to move away after the
+    // display recenters, so callers choose the behavior explicitly. Clicks also
+    // clear stale bins and commit immediately; otherwise a near-frequency click
+    // can briefly show old scope data under the newly centered frequency scale.
+    if (snapToTuningStep)
+    {
+        hz = roundFrequencyToStep(hz);
+    }
+    hz = clampFrequencyHzToActiveBand(hz);
     const quint64 displayCenterHz =
         clampSpectrumScopeCenterHz(hz, m_window->m_spectrumScope ? m_window->m_spectrumScope->bandwidthMhz() : 0.0);
     m_window->leaveMemoryModeForManualFrequencyChange();
@@ -301,6 +318,10 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz)
     m_window->m_displaySpectrumScopeTuneHz = hz;
     m_window->m_vfoFrequencyHz = hz;
     updateSpectrumScopeBandLimits(hz);
+    if (clearStaleDisplay && m_window->m_spectrumScopeDisplay)
+    {
+        m_window->m_spectrumScopeDisplay->clearDisplay();
+    }
     if (m_window->m_spectrumScopeFixedPanStartHz > 0 || m_window->m_spectrumScopeFixedPanEndHz > 0)
     {
         if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
@@ -331,7 +352,19 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz)
     }
     updateSpectrumVfoMarker();
 
-    if (m_window->m_spectrumScopeTuneCommitTimer)
+    if (commitImmediately)
+    {
+        if (m_window->m_spectrumScopeTuneCommitTimer)
+        {
+            m_window->m_spectrumScopeTuneCommitTimer->stop();
+        }
+        if (m_window->m_pendingSpectrumScopeTuneHz != 0 && m_window->m_model->isReady() && !m_window->m_controlsLocked)
+        {
+            m_window->leaveMemoryModeForManualFrequencyChange();
+            m_window->m_vfo->setFrequencyHz(m_window->m_pendingSpectrumScopeTuneHz);
+        }
+    }
+    else if (m_window->m_spectrumScopeTuneCommitTimer)
     {
         m_window->m_spectrumScopeTuneCommitTimer->start();
     }
@@ -361,7 +394,8 @@ void SpectrumScopeController::onSpectrumClicked(double freqMhz)
         return;
     }
 
-    scheduleSpectrumScopeTune(clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(freqMhz * 1e6))));
+    const quint64 targetHz = static_cast<quint64>(std::llround(freqMhz * 1e6));
+    scheduleSpectrumScopeTune(targetHz, false, true, true);
 }
 
 void SpectrumScopeController::onWheelStepRequested(int steps)

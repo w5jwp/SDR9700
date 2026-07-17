@@ -61,11 +61,14 @@ double WaterfallController::xToFreq(int x) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
-    if (m_canvasSize.width() <= 0 || endMhz <= startMhz)
+    const int right = qMax(0, m_canvasSize.width() - 1);
+    if (right <= 0 || endMhz <= startMhz)
     {
         return startMhz;
     }
-    return startMhz + (double(x) / m_canvasSize.width()) * (endMhz - startMhz);
+    // Keep the waterfall bin map aligned with the Spectrum Scope canvas by
+    // treating the last drawable pixel as the end frequency.
+    return startMhz + (double(qBound(0, x, right)) / right) * (endMhz - startMhz);
 }
 
 int WaterfallController::binForFrequency(double mhz, int binCount) const
@@ -80,9 +83,13 @@ int WaterfallController::binForFrequency(double mhz, int binCount) const
     {
         return -1;
     }
+    if (binCount == 1)
+    {
+        return 0;
+    }
 
     const double normalized = (mhz - dataStartMhz) / (dataEndMhz - dataStartMhz);
-    return qBound(0, int(normalized * binCount), binCount - 1);
+    return qBound(0, int(std::llround(normalized * double(binCount - 1))), binCount - 1);
 }
 
 int WaterfallController::binForDisplayX(int x, int binCount) const

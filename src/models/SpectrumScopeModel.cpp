@@ -8,6 +8,7 @@ namespace
 {
 constexpr double kMinSourceBandwidthMhz = 0.001;
 constexpr double kScopeRangeToleranceMhz = 0.000001;
+constexpr double kHeldCenterToleranceMhz = 0.000001;
 
 bool normalizeRange(double* startMhz, double* endMhz)
 {
@@ -146,15 +147,27 @@ void SpectrumScopeModel::ingestSpectrum(const QVector<float>& levels, double sta
     {
         return;
     }
-    if (m_hasDisplayCenterHold &&
-        (m_heldCenterMhz < startMhz - kScopeRangeToleranceMhz || m_heldCenterMhz > endMhz + kScopeRangeToleranceMhz))
-    {
-        return;
-    }
-
     // Update range tracking from the radio-provided spectrum bounds.
     const double incomingCenter = (startMhz + endMhz) / 2.0;
     const double incomingBw = endMhz - startMhz;
+    if (m_hasDisplayCenterHold)
+    {
+        if (m_heldCenterMhz < startMhz - kScopeRangeToleranceMhz || m_heldCenterMhz > endMhz + kScopeRangeToleranceMhz)
+        {
+            return;
+        }
+
+        // While click-to-tune is waiting for the radio to report the new
+        // center, nearby old scope frames can still contain the clicked
+        // frequency. Drawing those stale frames under the optimistic display
+        // center makes the signal appear to slide away from the click point.
+        // Accept held-center frames only when the radio's reported center has
+        // caught up to the requested center.
+        if (qAbs(incomingCenter - m_heldCenterMhz) > kHeldCenterToleranceMhz)
+        {
+            return;
+        }
+    }
     m_sourceCenterMhz = incomingCenter;
     m_sourceBandwidthMhz = incomingBw;
 
