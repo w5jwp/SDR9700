@@ -1411,6 +1411,7 @@ void MainWindow::onConnectionChanged(bool connected)
 
     if (connected)
     {
+        m_bandscopeStillSyncingAfterReady = false;
         m_reconnecting = false;
         m_lastErrorWasCredential = false;
         m_allowChooserOnDisconnect = true;
@@ -1448,6 +1449,7 @@ void MainWindow::onConnectionChanged(bool connected)
     else
     {
         m_radioUiReadyNotified = false;
+        m_bandscopeStillSyncingAfterReady = false;
         if (m_bandscopeTuneCommitTimer)
         {
             m_bandscopeTuneCommitTimer->stop();
@@ -1566,8 +1568,14 @@ void MainWindow::onRadioReadyChanged(bool ready)
             // Backend "radio connection ready" means CI-V/scope startup reached
             // a usable point, but MainWindow intentionally waits for the
             // MemoryController's first sync before telling the operator the UI
-            // is ready for normal operation.
-            showToast(QStringLiteral("Radio control and memories ready"));
+            // is ready for normal operation. Preserve the degraded bandscope
+            // state in this final toast so the operator knows why the scope may
+            // still be blank; if this policy causes confusion, the backout is
+            // to remove m_bandscopeStillSyncingAfterReady and restore the
+            // single "Radio control and memories ready" message.
+            showToast(m_bandscopeStillSyncingAfterReady
+                          ? QStringLiteral("Radio control and memories ready; bandscope still syncing")
+                          : QStringLiteral("Radio control and memories ready"));
         }
     }
     else
@@ -1745,6 +1753,16 @@ void MainWindow::onStatusMessage(const QString& msg)
 {
     ToastKind kind = ToastKind::Info;
     const QString lower = msg.toLower();
+    if (lower.contains(QStringLiteral("radio control ready")) &&
+        lower.contains(QStringLiteral("bandscope still syncing")))
+    {
+        m_bandscopeStillSyncingAfterReady = true;
+    }
+    else if (lower.contains(QStringLiteral("radio connection ready")) ||
+             lower.contains(QStringLiteral("bandscope synced")))
+    {
+        m_bandscopeStillSyncingAfterReady = false;
+    }
     if ((lower.contains(QStringLiteral("radio connection ready")) ||
          lower.contains(QStringLiteral("radio control ready"))) &&
         !radioUiReady())

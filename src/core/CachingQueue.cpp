@@ -97,11 +97,26 @@ void CachingQueue::run()
 
     while (!aborted.load(std::memory_order_relaxed))
     {
-        if (!waiting.wait(&mutex, deadline.remainingTime()))
+        const qint64 waitMs = queue.isEmpty() ? -1 : qMax<qint64>(0, deadline.remainingTime());
+        const bool woke = waiting.wait(&mutex, waitMs);
+        if (aborted.load(std::memory_order_relaxed))
+        {
+            break;
+        }
+
+        QQueue<CacheItem> pendingItems;
+        QQueue<QString> pendingMessages;
+        pendingItems.swap(items);
+        pendingMessages.swap(messages);
+
+        const bool commandWakeRequested = m_queueWakeRequested;
+        m_queueWakeRequested = false;
+
+        QueueItem item;
+        bool haveCommandToEmit = false;
+        if (!queue.isEmpty() && (!woke || commandWakeRequested))
         {
             QueuePriority prio = kPriorityImmediate;
-            QueueItem item;
-            bool haveCommandToEmit = false;
 
             // If no immediate commands are queued, rotate through lower priorities.
             if (!queue.contains(prio))
@@ -166,22 +181,11 @@ void CachingQueue::run()
                 }
                 haveCommandToEmit = true;
             }
-
-            deadline.setRemainingTime(queueInterval);
-            if (haveCommandToEmit)
-            {
-                locker.unlock();
-                emit haveCommand(item.command, item.param, item.receiver);
-                locker.relock();
-            }
         }
-        else if (!aborted.load(std::memory_order_relaxed))
-        {
-            QQueue<CacheItem> pendingItems;
-            QQueue<QString> pendingMessages;
-            pendingItems.swap(items);
-            pendingMessages.swap(messages);
 
+        deadline.setRemainingTime(queueInterval);
+        if (!pendingItems.isEmpty() || !pendingMessages.isEmpty() || haveCommandToEmit)
+        {
             locker.unlock();
             if (!pendingItems.isEmpty())
             {
@@ -194,9 +198,9 @@ void CachingQueue::run()
                 emit sendValues(batch);
                 if (receivers(SIGNAL(sendValue(CacheItem))) > 0)
                 {
-                    for (const CacheItem& item : batch)
+                    for (const CacheItem& cacheItem : batch)
                     {
-                        emit sendValue(item);
+                        emit sendValue(cacheItem);
                     }
                 }
             }
@@ -204,11 +208,11 @@ void CachingQueue::run()
             {
                 emit sendMessage(pendingMessages.dequeue());
             }
-            locker.relock();
-            if (queueInterval != -1 && deadline.isForever())
+            if (haveCommandToEmit)
             {
-                deadline.setRemainingTime(queueInterval);
+                emit haveCommand(item.command, item.param, item.receiver);
             }
+            locker.relock();
         }
     }
 }
@@ -284,6 +288,8 @@ void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
                 queue.insert(queue.cend(), kPriorityImmediate, it);
             }
             queue.insert(prio, item);
+            m_queueWakeRequested = true;
+            waiting.wakeOne();
         }
     }
 }

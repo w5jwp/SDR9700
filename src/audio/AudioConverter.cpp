@@ -226,7 +226,8 @@ bool AudioConverter::convert(audioPacket audio)
 
             audio.data.swap(scratchIn);
         }
-        Eigen::VectorXf samplesF;
+        Eigen::VectorXf& samplesF = scratchSamples;
+        samplesF.resize(0);
         if (sampleFormat == QAudioFormat::Int32)
         {
             if (!byteCountMatchesSampleSize(audio.data, int(sizeof(qint32))))
@@ -237,6 +238,10 @@ bool AudioConverter::convert(audioPacket audio)
             }
             const int n = audio.data.size() / int(sizeof(qint32));
             MapI32Un s32(reinterpret_cast<qint32*>(audio.data.data()), n);
+            // Keep using Eigen's cast/divide semantics, but write into a
+            // reusable member buffer to avoid one heap allocation per audio
+            // packet. This is intentionally byte-equivalent at the output side.
+            samplesF.resize(n);
             samplesF = s32.cast<float>() / float(std::numeric_limits<qint32>::max());
         }
         else if (sampleFormat == QAudioFormat::Int16)
@@ -249,6 +254,7 @@ bool AudioConverter::convert(audioPacket audio)
             }
             const int n = audio.data.size() / int(sizeof(qint16));
             MapI16Un s16(reinterpret_cast<qint16*>(audio.data.data()), n);
+            samplesF.resize(n);
             samplesF = s16.cast<float>() / float(std::numeric_limits<qint16>::max());
         }
         else if (sampleFormat == QAudioFormat::UInt8)
@@ -257,6 +263,7 @@ bool AudioConverter::convert(audioPacket audio)
             MapU8Un u8(reinterpret_cast<quint8*>(audio.data.data()), count);
             scratchF.resize(count);
             scratchF = (u8.cast<float>().array() - 128.0f) / 127.0f;
+            samplesF.resize(count);
             samplesF = scratchF;
         }
         else if (sampleFormat == QAudioFormat::Float)
@@ -269,6 +276,7 @@ bool AudioConverter::convert(audioPacket audio)
             }
             const int n = audio.data.size() / int(sizeof(float));
             MapFUn f(reinterpret_cast<float*>(audio.data.data()), n);
+            samplesF.resize(n);
             samplesF = f;
         }
         else
@@ -298,18 +306,19 @@ bool AudioConverter::convert(audioPacket audio)
 
             if (inFormat.channelCount() == 2 && outFormat.channelCount() == 1)
             {
-                Eigen::VectorXf samplesTemp(samplesF.size() / 2);
-                samplesTemp =
+                scratchChannelMix.resize(samplesF.size() / 2);
+                scratchChannelMix =
                     Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>>(samplesF.data(), samplesF.size() / 2);
-                samplesF = samplesTemp;
+                samplesF.swap(scratchChannelMix);
             }
             else if (inFormat.channelCount() == 1 && outFormat.channelCount() == 2)
             {
-                Eigen::VectorXf samplesTemp(samplesF.size() * 2);
-                Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>>(samplesTemp.data(), samplesF.size()) = samplesF;
-                Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>>(samplesTemp.data() + 1, samplesF.size()) =
+                scratchChannelMix.resize(samplesF.size() * 2);
+                Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>>(scratchChannelMix.data(), samplesF.size()) =
                     samplesF;
-                samplesF = samplesTemp;
+                Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>>(scratchChannelMix.data() + 1, samplesF.size()) =
+                    samplesF;
+                samplesF.swap(scratchChannelMix);
             }
             if (resampler != nullptr && resampleRatio != 1.0)
             {

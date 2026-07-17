@@ -264,6 +264,7 @@ class MainWindow : public QMainWindow
     bool m_lastErrorWasCredential{false};
     bool m_allowChooserOnDisconnect{false};
     bool m_radioUiReadyNotified{false};
+    bool m_bandscopeStillSyncingAfterReady{false};
 
     QTimer* m_txDurationTimer{nullptr};
     QElapsedTimer m_txElapsed;

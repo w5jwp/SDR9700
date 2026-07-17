@@ -141,6 +141,10 @@ class CachingQueue : public QThread
     // to be initialized to -1, which disables CachingQueue::add(); keep this
     // positive unless intentionally backing out queued command scheduling.
     qint64 queueInterval = 50;
+    // Set while holding mutex when add() inserts command work. The worker uses
+    // this to distinguish a command wake from a value/message wake so queued
+    // readbacks run immediately without accelerating periodic cache traffic.
+    bool m_queueWakeRequested{false};
 
     radioCapabilities* radioCaps = nullptr; // Set after IC-9700 capabilities are loaded.
 

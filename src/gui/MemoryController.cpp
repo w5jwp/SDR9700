@@ -56,6 +56,7 @@ constexpr int kRadioMemorySyncTotal =
 constexpr int kRadioMemoryRefreshIntervalMs = 25;
 constexpr int kRadioMemorySyncTimeoutMs = 30000;
 constexpr int kRadioMemorySyncMaxPasses = 3;
+constexpr int kRadioMemoryInitialSyncRetryDelayMs = 2000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
 constexpr int kRadioMemoryWriteReadbackTimeoutMs = 3000;
 constexpr int kRadioMemoryNameMaxChars = 16;
@@ -897,6 +898,19 @@ void MemoryController::setMemoryPollIntervalSeconds(int seconds)
     m_radioMemoryPeriodicRefreshTimer->setInterval(boundedSeconds * 1000);
 }
 
+// Radio memory sync state machine:
+// - requestRadioMemoryRefresh() polls every user channel in every IC-9700 band
+//   group and records each key in m_expectedRadioMemoryKeys.
+// - handleRadioMemoryReceived() marks replies as received and stores only
+//   populated memories in m_radioMemoriesByKey.
+// - requestNextRadioMemory() retries the full range a small number of times
+//   before waiting for late replies. The full-pass retry is intentionally easy
+//   to back out if captures show the IC-9700 behaves better with missing-key
+//   retries.
+// - finishRadioMemoryRefresh() is the only place that clears progress and marks
+//   the first sync complete. MainWindow keeps radio controls disabled until that
+//   first full sync completes, so timeout recovery must schedule a new initial
+//   sync instead of leaving the operator parked at "Syncing".
 void MemoryController::requestRadioMemoryRefresh()
 {
     if (!m_window->m_model || !m_window->m_model->isConnected() || m_refreshInProgress)
@@ -1016,11 +1030,29 @@ void MemoryController::finishRadioMemoryRefresh(bool timedOut)
     clearMemoryProgress();
     if (timedOut && wasInProgress)
     {
-        m_window->showToast(QStringLiteral("Radio memory sync timed out"), 5000, MainWindow::ToastKind::Warning);
+        m_window->showToast(m_initialMemorySyncComplete ? QStringLiteral("Radio memory sync timed out")
+                                                        : QStringLiteral("Radio memory sync timed out; retrying"),
+                            5000, MainWindow::ToastKind::Warning);
         if (resetAfterSync)
         {
             m_window->showToast(QStringLiteral("Memory reset canceled because sync timed out"), 5000,
                                 MainWindow::ToastKind::Warning);
+        }
+        if (!m_initialMemorySyncComplete && m_window->m_model && m_window->m_model->isConnected())
+        {
+            // Radio Ready is intentionally gated on the first memory sync. A
+            // lost CI-V memory reply should not strand the UI until the normal
+            // periodic poll interval elapses, so retry the initial sync quickly.
+            // Backout point: remove this singleShot if field testing shows the
+            // IC-9700 needs a longer quiet period after a memory poll timeout.
+            QTimer::singleShot(kRadioMemoryInitialSyncRetryDelayMs, this,
+                               [this]()
+                               {
+                                   if (!m_initialMemorySyncComplete)
+                                   {
+                                       requestRadioMemoryRefresh();
+                                   }
+                               });
         }
     }
     else if (completedFullSync && !m_initialMemorySyncComplete)

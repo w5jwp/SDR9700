@@ -86,6 +86,12 @@ class AudioConverter : public QObject
     QByteArray scratchIn;
     QByteArray scratchOut;
     Eigen::VectorXf scratchF;
+    // Reusable conversion buffers for the per-packet audio hot path. These
+    // replace short-lived local Eigen vectors but intentionally preserve the
+    // existing conversion formulas and ordering. Backout point for audio
+    // regressions: remove these members and restore local vectors in convert().
+    Eigen::VectorXf scratchSamples;
+    Eigen::VectorXf scratchChannelMix;
 
     void releaseCodecState();
 };

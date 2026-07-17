@@ -160,6 +160,10 @@ void WaterfallController::updateSpectrum(const QVector<float>& levels)
         return;
     }
 
+    // The waterfall intentionally stores only the newest frame between render
+    // ticks. This copy is the handoff from the model's signal-owned frame to
+    // the throttled renderer; eliminating it cleanly would require changing
+    // the spectrum signal contract to pass movable/shared immutable frames.
     m_pendingLevels = levels;
     m_hasPendingLevels = true;
     scheduleRender();

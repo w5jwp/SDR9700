@@ -534,6 +534,10 @@ void BandscopeCanvas::setInvertMouseWheel(bool invert)
 
 void BandscopeCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
+    // Keep an owned copy for painting because the incoming QVector belongs to
+    // the model signal delivery path and may be superseded before paintEvent().
+    // Backout/optimization point: a future double-buffered model could move
+    // this storage upstream and let the canvas paint a shared immutable frame.
     m_spectrumBins = levels;
     m_scopeOutOfRange = outOfRange;
 

@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <limits>
+#include <utility>
 
 namespace
 {
@@ -58,7 +59,12 @@ void ScopeController::flushLatestFrame()
         return;
     }
 
-    const ScopeData frame = m_pendingFrame;
+    // Move the latest pending frame out of the controller. Scope data arrives
+    // continuously, and this avoids copying the raw CI-V byte buffer once per
+    // flushed frame. Backout point: change this back to a copy if future Qt
+    // metatype behavior requires m_pendingFrame to remain intact after flush.
+    const ScopeData frame = std::move(m_pendingFrame);
+    m_pendingFrame = {};
     m_hasPendingFrame = false;
     emit scopeDataReceived();
 
