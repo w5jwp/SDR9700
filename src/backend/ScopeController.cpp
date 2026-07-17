@@ -32,8 +32,8 @@ void ScopeController::reset()
 
 void ScopeController::acceptScopeData(const ScopeData& data)
 {
-    qDebug(logBandscope()) << "ScopeWaveData: valid=" << data.valid << "dataLen=" << data.data.size()
-                           << "start=" << data.startFreq << "end=" << data.endFreq;
+    qDebug(logSpectrumScope()) << "ScopeWaveData: valid=" << data.valid << "dataLen=" << data.data.size()
+                               << "start=" << data.startFreq << "end=" << data.endFreq;
     if (!data.valid || data.data.isEmpty())
     {
         return;
@@ -69,7 +69,7 @@ void ScopeController::flushLatestFrame()
     emit scopeDataReceived();
 
     const QVector<float> levels = ScopeAdapter::toLevels(frame.data);
-    if (logBandscope().isDebugEnabled())
+    if (logSpectrumScope().isDebugEnabled())
     {
         static QElapsedTimer statsTimer;
         if (!statsTimer.isValid() || statsTimer.elapsed() >= 1000)
@@ -89,8 +89,8 @@ void ScopeController::flushLatestFrame()
                     ++rawZeros;
                 }
             }
-            qDebug(logBandscope()).nospace()
-                << "Bandscope stats: range=" << frame.startFreq << "-" << frame.endFreq << "MHz"
+            qDebug(logSpectrumScope()).nospace()
+                << "Spectrum Scope stats: range=" << frame.startFreq << "-" << frame.endFreq << "MHz"
                 << " levels[min=" << rawMin << " max=" << rawMax
                 << " avg=" << (double(rawTotal) / double(frame.data.size())) << " zeros=" << rawZeros << "/"
                 << frame.data.size() << "]";

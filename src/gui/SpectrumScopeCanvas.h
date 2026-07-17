@@ -10,12 +10,12 @@
 #include <QVector>
 #include <QWidget>
 
-class BandscopeCanvas : public QWidget
+class SpectrumScopeCanvas : public QWidget
 {
     Q_OBJECT
 
   public:
-    explicit BandscopeCanvas(QWidget* parent = nullptr);
+    explicit SpectrumScopeCanvas(QWidget* parent = nullptr);
 
     static int scaleHeight() { return 26; }
     static int levelScalePanelWidth() { return 30; }

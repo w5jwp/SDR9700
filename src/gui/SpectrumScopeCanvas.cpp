@@ -1,4 +1,4 @@
-#include "BandscopeCanvas.h"
+#include "SpectrumScopeCanvas.h"
 #include "LogCategories.h"
 
 #include <QFontMetrics>
@@ -58,7 +58,7 @@ int normalizedGridDensity(int density)
 }
 } // namespace
 
-BandscopeCanvas::BandscopeCanvas(QWidget* parent) : QWidget(parent)
+SpectrumScopeCanvas::SpectrumScopeCanvas(QWidget* parent) : QWidget(parent)
 {
     setMouseTracking(true);
     setFocusPolicy(Qt::ClickFocus);
@@ -88,21 +88,21 @@ BandscopeCanvas::BandscopeCanvas(QWidget* parent) : QWidget(parent)
     m_peakDecayTimer.start();
     m_repaintTimer.setSingleShot(true);
     m_repaintTimer.setInterval(16);
-    connect(&m_repaintTimer, &QTimer::timeout, this, qOverload<>(&BandscopeCanvas::update));
+    connect(&m_repaintTimer, &QTimer::timeout, this, qOverload<>(&SpectrumScopeCanvas::update));
     m_lastFrameTimer.start();
 }
 
-int BandscopeCanvas::plotHeight() const
+int SpectrumScopeCanvas::plotHeight() const
 {
     return qMax(1, height() - scaleHeight());
 }
 
-int BandscopeCanvas::spectrumPaneHeight() const
+int SpectrumScopeCanvas::spectrumPaneHeight() const
 {
     return plotHeight();
 }
 
-double BandscopeCanvas::xToFreq(int x) const
+double SpectrumScopeCanvas::xToFreq(int x) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
@@ -115,7 +115,7 @@ double BandscopeCanvas::xToFreq(int x) const
     return startMhz + (double(plotX - levelScalePanelWidth()) / plotW) * (endMhz - startMhz);
 }
 
-int BandscopeCanvas::freqToX(double mhz) const
+int SpectrumScopeCanvas::freqToX(double mhz) const
 {
     const double startMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
     const double endMhz = highFrequencyMhz(m_startMhz, m_endMhz);
@@ -127,7 +127,7 @@ int BandscopeCanvas::freqToX(double mhz) const
     return levelScalePanelWidth() + int((mhz - startMhz) / (endMhz - startMhz) * plotW);
 }
 
-int BandscopeCanvas::levelToY(float level, int topY, int h) const
+int SpectrumScopeCanvas::levelToY(float level, int topY, int h) const
 {
     float norm = (level - m_minLevel) / (m_maxLevel - m_minLevel);
     norm = std::max(0.0f, std::min(1.0f, norm));
@@ -136,7 +136,7 @@ int BandscopeCanvas::levelToY(float level, int topY, int h) const
     return topY + topInset + int((1.0f - norm) * qMax(1, h - 1 - topInset - bottomInset));
 }
 
-int BandscopeCanvas::binForFrequency(double mhz, int binCount) const
+int SpectrumScopeCanvas::binForFrequency(double mhz, int binCount) const
 {
     const double dataStartMhz = lowFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
     const double dataEndMhz = highFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
@@ -153,25 +153,25 @@ int BandscopeCanvas::binForFrequency(double mhz, int binCount) const
     return qBound(0, int(normalized * binCount), binCount - 1);
 }
 
-int BandscopeCanvas::binForDisplayX(int x, int binCount) const
+int SpectrumScopeCanvas::binForDisplayX(int x, int binCount) const
 {
     return binForFrequency(xToFreq(x), binCount);
 }
 
-bool BandscopeCanvas::isSpectrumClickArea(const QPoint& pos) const
+bool SpectrumScopeCanvas::isSpectrumClickArea(const QPoint& pos) const
 {
     const QRect plotRect(levelScalePanelWidth(), 0, qMax(0, width() - levelScalePanelWidth()),
                          qMax(0, plotHeight() - 1));
     return plotRect.contains(pos);
 }
 
-void BandscopeCanvas::invalidateStaticLayer()
+void SpectrumScopeCanvas::invalidateStaticLayer()
 {
     m_staticLayerDirty = true;
     m_displayBins.clear();
 }
 
-void BandscopeCanvas::ensureStaticLayer()
+void SpectrumScopeCanvas::ensureStaticLayer()
 {
     const QSize currentSize = size();
     if (!currentSize.isValid())
@@ -195,7 +195,7 @@ void BandscopeCanvas::ensureStaticLayer()
     m_staticLayerDirty = false;
 }
 
-void BandscopeCanvas::renderStaticLayer(QPainter* painter) const
+void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
 {
     if (!painter)
     {
@@ -374,7 +374,7 @@ void BandscopeCanvas::renderStaticLayer(QPainter* painter) const
     }
 }
 
-void BandscopeCanvas::ensureDisplayBinMap(int binCount)
+void SpectrumScopeCanvas::ensureDisplayBinMap(int binCount)
 {
     const QSize currentSize = size();
     if (binCount <= 0 || !currentSize.isValid())
@@ -404,7 +404,7 @@ void BandscopeCanvas::ensureDisplayBinMap(int binCount)
     m_displayBinMapDataEndMhz = m_dataEndMhz;
 }
 
-void BandscopeCanvas::setFrequencyRange(double startMhz, double endMhz)
+void SpectrumScopeCanvas::setFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
     {
@@ -420,7 +420,7 @@ void BandscopeCanvas::setFrequencyRange(double startMhz, double endMhz)
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setDataFrequencyRange(double startMhz, double endMhz)
+void SpectrumScopeCanvas::setDataFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
     {
@@ -435,13 +435,13 @@ void BandscopeCanvas::setDataFrequencyRange(double startMhz, double endMhz)
     m_displayBins.clear();
 }
 
-void BandscopeCanvas::setVfoFrequency(double freqMhz)
+void SpectrumScopeCanvas::setVfoFrequency(double freqMhz)
 {
     m_vfoMhz = freqMhz;
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setVfoMarkerColor(const QColor& color)
+void SpectrumScopeCanvas::setVfoMarkerColor(const QColor& color)
 {
     if (!color.isValid())
     {
@@ -459,7 +459,7 @@ void BandscopeCanvas::setVfoMarkerColor(const QColor& color)
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setBackgroundColor(const QColor& color)
+void SpectrumScopeCanvas::setBackgroundColor(const QColor& color)
 {
     if (!color.isValid())
     {
@@ -477,7 +477,7 @@ void BandscopeCanvas::setBackgroundColor(const QColor& color)
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setGridLineColor(const QColor& color)
+void SpectrumScopeCanvas::setGridLineColor(const QColor& color)
 {
     if (!color.isValid())
     {
@@ -495,7 +495,7 @@ void BandscopeCanvas::setGridLineColor(const QColor& color)
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setGridDensity(int density)
+void SpectrumScopeCanvas::setGridDensity(int density)
 {
     const int normalized = normalizedGridDensity(density);
     if (m_gridDensity == normalized)
@@ -508,14 +508,14 @@ void BandscopeCanvas::setGridDensity(int density)
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setFilterWidth(int lowHz, int highHz)
+void SpectrumScopeCanvas::setFilterWidth(int lowHz, int highHz)
 {
     m_filterLowHz = lowHz;
     m_filterHighHz = highHz;
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setInteractionLocked(bool locked)
+void SpectrumScopeCanvas::setInteractionLocked(bool locked)
 {
     if (m_interactionLocked == locked)
     {
@@ -527,12 +527,12 @@ void BandscopeCanvas::setInteractionLocked(bool locked)
     scheduleRepaint();
 }
 
-void BandscopeCanvas::setInvertMouseWheel(bool invert)
+void SpectrumScopeCanvas::setInvertMouseWheel(bool invert)
 {
     m_invertMouseWheel = invert;
 }
 
-void BandscopeCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRange)
+void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
     // Keep an owned copy for painting because the incoming QVector belongs to
     // the model signal delivery path and may be superseded before paintEvent().
@@ -559,7 +559,7 @@ void BandscopeCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRan
     scheduleRepaint();
 }
 
-void BandscopeCanvas::clearDisplay()
+void SpectrumScopeCanvas::clearDisplay()
 {
     m_spectrumBins.clear();
     m_peakHold.clear();
@@ -567,7 +567,7 @@ void BandscopeCanvas::clearDisplay()
     scheduleRepaint();
 }
 
-void BandscopeCanvas::scheduleRepaint()
+void SpectrumScopeCanvas::scheduleRepaint()
 {
     if (!m_repaintTimer.isActive())
     {
@@ -575,7 +575,7 @@ void BandscopeCanvas::scheduleRepaint()
     }
 }
 
-void BandscopeCanvas::paintEvent(QPaintEvent* event)
+void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
@@ -600,7 +600,8 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
         QFont f = p.font();
         f.setPointSize(9);
         p.setFont(f);
-        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter, "No bandscope data - waiting for radio stream");
+        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter,
+                   "No Spectrum Scope data - waiting for radio stream");
     }
 
     if (!m_spectrumBins.isEmpty())
@@ -698,7 +699,7 @@ void BandscopeCanvas::paintEvent(QPaintEvent* event)
     }
 }
 
-void BandscopeCanvas::mousePressEvent(QMouseEvent* ev)
+void SpectrumScopeCanvas::mousePressEvent(QMouseEvent* ev)
 {
     if (m_interactionLocked)
     {
@@ -712,7 +713,7 @@ void BandscopeCanvas::mousePressEvent(QMouseEvent* ev)
     }
 }
 
-void BandscopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
+void SpectrumScopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
 {
     if (ev->button() == Qt::LeftButton)
     {
@@ -727,7 +728,7 @@ void BandscopeCanvas::mouseReleaseEvent(QMouseEvent* ev)
     }
 }
 
-void BandscopeCanvas::wheelEvent(QWheelEvent* ev)
+void SpectrumScopeCanvas::wheelEvent(QWheelEvent* ev)
 {
     if (m_interactionLocked)
     {
@@ -770,10 +771,10 @@ void BandscopeCanvas::wheelEvent(QWheelEvent* ev)
     }
 
     m_wheelStepAccumulator -= acceptedSteps;
-    qDebug(logBandscope()) << "Bandscope wheel"
-                           << "angle=" << angle << "pixel=" << ev->pixelDelta() << "qtInverted=" << ev->inverted()
-                           << "physicalSteps=" << physicalSteps << "reversePref=" << m_invertMouseWheel
-                           << "acceptedSteps=" << acceptedSteps << "accumulator=" << m_wheelStepAccumulator;
+    qDebug(logSpectrumScope()) << "Spectrum Scope wheel"
+                               << "angle=" << angle << "pixel=" << ev->pixelDelta() << "qtInverted=" << ev->inverted()
+                               << "physicalSteps=" << physicalSteps << "reversePref=" << m_invertMouseWheel
+                               << "acceptedSteps=" << acceptedSteps << "accumulator=" << m_wheelStepAccumulator;
 
     Q_EMIT wheelStepRequested(acceptedSteps);
     ev->accept();

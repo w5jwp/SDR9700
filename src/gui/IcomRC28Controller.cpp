@@ -4,7 +4,7 @@
 #include "LogCategories.h"
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
-#include "models/BandscopeModel.h"
+#include "models/SpectrumScopeModel.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
 #ifdef HAVE_HIDAPI
@@ -229,10 +229,11 @@ void IcomRC28Controller::handleIcomRC28Tune(int steps)
     }
 
     const int stepHz = m_window->tuningStepHz();
-    const qint64 currentHz = static_cast<qint64>(
-        m_window->m_displayBandscopeTuneHz > 0 ? m_window->m_displayBandscopeTuneHz : m_window->m_vfo->frequencyHz());
+    const qint64 currentHz =
+        static_cast<qint64>(m_window->m_displaySpectrumScopeTuneHz > 0 ? m_window->m_displaySpectrumScopeTuneHz
+                                                                       : m_window->m_vfo->frequencyHz());
     const qint64 targetHz = currentHz + static_cast<qint64>(steps) * stepHz;
-    m_window->scheduleBandscopeTune(
+    m_window->scheduleSpectrumScopeTune(
         static_cast<quint64>(std::max<qint64>(static_cast<qint64>(kMinimumTuneFrequencyHz), targetHz)));
 }
 
@@ -256,8 +257,8 @@ void IcomRC28Controller::snapIcomRC28FrequencyToKhz()
         return;
     }
 
-    const quint64 currentHz =
-        m_window->m_displayBandscopeTuneHz > 0 ? m_window->m_displayBandscopeTuneHz : m_window->m_vfo->frequencyHz();
+    const quint64 currentHz = m_window->m_displaySpectrumScopeTuneHz > 0 ? m_window->m_displaySpectrumScopeTuneHz
+                                                                         : m_window->m_vfo->frequencyHz();
     const quint64 snappedHz =
         m_window->clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(currentHz / 1000.0)) * 1000ULL);
     if (snappedHz == currentHz)
@@ -265,22 +266,22 @@ void IcomRC28Controller::snapIcomRC28FrequencyToKhz()
         return;
     }
 
-    if (m_window->m_bandscopeTuneCommitTimer)
+    if (m_window->m_spectrumScopeTuneCommitTimer)
     {
-        m_window->m_bandscopeTuneCommitTimer->stop();
+        m_window->m_spectrumScopeTuneCommitTimer->stop();
     }
-    if (m_window->m_bandscopeTuneReleaseTimer)
+    if (m_window->m_spectrumScopeTuneReleaseTimer)
     {
-        m_window->m_bandscopeTuneReleaseTimer->stop();
+        m_window->m_spectrumScopeTuneReleaseTimer->stop();
     }
-    m_window->m_pendingBandscopeTuneHz = 0;
-    m_window->m_displayBandscopeTuneHz = 0;
-    m_window->m_bandscopeDisplayCenterHz = 0;
-    m_window->m_bandscopeFixedPanStartHz = 0;
-    m_window->m_bandscopeFixedPanEndHz = 0;
-    if (m_window->m_bandscope)
+    m_window->m_pendingSpectrumScopeTuneHz = 0;
+    m_window->m_displaySpectrumScopeTuneHz = 0;
+    m_window->m_spectrumScopeDisplayCenterHz = 0;
+    m_window->m_spectrumScopeFixedPanStartHz = 0;
+    m_window->m_spectrumScopeFixedPanEndHz = 0;
+    if (m_window->m_spectrumScope)
     {
-        m_window->m_bandscope->clearDisplayCenterHold();
+        m_window->m_spectrumScope->clearDisplayCenterHold();
     }
     m_window->leaveMemoryModeForManualFrequencyChange();
     m_window->m_vfo->setFrequencyHz(snappedHz);

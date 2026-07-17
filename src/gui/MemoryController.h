@@ -11,6 +11,8 @@
 #include "Types.h"
 
 class MainWindow;
+class MemoryEditorController;
+class MemorySyncController;
 class QPushButton;
 class QTimer;
 class QWidget;
@@ -20,6 +22,9 @@ class MemoryController : public QObject
     Q_OBJECT
 
   public:
+    friend class MemoryEditorController;
+    friend class MemorySyncController;
+
     explicit MemoryController(MainWindow* window);
 
     void buildMemoryWindow();
@@ -40,7 +45,7 @@ class MemoryController : public QObject
     void reloadMemoryTable();
     bool exportRadioMemories();
     void importRadioMemories();
-    bool initialMemorySyncComplete() const { return m_initialMemorySyncComplete; }
+    bool initialMemorySyncComplete() const;
 
   signals:
     void initialMemorySyncChanged(bool complete);
@@ -77,8 +82,14 @@ class MemoryController : public QObject
     void clearMemoryProgress();
     void closeMemoryEditorPane(bool resizeWindow = true);
     QWidget* popupParent() const;
+    void forceRadioMemorySyncDirect();
+    void setMemoryPollIntervalSecondsDirect(int seconds);
+    bool initialMemorySyncCompleteDirect() const { return m_initialMemorySyncComplete; }
+    void showMemoryEditorDirect(const QString& memoryId);
 
     MainWindow* m_window{nullptr};
+    MemoryEditorController* m_memoryEditorController{nullptr};
+    MemorySyncController* m_memorySyncController{nullptr};
     QTimer* m_radioMemoryRefreshTimer{nullptr};
     QTimer* m_radioMemoryPeriodicRefreshTimer{nullptr};
     QTimer* m_radioMemorySyncTimeoutTimer{nullptr};

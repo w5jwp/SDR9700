@@ -4,7 +4,9 @@
 #include "DialogPlacement.h"
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
+#include "MemoryEditorController.h"
 #include "MemoryPanel.h"
+#include "MemorySyncController.h"
 #include "RadioCapabilities.h"
 #include "VfoPanel.h"
 #include "UtilityWindow.h"
@@ -286,6 +288,16 @@ QString normalizedToneText(QString text)
     return value > 0 ? toneFrequencyLabel(value) : text;
 }
 
+bool memoryToneModeUsesTxTone(rptAccessTxRx_t toneMode)
+{
+    return toneMode == ratrTN || toneMode == ratrTT || toneMode == ratrTD;
+}
+
+bool memoryToneModeUsesRxTone(rptAccessTxRx_t toneMode)
+{
+    return toneMode == ratrNT || toneMode == ratrTT || toneMode == ratrTD || toneMode == ratrDT;
+}
+
 int modeRegisterFromLabel(const QString& mode)
 {
     if (mode == QLatin1String("LSB"))
@@ -384,13 +396,19 @@ MemoryType radioMemoryFromRecord(const MemoryRecord& memory, quint16 group, quin
         radioMemory.dtcs = memory.dtcs;
         radioMemory.dtcsB = memory.dtcsB;
     }
-    else if (toneMode != ratrNN)
+    // Mixed tone modes share payload fields: ratrDT writes DTCS for transmit
+    // and TSQL for receive. Keep those decisions explicit so a later tone-mode
+    // cleanup cannot accidentally drop half of the radio memory definition.
+    if (memoryToneModeUsesTxTone(toneMode))
     {
         // CSV import and the editor validate required tone fields before a write
         // is queued. Keep the radio payload faithful to those explicit fields so
         // bad memory data fails at the schema boundary instead of being repaired
         // here with hidden inferred values.
         radioMemory.tone = normalizedToneText(memory.tone);
+    }
+    if (memoryToneModeUsesRxTone(toneMode))
+    {
         radioMemory.tsql = normalizedToneText(memory.tsql);
     }
     const QByteArray name = memory.name.toLatin1().left(kRadioMemoryNameMaxChars);
@@ -497,12 +515,15 @@ bool modeSupportsMemoryOffset(int mode)
 
 MemoryController::MemoryController(MainWindow* window) : QObject(window), m_window(window)
 {
+    m_memoryEditorController = new MemoryEditorController(this);
+    m_memorySyncController = new MemorySyncController(this);
+
     m_radioMemoryRefreshTimer = new QTimer(this);
     m_radioMemoryRefreshTimer->setInterval(kRadioMemoryRefreshIntervalMs);
     connect(m_radioMemoryRefreshTimer, &QTimer::timeout, this, &MemoryController::requestNextRadioMemory);
 
     m_radioMemoryPeriodicRefreshTimer = new QTimer(this);
-    setMemoryPollIntervalSeconds(
+    setMemoryPollIntervalSecondsDirect(
         AppSettings::instance()
             .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
             .toInt());
@@ -566,6 +587,21 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
                 m_expectedRadioMemoryKeys.clear();
                 rebuildMemoryViews();
             });
+}
+
+void MemoryController::forceRadioMemorySync()
+{
+    m_memorySyncController->forceRadioMemorySync();
+}
+
+void MemoryController::setMemoryPollIntervalSeconds(int seconds)
+{
+    m_memorySyncController->setMemoryPollIntervalSeconds(seconds);
+}
+
+bool MemoryController::initialMemorySyncComplete() const
+{
+    return m_memorySyncController->initialMemorySyncComplete();
 }
 
 void MemoryController::buildMemoryWindow()
@@ -871,7 +907,7 @@ void MemoryController::closeMemoryEditorPane(bool resizeWindow)
     }
 }
 
-void MemoryController::forceRadioMemorySync()
+void MemoryController::forceRadioMemorySyncDirect()
 {
     if (!m_window->m_model || !m_window->m_model->isConnected())
     {
@@ -896,7 +932,7 @@ void MemoryController::forceRadioMemorySync()
     m_window->showToast(QStringLiteral("Radio memory sync started"));
 }
 
-void MemoryController::setMemoryPollIntervalSeconds(int seconds)
+void MemoryController::setMemoryPollIntervalSecondsDirect(int seconds)
 {
     const int boundedSeconds = qBound(kMemoryPollIntervalMinSeconds, seconds, kMemoryPollIntervalMaxSeconds);
     m_radioMemoryPeriodicRefreshTimer->setInterval(boundedSeconds * 1000);
@@ -2026,6 +2062,11 @@ void MemoryController::storeCurrentMemory()
 }
 
 void MemoryController::showMemoryEditor(const QString& memoryId)
+{
+    m_memoryEditorController->showMemoryEditor(memoryId);
+}
+
+void MemoryController::showMemoryEditorDirect(const QString& memoryId)
 {
     QWidget* parent = popupParent();
     const bool editing = !memoryId.isEmpty();

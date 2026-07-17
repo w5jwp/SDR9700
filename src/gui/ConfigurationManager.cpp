@@ -252,24 +252,24 @@ QJsonObject cleanConfigurationSettings(const QJsonDocument& doc)
         settings.insert(QStringLiteral("audio"), audio);
     }
 
-    const QJsonObject bandscopeSource = source.value(QStringLiteral("bandScope")).toObject();
-    QJsonObject bandscope;
-    insertCleanSetting(&bandscope, bandscopeSource, QStringLiteral("backgroundColor"), colorStringValue);
-    insertCleanSetting(&bandscope, bandscopeSource, QStringLiteral("centerLineColor"), colorStringValue);
-    insertCleanSetting(&bandscope, bandscopeSource, QStringLiteral("gridLineColor"), colorStringValue);
-    insertCleanSetting(&bandscope, bandscopeSource, QStringLiteral("gridDensity"),
+    const QJsonObject spectrumScopeSource = source.value(QStringLiteral("spectrumScope")).toObject();
+    QJsonObject spectrumScope;
+    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("backgroundColor"), colorStringValue);
+    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("centerLineColor"), colorStringValue);
+    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("gridLineColor"), colorStringValue);
+    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("gridDensity"),
                        [](const QJsonValue& value, QJsonValue* normalized)
                        { return intStringValue(value, 0, 2, normalized); });
-    insertCleanSetting(&bandscope, bandscopeSource, QStringLiteral("invertMouseWheel"), boolStringValue);
-    insertCleanSetting(&bandscope, bandscopeSource, QStringLiteral("spanHZ"),
+    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("invertMouseWheel"), boolStringValue);
+    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("spanHZ"),
                        [](const QJsonValue& value, QJsonValue* normalized)
                        { return intStringValue(value, 1, std::numeric_limits<int>::max(), normalized); });
-    insertCleanSetting(&bandscope, bandscopeSource, QStringLiteral("spectrumHeight"),
+    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("spectrumHeight"),
                        [](const QJsonValue& value, QJsonValue* normalized)
                        { return intStringValue(value, 1, std::numeric_limits<int>::max(), normalized); });
-    if (!bandscope.isEmpty())
+    if (!spectrumScope.isEmpty())
     {
-        settings.insert(QStringLiteral("bandScope"), bandscope);
+        settings.insert(QStringLiteral("spectrumScope"), spectrumScope);
     }
 
     const QJsonObject mainWindowSource = source.value(QStringLiteral("mainWindow")).toObject();

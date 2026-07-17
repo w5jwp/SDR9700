@@ -11,7 +11,7 @@ gain/PTT controls, and RX/TX audio routing through Qt Multimedia.
 
 ## Screenshots
 
-![SDR9700 Main Window (Bandscope and Waterfall)](resources/images/screenshots/screenshot_main_window_v26_06_01.png)
+![SDR9700 Main Window (Spectrum Scope and Waterfall)](resources/images/screenshots/screenshot_main_window_v26_06_01.png)
 
 ## Status
 

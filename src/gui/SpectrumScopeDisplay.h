@@ -6,13 +6,13 @@
 #include <QWidget>
 
 class QColor;
-class BandscopeCanvas;
+class SpectrumScopeCanvas;
 class QComboBox;
 class QScrollBar;
 class WaterfallCanvas;
 class WaterfallController;
 
-class BandscopeDisplay : public QWidget
+class SpectrumScopeDisplay : public QWidget
 {
     Q_OBJECT
 
@@ -23,7 +23,7 @@ class BandscopeDisplay : public QWidget
         QString label;
     };
 
-    explicit BandscopeDisplay(QWidget* parent = nullptr);
+    explicit SpectrumScopeDisplay(QWidget* parent = nullptr);
 
     void setSpanChoices(const QVector<SpanChoice>& choices);
     void setCurrentSpanHz(quint64 hz);
@@ -66,7 +66,7 @@ class BandscopeDisplay : public QWidget
     int currentSpectrumHeight() const;
     void updateChildGeometry();
 
-    BandscopeCanvas* m_bandscopeCanvas{nullptr};
+    SpectrumScopeCanvas* m_spectrumScopeCanvas{nullptr};
     QScrollBar* m_panScrollBar{nullptr};
     WaterfallCanvas* m_waterfallCanvas{nullptr};
     WaterfallController* m_waterfallController{nullptr};

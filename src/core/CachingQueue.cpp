@@ -117,7 +117,8 @@ void CachingQueue::run()
 
         QueueItem item;
         bool haveCommandToEmit = false;
-        if (!queue.isEmpty() && (!woke || commandWakeRequested))
+        const bool commandDispatchDue = !queue.isEmpty() && (!woke || commandWakeRequested);
+        if (commandDispatchDue)
         {
             QueuePriority prio = kPriorityImmediate;
 
@@ -184,9 +185,14 @@ void CachingQueue::run()
                 }
                 haveCommandToEmit = true;
             }
-        }
 
-        deadline.setRemainingTime(queueInterval);
+            // Cache and message updates wake this thread so UI state can be
+            // delivered promptly, but they must not move the next command
+            // deadline. During a busy memory sync or radio status burst,
+            // resetting the deadline on every non-command wake can starve
+            // recurring polls indefinitely.
+            deadline.setRemainingTime(queueInterval);
+        }
         if (!pendingItems.isEmpty() || !pendingMessages.isEmpty() || haveCommandToEmit)
         {
             locker.unlock();

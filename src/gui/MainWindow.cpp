@@ -1,12 +1,12 @@
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
-#include "BandscopeDisplay.h"
+#include "SpectrumScopeDisplay.h"
 #include "RadioChooserDialog.h"
 #include "SettingsDialog.h"
 #include "AboutDialog.h"
 #include "DialogPlacement.h"
 #include "DtmfDialog.h"
-#include "BandscopeController.h"
+#include "SpectrumScopeController.h"
 #include "IcomRC28Controller.h"
 #include "MainTitleBar.h"
 #include "MemoryController.h"
@@ -20,6 +20,7 @@
 #include "UiTheme.h"
 #include "UtilityWindow.h"
 #include "ConfigurationManager.h"
+#include "ControlPanelController.h"
 #include "MemoryStore.h"
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
@@ -32,7 +33,7 @@
 #endif
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
-#include "models/BandscopeModel.h"
+#include "models/SpectrumScopeModel.h"
 
 #include <QToolBar>
 #include <QAction>
@@ -89,9 +90,10 @@ constexpr int kMemorySelectionSettleDelayMs = 3000;
 using namespace sdr9700::ui::main_window;
 
 MainWindow::MainWindow(RadioModel* model, QWidget* parent)
-    : QMainWindow(parent), m_model(model), m_vfo(model->vfo()), m_bandscope(model->bandscope())
+    : QMainWindow(parent), m_model(model), m_vfo(model->vfo()), m_spectrumScope(model->spectrumScope())
 {
-    m_bandscopeController = new BandscopeController(this);
+    m_spectrumScopeController = new SpectrumScopeController(this);
+    m_controlPanelController = new ControlPanelController(this);
     m_icomRC28Controller = new IcomRC28Controller(this);
     m_memoryController = new MemoryController(this);
     m_radioCommandController = new RadioCommandController(this);
@@ -109,7 +111,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
 
     buildToolBar();
     buildControlPanel(vbox);
-    m_bandscopeController->buildBandscope(vbox);
+    m_spectrumScopeController->buildSpectrumScope(vbox);
     buildMemoryWindow();
     restoreWindowLayout();
     buildStatusBar();
@@ -117,7 +119,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_model, &RadioModel::connectionChanged, this, &MainWindow::onConnectionChanged);
     connect(m_model, &RadioModel::readyChanged, this, &MainWindow::onRadioReadyChanged);
     connect(m_model, &RadioModel::scopeSyncDegradedChanged, this,
-            [this](bool degraded) { m_bandscopeStillSyncingAfterReady = degraded; });
+            [this](bool degraded) { m_spectrumScopeStillSyncingAfterReady = degraded; });
     connect(m_model, &RadioModel::meterSnapshotChanged, this, &MainWindow::onMeterSnapshotChanged);
     connect(m_model, &RadioModel::pttChanged, this, &MainWindow::onPttChanged);
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
@@ -378,15 +380,16 @@ void MainWindow::showSettingsDialog()
                     m_settingsDialog = nullptr;
                 }
             });
-    connect(dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_bandscopeDisplay,
-            &BandscopeDisplay::setInvertMouseWheel);
-    connect(dlg, &SettingsDialog::bandscopeCenterLineColorChanged, m_bandscopeDisplay,
-            &BandscopeDisplay::setVfoMarkerColor);
-    connect(dlg, &SettingsDialog::bandscopeBackgroundColorChanged, m_bandscopeDisplay,
-            &BandscopeDisplay::setBackgroundColor);
-    connect(dlg, &SettingsDialog::bandscopeGridLineColorChanged, m_bandscopeDisplay,
-            &BandscopeDisplay::setGridLineColor);
-    connect(dlg, &SettingsDialog::bandscopeGridDensityChanged, m_bandscopeDisplay, &BandscopeDisplay::setGridDensity);
+    connect(dlg, &SettingsDialog::reverseMouseWheelTuningChanged, m_spectrumScopeDisplay,
+            &SpectrumScopeDisplay::setInvertMouseWheel);
+    connect(dlg, &SettingsDialog::spectrumScopeCenterLineColorChanged, m_spectrumScopeDisplay,
+            &SpectrumScopeDisplay::setVfoMarkerColor);
+    connect(dlg, &SettingsDialog::spectrumScopeBackgroundColorChanged, m_spectrumScopeDisplay,
+            &SpectrumScopeDisplay::setBackgroundColor);
+    connect(dlg, &SettingsDialog::spectrumScopeGridLineColorChanged, m_spectrumScopeDisplay,
+            &SpectrumScopeDisplay::setGridLineColor);
+    connect(dlg, &SettingsDialog::spectrumScopeGridDensityChanged, m_spectrumScopeDisplay,
+            &SpectrumScopeDisplay::setGridDensity);
     connect(dlg, &SettingsDialog::memoryPollIntervalSecondsChanged, m_memoryController,
             &MemoryController::setMemoryPollIntervalSeconds);
 #ifdef HAVE_HIDAPI
@@ -417,9 +420,9 @@ void MainWindow::showSettingsDialog()
                     m_vfoPanel->setLanMod(m_lanModValue);
                 }
                 m_model->setLanModLevel(m_lanModValue);
-                m_bandscopeDisplay->setInvertMouseWheel(
+                m_spectrumScopeDisplay->setInvertMouseWheel(
                     AppSettings::instance()
-                        .value(QString::fromLatin1(kBandScopeInvertMouseWheelSettingsKey), "False")
+                        .value(QString::fromLatin1(kSpectrumScopeInvertMouseWheelSettingsKey), "False")
                         .toBool());
 #ifdef HAVE_HIDAPI
                 refreshIcomRC28EncoderSettings();
@@ -509,6 +512,11 @@ void MainWindow::reloadMemoryTable()
 }
 
 void MainWindow::buildControlPanel(QVBoxLayout* vbox)
+{
+    m_controlPanelController->buildControlPanel(vbox);
+}
+
+void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
 {
     auto* strip = new QWidget(centralWidget());
     strip->setObjectName("controlStrip");
@@ -1001,12 +1009,12 @@ void MainWindow::restoreWindowLayout()
                                : centeredRectInAvailableGeometry(fixedSize, availableGeometryFor(savedRect)).topLeft();
         move(pos);
     }
-    if (m_bandscopeDisplay)
+    if (m_spectrumScopeDisplay)
     {
-        const int spectrumHeight = AppSettings::instance().value("bandScopeSpectrumHeight", -1).toInt();
+        const int spectrumHeight = AppSettings::instance().value("spectrumScopeSpectrumHeight", -1).toInt();
         if (spectrumHeight > 0)
         {
-            m_bandscopeDisplay->setSpectrumPaneHeight(spectrumHeight);
+            m_spectrumScopeDisplay->setSpectrumPaneHeight(spectrumHeight);
         }
     }
 }
@@ -1015,15 +1023,15 @@ void MainWindow::saveWindowLayout() const
 {
     AppSettings::instance().setValue("mainWindowPositionX", normalGeometry().x());
     AppSettings::instance().setValue("mainWindowPositionY", normalGeometry().y());
-    if (m_bandscopeDisplay)
+    if (m_spectrumScopeDisplay)
     {
-        AppSettings::instance().setValue("bandScopeSpectrumHeight", m_bandscopeDisplay->spectrumPaneHeight());
+        AppSettings::instance().setValue("spectrumScopeSpectrumHeight", m_spectrumScopeDisplay->spectrumPaneHeight());
     }
 }
 
 void MainWindow::updateSpectrumVfoMarker()
 {
-    m_bandscopeController->updateSpectrumVfoMarker();
+    m_spectrumScopeController->updateSpectrumVfoMarker();
 }
 
 void MainWindow::setRadioControlsEnabled(bool enabled)
@@ -1064,9 +1072,9 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
         m_rfGainBtn->setEnabled(controlsEnabled);
     }
 
-    if (m_bandscopeDisplay)
+    if (m_spectrumScopeDisplay)
     {
-        m_bandscopeDisplay->setInteractionLocked(m_controlsLocked);
+        m_spectrumScopeDisplay->setInteractionLocked(m_controlsLocked);
     }
 }
 
@@ -1225,9 +1233,9 @@ void MainWindow::updateControlLockIndicator()
     }
 }
 
-void MainWindow::updateBandscopeBandLimits(quint64 hz)
+void MainWindow::updateSpectrumScopeBandLimits(quint64 hz)
 {
-    m_bandscopeController->updateBandscopeBandLimits(hz);
+    m_spectrumScopeController->updateSpectrumScopeBandLimits(hz);
 }
 
 int MainWindow::tuningStepHz() const
@@ -1240,9 +1248,9 @@ void MainWindow::applyRadioTuningStep()
     m_radioCommandController->applyRadioTuningStep();
 }
 
-void MainWindow::applyBandscopeSettings()
+void MainWindow::applySpectrumScopeSettings()
 {
-    m_bandscopeController->applyBandscopeSettings();
+    m_spectrumScopeController->applySpectrumScopeSettings();
 }
 
 void MainWindow::updateStepButton()
@@ -1252,27 +1260,27 @@ void MainWindow::updateStepButton()
 
 quint64 MainWindow::roundFrequencyToStep(quint64 hz) const
 {
-    return m_bandscopeController->roundFrequencyToStep(hz);
+    return m_spectrumScopeController->roundFrequencyToStep(hz);
 }
 
-void MainWindow::panBandscopeToCenter(quint64 centerHz)
+void MainWindow::panSpectrumScopeToCenter(quint64 centerHz)
 {
-    m_bandscopeController->panBandscopeToCenter(centerHz);
+    m_spectrumScopeController->panSpectrumScopeToCenter(centerHz);
 }
 
-quint64 MainWindow::clampBandscopeCenterHz(quint64 hz, double bandwidthMhz) const
+quint64 MainWindow::clampSpectrumScopeCenterHz(quint64 hz, double bandwidthMhz) const
 {
-    return m_bandscopeController->clampBandscopeCenterHz(hz, bandwidthMhz);
+    return m_spectrumScopeController->clampSpectrumScopeCenterHz(hz, bandwidthMhz);
 }
 
 quint64 MainWindow::clampFrequencyHzToActiveBand(quint64 hz) const
 {
-    return m_bandscopeController->clampFrequencyHzToActiveBand(hz);
+    return m_spectrumScopeController->clampFrequencyHzToActiveBand(hz);
 }
 
-void MainWindow::scheduleBandscopeTune(quint64 hz)
+void MainWindow::scheduleSpectrumScopeTune(quint64 hz)
 {
-    m_bandscopeController->scheduleBandscopeTune(hz);
+    m_spectrumScopeController->scheduleSpectrumScopeTune(hz);
 }
 
 void MainWindow::setActiveMemory(const QString& id, const QString& name, quint64 frequencyHz, int duplexMode,
@@ -1413,7 +1421,7 @@ void MainWindow::onConnectionChanged(bool connected)
 
     if (connected)
     {
-        m_bandscopeStillSyncingAfterReady = false;
+        m_spectrumScopeStillSyncingAfterReady = false;
         m_reconnecting = false;
         m_lastErrorWasCredential = false;
         m_allowChooserOnDisconnect = true;
@@ -1451,27 +1459,27 @@ void MainWindow::onConnectionChanged(bool connected)
     else
     {
         m_radioUiReadyNotified = false;
-        m_bandscopeStillSyncingAfterReady = false;
-        if (m_bandscopeTuneCommitTimer)
+        m_spectrumScopeStillSyncingAfterReady = false;
+        if (m_spectrumScopeTuneCommitTimer)
         {
-            m_bandscopeTuneCommitTimer->stop();
+            m_spectrumScopeTuneCommitTimer->stop();
         }
-        if (m_bandscopeTuneReleaseTimer)
+        if (m_spectrumScopeTuneReleaseTimer)
         {
-            m_bandscopeTuneReleaseTimer->stop();
+            m_spectrumScopeTuneReleaseTimer->stop();
         }
-        m_pendingBandscopeTuneHz = 0;
-        m_displayBandscopeTuneHz = 0;
-        m_bandscopeDisplayCenterHz = 0;
-        m_bandscopeFixedPanStartHz = 0;
-        m_bandscopeFixedPanEndHz = 0;
-        if (m_bandscope)
+        m_pendingSpectrumScopeTuneHz = 0;
+        m_displaySpectrumScopeTuneHz = 0;
+        m_spectrumScopeDisplayCenterHz = 0;
+        m_spectrumScopeFixedPanStartHz = 0;
+        m_spectrumScopeFixedPanEndHz = 0;
+        if (m_spectrumScope)
         {
-            m_bandscope->clearDisplayCenterHold();
+            m_spectrumScope->clearDisplayCenterHold();
         }
         clearActiveMemory();
-        m_bandscopeDisplay->clearDisplay();
-        m_bandscopeDisplay->clearFrequencyPanRange();
+        m_spectrumScopeDisplay->clearDisplay();
+        m_spectrumScopeDisplay->clearFrequencyPanRange();
 #ifdef HAVE_HIDAPI
         m_icomRC28PttLatched = false;
 #endif
@@ -1561,7 +1569,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
     if (uiReady)
     {
         applyRadioTuningStep();
-        applyBandscopeSettings();
+        applySpectrumScopeSettings();
         m_connStateName = QStringLiteral("Connected");
         m_connStateLabel->setText(
             QStringLiteral("<span style='color:%1'>Connected</span>").arg(UiTheme::Color::Success));
@@ -1570,13 +1578,13 @@ void MainWindow::onRadioReadyChanged(bool ready)
             // Backend "radio connection ready" means CI-V/scope startup reached
             // a usable point, but MainWindow intentionally waits for the
             // MemoryController's first sync before telling the operator the UI
-            // is ready for normal operation. Preserve the degraded bandscope
+            // is ready for normal operation. Preserve the degraded Spectrum Scope
             // state in this final toast so the operator knows why the scope may
             // still be blank; if this policy causes confusion, the backout is
-            // to remove m_bandscopeStillSyncingAfterReady and restore the
+            // to remove m_spectrumScopeStillSyncingAfterReady and restore the
             // single "Radio control and memories ready" message.
-            showToast(m_bandscopeStillSyncingAfterReady
-                          ? QStringLiteral("Radio control and memories ready; bandscope still syncing")
+            showToast(m_spectrumScopeStillSyncingAfterReady
+                          ? QStringLiteral("Radio control and memories ready; Spectrum Scope still syncing")
                           : QStringLiteral("Radio control and memories ready"));
         }
     }
@@ -1616,28 +1624,29 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         }
     }
 
-    if (m_displayBandscopeTuneHz > 0 && m_bandscopeTuneReleaseTimer && m_bandscopeTuneReleaseTimer->isActive())
+    if (m_displaySpectrumScopeTuneHz > 0 && m_spectrumScopeTuneReleaseTimer &&
+        m_spectrumScopeTuneReleaseTimer->isActive())
     {
-        if (hz != m_displayBandscopeTuneHz)
+        if (hz != m_displaySpectrumScopeTuneHz)
         {
-            qDebug(logBandscope()) << "Ignoring transient bandscope tune confirmation"
-                                   << "confirmedHz=" << hz << "displayHz=" << m_displayBandscopeTuneHz;
+            qDebug(logSpectrumScope()) << "Ignoring transient Spectrum Scope tune confirmation"
+                                       << "confirmedHz=" << hz << "displayHz=" << m_displaySpectrumScopeTuneHz;
             return;
         }
-        m_pendingBandscopeTuneHz = 0;
-        m_displayBandscopeTuneHz = 0;
-        m_bandscopeDisplayCenterHz = 0;
-        m_bandscopeFixedPanStartHz = 0;
-        m_bandscopeFixedPanEndHz = 0;
-        m_bandscopeTuneReleaseTimer->stop();
-        if (m_bandscope)
+        m_pendingSpectrumScopeTuneHz = 0;
+        m_displaySpectrumScopeTuneHz = 0;
+        m_spectrumScopeDisplayCenterHz = 0;
+        m_spectrumScopeFixedPanStartHz = 0;
+        m_spectrumScopeFixedPanEndHz = 0;
+        m_spectrumScopeTuneReleaseTimer->stop();
+        if (m_spectrumScope)
         {
-            m_bandscope->clearDisplayCenterHold();
+            m_spectrumScope->clearDisplayCenterHold();
         }
     }
 
     m_vfoFrequencyHz = hz;
-    updateBandscopeBandLimits(hz);
+    updateSpectrumScopeBandLimits(hz);
     if (const int bandIndex = vfoBandIndexForHz(hz); bandIndex >= 0)
     {
         m_lastBandFrequencyHz[bandIndex] = hz;

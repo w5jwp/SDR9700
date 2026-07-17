@@ -240,7 +240,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 if (m_scopeSyncDegraded)
                 {
                     setScopeSyncDegraded(false);
-                    emit statusMessage("Bandscope synced");
+                    emit statusMessage("Spectrum Scope synced");
                 }
                 m_scopeDataReceived = true;
                 updateReadyState();
@@ -1530,7 +1530,7 @@ void RadioBackend::updateReadyState()
         {
             m_initialStateRetryTimer->stop();
         }
-        emit statusMessage(m_scopeSyncDegraded ? QStringLiteral("Radio control ready; bandscope still syncing")
+        emit statusMessage(m_scopeSyncDegraded ? QStringLiteral("Radio control ready; Spectrum Scope still syncing")
                                                : QStringLiteral("Radio connection ready..."));
         invokeOnCurrentCommander([](Commander* c) { c->enableAudio(); });
     }
@@ -1556,11 +1556,11 @@ void RadioBackend::restartAfterSyncTimeout()
     if (m_initialMainFrequencyReceived && m_initialMainModeReceived && !m_scopeDataReceived)
     {
         // Backout point for the current readiness policy: if operators decide
-        // that SDR9700 must never become usable until bandscope packets arrive,
+        // that SDR9700 must never become usable until Spectrum Scope packets arrive,
         // remove this degraded path and let the reconnect block below handle
         // all sync-watchdog timeouts.
         setScopeSyncDegraded(true);
-        qWarning(logRadio()) << "Radio control sync completed but bandscope data did not arrive within"
+        qWarning(logRadio()) << "Radio control sync completed but Spectrum Scope data did not arrive within"
                              << kSyncWatchdogTimeoutMs << "ms; enabling controls while scope retry continues";
         updateReadyState();
         return;

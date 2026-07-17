@@ -9,7 +9,7 @@
 
 class IRadioBackend;
 class VfoModel;
-class BandscopeModel;
+class SpectrumScopeModel;
 class MeterController;
 struct MeterSnapshot;
 
@@ -34,7 +34,7 @@ class RadioModel : public QObject
     int smeter() const { return m_smeter; }
 
     VfoModel* vfo() const { return m_vfo; }
-    BandscopeModel* bandscope() const { return m_bandscope; }
+    SpectrumScopeModel* spectrumScope() const { return m_spectrumScope; }
     MeterController* meterController() const { return m_meterController; }
     IRadioBackend* backend() const { return m_backend; }
 
@@ -85,7 +85,7 @@ class RadioModel : public QObject
   private:
     IRadioBackend* m_backend{nullptr};
     VfoModel* m_vfo{nullptr};
-    BandscopeModel* m_bandscope{nullptr};
+    SpectrumScopeModel* m_spectrumScope{nullptr};
     MeterController* m_meterController{nullptr};
 
     bool m_connected{false};

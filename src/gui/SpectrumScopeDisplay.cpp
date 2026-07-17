@@ -1,5 +1,5 @@
-#include "BandscopeDisplay.h"
-#include "BandscopeCanvas.h"
+#include "SpectrumScopeDisplay.h"
+#include "SpectrumScopeCanvas.h"
 #include "WaterfallCanvas.h"
 #include "WaterfallController.h"
 
@@ -16,7 +16,7 @@ namespace
 {
 constexpr int kMinSpectrumHeight = 150;
 constexpr int kMinWaterfallHeight = 180;
-constexpr int kDefaultBandscopeHeightBias = 0;
+constexpr int kDefaultSpectrumScopeHeightBias = 0;
 const QColor kScaleBackground(0x06, 0x11, 0x16);
 const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 constexpr int kSpanComboWidth = 94;
@@ -61,11 +61,11 @@ double mhzForScrollUnit(int unit)
 }
 } // namespace
 
-BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
+SpectrumScopeDisplay::SpectrumScopeDisplay(QWidget* parent) : QWidget(parent)
 {
     setMinimumSize(640, 320);
 
-    m_bandscopeCanvas = new BandscopeCanvas(this);
+    m_spectrumScopeCanvas = new SpectrumScopeCanvas(this);
     m_panScrollBar = new QScrollBar(Qt::Horizontal, this);
     m_waterfallCanvas = new WaterfallCanvas(this);
     m_waterfallController = new WaterfallController(this);
@@ -74,8 +74,8 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
     m_panScrollBar->setFixedHeight(panScrollBarHeight());
     m_panScrollBar->setTracking(true);
     m_panScrollBar->setEnabled(false);
-    m_panScrollBar->setToolTip(QStringLiteral("Pan bandscope"));
-    m_panScrollBar->setAccessibleName(QStringLiteral("Bandscope pan"));
+    m_panScrollBar->setToolTip(QStringLiteral("Pan Spectrum Scope"));
+    m_panScrollBar->setAccessibleName(QStringLiteral("Spectrum Scope pan"));
     m_panScrollBar->setStyleSheet(QStringLiteral(
         "QScrollBar:horizontal { background: #061116; border-top: 1px solid #0d2630; border-bottom: 1px solid #9a2424; "
         "height: 16px; margin: 0px; }"
@@ -94,7 +94,7 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
         "transparent; }"));
     m_spanCombo->setFixedSize(kSpanComboWidth, kSpanComboHeight);
     m_spanCombo->setFocusPolicy(Qt::NoFocus);
-    m_spanCombo->setToolTip(QStringLiteral("Bandscope span"));
+    m_spanCombo->setToolTip(QStringLiteral("Spectrum Scope span"));
     m_spanCombo->setStyleSheet(
         QStringLiteral("QComboBox { background: rgba(16, 22, 30, 220); "
                        "border: 1px solid #566576; border-radius: 3px; "
@@ -112,8 +112,10 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
                        "QComboBox QAbstractItemView::item { padding: 4px 10px; }"));
     m_spanCombo->raise();
 
-    connect(m_bandscopeCanvas, &BandscopeCanvas::frequencyClicked, this, &BandscopeDisplay::frequencyClicked);
-    connect(m_bandscopeCanvas, &BandscopeCanvas::wheelStepRequested, this, &BandscopeDisplay::wheelStepRequested);
+    connect(m_spectrumScopeCanvas, &SpectrumScopeCanvas::frequencyClicked, this,
+            &SpectrumScopeDisplay::frequencyClicked);
+    connect(m_spectrumScopeCanvas, &SpectrumScopeCanvas::wheelStepRequested, this,
+            &SpectrumScopeDisplay::wheelStepRequested);
     connect(m_waterfallController, &WaterfallController::imageChanged, m_waterfallCanvas,
             &WaterfallCanvas::setWaterfallImage);
     connect(m_panScrollBar, &QScrollBar::sliderPressed, m_waterfallController,
@@ -140,7 +142,7 @@ BandscopeDisplay::BandscopeDisplay(QWidget* parent) : QWidget(parent)
             });
 }
 
-void BandscopeDisplay::setSpanChoices(const QVector<SpanChoice>& choices)
+void SpectrumScopeDisplay::setSpanChoices(const QVector<SpanChoice>& choices)
 {
     const quint64 previousHz = m_spanCombo->currentData().toULongLong();
     {
@@ -156,7 +158,7 @@ void BandscopeDisplay::setSpanChoices(const QVector<SpanChoice>& choices)
     updateSpanComboGeometry();
 }
 
-void BandscopeDisplay::setCurrentSpanHz(quint64 hz)
+void SpectrumScopeDisplay::setCurrentSpanHz(quint64 hz)
 {
     const QSignalBlocker blocker(m_spanCombo);
     const int index = m_spanCombo->findData(QVariant::fromValue<qulonglong>(hz));
@@ -166,7 +168,7 @@ void BandscopeDisplay::setCurrentSpanHz(quint64 hz)
     }
 }
 
-void BandscopeDisplay::updateSpanComboGeometry()
+void SpectrumScopeDisplay::updateSpanComboGeometry()
 {
     if (!m_spanCombo)
     {
@@ -177,7 +179,7 @@ void BandscopeDisplay::updateSpanComboGeometry()
     m_spanCombo->raise();
 }
 
-void BandscopeDisplay::updatePanScrollBar()
+void SpectrumScopeDisplay::updatePanScrollBar()
 {
     if (!m_panScrollBar)
     {
@@ -219,20 +221,20 @@ void BandscopeDisplay::updatePanScrollBar()
     m_panScrollBar->setEnabled(!m_interactionLocked && canPan);
 }
 
-int BandscopeDisplay::defaultSpectrumHeight() const
+int SpectrumScopeDisplay::defaultSpectrumHeight() const
 {
-    return constrainedSpectrumHeight(((height() - BandscopeCanvas::scaleHeight() - panScrollBarHeight()) / 2) +
-                                     kDefaultBandscopeHeightBias);
+    return constrainedSpectrumHeight(((height() - SpectrumScopeCanvas::scaleHeight() - panScrollBarHeight()) / 2) +
+                                     kDefaultSpectrumScopeHeightBias);
 }
 
-int BandscopeDisplay::constrainedSpectrumHeight(int requested) const
+int SpectrumScopeDisplay::constrainedSpectrumHeight(int requested) const
 {
-    const int available = qMax(0, height() - BandscopeCanvas::scaleHeight() - panScrollBarHeight());
+    const int available = qMax(0, height() - SpectrumScopeCanvas::scaleHeight() - panScrollBarHeight());
     const int maxSpectrumHeight = qMax(kMinSpectrumHeight, available - kMinWaterfallHeight);
     return qBound(qMin(kMinSpectrumHeight, maxSpectrumHeight), requested, maxSpectrumHeight);
 }
 
-int BandscopeDisplay::currentSpectrumHeight() const
+int SpectrumScopeDisplay::currentSpectrumHeight() const
 {
     if (m_spectrumHeight < 0)
     {
@@ -241,54 +243,54 @@ int BandscopeDisplay::currentSpectrumHeight() const
     return constrainedSpectrumHeight(m_spectrumHeight);
 }
 
-void BandscopeDisplay::updateChildGeometry()
+void SpectrumScopeDisplay::updateChildGeometry()
 {
-    if (!m_bandscopeCanvas || !m_panScrollBar || !m_waterfallCanvas)
+    if (!m_spectrumScopeCanvas || !m_panScrollBar || !m_waterfallCanvas)
     {
         return;
     }
 
     const int spectrumHeight = currentSpectrumHeight();
-    const int bandscopeHeight = spectrumHeight + BandscopeCanvas::scaleHeight();
-    const int splitTop = bandscopeHeight;
+    const int spectrumScopeHeight = spectrumHeight + SpectrumScopeCanvas::scaleHeight();
+    const int splitTop = spectrumScopeHeight;
     const int waterfallTop = splitTop + panScrollBarHeight();
     const int waterfallHeight = qMax(0, height() - waterfallTop);
-    const int plotLeft = BandscopeCanvas::levelScalePanelWidth();
+    const int plotLeft = SpectrumScopeCanvas::levelScalePanelWidth();
 
-    m_bandscopeCanvas->setGeometry(0, 0, width(), bandscopeHeight);
+    m_spectrumScopeCanvas->setGeometry(0, 0, width(), spectrumScopeHeight);
     m_panScrollBar->setGeometry(plotLeft, splitTop, qMax(0, width() - plotLeft), panScrollBarHeight());
     m_waterfallCanvas->setGeometry(0, waterfallTop, width(), waterfallHeight);
     m_waterfallController->setCanvasSize(m_waterfallCanvas->size());
     updateSpanComboGeometry();
 }
 
-void BandscopeDisplay::paintEvent(QPaintEvent* event)
+void SpectrumScopeDisplay::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
-    if (m_bandscopeCanvas && m_panScrollBar)
+    if (m_spectrumScopeCanvas && m_panScrollBar)
     {
         const QRect scrollbarRect = m_panScrollBar->geometry();
         const int fillerTop = qMax(0, scrollbarRect.top() - 1);
-        painter.fillRect(0, fillerTop, BandscopeCanvas::levelScalePanelWidth(), scrollbarRect.bottom() - fillerTop + 1,
-                         kScaleBackground);
-        painter.fillRect(0, scrollbarRect.bottom(), BandscopeCanvas::levelScalePanelWidth(), 1, kScaleAccentLine);
+        painter.fillRect(0, fillerTop, SpectrumScopeCanvas::levelScalePanelWidth(),
+                         scrollbarRect.bottom() - fillerTop + 1, kScaleBackground);
+        painter.fillRect(0, scrollbarRect.bottom(), SpectrumScopeCanvas::levelScalePanelWidth(), 1, kScaleAccentLine);
     }
 }
 
-void BandscopeDisplay::setFrequencyRange(double startMhz, double endMhz)
+void SpectrumScopeDisplay::setFrequencyRange(double startMhz, double endMhz)
 {
     m_visibleStartMhz = startMhz;
     m_visibleEndMhz = endMhz;
-    m_bandscopeCanvas->setFrequencyRange(startMhz, endMhz);
+    m_spectrumScopeCanvas->setFrequencyRange(startMhz, endMhz);
     m_waterfallController->setFrequencyRange(startMhz, endMhz);
     updatePanScrollBar();
 }
 
-void BandscopeDisplay::setFrequencyPanRange(double startMhz, double endMhz)
+void SpectrumScopeDisplay::setFrequencyPanRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
     {
@@ -307,7 +309,7 @@ void BandscopeDisplay::setFrequencyPanRange(double startMhz, double endMhz)
     updatePanScrollBar();
 }
 
-void BandscopeDisplay::clearFrequencyPanRange()
+void SpectrumScopeDisplay::clearFrequencyPanRange()
 {
     if (!m_hasPanRange)
     {
@@ -320,55 +322,55 @@ void BandscopeDisplay::clearFrequencyPanRange()
     updatePanScrollBar();
 }
 
-void BandscopeDisplay::setDataFrequencyRange(double startMhz, double endMhz)
+void SpectrumScopeDisplay::setDataFrequencyRange(double startMhz, double endMhz)
 {
-    m_bandscopeCanvas->setDataFrequencyRange(startMhz, endMhz);
+    m_spectrumScopeCanvas->setDataFrequencyRange(startMhz, endMhz);
     m_waterfallController->setDataFrequencyRange(startMhz, endMhz);
 }
 
-void BandscopeDisplay::setVfoFrequency(double freqMhz)
+void SpectrumScopeDisplay::setVfoFrequency(double freqMhz)
 {
-    m_bandscopeCanvas->setVfoFrequency(freqMhz);
+    m_spectrumScopeCanvas->setVfoFrequency(freqMhz);
 }
 
-void BandscopeDisplay::setVfoMarkerColor(const QColor& color)
+void SpectrumScopeDisplay::setVfoMarkerColor(const QColor& color)
 {
-    m_bandscopeCanvas->setVfoMarkerColor(color);
+    m_spectrumScopeCanvas->setVfoMarkerColor(color);
 }
 
-void BandscopeDisplay::setBackgroundColor(const QColor& color)
+void SpectrumScopeDisplay::setBackgroundColor(const QColor& color)
 {
-    m_bandscopeCanvas->setBackgroundColor(color);
+    m_spectrumScopeCanvas->setBackgroundColor(color);
 }
 
-void BandscopeDisplay::setGridLineColor(const QColor& color)
+void SpectrumScopeDisplay::setGridLineColor(const QColor& color)
 {
-    m_bandscopeCanvas->setGridLineColor(color);
+    m_spectrumScopeCanvas->setGridLineColor(color);
 }
 
-void BandscopeDisplay::setGridDensity(int density)
+void SpectrumScopeDisplay::setGridDensity(int density)
 {
-    m_bandscopeCanvas->setGridDensity(density);
+    m_spectrumScopeCanvas->setGridDensity(density);
 }
 
-void BandscopeDisplay::setInteractionLocked(bool locked)
+void SpectrumScopeDisplay::setInteractionLocked(bool locked)
 {
     m_interactionLocked = locked;
-    m_bandscopeCanvas->setInteractionLocked(locked);
+    m_spectrumScopeCanvas->setInteractionLocked(locked);
     updatePanScrollBar();
 }
 
-void BandscopeDisplay::setInvertMouseWheel(bool invert)
+void SpectrumScopeDisplay::setInvertMouseWheel(bool invert)
 {
-    m_bandscopeCanvas->setInvertMouseWheel(invert);
+    m_spectrumScopeCanvas->setInvertMouseWheel(invert);
 }
 
-int BandscopeDisplay::spectrumPaneHeight() const
+int SpectrumScopeDisplay::spectrumPaneHeight() const
 {
     return currentSpectrumHeight();
 }
 
-void BandscopeDisplay::setSpectrumPaneHeight(int height)
+void SpectrumScopeDisplay::setSpectrumPaneHeight(int height)
 {
     if (height <= 0 || m_spectrumHeight == height)
     {
@@ -379,29 +381,29 @@ void BandscopeDisplay::setSpectrumPaneHeight(int height)
     updateChildGeometry();
 }
 
-void BandscopeDisplay::updateSpectrum(const QVector<float>& levels, bool outOfRange)
+void SpectrumScopeDisplay::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
-    m_bandscopeCanvas->updateSpectrum(levels, outOfRange);
+    m_spectrumScopeCanvas->updateSpectrum(levels, outOfRange);
     m_waterfallController->updateSpectrum(levels);
 }
 
-void BandscopeDisplay::clearDisplay()
+void SpectrumScopeDisplay::clearDisplay()
 {
-    m_bandscopeCanvas->clearDisplay();
+    m_spectrumScopeCanvas->clearDisplay();
     m_waterfallController->clearDisplay();
 }
 
-void BandscopeDisplay::setFilterWidth(int lowHz, int highHz)
+void SpectrumScopeDisplay::setFilterWidth(int lowHz, int highHz)
 {
-    m_bandscopeCanvas->setFilterWidth(lowHz, highHz);
+    m_spectrumScopeCanvas->setFilterWidth(lowHz, highHz);
 }
 
-int BandscopeDisplay::freqToX(double mhz) const
+int SpectrumScopeDisplay::freqToX(double mhz) const
 {
-    return m_bandscopeCanvas->freqToX(mhz);
+    return m_spectrumScopeCanvas->freqToX(mhz);
 }
 
-void BandscopeDisplay::resizeEvent(QResizeEvent* event)
+void SpectrumScopeDisplay::resizeEvent(QResizeEvent* event)
 {
     Q_UNUSED(event)
     updateChildGeometry();

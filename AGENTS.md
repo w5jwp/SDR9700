@@ -132,7 +132,7 @@ Local memory channels are stored at:
 These files are JSON. Boolean settings are stored as `"True"` / `"False"` strings
 for compatibility with existing code. Use camel-case keys, with all-caps
 abbreviations, grouped under current schema objects such as `radioChooser`,
-`audio`, `bandScope`, and `radio`. Do not add configuration fallback paths,
+`audio`, `spectrumScope`, and `radio`. Do not add configuration fallback paths,
 migration keys, or migration holdover code; configuration import is the cleanup
 boundary for current schema validation.
 

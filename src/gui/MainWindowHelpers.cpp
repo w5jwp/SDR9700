@@ -133,13 +133,14 @@ QColor colorSetting(const char* key, const QColor& defaultColor)
     return color.isValid() ? color : defaultColor;
 }
 
-int bandscopeGridDensitySetting()
+int spectrumScopeGridDensitySetting()
 {
-    return qBound(0,
-                  AppSettings::instance()
-                      .value(QString::fromLatin1(kBandScopeGridDensitySettingsKey), kDefaultBandscopeGridDensity)
-                      .toInt(),
-                  2);
+    return qBound(
+        0,
+        AppSettings::instance()
+            .value(QString::fromLatin1(kSpectrumScopeGridDensitySettingsKey), kDefaultSpectrumScopeGridDensity)
+            .toInt(),
+        2);
 }
 
 bool availableScreenContains(const QRect& rect)

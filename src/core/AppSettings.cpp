@@ -28,15 +28,15 @@ bool audioSetting(const QString& key)
     return kAudioSettings.contains(key);
 }
 
-bool bandscopeSetting(const QString& key)
+bool spectrumScopeSetting(const QString& key)
 {
-    static const QStringList kBandscopeSettings = {
-        QStringLiteral("bandScopeBackgroundColor"),  QStringLiteral("bandScopeCenterLineColor"),
-        QStringLiteral("bandScopeGridDensity"),      QStringLiteral("bandScopeGridLineColor"),
-        QStringLiteral("bandScopeInvertMouseWheel"), QStringLiteral("bandScopeSpanHZ"),
-        QStringLiteral("bandScopeSpectrumHeight"),
+    static const QStringList kSpectrumScopeSettings = {
+        QStringLiteral("spectrumScopeBackgroundColor"),  QStringLiteral("spectrumScopeCenterLineColor"),
+        QStringLiteral("spectrumScopeGridDensity"),      QStringLiteral("spectrumScopeGridLineColor"),
+        QStringLiteral("spectrumScopeInvertMouseWheel"), QStringLiteral("spectrumScopeSpanHZ"),
+        QStringLiteral("spectrumScopeSpectrumHeight"),
     };
-    return kBandscopeSettings.contains(key);
+    return kSpectrumScopeSettings.contains(key);
 }
 
 bool mainWindowSetting(const QString& key)
@@ -128,33 +128,33 @@ QString audioStoredKey(const QString& key)
     return {};
 }
 
-QString bandscopeStoredKey(const QString& key)
+QString spectrumScopeStoredKey(const QString& key)
 {
-    if (key == QStringLiteral("bandScopeBackgroundColor"))
+    if (key == QStringLiteral("spectrumScopeBackgroundColor"))
     {
         return QStringLiteral("backgroundColor");
     }
-    if (key == QStringLiteral("bandScopeCenterLineColor"))
+    if (key == QStringLiteral("spectrumScopeCenterLineColor"))
     {
         return QStringLiteral("centerLineColor");
     }
-    if (key == QStringLiteral("bandScopeGridDensity"))
+    if (key == QStringLiteral("spectrumScopeGridDensity"))
     {
         return QStringLiteral("gridDensity");
     }
-    if (key == QStringLiteral("bandScopeGridLineColor"))
+    if (key == QStringLiteral("spectrumScopeGridLineColor"))
     {
         return QStringLiteral("gridLineColor");
     }
-    if (key == QStringLiteral("bandScopeInvertMouseWheel"))
+    if (key == QStringLiteral("spectrumScopeInvertMouseWheel"))
     {
         return QStringLiteral("invertMouseWheel");
     }
-    if (key == QStringLiteral("bandScopeSpanHZ"))
+    if (key == QStringLiteral("spectrumScopeSpanHZ"))
     {
         return QStringLiteral("spanHZ");
     }
-    if (key == QStringLiteral("bandScopeSpectrumHeight"))
+    if (key == QStringLiteral("spectrumScopeSpectrumHeight"))
     {
         return QStringLiteral("spectrumHeight");
     }
@@ -283,7 +283,7 @@ bool AppSettings::save() const
 
     QJsonObject settings;
     QJsonObject audioSettings;
-    QJsonObject bandscopeSettings;
+    QJsonObject spectrumScopeSettings;
     QJsonObject mainWindowSettings;
     QJsonObject memoryManagerSettings;
     QJsonObject radioSettings;
@@ -299,9 +299,9 @@ bool AppSettings::save() const
             insertStoredSetting(&audioSettings, audioStoredKey(key), storedValue);
             continue;
         }
-        if (bandscopeSetting(key))
+        if (spectrumScopeSetting(key))
         {
-            insertStoredSetting(&bandscopeSettings, bandscopeStoredKey(key), storedValue);
+            insertStoredSetting(&spectrumScopeSettings, spectrumScopeStoredKey(key), storedValue);
             continue;
         }
         if (mainWindowSetting(key))
@@ -337,9 +337,9 @@ bool AppSettings::save() const
     {
         settings.insert(QStringLiteral("audio"), audioSettings);
     }
-    if (!bandscopeSettings.isEmpty())
+    if (!spectrumScopeSettings.isEmpty())
     {
-        settings.insert(QStringLiteral("bandScope"), bandscopeSettings);
+        settings.insert(QStringLiteral("spectrumScope"), spectrumScopeSettings);
     }
     if (!mainWindowSettings.isEmpty())
     {
@@ -410,22 +410,23 @@ bool AppSettings::loadJson(const QString& path)
             continue;
         }
 
-        if (it.key() == QStringLiteral("bandScope") && it.value().isObject())
+        if (it.key() == QStringLiteral("spectrumScope") && it.value().isObject())
         {
-            const QJsonObject bandscope = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("bandScopeBackgroundColor"),
-                              bandscope.value(QStringLiteral("backgroundColor")));
-            loadStoredSetting(&m_values, QStringLiteral("bandScopeCenterLineColor"),
-                              bandscope.value(QStringLiteral("centerLineColor")));
-            loadStoredSetting(&m_values, QStringLiteral("bandScopeGridDensity"),
-                              bandscope.value(QStringLiteral("gridDensity")));
-            loadStoredSetting(&m_values, QStringLiteral("bandScopeGridLineColor"),
-                              bandscope.value(QStringLiteral("gridLineColor")));
-            loadStoredSetting(&m_values, QStringLiteral("bandScopeInvertMouseWheel"),
-                              bandscope.value(QStringLiteral("invertMouseWheel")));
-            loadStoredSetting(&m_values, QStringLiteral("bandScopeSpanHZ"), bandscope.value(QStringLiteral("spanHZ")));
-            loadStoredSetting(&m_values, QStringLiteral("bandScopeSpectrumHeight"),
-                              bandscope.value(QStringLiteral("spectrumHeight")));
+            const QJsonObject spectrumScope = it.value().toObject();
+            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeBackgroundColor"),
+                              spectrumScope.value(QStringLiteral("backgroundColor")));
+            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeCenterLineColor"),
+                              spectrumScope.value(QStringLiteral("centerLineColor")));
+            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeGridDensity"),
+                              spectrumScope.value(QStringLiteral("gridDensity")));
+            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeGridLineColor"),
+                              spectrumScope.value(QStringLiteral("gridLineColor")));
+            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeInvertMouseWheel"),
+                              spectrumScope.value(QStringLiteral("invertMouseWheel")));
+            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeSpanHZ"),
+                              spectrumScope.value(QStringLiteral("spanHZ")));
+            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeSpectrumHeight"),
+                              spectrumScope.value(QStringLiteral("spectrumHeight")));
             continue;
         }
 

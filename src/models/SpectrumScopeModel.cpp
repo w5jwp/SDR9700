@@ -1,4 +1,4 @@
-#include "BandscopeModel.h"
+#include "SpectrumScopeModel.h"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -23,9 +23,9 @@ bool normalizeRange(double* startMhz, double* endMhz)
 }
 } // namespace
 
-BandscopeModel::BandscopeModel(QObject* parent) : QObject(parent) {}
+SpectrumScopeModel::SpectrumScopeModel(QObject* parent) : QObject(parent) {}
 
-double BandscopeModel::constrainedBandwidth(double bandwidthMhz) const
+double SpectrumScopeModel::constrainedBandwidth(double bandwidthMhz) const
 {
     double displayStartMhz = sourceStartMhz();
     double displayEndMhz = sourceEndMhz();
@@ -39,7 +39,7 @@ double BandscopeModel::constrainedBandwidth(double bandwidthMhz) const
     return qBound(kMinSourceBandwidthMhz, bandwidthMhz, maximumBandwidth);
 }
 
-double BandscopeModel::constrainedCenter(double centerMhz, double bandwidthMhz) const
+double SpectrumScopeModel::constrainedCenter(double centerMhz, double bandwidthMhz) const
 {
     double displayStartMhz = sourceStartMhz();
     double displayEndMhz = sourceEndMhz();
@@ -60,7 +60,7 @@ double BandscopeModel::constrainedCenter(double centerMhz, double bandwidthMhz) 
     return qBound(qMin(minCenter, maxCenter), centerMhz, qMax(minCenter, maxCenter));
 }
 
-void BandscopeModel::constrainDisplayRange()
+void SpectrumScopeModel::constrainDisplayRange()
 {
     const double nextBandwidth = constrainedBandwidth(m_bandwidthMhz);
     const double nextCenter = constrainedCenter(m_centerMhz, nextBandwidth);
@@ -74,7 +74,7 @@ void BandscopeModel::constrainDisplayRange()
     emit rangeChanged(m_centerMhz, m_bandwidthMhz);
 }
 
-void BandscopeModel::centerOnFrequency(double freqMhz)
+void SpectrumScopeModel::centerOnFrequency(double freqMhz)
 {
     const double nextBandwidth = constrainedBandwidth(m_bandwidthMhz);
     const double nextCenter = constrainedCenter(freqMhz, nextBandwidth);
@@ -88,7 +88,7 @@ void BandscopeModel::centerOnFrequency(double freqMhz)
     emit rangeChanged(m_centerMhz, m_bandwidthMhz);
 }
 
-void BandscopeModel::holdDisplayCenter(double centerMhz)
+void SpectrumScopeModel::holdDisplayCenter(double centerMhz)
 {
     if (!std::isfinite(centerMhz))
     {
@@ -99,13 +99,13 @@ void BandscopeModel::holdDisplayCenter(double centerMhz)
     m_hasDisplayCenterHold = true;
 }
 
-void BandscopeModel::clearDisplayCenterHold()
+void SpectrumScopeModel::clearDisplayCenterHold()
 {
     m_hasDisplayCenterHold = false;
     m_heldCenterMhz = 0.0;
 }
 
-void BandscopeModel::setFrequencyLimits(double startMhz, double endMhz)
+void SpectrumScopeModel::setFrequencyLimits(double startMhz, double endMhz)
 {
     if (!normalizeRange(&startMhz, &endMhz))
     {
@@ -123,7 +123,7 @@ void BandscopeModel::setFrequencyLimits(double startMhz, double endMhz)
     constrainDisplayRange();
 }
 
-void BandscopeModel::clearFrequencyLimits()
+void SpectrumScopeModel::clearFrequencyLimits()
 {
     if (!m_hasFrequencyLimits)
     {
@@ -136,7 +136,7 @@ void BandscopeModel::clearFrequencyLimits()
     constrainDisplayRange();
 }
 
-void BandscopeModel::ingestSpectrum(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange)
+void SpectrumScopeModel::ingestSpectrum(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange)
 {
     // Minimum change in MHz that warrants a rangeChanged emission.
     static constexpr double kRangeChangeTolerance = 0.0001;

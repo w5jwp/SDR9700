@@ -9,12 +9,12 @@ class QCheckBox;
 class QHBoxLayout;
 class QPushButton;
 
-class BandScopeSettingsPanel : public QWidget
+class SpectrumScopeSettingsPanel : public QWidget
 {
     Q_OBJECT
 
   public:
-    explicit BandScopeSettingsPanel(QWidget* parent = nullptr);
+    explicit SpectrumScopeSettingsPanel(QWidget* parent = nullptr);
 
   signals:
     void centerLineColorChanged(const QColor& color);

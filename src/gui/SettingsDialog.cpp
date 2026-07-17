@@ -1,7 +1,7 @@
 #include "SettingsDialog.h"
 #include "ApplicationConfigurationSettingsPanel.h"
 #include "AudioDevicesSettingsPanel.h"
-#include "BandScopeSettingsPanel.h"
+#include "SpectrumScopeSettingsPanel.h"
 #include "DialogPlacement.h"
 #include "FramelessTitleBar.h"
 #include "MemoryManagerSettingsPanel.h"
@@ -157,9 +157,9 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                 return panel;
             });
 #endif
-    QTreeWidgetItem* applicationCategory = addCategory(
-        QStringLiteral("APPLICATION"),
-        QStringLiteral("application configuration backup restore reset memory manager bandscope band scope"));
+    QTreeWidgetItem* applicationCategory =
+        addCategory(QStringLiteral("APPLICATION"),
+                    QStringLiteral("application configuration backup restore reset memory manager spectrum scope"));
     addPage(applicationCategory, Page::ApplicationConfiguration, QStringLiteral("Configuration"),
             QStringLiteral("application configuration backup restore reset settings"),
             [] { return new ApplicationConfigurationSettingsPanel; });
@@ -172,21 +172,21 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                         &SettingsDialog::memoryPollIntervalSecondsChanged);
                 return panel;
             });
-    addPage(applicationCategory, Page::BandScope, QStringLiteral("Band Scope"),
-            QStringLiteral("application appearance display visual bandscope band scope center line color vfo marker "
+    addPage(applicationCategory, Page::SpectrumScope, QStringLiteral("Spectrum Scope"),
+            QStringLiteral("application appearance display visual spectrum scope center line color vfo marker "
                            "background gridlines grid density fewer normal more"),
             [this]()
             {
-                auto* panel = new BandScopeSettingsPanel;
-                connect(panel, &BandScopeSettingsPanel::centerLineColorChanged, this,
-                        &SettingsDialog::bandscopeCenterLineColorChanged);
-                connect(panel, &BandScopeSettingsPanel::backgroundColorChanged, this,
-                        &SettingsDialog::bandscopeBackgroundColorChanged);
-                connect(panel, &BandScopeSettingsPanel::gridLineColorChanged, this,
-                        &SettingsDialog::bandscopeGridLineColorChanged);
-                connect(panel, &BandScopeSettingsPanel::gridDensityChanged, this,
-                        &SettingsDialog::bandscopeGridDensityChanged);
-                connect(panel, &BandScopeSettingsPanel::reverseMouseWheelTuningChanged, this,
+                auto* panel = new SpectrumScopeSettingsPanel;
+                connect(panel, &SpectrumScopeSettingsPanel::centerLineColorChanged, this,
+                        &SettingsDialog::spectrumScopeCenterLineColorChanged);
+                connect(panel, &SpectrumScopeSettingsPanel::backgroundColorChanged, this,
+                        &SettingsDialog::spectrumScopeBackgroundColorChanged);
+                connect(panel, &SpectrumScopeSettingsPanel::gridLineColorChanged, this,
+                        &SettingsDialog::spectrumScopeGridLineColorChanged);
+                connect(panel, &SpectrumScopeSettingsPanel::gridDensityChanged, this,
+                        &SettingsDialog::spectrumScopeGridDensityChanged);
+                connect(panel, &SpectrumScopeSettingsPanel::reverseMouseWheelTuningChanged, this,
                         &SettingsDialog::reverseMouseWheelTuningChanged);
                 return panel;
             });

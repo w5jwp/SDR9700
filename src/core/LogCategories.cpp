@@ -3,7 +3,7 @@
 Q_LOGGING_CATEGORY(logSystem, "system")
 Q_LOGGING_CATEGORY(logGui, "gui")
 Q_LOGGING_CATEGORY(logRadio, "radio")
-Q_LOGGING_CATEGORY(logBandscope, "bandscope")
+Q_LOGGING_CATEGORY(logSpectrumScope, "spectrumScope")
 Q_LOGGING_CATEGORY(logWaterfall, "waterfall")
 Q_LOGGING_CATEGORY(logRadioTraffic, "ci-v")
 Q_LOGGING_CATEGORY(logAudio, "audio")

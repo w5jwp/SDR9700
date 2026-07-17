@@ -11,9 +11,10 @@
 
 class RadioModel;
 class VfoModel;
-class BandscopeModel;
-class BandscopeController;
-class BandscopeDisplay;
+class SpectrumScopeModel;
+class SpectrumScopeController;
+class SpectrumScopeDisplay;
+class ControlPanelController;
 class VfoPanel;
 class MemoryPanel;
 class QLabel;
@@ -48,7 +49,8 @@ class IcomRC28Manager;
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
-    friend class BandscopeController;
+    friend class SpectrumScopeController;
+    friend class ControlPanelController;
     friend class IcomRC28Controller;
     friend class MemoryController;
     friend class RadioCommandController;
@@ -90,6 +92,7 @@ class MainWindow : public QMainWindow
   private:
     void buildToolBar();
     void buildControlPanel(QVBoxLayout* vbox);
+    void buildControlPanelContent(QVBoxLayout* vbox);
     void buildStatusBar();
     void centerPopupWindow(QWidget* popup) const;
     void bringDialogToFront(QWidget* dialog) const;
@@ -149,7 +152,8 @@ class MainWindow : public QMainWindow
     void checkIfMemorySelectionComplete();
 
     MainTitleBar* m_titleBar{nullptr};
-    BandscopeController* m_bandscopeController{nullptr};
+    SpectrumScopeController* m_spectrumScopeController{nullptr};
+    ControlPanelController* m_controlPanelController{nullptr};
     IcomRC28Controller* m_icomRC28Controller{nullptr};
     MemoryController* m_memoryController{nullptr};
     RadioCommandController* m_radioCommandController{nullptr};
@@ -157,9 +161,9 @@ class MainWindow : public QMainWindow
     RadioModel* m_model{nullptr};
     QUuid m_pendingProfileId;
     VfoModel* m_vfo{nullptr};
-    BandscopeModel* m_bandscope{nullptr};
+    SpectrumScopeModel* m_spectrumScope{nullptr};
 
-    BandscopeDisplay* m_bandscopeDisplay{nullptr};
+    SpectrumScopeDisplay* m_spectrumScopeDisplay{nullptr};
 
     VfoPanel* m_vfoPanel{nullptr};
     MemoryPanel* m_memoryPanel{nullptr};
@@ -264,18 +268,18 @@ class MainWindow : public QMainWindow
     bool m_lastErrorWasCredential{false};
     bool m_allowChooserOnDisconnect{false};
     bool m_radioUiReadyNotified{false};
-    bool m_bandscopeStillSyncingAfterReady{false};
+    bool m_spectrumScopeStillSyncingAfterReady{false};
 
     QTimer* m_txDurationTimer{nullptr};
     QElapsedTimer m_txElapsed;
     bool m_txActive{false};
-    QTimer* m_bandscopeTuneCommitTimer{nullptr};
-    QTimer* m_bandscopeTuneReleaseTimer{nullptr};
-    quint64 m_pendingBandscopeTuneHz{0};
-    quint64 m_displayBandscopeTuneHz{0};
-    quint64 m_bandscopeDisplayCenterHz{0};
-    quint64 m_bandscopeFixedPanStartHz{0};
-    quint64 m_bandscopeFixedPanEndHz{0};
+    QTimer* m_spectrumScopeTuneCommitTimer{nullptr};
+    QTimer* m_spectrumScopeTuneReleaseTimer{nullptr};
+    quint64 m_pendingSpectrumScopeTuneHz{0};
+    quint64 m_displaySpectrumScopeTuneHz{0};
+    quint64 m_spectrumScopeDisplayCenterHz{0};
+    quint64 m_spectrumScopeFixedPanStartHz{0};
+    quint64 m_spectrumScopeFixedPanEndHz{0};
 
     QString m_radioHost;
     quint16 m_radioPort{0};
@@ -298,15 +302,15 @@ class MainWindow : public QMainWindow
     void updateSystemStats();
     void toggleControlLock();
     void updateControlLockIndicator();
-    void updateBandscopeBandLimits(quint64 hz);
+    void updateSpectrumScopeBandLimits(quint64 hz);
     int tuningStepHz() const;
     void applyRadioTuningStep();
-    void applyBandscopeSettings();
+    void applySpectrumScopeSettings();
     quint64 roundFrequencyToStep(quint64 hz) const;
-    void panBandscopeToCenter(quint64 centerHz);
-    quint64 clampBandscopeCenterHz(quint64 hz, double bandwidthMhz) const;
+    void panSpectrumScopeToCenter(quint64 centerHz);
+    quint64 clampSpectrumScopeCenterHz(quint64 hz, double bandwidthMhz) const;
     quint64 clampFrequencyHzToActiveBand(quint64 hz) const;
-    void scheduleBandscopeTune(quint64 hz);
+    void scheduleSpectrumScopeTune(quint64 hz);
     void setActiveMemory(const QString& id, const QString& name, quint64 frequencyHz, int duplexMode, quint64 offsetHz,
                          int toneMode, ushort toneValue);
     void clearActiveMemory();

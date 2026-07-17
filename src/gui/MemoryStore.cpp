@@ -148,11 +148,9 @@ QString csvValue(const QStringList& row, const QHash<QString, int>& indexes, con
     return index >= 0 && index < row.size() ? row.at(index) : QString();
 }
 
-int csvInt(const QStringList& row, const QHash<QString, int>& indexes, const QString& key, int defaultValue = 0)
+int csvInt(const QStringList& row, const QHash<QString, int>& indexes, const QString& key)
 {
-    bool ok = false;
-    const int value = csvValue(row, indexes, key).toInt(&ok);
-    return ok ? value : defaultValue;
+    return csvValue(row, indexes, key).toInt();
 }
 
 bool csvHasValue(const QStringList& row, const QHash<QString, int>& indexes, const QString& key)
@@ -163,6 +161,55 @@ bool csvHasValue(const QStringList& row, const QHash<QString, int>& indexes, con
 bool csvRowIsBlank(const QStringList& row)
 {
     return std::all_of(row.cbegin(), row.cend(), [](const QString& field) { return field.trimmed().isEmpty(); });
+}
+
+void validateCsvIntegerField(const QStringList& row, const QHash<QString, int>& indexes, const QString& key,
+                             int rowNumber, QStringList* errors)
+{
+    const QString text = csvValue(row, indexes, key).trimmed();
+    bool ok = false;
+    const int value = text.toInt(&ok);
+    Q_UNUSED(value)
+    if (!ok && errors)
+    {
+        errors->append(QStringLiteral("Row %1: %2 must be an integer").arg(rowNumber).arg(key));
+    }
+}
+
+void validateCsvUInt64Field(const QStringList& row, const QHash<QString, int>& indexes, const QString& key,
+                            int rowNumber, QStringList* errors)
+{
+    const QString text = csvValue(row, indexes, key).trimmed();
+    bool ok = false;
+    const quint64 value = text.toULongLong(&ok);
+    Q_UNUSED(value)
+    if (!ok && errors)
+    {
+        errors->append(QStringLiteral("Row %1: %2 must be an unsigned integer").arg(rowNumber).arg(key));
+    }
+}
+
+void validateCsvNumericFields(const QStringList& row, const QHash<QString, int>& indexes, int rowNumber,
+                              QStringList* errors)
+{
+    // The CSV file is the operator-facing backup format. Reject malformed
+    // numeric values here so bad imports cannot silently become channel 0,
+    // simplex, FIL1, or another valid-looking default before the radio write.
+    validateCsvIntegerField(row, indexes, QStringLiteral("channel"), rowNumber, errors);
+    validateCsvUInt64Field(row, indexes, QStringLiteral("receiveHZ"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("mode"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("filter"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("dataMode"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("scan"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("duplexMode"), rowNumber, errors);
+    validateCsvUInt64Field(row, indexes, QStringLiteral("offsetHZ"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("toneMode"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("dsql"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("dtcs"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("dtcsPolarity"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("dtcsB"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("dtcsPolarityB"), rowNumber, errors);
+    validateCsvIntegerField(row, indexes, QStringLiteral("dvSql"), rowNumber, errors);
 }
 
 ushort toneValueFromRadioText(const QString& text)
@@ -282,9 +329,7 @@ QString normalizedToneText(QString text)
 
 quint64 csvUInt64(const QStringList& row, const QHash<QString, int>& indexes, const QString& key)
 {
-    bool ok = false;
-    const quint64 value = csvValue(row, indexes, key).toULongLong(&ok);
-    return ok ? value : 0;
+    return csvValue(row, indexes, key).toULongLong();
 }
 
 } // namespace
@@ -344,10 +389,9 @@ QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories)
 
 QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* errors)
 {
-    if (errors)
-    {
-        errors->clear();
-    }
+    QStringList localErrors;
+    QStringList* importErrors = errors ? errors : &localErrors;
+    importErrors->clear();
 
     const QVector<QStringList> rows = parseCsvRows(QString::fromUtf8(data));
     if (rows.isEmpty())
@@ -363,12 +407,12 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
     }
     for (const QString& header : memoryCsvHeaders())
     {
-        if (!indexes.contains(header) && errors)
+        if (!indexes.contains(header))
         {
-            errors->append(QStringLiteral("Missing CSV column: %1").arg(header));
+            importErrors->append(QStringLiteral("Missing CSV column: %1").arg(header));
         }
     }
-    if (errors && !errors->isEmpty())
+    if (!importErrors->isEmpty())
     {
         return {};
     }
@@ -383,26 +427,33 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
             continue;
         }
 
+        const int rowErrorCount = importErrors->size();
+        validateCsvNumericFields(row, indexes, i + 1, importErrors);
+        if (importErrors->size() != rowErrorCount)
+        {
+            continue;
+        }
+
         MemoryRecord memory;
         memory.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         memory.group = memoryGroupForBandLabel(csvValue(row, indexes, QStringLiteral("band")));
         memory.channel = static_cast<quint16>(csvInt(row, indexes, QStringLiteral("channel")));
         memory.name = csvValue(row, indexes, QStringLiteral("name"));
         memory.receiveHz = csvUInt64(row, indexes, QStringLiteral("receiveHZ"));
-        memory.mode = csvInt(row, indexes, QStringLiteral("mode"), modeFM);
-        memory.filter = csvInt(row, indexes, QStringLiteral("filter"), 1);
+        memory.mode = csvInt(row, indexes, QStringLiteral("mode"));
+        memory.filter = csvInt(row, indexes, QStringLiteral("filter"));
         memory.dataMode = csvInt(row, indexes, QStringLiteral("dataMode"));
         memory.scan = csvInt(row, indexes, QStringLiteral("scan"));
-        memory.duplexMode = csvInt(row, indexes, QStringLiteral("duplexMode"), dmSimplex);
+        memory.duplexMode = csvInt(row, indexes, QStringLiteral("duplexMode"));
         memory.offsetHz = csvUInt64(row, indexes, QStringLiteral("offsetHZ"));
-        memory.toneMode = csvInt(row, indexes, QStringLiteral("toneMode"), ratrNN);
+        memory.toneMode = csvInt(row, indexes, QStringLiteral("toneMode"));
         memory.tone = normalizedToneText(csvValue(row, indexes, QStringLiteral("tone")));
         memory.tsql = normalizedToneText(csvValue(row, indexes, QStringLiteral("tsql")));
         memory.dsql = csvInt(row, indexes, QStringLiteral("dsql"));
-        memory.dtcs = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcs"), 23));
+        memory.dtcs = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcs")));
         memory.dtcsPolarity = csvInt(row, indexes, QStringLiteral("dtcsPolarity"));
-        memory.dtcsB = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcsB"), memory.dtcs));
-        memory.dtcsPolarityB = csvInt(row, indexes, QStringLiteral("dtcsPolarityB"), memory.dtcsPolarity);
+        memory.dtcsB = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcsB")));
+        memory.dtcsPolarityB = csvInt(row, indexes, QStringLiteral("dtcsPolarityB"));
         memory.toneValue = memoryToneValueFromFields(static_cast<rptAccessTxRx_t>(memory.toneMode), memory.tone,
                                                      memory.tsql, memory.dtcs);
         memory.dvSql = csvInt(row, indexes, QStringLiteral("dvSql"));
@@ -416,8 +467,8 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
         memory.toneOption = sdr9700::ui::main_window::toneOptionLabel(static_cast<rptAccessTxRx_t>(memory.toneMode));
         memory.toneFrequency = sdr9700::ui::main_window::memoryToneFrequencyLabel(
             static_cast<rptAccessTxRx_t>(memory.toneMode), memory.toneValue);
-        validateMemoryRecord(memory, row, indexes, i + 1, errors);
-        if (!errors || errors->isEmpty())
+        validateMemoryRecord(memory, row, indexes, i + 1, importErrors);
+        if (importErrors->size() == rowErrorCount)
         {
             memories.append(memory);
         }

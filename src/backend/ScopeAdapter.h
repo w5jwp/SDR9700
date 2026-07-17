@@ -4,7 +4,7 @@
 #include <QVector>
 
 // Converts raw IC-9700 scope bytes (CI-V 0x27 response data) to native
-// display levels for the bandscope and waterfall renderers.
+// display levels for the Spectrum Scope and waterfall renderers.
 //
 // The IC-9700 encodes each scope point as a byte 0x00-0xA0 (0-160),
 // where 0 is the display floor and 160 is the display ceiling.

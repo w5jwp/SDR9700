@@ -2,7 +2,7 @@
 #pragma once
 
 #include "AppSettings.h"
-#include "BandscopeDisplay.h"
+#include "SpectrumScopeDisplay.h"
 #include "MemoryStore.h"
 #include "RadioCapabilities.h"
 #include "UiTheme.h"
@@ -21,19 +21,19 @@
 
 namespace sdr9700::ui::main_window
 {
-constexpr auto kBandScopeInvertMouseWheelSettingsKey = "bandScopeInvertMouseWheel";
+constexpr auto kSpectrumScopeInvertMouseWheelSettingsKey = "spectrumScopeInvertMouseWheel";
 constexpr auto kTuningStepHZSettingsKey = "tuningStepHZ";
-constexpr auto kBandScopeSpanHZSettingsKey = "bandScopeSpanHZ";
-constexpr auto kBandScopeCenterLineColorSettingsKey = "bandScopeCenterLineColor";
-constexpr auto kBandScopeBackgroundColorSettingsKey = "bandScopeBackgroundColor";
-constexpr auto kBandScopeGridLineColorSettingsKey = "bandScopeGridLineColor";
-constexpr auto kBandScopeGridDensitySettingsKey = "bandScopeGridDensity";
+constexpr auto kSpectrumScopeSpanHZSettingsKey = "spectrumScopeSpanHZ";
+constexpr auto kSpectrumScopeCenterLineColorSettingsKey = "spectrumScopeCenterLineColor";
+constexpr auto kSpectrumScopeBackgroundColorSettingsKey = "spectrumScopeBackgroundColor";
+constexpr auto kSpectrumScopeGridLineColorSettingsKey = "spectrumScopeGridLineColor";
+constexpr auto kSpectrumScopeGridDensitySettingsKey = "spectrumScopeGridDensity";
 constexpr int kDefaultTuningStepHZ = 100;
-constexpr quint64 kDefaultBandScopeSpanHZ = 500000;
-const QColor kDefaultBandscopeCenterLineColor(0xf5, 0xf7, 0xf8);
-const QColor kDefaultBandscopeBackgroundColor(0x0b, 0x3f, 0x55);
-const QColor kDefaultBandscopeGridLineColor(0xc8, 0xf1, 0xf5);
-constexpr int kDefaultBandscopeGridDensity = 1;
+constexpr quint64 kDefaultSpectrumScopeSpanHZ = 500000;
+const QColor kDefaultSpectrumScopeCenterLineColor(0xf5, 0xf7, 0xf8);
+const QColor kDefaultSpectrumScopeBackgroundColor(0x0b, 0x3f, 0x55);
+const QColor kDefaultSpectrumScopeGridLineColor(0xc8, 0xf1, 0xf5);
+constexpr int kDefaultSpectrumScopeGridDensity = 1;
 
 struct StepPreset
 {
@@ -47,21 +47,21 @@ inline constexpr StepPreset kStepPresets[] = {
     {5000, "5 kHz", 4}, {10000, "10 kHz", 6}, {25000, "25 kHz", 9}, {50000, "50 kHz", 10}, {100000, "100 kHz", 11},
 };
 
-struct BandscopeSpanPreset
+struct SpectrumScopeSpanPreset
 {
     quint64 hz;
     const char* label;
 };
 
-inline constexpr BandscopeSpanPreset kBandscopeSpanPresets[] = {
+inline constexpr SpectrumScopeSpanPreset kSpectrumScopeSpanPresets[] = {
     {2500, "2.5 kHz"}, {5000, "5 kHz"},     {10000, "10 kHz"},   {25000, "25 kHz"},
     {50000, "50 kHz"}, {100000, "100 kHz"}, {250000, "250 kHz"}, {500000, "500 kHz"},
 };
 
 constexpr quint64 kMinimumTuneFrequencyHz = 100000;
-constexpr int kBandscopeTuneCommitDelayMs = 70;
-constexpr int kBandscopeTuneReleaseDelayMs = 650;
-constexpr quint64 kBandscopeFixedPanMinDeltaHz = 1000;
+constexpr int kSpectrumScopeTuneCommitDelayMs = 70;
+constexpr int kSpectrumScopeTuneReleaseDelayMs = 650;
+constexpr quint64 kSpectrumScopeFixedPanMinDeltaHz = 1000;
 constexpr int kMemoryOffsetCustom = -1;
 constexpr auto kNoActiveMemoryLabel = "-";
 constexpr auto kMemoryPollIntervalSecondsSettingsKey = "memoryPollIntervalSeconds";
@@ -187,7 +187,7 @@ void styleCompactMenu(QMenu* menu);
 QString statusLabelStyle(const char* color, bool bold = false);
 QString errorStatusMessage(const QString& message);
 QColor colorSetting(const char* key, const QColor& defaultColor);
-int bandscopeGridDensitySetting();
+int spectrumScopeGridDensitySetting();
 bool availableScreenContains(const QRect& rect);
 QRect availableGeometryFor(const QRect& rect);
 QRect centeredRectInAvailableGeometry(QSize size, const QRect& available);

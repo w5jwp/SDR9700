@@ -4,14 +4,14 @@
 #include <QObject>
 #include <QVector>
 
-class BandscopeModel : public QObject
+class SpectrumScopeModel : public QObject
 {
     Q_OBJECT
 
     Q_PROPERTY(double bandwidthMhz READ bandwidthMhz NOTIFY rangeChanged)
 
   public:
-    explicit BandscopeModel(QObject* parent = nullptr);
+    explicit SpectrumScopeModel(QObject* parent = nullptr);
 
     double bandwidthMhz() const { return m_bandwidthMhz; }
     double startMhz() const { return m_centerMhz - m_bandwidthMhz / 2.0; }

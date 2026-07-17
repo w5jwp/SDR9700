@@ -112,15 +112,15 @@ set(SDR9700_SOURCES
     models/RadioModel.cpp
     models/VfoModel.h
     models/VfoModel.cpp
-    models/BandscopeModel.h
-    models/BandscopeModel.cpp
+    models/SpectrumScopeModel.h
+    models/SpectrumScopeModel.cpp
     models/MeterController.h
     models/MeterController.cpp
 
-    gui/BandscopeCanvas.h
-    gui/BandscopeCanvas.cpp
-    gui/BandscopeDisplay.h
-    gui/BandscopeDisplay.cpp
+    gui/SpectrumScopeCanvas.h
+    gui/SpectrumScopeCanvas.cpp
+    gui/SpectrumScopeDisplay.h
+    gui/SpectrumScopeDisplay.cpp
     gui/WaterfallCanvas.h
     gui/WaterfallCanvas.cpp
     gui/WaterfallController.h
@@ -131,12 +131,18 @@ set(SDR9700_SOURCES
     gui/MemoryStore.cpp
     gui/MainWindowHelpers.h
     gui/MainWindowHelpers.cpp
-    gui/BandscopeController.h
-    gui/BandscopeController.cpp
+    gui/SpectrumScopeController.h
+    gui/SpectrumScopeController.cpp
+    gui/ControlPanelController.h
+    gui/ControlPanelController.cpp
     gui/IcomRC28Controller.h
     gui/IcomRC28Controller.cpp
+    gui/MemoryEditorController.h
+    gui/MemoryEditorController.cpp
     gui/MemoryController.h
     gui/MemoryController.cpp
+    gui/MemorySyncController.h
+    gui/MemorySyncController.cpp
     gui/RadioCommandController.h
     gui/RadioCommandController.cpp
     gui/StatusBarController.h
@@ -152,8 +158,8 @@ set(SDR9700_SOURCES
     gui/ApplicationConfigurationSettingsPanel.cpp
     gui/MemoryManagerSettingsPanel.h
     gui/MemoryManagerSettingsPanel.cpp
-    gui/BandScopeSettingsPanel.h
-    gui/BandScopeSettingsPanel.cpp
+    gui/SpectrumScopeSettingsPanel.h
+    gui/SpectrumScopeSettingsPanel.cpp
     gui/AudioDevicesSettingsPanel.h
     gui/AudioDevicesSettingsPanel.cpp
     gui/AboutDialog.h

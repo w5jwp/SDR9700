@@ -1,6 +1,6 @@
 #include "RadioModel.h"
 #include "VfoModel.h"
-#include "BandscopeModel.h"
+#include "SpectrumScopeModel.h"
 #include "MeterController.h"
 #include "backend/RadioBackend.h"
 
@@ -8,14 +8,14 @@
 
 namespace
 {
-constexpr double kBandscopeCenterMarginFraction = 0.25;
+constexpr double kSpectrumScopeCenterMarginFraction = 0.25;
 }
 
 RadioModel::RadioModel(QObject* parent) : QObject(parent)
 {
     m_backend = new RadioBackend(this);
     m_vfo = new VfoModel(m_backend, this);
-    m_bandscope = new BandscopeModel(this);
+    m_spectrumScope = new SpectrumScopeModel(this);
     m_meterController = new MeterController(this);
 
     connect(m_backend, &IRadioBackend::connected, this, &RadioModel::onBackendConnected);
@@ -161,12 +161,12 @@ void RadioModel::onFrequencyChanged(quint64 hz)
 {
     m_vfo->applyFrequency(hz);
     double freqMhz = hz / 1e6;
-    double start = m_bandscope->startMhz();
-    double end = m_bandscope->endMhz();
-    double margin = m_bandscope->bandwidthMhz() * kBandscopeCenterMarginFraction;
+    double start = m_spectrumScope->startMhz();
+    double end = m_spectrumScope->endMhz();
+    double margin = m_spectrumScope->bandwidthMhz() * kSpectrumScopeCenterMarginFraction;
     if (freqMhz < start + margin || freqMhz > end - margin)
     {
-        m_bandscope->centerOnFrequency(freqMhz);
+        m_spectrumScope->centerOnFrequency(freqMhz);
     }
 }
 
@@ -230,5 +230,5 @@ void RadioModel::onSpectrumDataReady(const QVector<float>& levels, double start,
     {
         return;
     }
-    m_bandscope->ingestSpectrum(levels, start, end, outOfRange);
+    m_spectrumScope->ingestSpectrum(levels, start, end, outOfRange);
 }

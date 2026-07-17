@@ -1638,12 +1638,12 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
 
     if (!haveRadioCaps)
     {
-        qDebug(logBandscope()) << "Spectrum received in Commander, but radioID is incomplete.";
+        qDebug(logSpectrumScope()) << "Spectrum received in Commander, but radioID is incomplete.";
         return ret;
     }
     if (radioCaps.spectSeqMax == 0)
     {
-        qInfo(logBandscope()) << "Spectrum received before IC-9700 scope capabilities were ready.";
+        qInfo(logSpectrumScope()) << "Spectrum received before IC-9700 scope capabilities were ready.";
         return ret;
     }
 
@@ -1665,7 +1665,7 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     d.receiver = receiver;
     if (payloadIn.size() < 2)
     {
-        qWarning(logBandscope()) << "Ignoring short scope payload:" << payloadIn.toHex(' ');
+        qWarning(logSpectrumScope()) << "Ignoring short scope payload:" << payloadIn.toHex(' ');
         return false;
     }
 
@@ -1680,8 +1680,8 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     {
         if (payloadIn.size() < waveInfoBytes)
         {
-            qWarning(logBandscope()) << "Ignoring short single-frame scope payload. required" << waveInfoBytes << "got"
-                                     << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            qWarning(logSpectrumScope()) << "Ignoring short single-frame scope payload. required" << waveInfoBytes
+                                         << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
             return false;
         }
 
@@ -1717,8 +1717,8 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
         }
         ret = !d.data.isEmpty();
         d.valid = ret;
-        qInfo(logBandscope()) << "Spectrum single-frame start:" << d.startFreq << "end:" << d.endFreq
-                              << "mode:" << d.mode << "oor:" << d.oor << "dataLen:" << d.data.size();
+        qInfo(logSpectrumScope()) << "Spectrum single-frame start:" << d.startFreq << "end:" << d.endFreq
+                                  << "mode:" << d.mode << "oor:" << d.oor << "dataLen:" << d.data.size();
         return ret;
     }
 
@@ -1729,8 +1729,9 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
         const int multiFrameWaveInfoBytes = 4 + (freqLen * 2);
         if (payloadIn.size() < multiFrameWaveInfoBytes)
         {
-            qWarning(logBandscope()) << "Ignoring short scope wave-info payload. required" << multiFrameWaveInfoBytes
-                                     << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            qWarning(logSpectrumScope()) << "Ignoring short scope wave-info payload. required"
+                                         << multiFrameWaveInfoBytes << "got" << payloadIn.size()
+                                         << "data:" << payloadIn.toHex(' ');
             return false;
         }
 
@@ -1775,24 +1776,24 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
             ret = true;
         }
 
-        qInfo(logBandscope()) << "Spectrum seq 1/" << sequenceMax << "start:" << d.startFreq << "end:" << d.endFreq
-                              << "mode:" << d.mode << "oor:" << d.oor << "payloadLen:" << payloadIn.length();
+        qInfo(logSpectrumScope()) << "Spectrum seq 1/" << sequenceMax << "start:" << d.startFreq << "end:" << d.endFreq
+                                  << "mode:" << d.mode << "oor:" << d.oor << "payloadLen:" << payloadIn.length();
     }
     else if ((sequence > 1) && (sequence < sequenceMax))
     {
         // Intermediate scope chunks carry 50 pixels each.
         d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
         ret = false;
-        qInfo(logBandscope()) << "Spectrum seq" << sequence << "/" << sequenceMax << "dataAccum:" << d.data.size()
-                              << "payloadLen:" << payloadIn.length();
+        qInfo(logSpectrumScope()) << "Spectrum seq" << sequence << "/" << sequenceMax << "dataAccum:" << d.data.size()
+                                  << "payloadLen:" << payloadIn.length();
     }
     else if (sequence == sequenceMax)
     {
         // Final IC-9700 scope chunk carries the remaining waveform pixels.
         d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
         ret = true;
-        qInfo(logBandscope()) << "Spectrum seq" << sequence << "/" << sequenceMax
-                              << "(LAST) totalData:" << d.data.size() << "payloadLen:" << payloadIn.length();
+        qInfo(logSpectrumScope()) << "Spectrum seq" << sequence << "/" << sequenceMax
+                                  << "(LAST) totalData:" << d.data.size() << "payloadLen:" << payloadIn.length();
     }
     d.valid = ret;
 
