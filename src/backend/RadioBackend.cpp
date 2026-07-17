@@ -237,6 +237,11 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_scopeController, &ScopeController::scopeDataReceived, this,
             [this]()
             {
+                if (m_scopeSyncDegraded)
+                {
+                    m_scopeSyncDegraded = false;
+                    emit statusMessage("Bandscope synced");
+                }
                 m_scopeDataReceived = true;
                 updateReadyState();
             });
@@ -1505,7 +1510,8 @@ void RadioBackend::requestInitialRadioState()
 
 void RadioBackend::updateReadyState()
 {
-    const bool ready = m_scopeDataReceived && m_initialMainFrequencyReceived && m_initialMainModeReceived;
+    const bool mainControlReady = m_initialMainFrequencyReceived && m_initialMainModeReceived;
+    const bool ready = mainControlReady && (m_scopeDataReceived || m_scopeSyncDegraded);
     if (m_radioReady == ready)
     {
         return;
@@ -1523,7 +1529,8 @@ void RadioBackend::updateReadyState()
         {
             m_initialStateRetryTimer->stop();
         }
-        emit statusMessage("Radio connection ready...");
+        emit statusMessage(m_scopeSyncDegraded ? QStringLiteral("Radio control ready; bandscope still syncing")
+                                               : QStringLiteral("Radio connection ready..."));
         invokeOnCurrentCommander([](Commander* c) { c->enableAudio(); });
     }
 }
@@ -1532,6 +1539,18 @@ void RadioBackend::restartAfterSyncTimeout()
 {
     if (!m_commander || m_radioReady)
     {
+        return;
+    }
+    if (m_initialMainFrequencyReceived && m_initialMainModeReceived && !m_scopeDataReceived)
+    {
+        // Backout point for the current readiness policy: if operators decide
+        // that SDR9700 must never become usable until bandscope packets arrive,
+        // remove this degraded path and let the reconnect block below handle
+        // all sync-watchdog timeouts.
+        m_scopeSyncDegraded = true;
+        qWarning(logRadio()) << "Radio control sync completed but bandscope data did not arrive within"
+                             << kSyncWatchdogTimeoutMs << "ms; enabling controls while scope retry continues";
+        updateReadyState();
         return;
     }
     if (m_connectionHost.isEmpty() || m_connectionPort == 0)
@@ -1653,6 +1672,7 @@ void RadioBackend::onLanReady()
 
     m_radioReady = false;
     m_scopeDataReceived = false;
+    m_scopeSyncDegraded = false;
     resetScopeController();
     m_initialFrequencyReceived = false;
     m_initialModeReceived = false;

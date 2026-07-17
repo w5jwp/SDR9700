@@ -55,6 +55,7 @@ constexpr int kRadioMemorySyncTotal =
     (kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1);
 constexpr int kRadioMemoryRefreshIntervalMs = 25;
 constexpr int kRadioMemorySyncTimeoutMs = 30000;
+constexpr int kRadioMemorySyncMaxPasses = 3;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
 constexpr int kRadioMemoryWriteReadbackTimeoutMs = 3000;
 constexpr int kRadioMemoryNameMaxChars = 16;
@@ -907,6 +908,7 @@ void MemoryController::requestRadioMemoryRefresh()
     m_refreshChannel = kRadioMemoryFirstChannel;
     m_currentSyncGroup = 0;
     m_currentSyncChannel = 0;
+    m_refreshPass = 1;
     m_refreshInProgress = true;
     m_receivedRadioMemoryKeys.clear();
     m_expectedRadioMemoryKeys.clear();
@@ -940,16 +942,29 @@ void MemoryController::requestNextRadioMemory()
 
     if (m_refreshGroup > kRadioMemoryLastGroup)
     {
-        m_radioMemoryRefreshTimer->stop();
-        // All requests have been issued. Late replies still arrive through
-        // handleRadioMemoryReceived(); the timeout cancels the sync if the
-        // radio does not answer every user memory slot.
         if (allExpectedRadioMemoriesReceived())
         {
+            m_radioMemoryRefreshTimer->stop();
             finishRadioMemoryRefresh(false);
             return;
         }
 
+        if (m_refreshPass < kRadioMemorySyncMaxPasses)
+        {
+            ++m_refreshPass;
+            m_refreshGroup = kRadioMemoryFirstGroup;
+            m_refreshChannel = kRadioMemoryFirstChannel;
+            // Re-run the full memory range instead of trying to schedule only
+            // missing keys. The radio is already being polled at a conservative
+            // interval, and the simple full-pass retry is easier to back out if
+            // later packet captures show a better IC-9700 behavior.
+            setMemoryProgress(
+                QStringLiteral("Retrying radio memory sync (%1/%2)").arg(m_refreshPass).arg(kRadioMemorySyncMaxPasses),
+                m_receivedRadioMemoryKeys.size(), m_expectedRadioMemoryKeys.size());
+            return;
+        }
+
+        m_radioMemoryRefreshTimer->stop();
         setMemoryProgress(QStringLiteral("Waiting for radio memory replies"), m_receivedRadioMemoryKeys.size(),
                           m_expectedRadioMemoryKeys.size());
         return;
@@ -960,10 +975,14 @@ void MemoryController::requestNextRadioMemory()
     const int syncIndex =
         (m_currentSyncGroup - kRadioMemoryFirstGroup) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1) +
         (m_currentSyncChannel - kRadioMemoryFirstChannel + 1);
-    setMemoryProgress(QStringLiteral("Syncing %1 channel %2")
-                          .arg(memoryBandLabelForGroup(m_currentSyncGroup))
-                          .arg(m_currentSyncChannel, 3, 10, QLatin1Char('0')),
-                      syncIndex, kRadioMemorySyncTotal);
+    QString progressLabel = QStringLiteral("Syncing %1 channel %2")
+                                .arg(memoryBandLabelForGroup(m_currentSyncGroup))
+                                .arg(m_currentSyncChannel, 3, 10, QLatin1Char('0'));
+    if (m_refreshPass > 1)
+    {
+        progressLabel.append(QStringLiteral(" (%1/%2)").arg(m_refreshPass).arg(kRadioMemorySyncMaxPasses));
+    }
+    setMemoryProgress(progressLabel, syncIndex, kRadioMemorySyncTotal);
     m_window->m_model->requestRadioMemory(m_refreshGroup, m_refreshChannel);
     ++m_refreshChannel;
     if (m_refreshChannel > kRadioMemoryLastChannel)
@@ -992,6 +1011,7 @@ void MemoryController::finishRadioMemoryRefresh(bool timedOut)
     m_refreshInProgress = false;
     m_currentSyncGroup = 0;
     m_currentSyncChannel = 0;
+    m_refreshPass = 0;
     m_expectedRadioMemoryKeys.clear();
     clearMemoryProgress();
     if (timedOut && wasInProgress)

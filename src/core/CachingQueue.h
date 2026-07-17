@@ -137,7 +137,10 @@ class CachingQueue : public QThread
     bool compare(QVariant a, QVariant b);
 
     std::atomic_bool aborted{false};
-    qint64 queueInterval = -1;              // Queue worker is stopped while negative.
+    // Command queue pacing for queued readbacks and cache refreshes. This used
+    // to be initialized to -1, which disables CachingQueue::add(); keep this
+    // positive unless intentionally backing out queued command scheduling.
+    qint64 queueInterval = 50;
 
     radioCapabilities* radioCaps = nullptr; // Set after IC-9700 capabilities are loaded.
 

@@ -263,6 +263,7 @@ class MainWindow : public QMainWindow
     bool m_userDisconnected{false};
     bool m_lastErrorWasCredential{false};
     bool m_allowChooserOnDisconnect{false};
+    bool m_radioUiReadyNotified{false};
 
     QTimer* m_txDurationTimer{nullptr};
     QElapsedTimer m_txElapsed;

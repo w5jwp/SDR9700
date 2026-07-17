@@ -135,21 +135,24 @@ void UdpAudio::sendAudioBuffer(const QByteArray& data)
     int len = 0;
     while (len < data.length())
     {
-        QByteArray partial = data.mid(len, 1364);
-        len += partial.length();
+        const int chunkLen = qMin(1364, data.length() - len);
+        const char* chunk = data.constData() + len;
+        len += chunkLen;
         audio_packet p;
         memset(p.packet, 0x0, sizeof(p));
-        p.len = (quint32)sizeof(p) + partial.length();
+        p.len = (quint32)sizeof(p) + chunkLen;
         p.sentid = myId;
         p.rcvdid = remoteId;
         // The IC-9700 expects normal TX audio fragments to use 0x0080.
         // Marking intermediate fragments as 0x0081 can produce short
         // decode artifacts at the start of transmit.
         p.ident = 0x0080;
-        p.datalen = (quint16)qToBigEndian((quint16)partial.length());
+        p.datalen = (quint16)qToBigEndian((quint16)chunkLen);
         p.sendseq = (quint16)qToBigEndian((quint16)sendAudioSeq);
         QByteArray tx = QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p));
-        tx.append(partial);
+        // Append directly from the source frame so TX packetization performs
+        // one payload copy instead of building an intermediate QByteArray.
+        tx.append(chunk, chunkLen);
         sendTrackedPacket(tx);
         sendAudioSeq++;
     }

@@ -2824,6 +2824,15 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
                     }
                 };
 
+                // Memory format legend for the compiled IC-9700 definition:
+                // a/b identify group/channel, f/F carry RX/TX frequency, g/G
+                // carry mode, h/H filter, i/I data mode, j/k/l tone access,
+                // n/o tone frequencies, p/q DTCS polarity/code, s/S repeater
+                // offset, t/u/v D-STAR callsigns, z name, and Z is an
+                // IC-9700 mode-specific extension block. Deletion records are
+                // intentionally short: once a delete marker is written, the
+                // loop stops so the radio receives an empty memory record for
+                // that slot instead of a partially populated one.
                 for (auto& parse : parser)
                 {
                     switch (parse.spec)

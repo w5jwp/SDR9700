@@ -131,6 +131,7 @@ class RadioBackend : public IRadioBackend
     QTimer* m_initialStateRetryTimer{nullptr};
     QTimer* m_syncWatchdogTimer{nullptr};
     bool m_scopeDataReceived{false};
+    bool m_scopeSyncDegraded{false};
     bool m_initialFrequencyReceived{false};
     bool m_initialModeReceived{false};
     bool m_initialMainFrequencyReceived{false};

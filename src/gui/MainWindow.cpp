@@ -1447,6 +1447,7 @@ void MainWindow::onConnectionChanged(bool connected)
     }
     else
     {
+        m_radioUiReadyNotified = false;
         if (m_bandscopeTuneCommitTimer)
         {
             m_bandscopeTuneCommitTimer->stop();
@@ -1536,6 +1537,8 @@ void MainWindow::onRadioReadyChanged(bool ready)
 {
     const bool connected = m_model->isConnected();
     const bool uiReady = connected && ready && m_memoryController && m_memoryController->initialMemorySyncComplete();
+    const bool notifyReady = uiReady && !m_radioUiReadyNotified;
+    m_radioUiReadyNotified = uiReady;
     setRadioControlsEnabled(uiReady);
     if (m_vfoPanel)
     {
@@ -1558,6 +1561,14 @@ void MainWindow::onRadioReadyChanged(bool ready)
         m_connStateName = QStringLiteral("Connected");
         m_connStateLabel->setText(
             QStringLiteral("<span style='color:%1'>Connected</span>").arg(UiTheme::Color::Success));
+        if (notifyReady)
+        {
+            // Backend "radio connection ready" means CI-V/scope startup reached
+            // a usable point, but MainWindow intentionally waits for the
+            // MemoryController's first sync before telling the operator the UI
+            // is ready for normal operation.
+            showToast(QStringLiteral("Radio control and memories ready"));
+        }
     }
     else
     {
@@ -1734,8 +1745,13 @@ void MainWindow::onStatusMessage(const QString& msg)
 {
     ToastKind kind = ToastKind::Info;
     const QString lower = msg.toLower();
-    if (lower.contains(QStringLiteral("radio connection ready")) && !radioUiReady())
+    if ((lower.contains(QStringLiteral("radio connection ready")) ||
+         lower.contains(QStringLiteral("radio control ready"))) &&
+        !radioUiReady())
     {
+        // Backend readiness can arrive before the initial radio-memory sync.
+        // Suppress these early "ready" toasts so the operator only sees the
+        // final ready message after normal memory selection is actually usable.
         return;
     }
     if (lower.contains(QStringLiteral("timed out")) || lower.contains(QStringLiteral("stopped")) ||
