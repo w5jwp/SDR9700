@@ -37,11 +37,8 @@ class MemoryController : public QObject
     void storeCurrentMemory();
     void showMemoryEditor(const QString& memoryId);
     void reloadMemoryTable();
-    bool backupRadioMemories();
-    void restoreRadioMemories();
     bool exportRadioMemories();
     void importRadioMemories();
-    bool resetRadioMemories();
     bool initialMemorySyncComplete() const { return m_initialMemorySyncComplete; }
 
   signals:

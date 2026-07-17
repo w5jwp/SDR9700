@@ -15,11 +15,8 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
-#include <QDateTime>
-#include <QDir>
 #include <QFile>
 #include <QFileDialog>
-#include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -73,7 +70,6 @@ constexpr int kMemoryToneTypeRole = Qt::UserRole + 1;
 constexpr int kMemoryToneRxRole = Qt::UserRole + 2;
 constexpr int kMemoryToneTxRole = Qt::UserRole + 3;
 constexpr auto kMemoryFileFilter = "SDR9700 Memories (*.csv);;CSV Files (*.csv);;All Files (*)";
-constexpr auto kMemoryBackupFilter = "SDR9700 memory backups (sdr9700-memories-backup-*.json);;JSON Files (*.json)";
 
 enum MemoryToneFamily
 {
@@ -216,12 +212,12 @@ int recordDuplexModeFromRadio(quint8 duplex)
 
 quint64 defaultOffsetForModeAndHz(duplexMode_t mode, quint64 hz)
 {
-    for (const OffsetPreset& preset : offsetPresetsForHz(hz))
+    const QVector<OffsetPreset> presets = offsetPresetsForHz(hz);
+    const auto preset = std::find_if(presets.cbegin(), presets.cend(),
+                                     [mode](const OffsetPreset& option) { return option.mode == mode; });
+    if (preset != presets.cend())
     {
-        if (preset.mode == mode)
-        {
-            return preset.hz;
-        }
+        return preset->hz;
     }
     return 0;
 }
@@ -422,17 +418,6 @@ QVector<MemoryType> deletedUserRadioMemories()
         }
     }
     return deletes;
-}
-
-QString backupDirectoryPath()
-{
-    return QDir(QFileInfo(AppSettings::configPath()).absolutePath()).filePath(QStringLiteral("backups"));
-}
-
-QString memoryBackupPath()
-{
-    const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
-    return QDir(backupDirectoryPath()).filePath(QStringLiteral("sdr9700-memories-backup-%1.json").arg(timestamp));
 }
 
 QString dtcsMemoryValue(ushort code, int polarity)
@@ -1348,101 +1333,6 @@ void MemoryController::clearMemoryProgress()
     updateMemoryTableInteraction();
 }
 
-bool MemoryController::backupRadioMemories()
-{
-    const QString path = memoryBackupPath();
-    QDir().mkpath(QFileInfo(path).absolutePath());
-
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-    {
-        QMessageBox::warning(popupParent(), QStringLiteral("Backup Memories Failed"),
-                             QStringLiteral("Memory backup failed. Could not create the backup file."));
-        return false;
-    }
-
-    const QByteArray data = memoriesExportDocument(currentMemories()).toJson(QJsonDocument::Indented);
-    if (file.write(data) != static_cast<qint64>(data.size()) || !file.commit())
-    {
-        QMessageBox::warning(popupParent(), QStringLiteral("Backup Memories Failed"),
-                             QStringLiteral("Memory backup failed. Could not create the backup file."));
-        return false;
-    }
-
-    QMessageBox::information(popupParent(), QStringLiteral("Backup Memories Successful"),
-                             QStringLiteral("Memory backup successful.\n\nSaved to:\n%1").arg(path));
-    return true;
-}
-
-void MemoryController::restoreRadioMemories()
-{
-    if (!m_window->m_model || !m_window->m_model->isConnected())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Restore Memories"),
-                                 QStringLiteral("Connect to the radio before restoring memories."));
-        return;
-    }
-    if (m_refreshInProgress)
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Restore Memories"),
-                                 QStringLiteral("Wait for the current radio memory sync to finish before restoring."));
-        return;
-    }
-    if (!m_memoryProgressLabel.isEmpty())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Restore Memories"),
-                                 QStringLiteral("Wait for the current memory operation to finish before restoring."));
-        return;
-    }
-
-    const QString path = QFileDialog::getOpenFileName(popupParent(), QStringLiteral("Restore Memories"),
-                                                      backupDirectoryPath(), QString::fromLatin1(kMemoryBackupFilter));
-    if (path.isEmpty())
-    {
-        return;
-    }
-
-    if (QMessageBox::question(
-            popupParent(), QStringLiteral("Restore Memories"),
-            QStringLiteral("Restore this memory backup to the radio?\n\n"
-                           "User memory channels 1-99 on 2M, 70CM, and 23CM will be cleared first.")) !=
-        QMessageBox::Yes)
-    {
-        return;
-    }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        QMessageBox::warning(popupParent(), QStringLiteral("Restore Memories Failed"),
-                             QStringLiteral("Memory restore failed. Could not open the selected file."));
-        return;
-    }
-
-    QJsonParseError error;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-    if (error.error != QJsonParseError::NoError)
-    {
-        QMessageBox::warning(popupParent(), QStringLiteral("Restore Memories Failed"),
-                             QStringLiteral("Memory restore failed. The selected file is not valid JSON."));
-        return;
-    }
-
-    const QVector<MemoryType> deletes = deletedUserRadioMemories();
-    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing existing memories"));
-    m_radioMemoriesByKey.clear();
-
-    int skipped = 0;
-    const int restoreStartDelayMs = deletes.size() * kRadioMemoryWriteIntervalMs + 500;
-    const int queued = queueRecordsToRadio(memoriesFromDocument(doc), &skipped, restoreStartDelayMs,
-                                           QStringLiteral("Uploading memories"));
-    m_window->showToast(skipped > 0
-                            ? QStringLiteral("Queued %1 memories for restore, skipped %2").arg(queued).arg(skipped)
-                            : QStringLiteral("Queued %1 memories for restore").arg(queued));
-    QTimer::singleShot(restoreStartDelayMs + queued * kRadioMemoryWriteIntervalMs + 1000, this,
-                       &MemoryController::requestRadioMemoryRefresh);
-}
-
 bool MemoryController::exportRadioMemories()
 {
     const QString path =
@@ -1543,34 +1433,6 @@ void MemoryController::importRadioMemories()
             : QStringLiteral("Queued %1 memories for import").arg(importedCount));
     QTimer::singleShot(importStartDelayMs + importedCount * kRadioMemoryWriteIntervalMs + 1000, this,
                        &MemoryController::requestRadioMemoryRefresh);
-}
-
-bool MemoryController::resetRadioMemories()
-{
-    if (!m_window->m_model || !m_window->m_model->isConnected())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Reset Memories"),
-                                 QStringLiteral("Connect to the radio before resetting memories."));
-        return false;
-    }
-    if (m_refreshInProgress || !m_memoryProgressLabel.isEmpty())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Reset Memories"),
-                                 QStringLiteral("Wait for the current memory operation to finish before resetting."));
-        return false;
-    }
-
-    if (QMessageBox::question(popupParent(), QStringLiteral("Reset Memories"),
-                              QStringLiteral("Sync radio memories and clear only stored memory channels 1-99 on 2M, "
-                                             "70CM, and 23CM?")) != QMessageBox::Yes)
-    {
-        return false;
-    }
-
-    m_resetAfterSync = true;
-    requestRadioMemoryRefresh();
-    m_window->showToast(QStringLiteral("Syncing memories before reset"));
-    return true;
 }
 
 void MemoryController::rebuildMemoryViews()
@@ -1959,7 +1821,12 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
         form->setVerticalSpacing(6);
         form->setContentsMargins(10, 12, 10, 10);
     };
-    auto makeSection = [editor, configureSectionForm](const QString& title, QFormLayout** form)
+    struct EditorSection
+    {
+        QGroupBox* group{nullptr};
+        QFormLayout* form{nullptr};
+    };
+    auto makeSection = [editor, configureSectionForm](const QString& title)
     {
         auto* group = new QGroupBox(title, editor);
         group->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -1970,9 +1837,9 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
                                             "color: %3; background: %4; }")
                                  .arg(UiTheme::Color::TextStatusPrimary, UiTheme::Color::BorderMedium,
                                       UiTheme::Color::TextStatusSecondary, UiTheme::Color::Panel));
-        *form = new QFormLayout(group);
-        configureSectionForm(*form);
-        return group;
+        auto* form = new QFormLayout(group);
+        configureSectionForm(form);
+        return EditorSection{group, form};
     };
     auto* channelCombo = new QComboBox(editor);
     for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
@@ -2232,14 +2099,14 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
         dtcsSpin->setValue(0);
         dtcsRxSpin->setValue(0);
     };
-    QFormLayout* memoryForm = nullptr;
-    QFormLayout* optionsForm = nullptr;
-    QFormLayout* toneForm = nullptr;
-    QFormLayout* dstarForm = nullptr;
-    auto* memoryGroup = makeSection(QStringLiteral("Memory"), &memoryForm);
-    auto* optionsGroup = makeSection(QStringLiteral("Options"), &optionsForm);
-    auto* toneGroup = makeSection(QStringLiteral("Tone"), &toneForm);
-    auto* dstarGroup = makeSection(QStringLiteral("D-STAR / DV"), &dstarForm);
+    const EditorSection memorySection = makeSection(QStringLiteral("Memory"));
+    const EditorSection optionsSection = makeSection(QStringLiteral("Options"));
+    const EditorSection toneSection = makeSection(QStringLiteral("Tone"));
+    const EditorSection dstarSection = makeSection(QStringLiteral("D-STAR / DV"));
+    auto* memoryGroup = memorySection.group;
+    auto* optionsGroup = optionsSection.group;
+    auto* toneGroup = toneSection.group;
+    auto* dstarGroup = dstarSection.group;
 
     auto* optionsRow = new QWidget(optionsGroup);
     auto* optionsRowLayout = new QHBoxLayout(optionsRow);
@@ -2286,16 +2153,16 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     addMemoryField(1, 0, QStringLiteral("Name"), nameEdit, 2);
     memoryGrid->addWidget(modeOffsetRow, 2, 0, 1, 2);
     memoryGrid->addWidget(customOffsetField, 3, 0, 1, 2);
-    memoryForm->addRow(memoryFields);
-    optionsForm->addRow(optionsRow);
-    toneForm->addRow(toneOptionCombo);
-    toneForm->addRow(toneValueRow);
-    toneForm->addRow(dtcsValueRow);
-    dstarForm->addRow("Digital SQL (DSQL):", dsqlCombo);
-    dstarForm->addRow("DV SQL:", dvSqlSpin);
-    dstarForm->addRow("Your Call (UR):", urEdit);
-    dstarForm->addRow("Repeater 1 Callsign (R1):", r1Edit);
-    dstarForm->addRow("Repeater 2 Callsign (R2):", r2Edit);
+    memorySection.form->addRow(memoryFields);
+    optionsSection.form->addRow(optionsRow);
+    toneSection.form->addRow(toneOptionCombo);
+    toneSection.form->addRow(toneValueRow);
+    toneSection.form->addRow(dtcsValueRow);
+    dstarSection.form->addRow("Digital SQL (DSQL):", dsqlCombo);
+    dstarSection.form->addRow("DV SQL:", dvSqlSpin);
+    dstarSection.form->addRow("Your Call (UR):", urEdit);
+    dstarSection.form->addRow("Repeater 1 Callsign (R1):", r1Edit);
+    dstarSection.form->addRow("Repeater 2 Callsign (R2):", r2Edit);
 
     root->addWidget(memoryGroup);
     root->addWidget(toneGroup);
@@ -2382,8 +2249,8 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
 
     auto populateToneValues = [clearTonePick]() { clearTonePick(); };
 
-    auto updateConditionalSections =
-        [modeCombo, toneOptionCombo, toneForm, toneValueRow, dtcsValueRow, dstarGroup, resizeEditorToContents]()
+    auto updateConditionalSections = [modeCombo, toneOptionCombo, toneForm = toneSection.form, toneValueRow,
+                                      dtcsValueRow, dstarGroup, resizeEditorToContents]()
     {
         const int mode = modeCombo->currentData().toInt();
         const auto toneFamily = static_cast<MemoryToneFamily>(toneOptionCombo->currentData().toInt());

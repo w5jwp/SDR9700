@@ -1,7 +1,6 @@
 // cppcheck-suppress-file unusedStructMember
 #pragma once
 
-#include <QJsonDocument>
 #include <QString>
 #include <QVector>
 
@@ -45,10 +44,5 @@ struct MemoryRecord
 
 int memoryBandKeyForHz(quint64 hz);
 QString memoryBandLabelForGroup(quint16 group);
-QJsonDocument memoriesExportDocument(const QVector<MemoryRecord>& memories);
-QVector<MemoryRecord> memoriesFromDocument(const QJsonDocument& doc);
 QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories);
 QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data);
-QString memoriesPath();
-QVector<MemoryRecord> loadMemories();
-bool saveMemories(const QVector<MemoryRecord>& memories);

@@ -1,18 +1,9 @@
 #include "MemoryStore.h"
 
-#include "AppSettings.h"
 #include "MainWindowHelpers.h"
 #include "RadioCapabilities.h"
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QHash>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonValue>
-#include <QSaveFile>
 #include <QUuid>
 
 namespace
@@ -206,96 +197,6 @@ quint64 csvUInt64(const QStringList& row, const QHash<QString, int>& indexes, co
     return ok ? value : 0;
 }
 
-QJsonObject memoryToJson(const MemoryRecord& memory)
-{
-    QJsonObject object;
-    object.insert(QStringLiteral("ID"), memory.id);
-    object.insert(QStringLiteral("group"), memory.group);
-    object.insert(QStringLiteral("channel"), memory.channel);
-    object.insert(QStringLiteral("name"), memory.name);
-    object.insert(QStringLiteral("band"), memory.band);
-    object.insert(QStringLiteral("bandKey"), memory.bandKey);
-    object.insert(QStringLiteral("receiveHZ"), QString::number(memory.receiveHz));
-    object.insert(QStringLiteral("mode"), memory.mode);
-    object.insert(QStringLiteral("filter"), memory.filter);
-    object.insert(QStringLiteral("dataMode"), memory.dataMode);
-    object.insert(QStringLiteral("scan"), memory.scan);
-    object.insert(QStringLiteral("shift"), memory.shift);
-    object.insert(QStringLiteral("duplexMode"), memory.duplexMode);
-    object.insert(QStringLiteral("offsetHZ"), QString::number(memory.offsetHz));
-    object.insert(QStringLiteral("toneOption"), memory.toneOption);
-    object.insert(QStringLiteral("toneFrequency"), memory.toneFrequency);
-    object.insert(QStringLiteral("tone"), memory.tone);
-    object.insert(QStringLiteral("tsql"), memory.tsql);
-    object.insert(QStringLiteral("toneMode"), memory.toneMode);
-    object.insert(QStringLiteral("toneValue"), memory.toneValue);
-    object.insert(QStringLiteral("dsql"), memory.dsql);
-    object.insert(QStringLiteral("dtcs"), memory.dtcs);
-    object.insert(QStringLiteral("dtcsPolarity"), memory.dtcsPolarity);
-    object.insert(QStringLiteral("dtcsB"), memory.dtcsB);
-    object.insert(QStringLiteral("dtcsPolarityB"), memory.dtcsPolarityB);
-    object.insert(QStringLiteral("dvSql"), memory.dvSql);
-    object.insert(QStringLiteral("urCall"), memory.urCall);
-    object.insert(QStringLiteral("r1Call"), memory.r1Call);
-    object.insert(QStringLiteral("r2Call"), memory.r2Call);
-    return object;
-}
-
-int intFromJson(const QJsonObject& object, const QString& key, int defaultValue = 0)
-{
-    bool ok = false;
-    const int value = object.value(key).toVariant().toInt(&ok);
-    return ok ? value : defaultValue;
-}
-
-MemoryRecord memoryFromJson(const QJsonObject& object)
-{
-    MemoryRecord memory;
-    memory.id = object.value(QStringLiteral("ID")).toString();
-    memory.group = static_cast<quint16>(intFromJson(object, QStringLiteral("group")));
-    memory.channel = static_cast<quint16>(intFromJson(object, QStringLiteral("channel")));
-    memory.name = object.value(QStringLiteral("name")).toString();
-    memory.band = object.value(QStringLiteral("band")).toString();
-    memory.bandKey = intFromJson(object, QStringLiteral("bandKey"), -1);
-    memory.receiveHz = object.value(QStringLiteral("receiveHZ")).toVariant().toULongLong();
-    memory.mode = intFromJson(object, QStringLiteral("mode"), modeFM);
-    memory.filter = intFromJson(object, QStringLiteral("filter"), 1);
-    memory.dataMode = intFromJson(object, QStringLiteral("dataMode"));
-    memory.scan = intFromJson(object, QStringLiteral("scan"));
-    memory.shift = object.value(QStringLiteral("shift")).toString();
-    memory.duplexMode = intFromJson(object, QStringLiteral("duplexMode"), dmSimplex);
-    memory.offsetHz = object.value(QStringLiteral("offsetHZ")).toVariant().toULongLong();
-    memory.toneOption = object.value(QStringLiteral("toneOption")).toString();
-    memory.toneFrequency = object.value(QStringLiteral("toneFrequency")).toString();
-    memory.tone = object.value(QStringLiteral("tone")).toString();
-    memory.tsql = object.value(QStringLiteral("tsql")).toString();
-    memory.toneMode = intFromJson(object, QStringLiteral("toneMode"), ratrNN);
-    memory.toneValue = static_cast<ushort>(intFromJson(object, QStringLiteral("toneValue")));
-    memory.dsql = intFromJson(object, QStringLiteral("dsql"));
-    memory.dtcs = static_cast<ushort>(
-        intFromJson(object, QStringLiteral("dtcs"),
-                    isDtcsToneMode(static_cast<rptAccessTxRx_t>(memory.toneMode)) ? memory.toneValue : 23));
-    memory.dtcsPolarity = intFromJson(object, QStringLiteral("dtcsPolarity"));
-    memory.dtcsB = static_cast<ushort>(intFromJson(object, QStringLiteral("dtcsB"), memory.dtcs));
-    memory.dtcsPolarityB = intFromJson(object, QStringLiteral("dtcsPolarityB"), memory.dtcsPolarity);
-    memory.dvSql = intFromJson(object, QStringLiteral("dvSql"));
-    memory.urCall = object.value(QStringLiteral("urCall")).toString();
-    memory.r1Call = object.value(QStringLiteral("r1Call")).toString();
-    memory.r2Call = object.value(QStringLiteral("r2Call")).toString();
-    memory.notes = object.value(QStringLiteral("notes")).toString();
-    return memory;
-}
-
-QJsonArray memoriesArray(const QVector<MemoryRecord>& memories)
-{
-    QJsonArray array;
-    for (const MemoryRecord& memory : memories)
-    {
-        array.append(memoryToJson(memory));
-    }
-    return array;
-}
-
 } // namespace
 
 int memoryBandKeyForHz(quint64 hz)
@@ -316,13 +217,6 @@ QString memoryBandLabelForGroup(quint16 group)
     default:
         return QString();
     }
-}
-
-QJsonDocument memoriesExportDocument(const QVector<MemoryRecord>& memories)
-{
-    QJsonObject root;
-    root.insert(QStringLiteral("memories"), memoriesArray(memories));
-    return QJsonDocument(root);
 }
 
 QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories)
@@ -357,42 +251,6 @@ QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories)
     return lines.join(QLatin1Char('\n')).append(QLatin1Char('\n')).toUtf8();
 }
 
-QVector<MemoryRecord> memoriesFromDocument(const QJsonDocument& doc)
-{
-    if (!doc.isObject())
-    {
-        return {};
-    }
-
-    const QJsonArray array = doc.object().value(QStringLiteral("memories")).toArray();
-    QVector<MemoryRecord> memories;
-    memories.reserve(array.size());
-    for (const QJsonValue& value : array)
-    {
-        if (!value.isObject())
-        {
-            continue;
-        }
-        MemoryRecord memory = memoryFromJson(value.toObject());
-        if (memory.id.isEmpty())
-        {
-            memory.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        }
-        if (memory.bandKey == -1)
-        {
-            memory.bandKey = memoryBandKeyForHz(memory.receiveHz);
-        }
-        if (memory.band.isEmpty())
-        {
-            memory.band = memoryBandLabelForHz(memory.receiveHz);
-        }
-        if (memory.group > 0 && memory.channel > 0 && memory.receiveHz > 0)
-        {
-            memories.append(memory);
-        }
-    }
-    return memories;
-}
 
 QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
 {
@@ -453,45 +311,4 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data)
         }
     }
     return memories;
-}
-
-QString memoriesPath()
-{
-    return QDir(QFileInfo(AppSettings::configPath()).absolutePath()).filePath(QStringLiteral("sdr9700-memories.json"));
-}
-
-QVector<MemoryRecord> loadMemories()
-{
-    QFile file(memoriesPath());
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        return {};
-    }
-
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    if (!doc.isObject())
-    {
-        return {};
-    }
-
-    return memoriesFromDocument(doc);
-}
-
-bool saveMemories(const QVector<MemoryRecord>& memories)
-{
-    const QString path = memoriesPath();
-    QDir().mkpath(QFileInfo(path).absolutePath());
-
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-    {
-        return false;
-    }
-
-    const QByteArray data = memoriesExportDocument(memories).toJson(QJsonDocument::Indented);
-    if (file.write(data) != static_cast<qint64>(data.size()))
-    {
-        return false;
-    }
-    return file.commit();
 }

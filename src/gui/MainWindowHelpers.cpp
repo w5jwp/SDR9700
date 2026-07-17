@@ -110,14 +110,6 @@ void styleCompactMenu(QMenu* menu)
                                  UiTheme::Color::AccentDark, UiTheme::Color::White, UiTheme::Color::Border));
 }
 
-void applyTitleCloseOnlyFlags(QWidget* widget)
-{
-    widget->setWindowFlags((widget->windowFlags() | Qt::CustomizeWindowHint | Qt::WindowTitleHint |
-                            Qt::WindowSystemMenuHint | Qt::WindowCloseButtonHint) &
-                           ~Qt::WindowMinimizeButtonHint & ~Qt::WindowMaximizeButtonHint &
-                           ~Qt::WindowMinMaxButtonsHint);
-}
-
 QString statusLabelStyle(const char* color, bool bold)
 {
     return QString("QLabel { color: %1; font-size: 12px;%2 }")
@@ -280,28 +272,6 @@ QString memoryToneFrequencyLabel(rptAccessTxRx_t mode, ushort value)
     default:
         return QString();
     }
-}
-
-QString memoryToneDisplayLabel(const MemoryRecord& memory)
-{
-    const auto mode = static_cast<rptAccessTxRx_t>(memory.toneMode);
-    if (mode == ratrNN)
-    {
-        return QStringLiteral("Off");
-    }
-
-    const QString option = toneOptionLabel(mode);
-    QString value = memoryToneFrequencyLabel(mode, memory.toneValue);
-    if (value.isEmpty())
-    {
-        value = memory.toneFrequency;
-    }
-
-    if (value.isEmpty())
-    {
-        return option;
-    }
-    return QStringLiteral("%1 (%2)").arg(option, value);
 }
 
 QString memoryModeLabel(int mode)
