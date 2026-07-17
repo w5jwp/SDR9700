@@ -56,6 +56,7 @@ constexpr int kRadioMemorySyncTotal =
 constexpr int kRadioMemoryRefreshIntervalMs = 25;
 constexpr int kRadioMemorySyncTimeoutMs = 30000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
+constexpr int kRadioMemoryWriteReadbackTimeoutMs = 3000;
 constexpr int kRadioMemoryNameMaxChars = 16;
 constexpr int kMemoryEditorPaneWidth = 420;
 constexpr int kMemoryEditorFieldHeight = 30;
@@ -512,6 +513,23 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
                 }
             });
 
+    m_memoryViewRefreshTimer = new QTimer(this);
+    m_memoryViewRefreshTimer->setInterval(250);
+    m_memoryViewRefreshTimer->setSingleShot(true);
+    connect(m_memoryViewRefreshTimer, &QTimer::timeout, this, &MemoryController::rebuildMemoryViews);
+
+    m_radioMemoryWriteTimeoutTimer = new QTimer(this);
+    m_radioMemoryWriteTimeoutTimer->setSingleShot(true);
+    m_radioMemoryWriteTimeoutTimer->setInterval(kRadioMemoryWriteReadbackTimeoutMs);
+    connect(m_radioMemoryWriteTimeoutTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (m_waitingForRadioMemoryWriteReadback)
+                {
+                    finishQueuedRadioMemoryWrites(true);
+                }
+            });
+
     connect(m_window->m_model, &RadioModel::radioMemoryReceived, this, &MemoryController::handleRadioMemoryReceived);
     connect(m_window->m_model, &RadioModel::readyChanged, this,
             [this](bool ready)
@@ -530,6 +548,7 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
                 }
                 m_radioMemoryRefreshTimer->stop();
                 m_radioMemoryPeriodicRefreshTimer->stop();
+                m_memoryViewRefreshTimer->stop();
                 finishRadioMemoryRefresh(false);
                 if (m_initialMemorySyncComplete)
                 {
@@ -538,6 +557,7 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
                 }
                 m_radioMemoriesByKey.clear();
                 m_receivedRadioMemoryKeys.clear();
+                m_expectedRadioMemoryKeys.clear();
                 rebuildMemoryViews();
             });
 }
@@ -889,6 +909,17 @@ void MemoryController::requestRadioMemoryRefresh()
     m_currentSyncChannel = 0;
     m_refreshInProgress = true;
     m_receivedRadioMemoryKeys.clear();
+    m_expectedRadioMemoryKeys.clear();
+    // Radio Ready depends on this first sync. Track every requested memory slot
+    // and complete only after the radio replies for all of them, not merely
+    // after all requests have been queued.
+    for (quint16 group = kRadioMemoryFirstGroup; group <= kRadioMemoryLastGroup; ++group)
+    {
+        for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
+        {
+            m_expectedRadioMemoryKeys.insert(radioMemoryKey(group, channel));
+        }
+    }
     m_radioMemorySyncTimeoutTimer->start(kRadioMemorySyncTimeoutMs);
     requestNextRadioMemory();
     if (!m_refreshInProgress)
@@ -909,7 +940,18 @@ void MemoryController::requestNextRadioMemory()
 
     if (m_refreshGroup > kRadioMemoryLastGroup)
     {
-        finishRadioMemoryRefresh(false);
+        m_radioMemoryRefreshTimer->stop();
+        // All requests have been issued. Late replies still arrive through
+        // handleRadioMemoryReceived(); the timeout cancels the sync if the
+        // radio does not answer every user memory slot.
+        if (allExpectedRadioMemoriesReceived())
+        {
+            finishRadioMemoryRefresh(false);
+            return;
+        }
+
+        setMemoryProgress(QStringLiteral("Waiting for radio memory replies"), m_receivedRadioMemoryKeys.size(),
+                          m_expectedRadioMemoryKeys.size());
         return;
     }
 
@@ -931,17 +973,26 @@ void MemoryController::requestNextRadioMemory()
     }
 }
 
+bool MemoryController::allExpectedRadioMemoriesReceived() const
+{
+    return !m_expectedRadioMemoryKeys.isEmpty() &&
+           std::all_of(m_expectedRadioMemoryKeys.cbegin(), m_expectedRadioMemoryKeys.cend(),
+                       [this](quint32 key) { return m_receivedRadioMemoryKeys.contains(key); });
+}
+
 void MemoryController::finishRadioMemoryRefresh(bool timedOut)
 {
     m_radioMemoryRefreshTimer->stop();
     m_radioMemorySyncTimeoutTimer->stop();
+    m_memoryViewRefreshTimer->stop();
     const bool wasInProgress = m_refreshInProgress;
-    const bool completedFullSync = wasInProgress && !timedOut && m_refreshGroup > kRadioMemoryLastGroup;
+    const bool completedFullSync = wasInProgress && !timedOut && allExpectedRadioMemoriesReceived();
     const bool resetAfterSync = m_resetAfterSync;
     m_resetAfterSync = false;
     m_refreshInProgress = false;
     m_currentSyncGroup = 0;
     m_currentSyncChannel = 0;
+    m_expectedRadioMemoryKeys.clear();
     clearMemoryProgress();
     if (timedOut && wasInProgress)
     {
@@ -961,6 +1012,20 @@ void MemoryController::finishRadioMemoryRefresh(bool timedOut)
     if (resetAfterSync && !timedOut && wasInProgress)
     {
         QTimer::singleShot(500, this, &MemoryController::resetStoredRadioMemoriesAfterSync);
+    }
+}
+
+void MemoryController::scheduleMemoryViewsRebuild()
+{
+    if (!m_refreshInProgress)
+    {
+        rebuildMemoryViews();
+        return;
+    }
+
+    if (!m_memoryViewRefreshTimer->isActive())
+    {
+        m_memoryViewRefreshTimer->start();
     }
 }
 
@@ -998,12 +1063,15 @@ void MemoryController::resetStoredRadioMemoriesAfterSync()
         return;
     }
 
-    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing stored memories"));
-    m_radioMemoriesByKey.clear();
-    m_receivedRadioMemoryKeys.clear();
-    rebuildMemoryViews();
-    QTimer::singleShot(deletes.size() * kRadioMemoryWriteIntervalMs + 1000, this,
-                       &MemoryController::requestRadioMemoryRefresh);
+    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing stored memories"),
+                           [this]()
+                           {
+                               m_radioMemoriesByKey.clear();
+                               m_receivedRadioMemoryKeys.clear();
+                               m_expectedRadioMemoryKeys.clear();
+                               rebuildMemoryViews();
+                               requestRadioMemoryRefresh();
+                           });
 }
 
 void MemoryController::updateMemoryTableInteraction()
@@ -1033,6 +1101,21 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
     }
 
     const quint32 key = radioMemoryKey(memory.group, memory.channel);
+    const bool completedQueuedWrite = m_waitingForRadioMemoryWriteReadback && key == m_expectedRadioMemoryWriteKey;
+    auto advanceQueuedWrite = [this, completedQueuedWrite]()
+    {
+        if (!completedQueuedWrite)
+        {
+            return;
+        }
+
+        m_radioMemoryWriteTimeoutTimer->stop();
+        m_waitingForRadioMemoryWriteReadback = false;
+        ++m_queuedRadioMemoryWriteIndex;
+        setMemoryProgress(m_queuedRadioMemoryWriteLabel, m_queuedRadioMemoryWriteIndex,
+                          m_queuedRadioMemoryWrites.size());
+        QTimer::singleShot(kRadioMemoryWriteIntervalMs, this, &MemoryController::writeNextQueuedRadioMemory);
+    };
     m_receivedRadioMemoryKeys.insert(key);
     if (radioMemoryIsStored(memory))
     {
@@ -1052,13 +1135,40 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
         {
             if (m_window->m_applyingMemorySelection)
             {
+                if (m_refreshInProgress)
+                {
+                    if (m_refreshGroup > kRadioMemoryLastGroup)
+                    {
+                        setMemoryProgress(QStringLiteral("Waiting for radio memory replies"),
+                                          m_receivedRadioMemoryKeys.size(), m_expectedRadioMemoryKeys.size());
+                    }
+                    if (allExpectedRadioMemoriesReceived())
+                    {
+                        finishRadioMemoryRefresh(false);
+                    }
+                }
+                advanceQueuedWrite();
                 return;
             }
             m_window->clearActiveMemory();
         }
         m_radioMemoriesByKey.remove(key);
     }
-    rebuildMemoryViews();
+    if (m_refreshInProgress)
+    {
+        if (m_refreshGroup > kRadioMemoryLastGroup)
+        {
+            setMemoryProgress(QStringLiteral("Waiting for radio memory replies"), m_receivedRadioMemoryKeys.size(),
+                              m_expectedRadioMemoryKeys.size());
+        }
+        if (allExpectedRadioMemoriesReceived())
+        {
+            finishRadioMemoryRefresh(false);
+            return;
+        }
+    }
+    scheduleMemoryViewsRebuild();
+    advanceQueuedWrite();
 }
 
 QVector<MemoryRecord> MemoryController::currentMemories() const
@@ -1198,36 +1308,94 @@ void MemoryController::deleteRadioMemory(quint16 group, quint16 channel)
 }
 
 void MemoryController::queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs,
-                                              const QString& progressLabel)
+                                              const QString& progressLabel, std::function<void()> completion)
 {
     if (!m_window->m_model || !m_window->m_model->isConnected())
     {
         return;
     }
 
-    int delayMs = qMax(0, startDelayMs);
-    if (!progressLabel.isEmpty() && !memories.isEmpty())
+    QTimer::singleShot(qMax(0, startDelayMs), this,
+                       [this, memories, progressLabel, completion = std::move(completion)]() mutable
+                       { startQueuedRadioMemoryWrites(memories, progressLabel, std::move(completion)); });
+}
+
+void MemoryController::startQueuedRadioMemoryWrites(const QVector<MemoryType>& memories, const QString& progressLabel,
+                                                    std::function<void()> completion)
+{
+    if (!m_window->m_model || !m_window->m_model->isConnected())
     {
-        QTimer::singleShot(delayMs, this, [this, progressLabel, total = memories.size()]()
-                           { setMemoryProgress(progressLabel, 0, total); });
+        return;
+    }
+    if (m_waitingForRadioMemoryWriteReadback || !m_queuedRadioMemoryWrites.isEmpty())
+    {
+        m_window->showToast(QStringLiteral("Memory write already in progress"), 5000, MainWindow::ToastKind::Warning);
+        return;
     }
 
-    for (int i = 0; i < memories.size(); ++i)
+    if (memories.isEmpty())
     {
-        const MemoryType memory = memories.at(i);
-        QTimer::singleShot(delayMs, this,
-                           [this, memory, progressLabel, i, total = memories.size()]()
-                           {
-                               if (m_window->m_model && m_window->m_model->isConnected())
-                               {
-                                   m_window->m_model->writeRadioMemory(memory);
-                                   if (!progressLabel.isEmpty())
-                                   {
-                                       setMemoryProgress(progressLabel, i + 1, total);
-                                   }
-                               }
-                           });
-        delayMs += kRadioMemoryWriteIntervalMs;
+        if (completion)
+        {
+            completion();
+        }
+        return;
+    }
+
+    m_queuedRadioMemoryWrites = memories;
+    m_queuedRadioMemoryWriteIndex = 0;
+    m_queuedRadioMemoryWriteLabel = progressLabel;
+    m_queuedRadioMemoryWriteCompletion = std::move(completion);
+    setMemoryProgress(m_queuedRadioMemoryWriteLabel, 0, m_queuedRadioMemoryWrites.size());
+    writeNextQueuedRadioMemory();
+}
+
+void MemoryController::writeNextQueuedRadioMemory()
+{
+    if (!m_window->m_model || !m_window->m_model->isConnected())
+    {
+        finishQueuedRadioMemoryWrites(true);
+        return;
+    }
+    if (m_queuedRadioMemoryWriteIndex >= m_queuedRadioMemoryWrites.size())
+    {
+        finishQueuedRadioMemoryWrites(false);
+        return;
+    }
+
+    const MemoryType memory = m_queuedRadioMemoryWrites.at(m_queuedRadioMemoryWriteIndex);
+    m_expectedRadioMemoryWriteKey = radioMemoryKey(memory.group, memory.channel);
+    m_waitingForRadioMemoryWriteReadback = true;
+    // RadioBackend requests this memory slot again after writing it. Advance
+    // the batch only when that readback arrives so progress reflects radio
+    // state, not just elapsed GUI timer time.
+    m_window->m_model->writeRadioMemory(memory);
+    m_radioMemoryWriteTimeoutTimer->start();
+}
+
+void MemoryController::finishQueuedRadioMemoryWrites(bool timedOut)
+{
+    m_radioMemoryWriteTimeoutTimer->stop();
+    const std::function<void()> completion = std::move(m_queuedRadioMemoryWriteCompletion);
+    const QString label = m_queuedRadioMemoryWriteLabel;
+    m_queuedRadioMemoryWrites.clear();
+    m_queuedRadioMemoryWriteIndex = 0;
+    m_expectedRadioMemoryWriteKey = 0;
+    m_waitingForRadioMemoryWriteReadback = false;
+    m_queuedRadioMemoryWriteLabel.clear();
+    m_queuedRadioMemoryWriteCompletion = {};
+    clearMemoryProgress();
+    if (timedOut)
+    {
+        m_window->showToast(label.isEmpty() ? QStringLiteral("Memory write timed out")
+                                            : QStringLiteral("%1 timed out").arg(label),
+                            5000, MainWindow::ToastKind::Warning);
+        return;
+    }
+
+    if (completion)
+    {
+        completion();
     }
 }
 
@@ -1258,7 +1426,7 @@ bool MemoryController::firstOpenChannelForGroup(quint16 group, quint16* channel)
 }
 
 int MemoryController::queueRecordsToRadio(const QVector<MemoryRecord>& records, int* skippedCount, int startDelayMs,
-                                          const QString& progressLabel)
+                                          const QString& progressLabel, std::function<void()> completion)
 {
     QSet<quint32> occupied;
     for (auto it = m_radioMemoriesByKey.cbegin(); it != m_radioMemoriesByKey.cend(); ++it)
@@ -1290,7 +1458,7 @@ int MemoryController::queueRecordsToRadio(const QVector<MemoryRecord>& records, 
         ++queuedCount;
     }
 
-    queueRadioMemoryWrites(writes, startDelayMs, progressLabel);
+    queueRadioMemoryWrites(writes, startDelayMs, progressLabel, std::move(completion));
 
     if (skippedCount)
     {
@@ -1419,20 +1587,22 @@ void MemoryController::importRadioMemories()
     }
 
     const QVector<MemoryType> deletes = deletedUserRadioMemories();
-    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing existing memories"));
-    m_radioMemoriesByKey.clear();
+    queueRadioMemoryWrites(
+        deletes, 0, QStringLiteral("Clearing existing memories"),
+        [this, records]()
+        {
+            m_radioMemoriesByKey.clear();
 
-    int skippedCount = 0;
-    const int importStartDelayMs = deletes.size() * kRadioMemoryWriteIntervalMs + 500;
-    const int importedCount =
-        queueRecordsToRadio(records, &skippedCount, importStartDelayMs, QStringLiteral("Uploading memories"));
+            int skippedCount = 0;
+            const int importedCount =
+                queueRecordsToRadio(records, &skippedCount, 0, QStringLiteral("Uploading memories"),
+                                    [this]() { requestRadioMemoryRefresh(); });
 
-    m_window->showToast(
-        skippedCount > 0
-            ? QStringLiteral("Queued %1 memories for import, skipped %2").arg(importedCount).arg(skippedCount)
-            : QStringLiteral("Queued %1 memories for import").arg(importedCount));
-    QTimer::singleShot(importStartDelayMs + importedCount * kRadioMemoryWriteIntervalMs + 1000, this,
-                       &MemoryController::requestRadioMemoryRefresh);
+            m_window->showToast(
+                skippedCount > 0
+                    ? QStringLiteral("Queued %1 memories for import, skipped %2").arg(importedCount).arg(skippedCount)
+                    : QStringLiteral("Queued %1 memories for import").arg(importedCount));
+        });
 }
 
 void MemoryController::rebuildMemoryViews()
@@ -2770,6 +2940,16 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
                 }
                 if (group != oldGroup || channel != oldChannel)
                 {
+                    if (m_radioMemoriesByKey.contains(radioMemoryKey(group, channel)))
+                    {
+                        if (QMessageBox::question(parent, "Add/Edit Memory",
+                                                  QStringLiteral("Overwrite radio memory %1 channel %2?")
+                                                      .arg(memoryBandLabelForGroup(group))
+                                                      .arg(channel, 3, 10, QLatin1Char('0'))) != QMessageBox::Yes)
+                        {
+                            return;
+                        }
+                    }
                     deleteRadioMemory(oldGroup, oldChannel);
                 }
             }

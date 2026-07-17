@@ -94,7 +94,8 @@ class RadioBackend : public IRadioBackend
     void handleTransmitSwr(double swr);
     void selectMainVfoForCommand(Commander* commandSession) const;
     void selectMemoryBandForCommand(Commander* commandSession, quint16 group) const;
-    void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel) const;
+    void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
+                                bool prepareBand = true) const;
     void resetScopeController();
     void routeRadioItemsForSession(quint64 session, const QVector<CacheItem>& items);
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;

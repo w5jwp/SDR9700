@@ -1054,19 +1054,34 @@ void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16
     frequency.MHzDouble = hz / 1e6;
     frequency.VFO = activeVFO;
 
+    // IC-9700 memory channels are scoped by band. Select the MAIN VFO and tune
+    // it inside the desired band before entering memory mode so command 08h
+    // resolves channel N against the intended memory group.
     selectMainVfoForCommand(commandSession);
     commandSession->receiveCommand(funcVFOModeSelect, QVariant(), 0);
     commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency), 0);
 }
 
-void RadioBackend::selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel) const
+void RadioBackend::selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
+                                          bool prepareBand) const
 {
-    Q_UNUSED(group)
     if (!commandSession)
     {
         return;
     }
+    if (memoryGroupDefaultFrequencyHz(group) == 0)
+    {
+        qWarning(logRadio()) << "Ignoring memory channel selection for unsupported group" << group;
+        return;
+    }
 
+    if (prepareBand)
+    {
+        selectMemoryBandForCommand(commandSession, group);
+    }
+    // Command 08h carries the channel number. When prepareBand is false the
+    // caller has already selected the desired band and is avoiding VFO tuning
+    // commands in a timing-sensitive path such as PTT.
     commandSession->receiveCommand(funcMemoryMode, QVariant(), 0);
     commandSession->receiveCommand(funcMemoryMode, QVariant::fromValue(static_cast<uint>(channel)), 0);
 }
@@ -1167,7 +1182,7 @@ void RadioBackend::setPtt(bool on)
                 if (selectedMemory)
                 {
                     const auto [group, channel] = *selectedMemory;
-                    selectMemoryForCommand(commandSession, group, channel);
+                    selectMemoryForCommand(commandSession, group, channel, false);
                     commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
                     commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
                 }
@@ -1354,7 +1369,6 @@ void RadioBackend::selectRadioMemory(quint16 group, quint16 channel)
     invokeOnCurrentCommander(
         [this, group, channel, memoryAddress](Commander* commandSession)
         {
-            selectMemoryBandForCommand(commandSession, group);
             selectMemoryForCommand(commandSession, group, channel);
             commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0);
             commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);

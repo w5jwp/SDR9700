@@ -24,6 +24,9 @@ UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint
     {
         m_txSilencePacketBytes = int(this->txSetup.sampleRate / 50) * int(sizeof(qint16));
     }
+    // Keep a reusable silence frame for TX under-runs. The byte content and
+    // frame size match the previous per-tick QByteArray allocation exactly.
+    m_txSilenceFrame = QByteArray(m_txSilencePacketBytes, '\0');
 
     if (txSetup.sampleRate == 0)
     {
@@ -162,6 +165,10 @@ void UdpAudio::receiveAudioData(audioPacket audio)
     if (audio.data.length() > 0)
     {
         m_txSilencePacketBytes = audio.data.length();
+        if (m_txSilenceFrame.size() != m_txSilencePacketBytes)
+        {
+            m_txSilenceFrame = QByteArray(m_txSilencePacketBytes, '\0');
+        }
 
         // DTMF timer owns the audio path; mic frames are suppressed entirely.
         if (m_dtmfTimerActive)
@@ -219,7 +226,11 @@ void UdpAudio::sendNextTxAudioFrame()
     }
     else
     {
-        frame = QByteArray(m_txSilencePacketBytes, '\0');
+        if (m_txSilenceFrame.size() != m_txSilencePacketBytes)
+        {
+            m_txSilenceFrame = QByteArray(m_txSilencePacketBytes, '\0');
+        }
+        frame = m_txSilenceFrame;
     }
     sendAudioBuffer(frame);
 }

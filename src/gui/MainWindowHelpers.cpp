@@ -253,7 +253,7 @@ QString toneOptionLabel(rptAccessTxRx_t mode)
     case ratrDT:
         return QStringLiteral("DTCS");
     default:
-        return QStringLiteral("Off");
+        return QStringLiteral("OFF");
     }
 }
 

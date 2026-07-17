@@ -421,34 +421,25 @@ void CachingQueue::setRadioCaps(radioCapabilities* caps)
 
 void CachingQueue::message(QString msg)
 {
-
-    if (mutex.tryLock(kCacheLockTimeMs))
     {
+        QMutexLocker locker(&mutex);
         messages.append(msg);
-        mutex.unlock();
-        qDebug(logRadio()) << "Received:" << msg;
-        waiting.wakeOne();
     }
-    else
-    {
-        qWarning(logRadio()) << "Queue failed to send message() after" << kCacheLockTimeMs << "ms, mutex locked";
-    }
+    qDebug(logRadio()) << "Received:" << msg;
+    waiting.wakeOne();
 }
 
 void CachingQueue::receiveValue(Funcs func, QVariant value, uchar receiver)
 {
-    if (mutex.tryLock(kCacheLockTimeMs))
     {
+        // Parsed CI-V replies are authoritative state. Wait for the queue lock
+        // instead of dropping an update during heavy polling or memory sync.
+        QMutexLocker locker(&mutex);
         CacheItem c = CacheItem(func, value, receiver);
         items.enqueue(c);
         updateCache(true, func, value, receiver);
-        mutex.unlock();
-        waiting.wakeOne();
     }
-    else
-    {
-        qWarning(logRadio()) << "Failed to receiveValue() after" << kCacheLockTimeMs << "ms, mutex locked";
-    }
+    waiting.wakeOne();
 }
 
 void CachingQueue::updateCache(bool reply, QueueItem item)
