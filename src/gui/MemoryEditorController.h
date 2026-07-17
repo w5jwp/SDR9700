@@ -12,6 +12,8 @@ class MemoryEditorController : public QObject
   public:
     explicit MemoryEditorController(MemoryController* owner);
 
+    void editSelectedMemory();
+    void storeCurrentMemory();
     void showMemoryEditor(const QString& memoryId);
 
   private:

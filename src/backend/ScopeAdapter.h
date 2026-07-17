@@ -11,15 +11,26 @@
 namespace ScopeAdapter
 {
 
-inline QVector<float> toLevels(const QByteArray& raw)
+inline void toLevels(const QByteArray& raw, QVector<float>* levels)
 {
-    QVector<float> levels;
-    levels.reserve(raw.size());
+    if (!levels)
+    {
+        return;
+    }
+
+    levels->resize(raw.size());
+    auto out = levels->begin();
     for (unsigned char byte : raw)
     {
         const unsigned char clamped = byte > 160 ? static_cast<unsigned char>(160) : byte;
-        levels.append(static_cast<float>(clamped));
+        *out++ = static_cast<float>(clamped);
     }
+}
+
+inline QVector<float> toLevels(const QByteArray& raw)
+{
+    QVector<float> levels;
+    toLevels(raw, &levels);
     return levels;
 }
 

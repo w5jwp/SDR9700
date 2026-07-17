@@ -28,4 +28,7 @@ class SpectrumScopeController : public QObject
     void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay);
 
     MainWindow* m_window{nullptr};
+    quint64 m_lastSpectrumScopeLimitStartHz{0};
+    quint64 m_lastSpectrumScopeLimitEndHz{0};
+    bool m_hasLastSpectrumScopeLimits{false};
 };

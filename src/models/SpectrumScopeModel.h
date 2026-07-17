@@ -22,7 +22,7 @@ class SpectrumScopeModel : public QObject
     void centerOnFrequency(double freqMhz);
     void setFrequencyLimits(double startMhz, double endMhz);
     void clearFrequencyLimits();
-    void holdDisplayCenter(double centerMhz);
+    void holdDisplayCenter(double displayCenterMhz, double expectedSourceCenterMhz);
     void clearDisplayCenterHold();
 
     void ingestSpectrum(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange);
@@ -43,6 +43,7 @@ class SpectrumScopeModel : public QObject
     double m_limitStartMhz{0.0};
     double m_limitEndMhz{0.0};
     double m_heldCenterMhz{0.0};
+    double m_heldSourceCenterMhz{0.0};
     bool m_hasFrequencyLimits{false};
     bool m_hasDisplayCenterHold{false};
 };

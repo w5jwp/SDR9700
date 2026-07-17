@@ -68,7 +68,10 @@ void ScopeController::flushLatestFrame()
     m_hasPendingFrame = false;
     emit scopeDataReceived();
 
-    const QVector<float> levels = ScopeAdapter::toLevels(frame.data);
+    // Reuse the conversion buffer between frames. The queued signal delivery
+    // below still gives receivers their own safe copy when crossing threads,
+    // but this removes one allocation from the radio-data hot path.
+    ScopeAdapter::toLevels(frame.data, &m_levelsScratch);
     if (logSpectrumScope().isDebugEnabled())
     {
         static QElapsedTimer statsTimer;
@@ -98,5 +101,5 @@ void ScopeController::flushLatestFrame()
         }
     }
 
-    emit spectrumDataReady(levels, frame.startFreq, frame.endFreq, frame.oor);
+    emit spectrumDataReady(m_levelsScratch, frame.startFreq, frame.endFreq, frame.oor);
 }

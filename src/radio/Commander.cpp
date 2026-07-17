@@ -1763,7 +1763,9 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
 
         d.data.clear();
 
-        // Fixed and scroll modes report explicit start/end frequencies.
+        // The first two frequency fields are mode-dependent. In fixed/scroll
+        // modes they are explicit start/end frequencies; in center mode they
+        // are center frequency and half-span, matching the single-frame parser.
         fStart = parseFreqData(payloadIn.mid(3, freqLen), receiver);
         d.startFreq = fStart.MHzDouble;
         fEnd = parseFreqData(payloadIn.mid(3 + freqLen, freqLen), receiver);

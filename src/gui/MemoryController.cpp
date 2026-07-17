@@ -56,8 +56,8 @@ constexpr quint16 kRadioMemoryLastChannel = 99;
 constexpr int kRadioMemorySyncTotal =
     (kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1);
 constexpr int kRadioMemoryRefreshIntervalMs = 25;
-constexpr int kRadioMemorySyncTimeoutMs = 30000;
 constexpr int kRadioMemorySyncMaxPasses = 3;
+constexpr int kRadioMemorySyncReplyGraceMs = 20000;
 constexpr int kRadioMemoryInitialSyncRetryDelayMs = 2000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
 constexpr int kRadioMemoryWriteReadbackTimeoutMs = 3000;
@@ -511,6 +511,12 @@ bool modeSupportsMemoryOffset(int mode)
 {
     return mode == modeFM || mode == modeDV || mode == modeDD;
 }
+
+constexpr int radioMemorySyncTimeoutMs()
+{
+    return (kRadioMemorySyncTotal * kRadioMemoryRefreshIntervalMs * kRadioMemorySyncMaxPasses) +
+           kRadioMemorySyncReplyGraceMs;
+}
 } // namespace
 
 MemoryController::MemoryController(MainWindow* window) : QObject(window), m_window(window)
@@ -523,7 +529,7 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
     connect(m_radioMemoryRefreshTimer, &QTimer::timeout, this, &MemoryController::requestNextRadioMemory);
 
     m_radioMemoryPeriodicRefreshTimer = new QTimer(this);
-    setMemoryPollIntervalSecondsDirect(
+    m_memorySyncController->setMemoryPollIntervalSeconds(
         AppSettings::instance()
             .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
             .toInt());
@@ -907,37 +913,6 @@ void MemoryController::closeMemoryEditorPane(bool resizeWindow)
     }
 }
 
-void MemoryController::forceRadioMemorySyncDirect()
-{
-    if (!m_window->m_model || !m_window->m_model->isConnected())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Sync Memories"),
-                                 QStringLiteral("Connect to the radio before syncing memories."));
-        return;
-    }
-
-    if (m_refreshInProgress)
-    {
-        finishRadioMemoryRefresh(false);
-    }
-    if (!m_memoryProgressLabel.isEmpty())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Sync Memories"),
-                                 QStringLiteral("Wait for the current memory operation to finish before syncing."));
-        return;
-    }
-
-    requestRadioMemoryRefresh();
-    reloadMemoryTable();
-    m_window->showToast(QStringLiteral("Radio memory sync started"));
-}
-
-void MemoryController::setMemoryPollIntervalSecondsDirect(int seconds)
-{
-    const int boundedSeconds = qBound(kMemoryPollIntervalMinSeconds, seconds, kMemoryPollIntervalMaxSeconds);
-    m_radioMemoryPeriodicRefreshTimer->setInterval(boundedSeconds * 1000);
-}
-
 // Radio memory sync state machine:
 // - requestRadioMemoryRefresh() polls every user channel in every IC-9700 band
 //   group and records each key in m_expectedRadioMemoryKeys.
@@ -976,7 +951,10 @@ void MemoryController::requestRadioMemoryRefresh()
             m_expectedRadioMemoryKeys.insert(radioMemoryKey(group, channel));
         }
     }
-    m_radioMemorySyncTimeoutTimer->start(kRadioMemorySyncTimeoutMs);
+    // Keep this timeout tied to the amount of CI-V work being scheduled. A
+    // fixed timeout looked fine on a fast link but could expire while slower
+    // radios were still sending late memory replies.
+    m_radioMemorySyncTimeoutTimer->start(radioMemorySyncTimeoutMs());
     requestNextRadioMemory();
     if (!m_refreshInProgress)
     {
@@ -1051,6 +1029,60 @@ bool MemoryController::allExpectedRadioMemoriesReceived() const
     return !m_expectedRadioMemoryKeys.isEmpty() &&
            std::all_of(m_expectedRadioMemoryKeys.cbegin(), m_expectedRadioMemoryKeys.cend(),
                        [this](quint32 key) { return m_receivedRadioMemoryKeys.contains(key); });
+}
+
+bool MemoryController::radioConnected() const
+{
+    return m_window->m_model && m_window->m_model->isConnected();
+}
+
+bool MemoryController::memoryRefreshInProgress() const
+{
+    return m_refreshInProgress;
+}
+
+bool MemoryController::memoryOperationInProgress() const
+{
+    return !m_memoryProgressLabel.isEmpty();
+}
+
+bool MemoryController::memoryEditorVisible() const
+{
+    return m_memoryEditorPane && m_memoryEditorPane->isVisible();
+}
+
+void MemoryController::cancelMemoryRefresh()
+{
+    finishRadioMemoryRefresh(false);
+}
+
+void MemoryController::requestRadioMemoryRefreshFromController()
+{
+    requestRadioMemoryRefresh();
+}
+
+void MemoryController::setMemoryPollTimerIntervalSeconds(int seconds)
+{
+    const int boundedSeconds = qBound(kMemoryPollIntervalMinSeconds, seconds, kMemoryPollIntervalMaxSeconds);
+    m_radioMemoryPeriodicRefreshTimer->setInterval(boundedSeconds * 1000);
+}
+
+void MemoryController::clearMemoryEditButtonChecked()
+{
+    if (m_memoryEditButton)
+    {
+        m_memoryEditButton->setChecked(false);
+    }
+}
+
+void MemoryController::closeMemoryEditorFromController()
+{
+    closeMemoryEditorPane();
+}
+
+void MemoryController::showMemoryToast(const QString& message)
+{
+    m_window->showToast(message);
 }
 
 void MemoryController::finishRadioMemoryRefresh(bool timedOut)
@@ -1909,23 +1941,7 @@ void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFail
 
 void MemoryController::editSelectedMemory()
 {
-    if (m_memoryEditorPane && m_memoryEditorPane->isVisible())
-    {
-        closeMemoryEditorPane();
-        return;
-    }
-
-    const QString id = selectedMemoryId();
-    if (id.isEmpty())
-    {
-        if (m_memoryEditButton)
-        {
-            m_memoryEditButton->setChecked(false);
-        }
-        QMessageBox::information(popupParent(), "Edit Memory", "Choose one memory first.");
-        return;
-    }
-    showMemoryEditor(id);
+    m_memoryEditorController->editSelectedMemory();
 }
 
 void MemoryController::copySelectedMemory()
@@ -2058,7 +2074,7 @@ void MemoryController::moveSelectedMemory(int direction)
 
 void MemoryController::storeCurrentMemory()
 {
-    showMemoryEditor(QString());
+    m_memoryEditorController->storeCurrentMemory();
 }
 
 void MemoryController::showMemoryEditor(const QString& memoryId)
@@ -2066,7 +2082,7 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
     m_memoryEditorController->showMemoryEditor(memoryId);
 }
 
-void MemoryController::showMemoryEditorDirect(const QString& memoryId)
+void MemoryController::showMemoryEditorPane(const QString& memoryId)
 {
     QWidget* parent = popupParent();
     const bool editing = !memoryId.isEmpty();

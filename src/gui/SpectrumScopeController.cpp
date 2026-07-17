@@ -156,6 +156,13 @@ void SpectrumScopeController::updateSpectrumScopeBandLimits(quint64 hz)
     const availableBands band = sdr9700::radioBandForFrequency(hz);
     if (band == bandUnknown || !sdr9700::radioBandEdges(band, &startHz, &endHz))
     {
+        if (!m_hasLastSpectrumScopeLimits)
+        {
+            return;
+        }
+        m_hasLastSpectrumScopeLimits = false;
+        m_lastSpectrumScopeLimitStartHz = 0;
+        m_lastSpectrumScopeLimitEndHz = 0;
         m_window->m_spectrumScope->clearFrequencyLimits();
         if (m_window->m_spectrumScopeDisplay)
         {
@@ -164,6 +171,14 @@ void SpectrumScopeController::updateSpectrumScopeBandLimits(quint64 hz)
         return;
     }
 
+    if (m_hasLastSpectrumScopeLimits && m_lastSpectrumScopeLimitStartHz == startHz &&
+        m_lastSpectrumScopeLimitEndHz == endHz)
+    {
+        return;
+    }
+    m_hasLastSpectrumScopeLimits = true;
+    m_lastSpectrumScopeLimitStartHz = startHz;
+    m_lastSpectrumScopeLimitEndHz = endHz;
     m_window->m_spectrumScope->setFrequencyLimits(startHz / 1e6, endHz / 1e6);
     if (m_window->m_spectrumScopeDisplay)
     {
@@ -338,7 +353,7 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
     }
     if (m_window->m_spectrumScope)
     {
-        m_window->m_spectrumScope->holdDisplayCenter(displayCenterHz / 1e6);
+        m_window->m_spectrumScope->holdDisplayCenter(displayCenterHz / 1e6, hz / 1e6);
     }
 
     if (m_window->m_vfoPanel && !m_window->m_vfoPanel->frequencyHasFocus())

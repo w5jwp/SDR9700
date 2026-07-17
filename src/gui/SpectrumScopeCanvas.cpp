@@ -563,7 +563,11 @@ void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outO
     // the model signal delivery path and may be superseded before paintEvent().
     // Backout/optimization point: a future double-buffered model could move
     // this storage upstream and let the canvas paint a shared immutable frame.
-    m_spectrumBins = levels;
+    // Reuse the existing backing store where possible. Spectrum frames arrive
+    // continuously, so avoiding a fresh QVector allocation per repaint keeps
+    // click tuning and waterfall painting from competing with allocator churn.
+    m_spectrumBins.resize(levels.size());
+    std::copy(levels.cbegin(), levels.cend(), m_spectrumBins.begin());
     m_scopeOutOfRange = outOfRange;
 
     if (m_peakHold.size() != levels.size())

@@ -8,7 +8,8 @@ namespace
 {
 constexpr double kMinSourceBandwidthMhz = 0.001;
 constexpr double kScopeRangeToleranceMhz = 0.000001;
-constexpr double kHeldCenterToleranceMhz = 0.000001;
+constexpr double kMinHeldCenterToleranceMhz = 0.00005;
+constexpr double kMaxHeldCenterToleranceMhz = 0.0005;
 
 bool normalizeRange(double* startMhz, double* endMhz)
 {
@@ -89,14 +90,15 @@ void SpectrumScopeModel::centerOnFrequency(double freqMhz)
     emit rangeChanged(m_centerMhz, m_bandwidthMhz);
 }
 
-void SpectrumScopeModel::holdDisplayCenter(double centerMhz)
+void SpectrumScopeModel::holdDisplayCenter(double displayCenterMhz, double expectedSourceCenterMhz)
 {
-    if (!std::isfinite(centerMhz))
+    if (!std::isfinite(displayCenterMhz) || !std::isfinite(expectedSourceCenterMhz))
     {
         return;
     }
 
-    m_heldCenterMhz = centerMhz;
+    m_heldCenterMhz = displayCenterMhz;
+    m_heldSourceCenterMhz = expectedSourceCenterMhz;
     m_hasDisplayCenterHold = true;
 }
 
@@ -104,6 +106,7 @@ void SpectrumScopeModel::clearDisplayCenterHold()
 {
     m_hasDisplayCenterHold = false;
     m_heldCenterMhz = 0.0;
+    m_heldSourceCenterMhz = 0.0;
 }
 
 void SpectrumScopeModel::setFrequencyLimits(double startMhz, double endMhz)
@@ -157,13 +160,23 @@ void SpectrumScopeModel::ingestSpectrum(const QVector<float>& levels, double sta
             return;
         }
 
-        // While click-to-tune is waiting for the radio to report the new
+        // While click-to-tune is waiting for the radio to report the new source
         // center, nearby old scope frames can still contain the clicked
         // frequency. Drawing those stale frames under the optimistic display
         // center makes the signal appear to slide away from the click point.
-        // Accept held-center frames only when the radio's reported center has
-        // caught up to the requested center.
-        if (qAbs(incomingCenter - m_heldCenterMhz) > kHeldCenterToleranceMhz)
+        //
+        // The held display center and the expected radio/source center are
+        // intentionally separate. Near a band edge the UI clamps the visible
+        // range so the scale stays inside the band, while the IC-9700 still
+        // reports scope frames centered on the requested VFO. Tying acceptance
+        // to the clamped display center rejects valid edge-of-band frames.
+        // If field testing shows another click-to-tune drift case, capture both
+        // incomingCenter and m_heldSourceCenterMhz before changing this logic.
+        const double binToleranceMhz =
+            levels.size() > 1 ? incomingBw / static_cast<double>(levels.size() - 1) * 0.25 : kMinHeldCenterToleranceMhz;
+        const double heldCenterToleranceMhz =
+            qBound(kMinHeldCenterToleranceMhz, binToleranceMhz, kMaxHeldCenterToleranceMhz);
+        if (qAbs(incomingCenter - m_heldSourceCenterMhz) > heldCenterToleranceMhz)
         {
             return;
         }

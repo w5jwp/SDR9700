@@ -28,5 +28,6 @@ class ScopeController : public QObject
 
     QTimer* m_flushTimer{nullptr};
     ScopeData m_pendingFrame;
+    QVector<float> m_levelsScratch;
     bool m_hasPendingFrame{false};
 };

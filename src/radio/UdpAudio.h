@@ -89,6 +89,7 @@ class UdpAudio : public UdpBase
     std::atomic_bool m_txActive{false};
     QQueue<QByteArray> m_txAudioQueue;
     QByteArray m_dtmfPcm;
+    QByteArray m_dtmfFrame;
     QByteArray m_txSilenceFrame;
     int m_dtmfPcmOffset{0};
     QTimer* m_dtmfTimer{nullptr};

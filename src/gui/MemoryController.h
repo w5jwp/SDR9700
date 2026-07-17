@@ -22,9 +22,6 @@ class MemoryController : public QObject
     Q_OBJECT
 
   public:
-    friend class MemoryEditorController;
-    friend class MemorySyncController;
-
     explicit MemoryController(MainWindow* window);
 
     void buildMemoryWindow();
@@ -46,6 +43,21 @@ class MemoryController : public QObject
     bool exportRadioMemories();
     void importRadioMemories();
     bool initialMemorySyncComplete() const;
+
+    // Narrow controller-facing hooks. Keep these explicit instead of granting
+    // helper controllers blanket friend access to all MemoryController state.
+    bool radioConnected() const;
+    bool memoryRefreshInProgress() const;
+    bool memoryOperationInProgress() const;
+    bool memoryEditorVisible() const;
+    void cancelMemoryRefresh();
+    void requestRadioMemoryRefreshFromController();
+    void setMemoryPollTimerIntervalSeconds(int seconds);
+    void clearMemoryEditButtonChecked();
+    void closeMemoryEditorFromController();
+    void showMemoryEditorPane(const QString& memoryId);
+    void showMemoryToast(const QString& message);
+    QWidget* popupParent() const;
 
   signals:
     void initialMemorySyncChanged(bool complete);
@@ -81,11 +93,6 @@ class MemoryController : public QObject
     void setMemoryProgress(const QString& label, int value, int maximum);
     void clearMemoryProgress();
     void closeMemoryEditorPane(bool resizeWindow = true);
-    QWidget* popupParent() const;
-    void forceRadioMemorySyncDirect();
-    void setMemoryPollIntervalSecondsDirect(int seconds);
-    bool initialMemorySyncCompleteDirect() const { return m_initialMemorySyncComplete; }
-    void showMemoryEditorDirect(const QString& memoryId);
 
     MainWindow* m_window{nullptr};
     MemoryEditorController* m_memoryEditorController{nullptr};
