@@ -34,16 +34,20 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
 - `RadioModel`: app-level connection and radio state.
 - `VfoModel`: active VFO state exposed to the UI.
 - `SpectrumScopeModel`: spectrum range and waterfall/scope data exposed to the UI.
-- `SpectrumWidget`: displays FFT/scope and waterfall data.
-- `TitleBarWidget`: custom frameless window title bar housing the menu bar,
+- `SpectrumScopeDisplay`, `SpectrumScopeCanvas`, and `WaterfallCanvas`: display
+  IC-9700 scope and waterfall data.
+- `SpectrumScopeController` and `WaterfallController`: coordinate scope input,
+  rendering state, and operator interaction.
+- `MainTitleBar`: custom frameless window title bar housing the menu bar,
   volume/mute/lock controls, and window management buttons.
-- `DtmfWidget`: floating DTMF send panel with PTT gating.
-- `MemoryStore` / `MemoryWidget`: local SDR9700 memory channels stored outside
-  the radio.
-- `Rc28Manager` (optional, HAVE_HIDAPI): HID driver for the Icom RC-28 rotary
+- `DtmfDialog`: floating DTMF send panel with PTT gating.
+- `MemoryController`, `MemorySyncController`, and `MemoryEditorController`:
+  synchronize, display, and edit the IC-9700's radio-backed memories.
+- `MemoryStore`: validates and serializes memory records for CSV import/export.
+- `IcomRC28Manager` (optional, HAVE_HIDAPI): HID driver for the Icom RC-28 rotary
   controller; emits tuning step and button events, and accepts LED state.
 - `AppSettings`: JSON-backed client settings at
-  `~/.config/SDR9700/config.json`.
+  `~/.config/SDR9700/sdr9700.json`.
 
 ## Threading
 

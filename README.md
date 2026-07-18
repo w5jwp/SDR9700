@@ -41,8 +41,9 @@ hardware testing and polish before a stable release.
   usage.
 - VFO step selector for configurable tuning step sizes.
 - DTMF send panel with PTT gating.
-- Local SDR9700 memories stored outside the radio, with add/edit/copy/remove,
-  import/export, band filtering, ordering, and selection-to-radio.
+- Radio-backed IC-9700 memory management with add/edit/copy/remove, periodic and
+  on-demand synchronization, CSV import/export, band filtering, ordering, and
+  selection from both the main window and Memory Manager.
 - Main-window lock mode that prevents accidental radio-control changes while
   leaving PTT, mute, and AF gain usable.
 - Icom RC-28 rotary controller support for step tuning and button mapping,
@@ -54,8 +55,8 @@ hardware testing and polish before a stable release.
   scope/waterfall behavior, and edge-case packet handling.
 - Continue tightening CI-V parser validation for malformed or unexpected radio
   responses.
-- Add automated tests around settings, memories, protocol parsing, and UI-facing
-  model behavior.
+- Expand automated tests around settings, radio protocol parsing, connection
+  lifecycle behavior, and UI-facing models.
 - Improve packaging for common Linux distributions.
 - Add user documentation for setup, radio LAN configuration, audio routing, and
   memory workflows.

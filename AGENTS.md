@@ -17,7 +17,8 @@ audio routing, and station workflows.
 - Scope/waterfall display.
 - RX/TX audio routing through Qt Multimedia.
 - AF/RF/TX gain, squelch, PTT, and DTMF send with PTT gating.
-- Local SDR9700 memory channels stored outside the radio.
+- Radio-backed IC-9700 memory management with synchronization and CSV
+  import/export.
 - Main-window lock mode.
 - Icom RC-28 rotary controller support for step tuning and button mapping
   (optional, requires libhidapi at build time).
@@ -123,18 +124,16 @@ Client-side application settings are stored by `AppSettings` at:
 ~/.config/SDR9700/sdr9700.json
 ```
 
-Local memory channels are stored at:
+Memory records are synchronized with the IC-9700 and are not persisted in a
+separate application-owned memory file. CSV import/export is the supported
+offline interchange format.
 
-```text
-~/.config/SDR9700/sdr9700-memories.json
-```
-
-These files are JSON. Boolean settings are stored as `"True"` / `"False"` strings
-for compatibility with existing code. Use camel-case keys, with all-caps
-abbreviations, grouped under current schema objects such as `radioChooser`,
-`audio`, `spectrumScope`, and `radio`. Do not add configuration fallback paths,
-migration keys, or migration holdover code; configuration import is the cleanup
-boundary for current schema validation.
+The settings file is JSON. Boolean settings are stored as `"True"` / `"False"`
+strings for compatibility with existing code. Use camel-case keys, with
+all-caps abbreviations, grouped under current schema objects such as
+`radioChooser`, `audio`, `spectrumScope`, and `radio`. Do not add configuration
+fallback paths, migration keys, or migration holdover code; configuration
+import is the cleanup boundary for current schema validation.
 
 ## Architecture
 
