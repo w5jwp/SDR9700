@@ -4,6 +4,8 @@
 #include "RadioCapabilities.h"
 
 #include <QHash>
+#include <QSet>
+#include <QStringDecoder>
 #include <QUuid>
 
 #include <algorithm>
@@ -34,24 +36,12 @@ QString memoryBandLabelForHz(quint64 hz)
 
 quint16 memoryGroupForBandLabel(QString band)
 {
-    band = band.trimmed().toLower();
+    band = band.trimmed();
     bool ok = false;
     const uint numericBand = band.toUInt(&ok);
     if (ok && numericBand >= 1 && numericBand <= 3)
     {
         return static_cast<quint16>(numericBand);
-    }
-    if (band == QLatin1String("2m"))
-    {
-        return 1;
-    }
-    if (band == QLatin1String("70cm"))
-    {
-        return 2;
-    }
-    if (band == QLatin1String("23cm"))
-    {
-        return 3;
     }
     return 0;
 }
@@ -79,12 +69,13 @@ QString csvLine(const QStringList& fields)
     return escaped.join(QLatin1Char(','));
 }
 
-QVector<QStringList> parseCsvRows(const QString& text)
+QVector<QStringList> parseCsvRows(const QString& text, QStringList* errors)
 {
     QVector<QStringList> rows;
     QStringList row;
     QString field;
     bool quoted = false;
+    bool quoteClosed = false;
     for (qsizetype i = 0; i < text.size(); ++i)
     {
         const QChar ch = text.at(i);
@@ -100,6 +91,7 @@ QVector<QStringList> parseCsvRows(const QString& text)
                 else
                 {
                     quoted = false;
+                    quoteClosed = true;
                 }
             }
             else
@@ -111,12 +103,22 @@ QVector<QStringList> parseCsvRows(const QString& text)
 
         if (ch == QLatin1Char('"'))
         {
+            if (!field.isEmpty() || quoteClosed)
+            {
+                if (errors)
+                {
+                    errors->append(
+                        QStringLiteral("Malformed CSV: quote inside an unquoted field at character %1").arg(i + 1));
+                }
+                return {};
+            }
             quoted = true;
         }
         else if (ch == QLatin1Char(','))
         {
             row.append(field);
             field.clear();
+            quoteClosed = false;
         }
         else if (ch == QLatin1Char('\n') || ch == QLatin1Char('\r'))
         {
@@ -128,11 +130,30 @@ QVector<QStringList> parseCsvRows(const QString& text)
             rows.append(row);
             row.clear();
             field.clear();
+            quoteClosed = false;
         }
         else
         {
+            if (quoteClosed)
+            {
+                if (errors)
+                {
+                    errors->append(
+                        QStringLiteral("Malformed CSV: unexpected text after a closing quote at character %1")
+                            .arg(i + 1));
+                }
+                return {};
+            }
             field.append(ch);
         }
+    }
+    if (quoted)
+    {
+        if (errors)
+        {
+            errors->append(QStringLiteral("Malformed CSV: unterminated quoted field"));
+        }
+        return {};
     }
     if (!field.isEmpty() || !row.isEmpty())
     {
@@ -256,7 +277,7 @@ void validateMemoryRecord(const MemoryRecord& memory, const QStringList& row, co
 
     if (memory.group == 0)
     {
-        addError(QStringLiteral("band must be 1, 2, 3, 2M, 70CM, or 23CM"));
+        addError(QStringLiteral("band must be 1, 2, or 3"));
     }
     if (memory.channel < kCsvFirstRadioMemoryChannel || memory.channel > kCsvLastUserRadioMemoryChannel)
     {
@@ -265,6 +286,71 @@ void validateMemoryRecord(const MemoryRecord& memory, const QStringList& row, co
     if (memory.receiveHz == 0)
     {
         addError(QStringLiteral("receiveHZ must be a positive integer"));
+    }
+    const sdr9700::RadioBandDef* frequencyBand =
+        sdr9700::radioBandDefinition(sdr9700::radioBandForFrequency(memory.receiveHz));
+    if (!frequencyBand || frequencyBand->memGroup != memory.group)
+    {
+        addError(QStringLiteral("receiveHZ is not in the selected radio band"));
+    }
+    if (memory.name.size() > kMemoryNameMaxChars)
+    {
+        addError(QStringLiteral("name is limited to %1 characters").arg(kMemoryNameMaxChars));
+    }
+    if (QString::fromLatin1(memory.name.toLatin1()) != memory.name)
+    {
+        addError(QStringLiteral("name must contain Latin-1 characters supported by the radio"));
+    }
+
+    static constexpr radioMode_t validModes[] = {modeLSB, modeUSB,  modeAM,     modeCW, modeRTTY,
+                                                 modeFM,  modeCW_R, modeRTTY_R, modeDV, modeDD};
+    if (std::find(std::cbegin(validModes), std::cend(validModes), static_cast<radioMode_t>(memory.mode)) ==
+        std::cend(validModes))
+    {
+        addError(QStringLiteral("mode is not supported by the IC-9700 memory editor"));
+    }
+    if (memory.filter < 1 || memory.filter > 3)
+    {
+        addError(QStringLiteral("filter must be 1-3"));
+    }
+    if (memory.dataMode < 0 || memory.dataMode > 1)
+    {
+        addError(QStringLiteral("dataMode must be 0 or 1"));
+    }
+    if (memory.scan < 0 || memory.scan > 3)
+    {
+        addError(QStringLiteral("scan must be 0-3"));
+    }
+    const auto duplex = static_cast<duplexMode_t>(memory.duplexMode);
+    if (duplex != dmSimplex && duplex != dmDupMinus && duplex != dmDupPlus)
+    {
+        addError(QStringLiteral("duplexMode must be simplex, minus, or plus"));
+    }
+    if (duplex == dmSimplex && memory.offsetHz != 0)
+    {
+        addError(QStringLiteral("offsetHZ must be 0 for simplex memories"));
+    }
+    if ((duplex == dmDupMinus || duplex == dmDupPlus) && memory.offsetHz == 0)
+    {
+        addError(QStringLiteral("offsetHZ must be positive for repeater memories"));
+    }
+    if (memory.dsql < 0 || memory.dsql > 2)
+    {
+        addError(QStringLiteral("dsql must be 0-2"));
+    }
+    if (memory.dtcsPolarity < 0 || memory.dtcsPolarity > 3 || memory.dtcsPolarityB < 0 || memory.dtcsPolarityB > 3)
+    {
+        addError(QStringLiteral("DTCS polarity values must be 0-3"));
+    }
+    if (memory.dvSql < 0 || memory.dvSql > 99)
+    {
+        addError(QStringLiteral("dvSql must be 0-99"));
+    }
+    const auto validCall = [](const QString& value)
+    { return value.size() <= 8 && QString::fromLatin1(value.toLatin1()) == value; };
+    if (!validCall(memory.urCall) || !validCall(memory.r1Call) || !validCall(memory.r2Call))
+    {
+        addError(QStringLiteral("D-STAR callsigns are limited to 8 Latin-1 characters"));
     }
 
     const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
@@ -312,6 +398,32 @@ void validateMemoryRecord(const MemoryRecord& memory, const QStringList& row, co
     default:
         addError(QStringLiteral("toneMode is not supported by SDR9700 memory import"));
         break;
+    }
+
+    const auto validTone = [](const QString& value)
+    {
+        if (value.trimmed().isEmpty())
+        {
+            return true;
+        }
+        const ushort tone = toneValueFromRadioText(value);
+        return std::any_of(std::cbegin(sdr9700::ui::main_window::kTonePresets),
+                           std::cend(sdr9700::ui::main_window::kTonePresets),
+                           [tone](const auto& preset) { return preset.tone == tone; });
+    };
+    if (!validTone(memory.tone) || !validTone(memory.tsql))
+    {
+        addError(QStringLiteral("tone and tsql must use IC-9700 preset frequencies"));
+    }
+    const auto validDtcs = [](ushort code)
+    {
+        return std::find(std::cbegin(sdr9700::ui::main_window::kDtcsCodes),
+                         std::cend(sdr9700::ui::main_window::kDtcsCodes),
+                         code) != std::cend(sdr9700::ui::main_window::kDtcsCodes);
+    };
+    if (!validDtcs(memory.dtcs) || !validDtcs(memory.dtcsB))
+    {
+        addError(QStringLiteral("dtcs and dtcsB must use IC-9700 preset codes"));
     }
 }
 
@@ -393,7 +505,14 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
     QStringList* importErrors = errors ? errors : &localErrors;
     importErrors->clear();
 
-    const QVector<QStringList> rows = parseCsvRows(QString::fromUtf8(data));
+    QStringDecoder decoder(QStringDecoder::Utf8);
+    const QString csvText = decoder(data);
+    if (decoder.hasError())
+    {
+        importErrors->append(QStringLiteral("The CSV file is not valid UTF-8"));
+        return {};
+    }
+    const QVector<QStringList> rows = parseCsvRows(csvText, importErrors);
     if (rows.isEmpty())
     {
         return {};
@@ -403,7 +522,12 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
     const QStringList headers = rows.first();
     for (int i = 0; i < headers.size(); ++i)
     {
-        indexes.insert(headers.at(i).trimmed(), i);
+        const QString header = headers.at(i).trimmed();
+        if (indexes.contains(header))
+        {
+            importErrors->append(QStringLiteral("Duplicate CSV column: %1").arg(header));
+        }
+        indexes.insert(header, i);
     }
     for (const QString& header : memoryCsvHeaders())
     {
@@ -418,12 +542,19 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
     }
 
     QVector<MemoryRecord> memories;
+    QSet<quint32> importedChannels;
     memories.reserve(rows.size() - 1);
     for (int i = 1; i < rows.size(); ++i)
     {
         const QStringList& row = rows.at(i);
         if (csvRowIsBlank(row))
         {
+            continue;
+        }
+        if (row.size() != headers.size())
+        {
+            importErrors->append(
+                QStringLiteral("Row %1: expected %2 fields, found %3").arg(i + 1).arg(headers.size()).arg(row.size()));
             continue;
         }
 
@@ -468,8 +599,17 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
         memory.toneFrequency = sdr9700::ui::main_window::memoryToneFrequencyLabel(
             static_cast<rptAccessTxRx_t>(memory.toneMode), memory.toneValue);
         validateMemoryRecord(memory, row, indexes, i + 1, importErrors);
+        const quint32 channelKey = (quint32(memory.group) << 16U) | memory.channel;
+        if (importedChannels.contains(channelKey))
+        {
+            importErrors->append(QStringLiteral("Row %1: duplicate band/channel %2/%3")
+                                     .arg(i + 1)
+                                     .arg(memory.group)
+                                     .arg(memory.channel));
+        }
         if (importErrors->size() == rowErrorCount)
         {
+            importedChannels.insert(channelKey);
             memories.append(memory);
         }
     }

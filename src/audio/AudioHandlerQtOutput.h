@@ -21,11 +21,14 @@ class AudioHandlerQtOutput : public AudioHandlerBase
 
   private:
     void writeToOutputDevice(const QByteArray& data, quint32 seq, float amplitudePeak, float amplitudeRms);
+    void drainPendingOutput();
 
     QAudioSink* audioOutput{nullptr};
 
     QIODevice* audioDevice{nullptr};
+    QByteArray m_pendingOutput;
+    qsizetype m_pendingOutputOffset{0};
 
   private slots:
-    void onConverted(audioPacket audio);
+    void onConverted(const audioPacket& audio);
 };

@@ -24,5 +24,5 @@ class AudioHandlerQtInput : public AudioHandlerBase
 
   private slots:
     void onReadyRead();
-    void onConverted(audioPacket audio);
+    void onConverted(const audioPacket& audio);
 };

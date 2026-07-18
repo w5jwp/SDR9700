@@ -185,7 +185,6 @@ void setSelectorButtonLines(QPushButton* button, const QString& primary, const Q
 void setCommandButtonActive(QPushButton* button, bool active);
 void styleCompactMenu(QMenu* menu);
 QString statusLabelStyle(const char* color, bool bold = false);
-QString errorStatusMessage(const QString& message);
 QColor colorSetting(const char* key, const QColor& defaultColor);
 int spectrumScopeGridDensitySetting();
 bool availableScreenContains(const QRect& rect);

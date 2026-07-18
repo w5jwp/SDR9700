@@ -2,6 +2,8 @@
 
 #include "RadioCommander.h"
 
+#include <QElapsedTimer>
+#include <QQueue>
 #include <QVector>
 
 class Commander : public RadioCommander
@@ -70,6 +72,10 @@ class Commander : public RadioCommander
     FuncType getCommand(Funcs func, QByteArray& payload, int value = INT_MIN, uchar receiver = 0);
     void rememberPendingReply(Funcs func, uchar receiver);
     bool takePendingReplyReceiver(Funcs func, uchar* receiver);
+    void rememberPendingSetCommand(Funcs func, const QByteArray& payload, const QVariant& value, uchar receiver,
+                                   const FuncType& command);
+    bool takePendingSetCommand(CommandErrorType* command);
+    void discardExpiredPendingReplies();
 
     QByteArray getLANAddr();
     QByteArray getACCAddr(quint8 ab);
@@ -103,7 +109,6 @@ class Commander : public RadioCommander
     bool lookingForRadio{false};
     bool foundRadio{false};
 
-    bool warnedAboutFA = false;
     double frequencyMhz{0.0};
     quint16 civAddr{0};
     quint16 incomingCIVAddr{0};
@@ -112,8 +117,11 @@ class Commander : public RadioCommander
     {
         Funcs func{funcNone};
         uchar receiver{0};
+        qint64 createdAtMs{0};
     };
     QVector<PendingReply> m_pendingReplies;
+    QQueue<CommandErrorType> m_pendingSetCommands;
+    QElapsedTimer m_pendingCommandClock;
     bool m_suppressReadbackForCurrentCommand{false};
 
     ScopeData mainScopeData;

@@ -38,6 +38,31 @@ enum connectionStatus_t
     connConnected
 };
 
+// ConnectionStage is a machine-readable lifecycle contract shared by the
+// radio stack and GUI. User-facing text is deliberately kept out of control
+// flow so wording changes and future translation cannot alter reconnect or
+// readiness behavior.
+enum class ConnectionStage
+{
+    Unchanged,
+    Disconnected,
+    Connecting,
+    WaitingForRadio,
+    OpeningStreams,
+    SyncingRadioState,
+    Ready,
+    Reconnecting,
+    Disconnecting,
+    Failed,
+};
+
+enum class MessageSeverity
+{
+    Info,
+    Warning,
+    Error,
+};
+
 enum underlay_t
 {
     underlayNone,
@@ -754,14 +779,8 @@ enum class ErrorCode
 struct errorType
 {
     errorType() : alert(false) {};
-    errorType(bool alert, const QString& message) : alert(alert), message(message) {};
-    [[deprecated("Provide an ErrorCode; pass ErrorCode::Unknown to opt out explicitly")]]
-    errorType(bool alert, const QString& device, const QString& message)
-        : alert(alert), device(device), message(message) {};
     errorType(bool alert, const QString& device, const QString& message, ErrorCode code)
         : alert(alert), code(code), device(device), message(message) {};
-    errorType(const QString& device, const QString& message) : alert(false), device(device), message(message) {};
-    explicit errorType(const QString& message) : alert(false), message(message) {};
 
     bool alert;
     ErrorCode code{ErrorCode::Unknown};

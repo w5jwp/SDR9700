@@ -65,8 +65,9 @@ class RadioModel : public QObject
     void meterSnapshotChanged(const MeterSnapshot& snapshot);
     void pttChanged(bool on);
     void transmittingChanged(bool on);
-    void errorOccurred(const QString& message);
-    void statusMessage(const QString& message);
+    void connectionStageChanged(ConnectionStage stage, const QString& message);
+    void errorOccurred(ErrorCode code, const QString& message);
+    void statusMessage(const QString& message, MessageSeverity severity);
     void networkQualityChanged(int rttMs);
     void txAudioLevelChanged(int peak, int rms);
     void radioMemoryReceived(MemoryType memory);
@@ -74,7 +75,7 @@ class RadioModel : public QObject
   private slots:
     void onBackendConnected();
     void onBackendDisconnected();
-    void onBackendError(const QString& msg);
+    void onBackendError(ErrorCode code, const QString& msg);
     void onBackendReadyChanged(bool ready);
     void onFrequencyChanged(quint64 hz);
     void onModeChanged(const QString& mode);

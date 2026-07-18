@@ -128,6 +128,14 @@ AudioConverter::~AudioConverter()
     releaseCodecState();
 }
 
+void AudioConverter::process(audioPacket audio)
+{
+    // Always report completion, including malformed/dropped packets, so the
+    // bounded producer queue can advance and cannot become permanently busy.
+    convert(std::move(audio));
+    emit conversionCycleFinished();
+}
+
 void AudioConverter::releaseCodecState()
 {
     if (opusEncoder != nullptr)
@@ -212,7 +220,7 @@ bool AudioConverter::convert(audioPacket audio)
             {
                 const quint8 u = ~in[i];
 
-                const int sign = (u & 0x80) ? 1 : -1;
+                const int sign = (u & 0x80) ? -1 : 1;
                 const int exp = (u >> 4) & 0x07; // 3 bits
                 const int mant = (u & 0x0F);     // 4 bits
 
@@ -307,8 +315,12 @@ bool AudioConverter::convert(audioPacket audio)
             if (inFormat.channelCount() == 2 && outFormat.channelCount() == 1)
             {
                 scratchChannelMix.resize(samplesF.size() / 2);
-                scratchChannelMix =
-                    Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>>(samplesF.data(), samplesF.size() / 2);
+                const Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>> left(samplesF.data(), samplesF.size() / 2);
+                const Eigen::Map<Eigen::VectorXf, 0, Eigen::InnerStride<2>> right(samplesF.data() + 1,
+                                                                                  samplesF.size() / 2);
+                // Average both channels. Keeping only the left channel made a
+                // right-only microphone/source silent on transmit.
+                scratchChannelMix = (left + right) * 0.5f;
                 samplesF.swap(scratchChannelMix);
             }
             else if (inFormat.channelCount() == 1 && outFormat.channelCount() == 2)
@@ -401,7 +413,7 @@ bool AudioConverter::convert(audioPacket audio)
 
                 constexpr int BIAS = 0x84; // 132
                 constexpr int CLIP = 32635;
-                static constexpr int seg_end[8] = {0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF};
+                static constexpr int seg_end[8] = {0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF, 0x1FFF, 0x3FFF, 0x7FFF};
 
                 for (int i = 0; i < n; ++i)
                 {
@@ -429,12 +441,12 @@ bool AudioConverter::convert(audioPacket audio)
                     if (pcm < 0)
                     {
                         pcm = BIAS - pcm;
-                        mask = 0xFF;
+                        mask = 0x7F;
                     }
                     else
                     {
                         pcm = BIAS + pcm;
-                        mask = 0x7F;
+                        mask = 0xFF;
                     }
                     const int maxp = BIAS + CLIP;
                     if (pcm > maxp)

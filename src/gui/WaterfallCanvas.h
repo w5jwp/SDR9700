@@ -11,12 +11,14 @@ class WaterfallCanvas : public QWidget
   public:
     explicit WaterfallCanvas(QWidget* parent = nullptr);
 
-    void setWaterfallImage(const QImage& image);
-    void clearDisplay();
+    void setWaterfallImageSource(const QImage* image);
 
   protected:
     void paintEvent(QPaintEvent* event) override;
 
   private:
-    QImage m_waterfall;
+    // WaterfallController owns this image and outlives the canvas within
+    // SpectrumScopeDisplay. Keeping a non-owning source avoids QImage
+    // copy-on-write detaching the complete waterfall on every rendered row.
+    const QImage* m_waterfall{nullptr};
 };

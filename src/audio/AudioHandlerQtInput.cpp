@@ -5,9 +5,6 @@ bool AudioHandlerQtInput::openDevice() noexcept
     audioInput = new QAudioSource(deviceInfo, nativeFormat, this);
     connect(audioInput, &QAudioSource::stateChanged, this, &AudioHandlerQtInput::stateChanged);
 
-    emit setupConverter(nativeFormat, codecType::LPCM, radioFormat, codec, 7, setupData.resampleQuality);
-
-    connect(this, &AudioHandlerBase::sendToConverter, converter, &AudioConverter::convert);
     connect(converter, &AudioConverter::converted, this, &AudioHandlerQtInput::onConverted);
 
     audioInput->setBufferSize(nativeFormat.bytesForDuration(setupData.latency * 1000));
@@ -59,13 +56,13 @@ void AudioHandlerQtInput::onReadyRead()
     while (tempBuf.data.size() - m_bufferReadOffset >= bytesPerBlock)
     {
         audioPacket pkt;
-        pkt.time = QTime::currentTime();
+        pkt.createdAtMs = audioMonotonicTimestampMs();
         pkt.sent = 0;
         pkt.volume = volume;
         memcpy(&pkt.guid, setupData.guid, GUIDLEN);
         pkt.data = QByteArray(tempBuf.data.constData() + m_bufferReadOffset, bytesPerBlock);
         m_bufferReadOffset += bytesPerBlock;
-        emit sendToConverter(pkt);
+        queueForConversion(std::move(pkt));
     }
 
     if (m_bufferReadOffset > 0 && m_bufferReadOffset >= tempBuf.data.size() / 2)
@@ -75,7 +72,7 @@ void AudioHandlerQtInput::onReadyRead()
     }
 }
 
-void AudioHandlerQtInput::onConverted(audioPacket audio)
+void AudioHandlerQtInput::onConverted(const audioPacket& audio)
 {
     if (audio.data.isEmpty())
     {

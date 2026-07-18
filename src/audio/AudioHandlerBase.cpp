@@ -6,6 +6,8 @@
 namespace
 {
 constexpr int kShutdownWaitMs = 500;
+constexpr int kMaxRxConversionBacklog = 4;
+constexpr int kMaxTxConversionBacklog = 8;
 
 qreal localAudioGainFromSlider(quint8 volumeIdx)
 {
@@ -93,9 +95,12 @@ void AudioHandlerBase::dispose()
     // the lock would deadlock.
     if (converterThread)
     {
-        disconnect(this, &AudioHandlerBase::setupConverter, converter, &AudioConverter::init);
-        disconnect(this, &AudioHandlerBase::sendToConverter, converter, &AudioConverter::convert);
+        disconnect(this, &AudioHandlerBase::sendToConverter, converter, &AudioConverter::process);
         disconnect(converter, &AudioConverter::converted, nullptr, nullptr);
+        disconnect(converter, &AudioConverter::conversionCycleFinished, this,
+                   &AudioHandlerBase::onConversionCycleFinished);
+        m_conversionQueue.clear();
+        m_conversionBusy = false;
         stopConverterThread(role());
     }
 
@@ -217,11 +222,28 @@ bool AudioHandlerBase::init(const audioSetup& setup)
     }
 
     converter = new AudioConverter();
+    const QAudioFormat converterInputFormat = setup.isinput ? nativeFormat : radioFormat;
+    const codecType converterInputCodec = setup.isinput ? codecType::LPCM : codec;
+    const QAudioFormat converterOutputFormat = setup.isinput ? radioFormat : nativeFormat;
+    const codecType converterOutputCodec = setup.isinput ? codec : codecType::LPCM;
+    // Initialize before moving the converter to its worker thread. The previous
+    // queued initialization could race the first QAudio readyRead callback and
+    // silently drop the beginning of a transmission.
+    if (!converter->init(converterInputFormat, converterInputCodec, converterOutputFormat, converterOutputCodec, 7,
+                         setup.resampleQuality))
+    {
+        delete converter;
+        converter = nullptr;
+        reportError("Failed to initialize audio converter");
+        emit initFailed();
+        return false;
+    }
     converterThread = new QThread(this);
     converterThread->setObjectName(role() == "Input" ? "audioConvIn()" : "audioConvOut()");
     converter->moveToThread(converterThread);
 
-    connect(this, &AudioHandlerBase::setupConverter, converter, &AudioConverter::init);
+    connect(this, &AudioHandlerBase::sendToConverter, converter, &AudioConverter::process);
+    connect(converter, &AudioConverter::conversionCycleFinished, this, &AudioHandlerBase::onConversionCycleFinished);
     connect(converterThread, &QThread::finished, converter, &QObject::deleteLater);
     connect(converter, &AudioConverter::initFailed, this,
             [this](const QString& message)
@@ -230,7 +252,9 @@ bool AudioHandlerBase::init(const audioSetup& setup)
                 emit initFailed();
             });
 
-    converterThread->start(QThread::TimeCriticalPriority);
+    // HighPriority gives audio prompt service without the scheduler starvation
+    // risk of TimeCriticalPriority on a busy single/dual-core Linux host.
+    converterThread->start(QThread::HighPriority);
 
     underTimer = new QTimer(this);
     underTimer->setSingleShot(true);
@@ -308,4 +332,47 @@ void AudioHandlerBase::stateChanged(QAudio::State state)
 void AudioHandlerBase::clearUnderrun()
 {
     isUnderrun.store(false, std::memory_order_relaxed);
+}
+
+void AudioHandlerBase::queueForConversion(audioPacket audio)
+{
+    if (!converter || disposed.load(std::memory_order_acquire))
+    {
+        return;
+    }
+
+    if (!m_conversionBusy)
+    {
+        m_conversionBusy = true;
+        emit sendToConverter(std::move(audio));
+        return;
+    }
+
+    const int limit = setupData.isinput ? kMaxTxConversionBacklog : kMaxRxConversionBacklog;
+    if (m_conversionQueue.size() >= limit)
+    {
+        // Keep bounded latency under overload. Dropping the oldest not-yet-
+        // converted frame preserves the order of all surviving frames and is
+        // preferable to transmitting/playing increasingly stale audio.
+        m_conversionQueue.dequeue();
+        isOverrun.store(true, std::memory_order_relaxed);
+    }
+    m_conversionQueue.enqueue(std::move(audio));
+}
+
+void AudioHandlerBase::onConversionCycleFinished()
+{
+    if (disposed.load(std::memory_order_acquire) || !converter)
+    {
+        m_conversionQueue.clear();
+        m_conversionBusy = false;
+        return;
+    }
+    if (m_conversionQueue.isEmpty())
+    {
+        m_conversionBusy = false;
+        return;
+    }
+
+    emit sendToConverter(m_conversionQueue.dequeue());
 }

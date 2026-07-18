@@ -74,6 +74,8 @@ struct networkStatus
     QString message;
     QString rxLatencyClass;
     bool userVisibleMessage{false};
+    ConnectionStage connectionStage{ConnectionStage::Unchanged};
+    MessageSeverity messageSeverity{MessageSeverity::Info};
 };
 
 class UdpBase : public QObject
@@ -82,7 +84,8 @@ class UdpBase : public QObject
   public:
     ~UdpBase();
 
-    void init(quint16 bindPort);
+    bool init(quint16 bindPort);
+    bool isSocketBound() const;
 
     void reconnect();
 
@@ -167,6 +170,7 @@ class UdpBase : public QObject
     // Stream packet handlers call this only after accepting a packet that proves
     // the radio-side UDP session is still alive.
     void markPacketReceived() { lastReceivedMs = elapsedMs(); }
+    bool acceptDatagramFrom(const QNetworkDatagram& datagram) const;
 
     QElapsedTimer mono;
     int pingDriftMs = 0; // Signed drift estimate: positive when the radio clock trails prediction.

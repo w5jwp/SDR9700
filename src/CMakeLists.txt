@@ -218,3 +218,27 @@ target_compile_options(SDR9700 PRIVATE -Wall -Wextra)
 set_target_properties(SDR9700 PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+if(BUILD_TESTING)
+    add_executable(AudioConverterTest tests/AudioConverterTest.cpp)
+    target_link_libraries(AudioConverterTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(AudioConverterTest PRIVATE -Wall -Wextra)
+    add_test(NAME AudioConverterTest COMMAND AudioConverterTest)
+
+    add_executable(MemoryStoreTest
+        tests/MemoryStoreTest.cpp
+        gui/MemoryStore.cpp
+        gui/MainWindowHelpers.cpp
+    )
+    target_include_directories(MemoryStoreTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(MemoryStoreTest PRIVATE
+        SDR9700_core
+        Qt6::Test
+        Qt6::Widgets
+    )
+    target_compile_options(MemoryStoreTest PRIVATE -Wall -Wextra)
+    add_test(NAME MemoryStoreTest COMMAND MemoryStoreTest)
+endif()

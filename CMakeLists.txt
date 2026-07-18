@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 project(SDR9700 VERSION 26.07.01 LANGUAGES C CXX)
 
+include(CTest)
+
 set(SDR9700_DISPLAY_VERSION "26.07.01")
 
 set(CMAKE_CXX_STANDARD 20)
@@ -30,5 +32,8 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS
     Multimedia
     MultimediaWidgets
 )
+if(BUILD_TESTING)
+    find_package(Qt6 6.2 REQUIRED COMPONENTS Test)
+endif()
 
 add_subdirectory(src)

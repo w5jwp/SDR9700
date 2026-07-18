@@ -501,7 +501,7 @@ void StatusBarController::buildStatusBar()
             {
                 if (m_window->m_toastLabel)
                 {
-                    m_window->m_toastLabel->setText(QString());
+                    applyToast(m_persistentMessage, m_persistentKind);
                 }
             });
 
@@ -527,6 +527,22 @@ void StatusBarController::showToast(const QString& msg, int durationMs, MainWind
         return;
     }
 
+    if (durationMs <= 0)
+    {
+        m_persistentMessage = msg;
+        m_persistentKind = kind;
+    }
+
+    applyToast(msg, kind);
+    m_window->m_toastTimer->stop();
+    if (durationMs > 0)
+    {
+        m_window->m_toastTimer->start(durationMs);
+    }
+}
+
+void StatusBarController::applyToast(const QString& message, MainWindow::ToastKind kind)
+{
     const char* color = UiTheme::Color::TextStatusPrimary;
     bool bold = false;
     if (kind == MainWindow::ToastKind::Warning)
@@ -540,10 +556,8 @@ void StatusBarController::showToast(const QString& msg, int durationMs, MainWind
         bold = true;
     }
 
-    m_window->m_toastTimer->stop();
-    m_window->m_toastLabel->setText(msg);
+    m_window->m_toastLabel->setText(message);
     m_window->m_toastLabel->setStyleSheet(statusLabelStyle(color, bold));
-    m_window->m_toastTimer->start(durationMs);
 }
 
 void StatusBarController::updateNetworkQuality(int rttMs)

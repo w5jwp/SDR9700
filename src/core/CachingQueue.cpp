@@ -5,7 +5,6 @@
 
 namespace
 {
-constexpr int kCacheLockTimeMs = 100;
 bool shutdownHookInstalled = false;
 
 const QMap<QString, int> kPriorityMap = {{"None", 0},        {"Immediate", 1},   {"Highest", 2},
@@ -36,7 +35,9 @@ CachingQueue* CachingQueue::getInstance(QObject* parent)
             QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit,
                              &CachingQueue::shutdownInstance);
         }
-        instance->start(QThread::TimeCriticalPriority);
+        // CI-V polling needs prompt service but must never outrank the audio
+        // pipeline or the OS networking stack on a loaded station computer.
+        instance->start(QThread::HighPriority);
         qDebug(logRadio()) << "Created new CachingQueue() for:"
                            << ((parent != nullptr) ? parent->objectName() : "<unknown>");
     }
@@ -66,24 +67,36 @@ void CachingQueue::shutdownInstance()
         return;
     }
 
-    queue->stopThread();
-    delete queue;
+    if (queue->stopThread())
+    {
+        delete queue;
+    }
+    else
+    {
+        // Deleting a running QThread is undefined and was a source of forced
+        // shutdowns. The worker normally exits immediately after wakeAll(); in
+        // the pathological timeout case, retain the object until its run loop
+        // actually finishes rather than tearing memory out from under it.
+        QObject::connect(queue, &QThread::finished, queue, &QObject::deleteLater);
+    }
 }
 
-void CachingQueue::stopThread()
+bool CachingQueue::stopThread()
 {
-    aborted.store(true, std::memory_order_relaxed);
+    aborted.store(true, std::memory_order_release);
     {
         QMutexLocker locker(&mutex);
         waiting.wakeAll();
     }
     if (isRunning() && QThread::currentThread() != this)
     {
-        if (!wait(kCacheLockTimeMs))
+        if (!wait(3000))
         {
-            qWarning(logRadio()) << "CachingQueue() did not stop after" << kCacheLockTimeMs << "ms";
+            qCritical(logRadio()) << "CachingQueue() did not stop within 3000 ms; deferring object deletion";
+            return false;
         }
     }
+    return !isRunning();
 }
 
 void CachingQueue::run()
@@ -95,14 +108,14 @@ void CachingQueue::run()
 
     quint64 counter = kPriorityImmediate;
 
-    while (!aborted.load(std::memory_order_relaxed))
+    while (!aborted.load(std::memory_order_acquire))
     {
         // With no queued commands, wait indefinitely for a cache/message update
         // or a new command. When commands exist, wake on the normal queue
         // interval so recurring polls keep their pacing.
         const bool woke =
             queue.isEmpty() ? waiting.wait(&mutex) : waiting.wait(&mutex, qMax<qint64>(0, deadline.remainingTime()));
-        if (aborted.load(std::memory_order_relaxed))
+        if (aborted.load(std::memory_order_acquire))
         {
             break;
         }
@@ -608,7 +621,7 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
     return ret;
 }
 
-bool CachingQueue::compare(QVariant a, QVariant b)
+bool CachingQueue::compare(const QVariant& a, const QVariant& b)
 {
     bool changed = false;
 

@@ -20,7 +20,10 @@ UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, qui
     port = civPort;
     radioIP = ip;
 
-    UdpBase::init(localPort);
+    if (!UdpBase::init(localPort))
+    {
+        return;
+    }
 
     QUdpSocket::connect(udp, &QUdpSocket::readyRead, this, &UdpCivData::dataReceived);
 
@@ -182,6 +185,10 @@ void UdpCivData::dataReceived()
     while (udp->hasPendingDatagrams())
     {
         QNetworkDatagram datagram = udp->receiveDatagram();
+        if (!acceptDatagramFrom(datagram))
+        {
+            continue;
+        }
         QByteArray r = datagram.data();
 
         const bool scopeDataDatagram = isScopeDataDatagram(r);

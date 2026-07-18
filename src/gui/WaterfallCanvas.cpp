@@ -12,15 +12,9 @@ WaterfallCanvas::WaterfallCanvas(QWidget* parent) : QWidget(parent)
     setAutoFillBackground(false);
 }
 
-void WaterfallCanvas::setWaterfallImage(const QImage& image)
+void WaterfallCanvas::setWaterfallImageSource(const QImage* image)
 {
     m_waterfall = image;
-    update();
-}
-
-void WaterfallCanvas::clearDisplay()
-{
-    m_waterfall = {};
     update();
 }
 
@@ -30,8 +24,8 @@ void WaterfallCanvas::paintEvent(QPaintEvent* event)
 
     QPainter p(this);
     p.fillRect(rect(), kWaterfallBg);
-    if (!m_waterfall.isNull())
+    if (m_waterfall && !m_waterfall->isNull())
     {
-        p.drawImage(rect(), m_waterfall, QRect(0, 0, m_waterfall.width(), qMin(height(), m_waterfall.height())));
+        p.drawImage(rect(), *m_waterfall, QRect(0, 0, m_waterfall->width(), qMin(height(), m_waterfall->height())));
     }
 }

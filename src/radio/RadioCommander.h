@@ -107,7 +107,6 @@ class RadioCommander : public QObject
     struct radioCapabilities radioCaps{};
     bool haveRadioCaps = false;
     bool isRadioAdmin = true; // true = request admin-level radio access on connect
-    CommandErrorType lastCommand;
 
   private:
 };

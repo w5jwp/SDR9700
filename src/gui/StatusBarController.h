@@ -19,5 +19,9 @@ class StatusBarController : public QObject
     void updateNetworkQuality(int rttMs);
 
   private:
+    void applyToast(const QString& message, MainWindow::ToastKind kind);
+
     MainWindow* m_window{nullptr};
+    QString m_persistentMessage;
+    MainWindow::ToastKind m_persistentKind{MainWindow::ToastKind::Info};
 };

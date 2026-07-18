@@ -63,6 +63,8 @@ class MemoryController : public QObject
     void initialMemorySyncChanged(bool complete);
 
   private:
+    using MemoryWriteCompletion = std::function<void(bool success)>;
+
     void requestRadioMemoryRefresh();
     void requestNextRadioMemory();
     void handleRadioMemoryReceived(MemoryType memory);
@@ -77,19 +79,17 @@ class MemoryController : public QObject
     MemoryType radioMemoryForId(const QString& id, bool* found = nullptr) const;
     bool parseRadioMemoryId(const QString& id, quint16* group, quint16* channel) const;
     void applyMemoryToVfo(const MemoryRecord& memory);
-    void writeMemoryRecord(const MemoryRecord& memory, quint16 group, quint16 channel);
-    void deleteRadioMemory(quint16 group, quint16 channel);
+    void writeMemoryRecord(const MemoryRecord& memory, quint16 group, quint16 channel,
+                           MemoryWriteCompletion completion = {});
+    void deleteRadioMemory(quint16 group, quint16 channel, MemoryWriteCompletion completion = {});
     void queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs = 0,
-                                const QString& progressLabel = QString(),
-                                std::function<void()> completion = std::function<void()>());
+                                const QString& progressLabel = QString(), MemoryWriteCompletion completion = {});
     void startQueuedRadioMemoryWrites(const QVector<MemoryType>& memories, const QString& progressLabel,
-                                      std::function<void()> completion);
+                                      MemoryWriteCompletion completion);
     void writeNextQueuedRadioMemory();
     void finishQueuedRadioMemoryWrites(bool timedOut);
     bool firstOpenChannelForGroup(quint16 group, quint16* channel) const;
-    int queueRecordsToRadio(const QVector<MemoryRecord>& records, int* skippedCount, int startDelayMs = 0,
-                            const QString& progressLabel = QString(),
-                            std::function<void()> completion = std::function<void()>());
+    void restoreRadioMemoriesAfterFailedImport(const QVector<MemoryType>& backup);
     void setMemoryProgress(const QString& label, int value, int maximum);
     void clearMemoryProgress();
     void closeMemoryEditorPane(bool resizeWindow = true);
@@ -124,6 +124,6 @@ class MemoryController : public QObject
     quint32 m_expectedRadioMemoryWriteKey{0};
     bool m_waitingForRadioMemoryWriteReadback{false};
     QString m_queuedRadioMemoryWriteLabel;
-    std::function<void()> m_queuedRadioMemoryWriteCompletion;
+    MemoryWriteCompletion m_queuedRadioMemoryWriteCompletion;
     bool m_initialMemorySyncComplete{false};
 };

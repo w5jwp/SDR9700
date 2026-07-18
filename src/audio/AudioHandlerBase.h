@@ -9,6 +9,7 @@
 #include <QAudio>
 #include <QAudioFormat>
 #include <QIODevice>
+#include <QQueue>
 #include <atomic>
 #include <cstring>
 
@@ -44,8 +45,6 @@ class AudioHandlerBase : public QObject
     void haveAudioData(const audioPacket& data);
     void haveLevels(quint16 amplitudePeak, quint16 amplitudeRMS, quint16 configuredLatency, quint16 measuredLatency,
                     bool underrun, bool overrun);
-    void setupConverter(QAudioFormat in, codecType codecIn, QAudioFormat out, codecType codecOut, quint8 opusApp,
-                        quint8 resampQuality);
     void sendToConverter(audioPacket audio);
 
   public slots:
@@ -55,6 +54,7 @@ class AudioHandlerBase : public QObject
     virtual void incomingAudio(audioPacket) {}
     void stateChanged(QAudio::State state);
     void clearUnderrun();
+    void onConversionCycleFinished();
 
   protected:
     virtual bool openDevice() noexcept = 0;
@@ -65,19 +65,11 @@ class AudioHandlerBase : public QObject
     bool negotiateFormat(int minSampleRate = 48000);
     void stopConverterThread(const QString& roleName);
 
-    virtual QAudioFormat getNativeFormat()
-    {
-        qCritical(logAudio()) << "No getNativeFormat()!!";
-        return QAudioFormat();
-    };
-    virtual bool isFormatSupported(QAudioFormat f)
-    {
-        Q_UNUSED(f)
-        qCritical(logAudio()) << "No isFormatSupported()!";
-        return false;
-    };
+    virtual QAudioFormat getNativeFormat() = 0;
+    virtual bool isFormatSupported(QAudioFormat format) = 0;
 
     void reportError(const QString& msg);
+    void queueForConversion(audioPacket audio);
 
   protected:
     audioSetup setupData{};
@@ -106,4 +98,6 @@ class AudioHandlerBase : public QObject
     QMutex devMutex;
     std::atomic<bool> disposed{false};
     audioPacket tempBuf;
+    QQueue<audioPacket> m_conversionQueue;
+    bool m_conversionBusy{false};
 };

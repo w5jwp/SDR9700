@@ -122,6 +122,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
             [this](bool degraded) { m_spectrumScopeStillSyncingAfterReady = degraded; });
     connect(m_model, &RadioModel::meterSnapshotChanged, this, &MainWindow::onMeterSnapshotChanged);
     connect(m_model, &RadioModel::pttChanged, this, &MainWindow::onPttChanged);
+    connect(m_model, &RadioModel::connectionStageChanged, this, &MainWindow::onConnectionStageChanged);
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
     connect(m_model, &RadioModel::errorOccurred, this, &MainWindow::onError);
     connect(m_model, &RadioModel::networkQualityChanged, this, &MainWindow::updateNetworkQuality);
@@ -316,7 +317,7 @@ void MainWindow::buildToolBar()
                 }
                 const int bounded = qBound(0, value, 255);
                 m_currentAfGain = bounded;
-                AppSettings::instance().setValue(QStringLiteral("volumeLevel"), bounded);
+                AppSettings::instance().setValueDeferred(QStringLiteral("volumeLevel"), bounded);
                 if (auto* backend = m_model->backend())
                 {
                     backend->setAfGain(bounded);
@@ -731,7 +732,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
                         return;
                     }
                     m_lanModValue = qBound(0, value, 255);
-                    AppSettings::instance().setValue(QStringLiteral("LANModLevel"), m_lanModValue);
+                    AppSettings::instance().setValueDeferred(QStringLiteral("LANModLevel"), m_lanModValue);
                     m_model->setLanModLevel(m_lanModValue);
                 });
     };
@@ -948,15 +949,11 @@ void MainWindow::onConnectToProfile(const RadioProfile& profile)
     m_radioPort = profile.port;
     m_radioUsername = profile.username;
     m_userDisconnected = false;
-    m_autoReconnectSuppressedForSyncFailure = false;
+    // The backend validates the profile synchronously. Publish Connecting before
+    // entering it so an invalid host/port cannot leave the previous UI state on
+    // screen while an error toast is shown.
+    onConnectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1...").arg(profile.host));
     m_model->connectToRadio(profile.host, profile.port, profile.username, profile.password);
-    if (m_connStateLabel)
-    {
-        m_connStateName = QStringLiteral("Connecting");
-        m_connStateLabel->setText(
-            QStringLiteral("<span style='color:%1'>Connecting</span>").arg(UiTheme::Color::Accent));
-    }
-    updateConnectionTooltip();
 }
 
 void MainWindow::tryAutoConnect()
@@ -1492,7 +1489,7 @@ void MainWindow::onConnectionChanged(bool connected)
         // IC-9700 LAN server half-open and leave the operator watching an
         // endless Connecting/Syncing loop. Manual reconnect resets the attempt.
         const bool canReconnect = hadRadioUiReady && !m_userDisconnected && !m_lastErrorWasCredential &&
-                                  !m_autoReconnectSuppressedForSyncFailure && !m_pendingProfileId.isNull() &&
+                                  !m_pendingProfileId.isNull() &&
                                   RadioProfileStore::instance().profileById(m_pendingProfileId);
 
         if (canReconnect)
@@ -1537,10 +1534,6 @@ void MainWindow::onConnectionChanged(bool connected)
             m_reconnecting = false;
             m_userDisconnected = false;
             m_lastErrorWasCredential = false;
-            // Do not clear m_autoReconnectSuppressedForSyncFailure here. A sync
-            // watchdog failure intentionally leaves the last profile selected
-            // but disables automatic reconnect until the operator starts a new
-            // manual connection, where onConnectToProfile() resets the flag.
             if (m_connStateLabel)
             {
                 m_connStateName = QStringLiteral("Disconnected");
@@ -1591,8 +1584,8 @@ void MainWindow::onRadioReadyChanged(bool ready)
             QStringLiteral("<span style='color:%1'>Connected</span>").arg(UiTheme::Color::Success));
         if (notifyReady)
         {
-            // Backend "radio connection ready" means CI-V/scope startup reached
-            // a usable point, but MainWindow intentionally waits for the
+            // Backend readiness means initial CI-V frequency and mode reads
+            // reached a usable point, but MainWindow intentionally waits for the
             // MemoryController's first sync before telling the operator the UI
             // is ready for normal operation. Preserve the degraded Spectrum Scope
             // state in this final toast so the operator knows why the scope may
@@ -1600,8 +1593,9 @@ void MainWindow::onRadioReadyChanged(bool ready)
             // to remove m_spectrumScopeStillSyncingAfterReady and restore the
             // single "Radio control and memories ready" message.
             showToast(m_spectrumScopeStillSyncingAfterReady
-                          ? QStringLiteral("Radio control and memories ready; Spectrum Scope still syncing")
-                          : QStringLiteral("Radio control and memories ready"));
+                          ? QStringLiteral("Radio ready. Spectrum Scope is still syncing.")
+                          : QStringLiteral("Radio ready."),
+                      0);
         }
     }
     else
@@ -1772,42 +1766,75 @@ void MainWindow::updateNetworkQuality(int rttMs)
     m_statusBarController->updateNetworkQuality(rttMs);
 }
 
-void MainWindow::onStatusMessage(const QString& msg)
+void MainWindow::onConnectionStageChanged(ConnectionStage stage, const QString& message)
 {
-    ToastKind kind = ToastKind::Info;
-    const QString lower = msg.toLower();
-    if ((lower.contains(QStringLiteral("radio connection ready")) ||
-         lower.contains(QStringLiteral("radio control ready"))) &&
-        !radioUiReady())
+    const char* color = UiTheme::Color::TextStatusLabel;
+    switch (stage)
     {
-        // Backend readiness can arrive before the initial radio-memory sync.
-        // Suppress these early "ready" toasts so the operator only sees the
-        // final ready message after normal memory selection is actually usable.
+    case ConnectionStage::Connecting:
+    case ConnectionStage::WaitingForRadio:
+    case ConnectionStage::OpeningStreams:
+        m_connStateName = QStringLiteral("Connecting");
+        color = UiTheme::Color::Accent;
+        break;
+    case ConnectionStage::SyncingRadioState:
+    case ConnectionStage::Ready:
+        // Backend Ready means CI-V state is usable. The operator-facing ready
+        // state remains gated on MemoryController's first complete poll.
+        m_connStateName = radioUiReady() ? QStringLiteral("Connected") : QStringLiteral("Syncing");
+        color = radioUiReady() ? UiTheme::Color::Success : UiTheme::Color::Warning;
+        break;
+    case ConnectionStage::Reconnecting:
+        m_connStateName = QStringLiteral("Reconnecting");
+        color = UiTheme::Color::Danger;
+        break;
+    case ConnectionStage::Failed:
+    case ConnectionStage::Disconnected:
+        m_connStateName = QStringLiteral("Disconnected");
+        break;
+    case ConnectionStage::Disconnecting:
+        m_connStateName = QStringLiteral("Disconnecting");
+        break;
+    case ConnectionStage::Unchanged:
         return;
     }
-    if (lower.contains(QStringLiteral("radio sync timed out")))
+
+    if (m_connStateLabel)
     {
-        // The backend owns the one controlled recovery attempt for startup
-        // sync failures. A second auto-reconnect from the GUI leaves the
-        // operator watching repeated "Syncing" attempts while the IC-9700 LAN
-        // server is still half-open. Manual reconnect remains available after
-        // the radio settles.
-        m_autoReconnectSuppressedForSyncFailure = true;
+        m_connStateLabel->setText(
+            QStringLiteral("<span style='color:%1'>%2</span>").arg(QString::fromLatin1(color), m_connStateName));
     }
-    if (lower.contains(QStringLiteral("timed out")) || lower.contains(QStringLiteral("stopped")) ||
-        lower.contains(QStringLiteral("blocked")) || lower.contains(QStringLiteral("locked")) ||
-        lower.contains(QStringLiteral("disconnected")) || lower.contains(QStringLiteral("could not")) ||
-        lower.contains(QStringLiteral("failed")))
+    updateConnectionTooltip();
+    if (!message.isEmpty())
+    {
+        const ToastKind kind = stage == ConnectionStage::Failed         ? ToastKind::Error
+                               : stage == ConnectionStage::Reconnecting ? ToastKind::Warning
+                                                                        : ToastKind::Info;
+        showToast(message, 0, kind);
+    }
+}
+
+void MainWindow::onStatusMessage(const QString& msg, MessageSeverity severity)
+{
+    ToastKind kind = ToastKind::Info;
+    if (severity == MessageSeverity::Warning)
     {
         kind = ToastKind::Warning;
+    }
+    else if (severity == MessageSeverity::Error)
+    {
+        kind = ToastKind::Error;
     }
     showToast(msg, 5000, kind);
 }
 
-void MainWindow::onError(const QString& msg)
+void MainWindow::onError(ErrorCode code, const QString& msg)
 {
-    showToast(errorStatusMessage(msg), 8000, ToastKind::Error);
-    m_lastErrorWasCredential = msg.startsWith(QStringLiteral("Login denied"), Qt::CaseInsensitive);
+    Q_UNUSED(msg)
+    // RadioBackend publishes the same failure through connectionStageChanged,
+    // which owns the persistent operator-facing toast. Keep this typed signal
+    // solely for reconnect policy so one failure does not produce two messages.
+    m_lastErrorWasCredential = code == ErrorCode::AuthFailure;
 }
 
 void MainWindow::onAfGainChanged(int value)

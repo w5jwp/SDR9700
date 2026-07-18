@@ -2,7 +2,6 @@
 
 #include <QObject>
 #include <QByteArray>
-#include <QTime>
 #include <QMap>
 #include <QDebug>
 #include <QAudioFormat>
@@ -11,6 +10,7 @@
 #include <QAudioDevice>
 #include <QAudioSource>
 #include <QAudioSink>
+#include <chrono>
 
 #include "opus/opus.h"
 #include <Eigen/Eigen>
@@ -26,7 +26,10 @@ using SpeexResamplerState = struct SpeexResamplerState_;
 struct audioPacket
 {
     quint32 seq = 0;
-    QTime time;
+    // Packet age is used to discard stale playback data. steady_clock is
+    // process-wide and monotonic, so this remains valid across midnight and
+    // wall-clock/NTP adjustments while packets cross audio threads.
+    qint64 createdAtMs = 0;
     quint16 sent = 0;
     QByteArray data;
     quint8 guid[GUIDLEN]{};
@@ -64,9 +67,11 @@ class AudioConverter : public QObject
     bool init(QAudioFormat inFormat, codecType inCodec, QAudioFormat outFormat, codecType outCodec,
               quint8 opusComplexity, quint8 resampleQuality);
     bool convert(audioPacket audio);
+    void process(audioPacket audio);
 
   signals:
     void converted(audioPacket audio);
+    void conversionCycleFinished();
     void floatAudio(Eigen::VectorXf audio);
     void initFailed(QString message);
 
@@ -103,6 +108,12 @@ class AudioConverter : public QObject
 
     void releaseCodecState();
 };
+
+inline qint64 audioMonotonicTimestampMs()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
 
 
 // Eigen vectors cross thread boundaries in queued Qt signal delivery.

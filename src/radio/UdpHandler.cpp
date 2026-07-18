@@ -2,7 +2,6 @@
 #include "AppInfo.h"
 #include "LogCategories.h"
 
-#include <QNetworkInterface>
 #include <QRandomGenerator>
 #include <algorithm>
 #include <iterator>
@@ -88,57 +87,32 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
         return;
     }
 
-    // The IC-9700 LAN handshake needs the local IPv4 address encoded in its
-    // session ID. Prefer an address on the same subnet as the radio. If none is
-    // found, use the first active non-loopback IPv4 address as the best local
-    // candidate.
-    QHostAddress candidateLocalIp;
-    const quint32 radioIpv4 = radioIP.toIPv4Address();
-    for (const QNetworkInterface& iface : QNetworkInterface::allInterfaces())
+    // Ask the kernel routing table which source address it would use for this
+    // radio. Enumerating interfaces and choosing the first active IPv4 address
+    // is incorrect on VPN, VLAN, routed, and otherwise multi-homed hosts.
+    QUdpSocket routeProbe;
+    routeProbe.connectToHost(radioIP, controlPort, QIODevice::WriteOnly);
+    if (routeProbe.state() == QAbstractSocket::ConnectedState || routeProbe.waitForConnected(100))
     {
-        const auto flags = iface.flags();
-        if (!flags.testFlag(QNetworkInterface::IsUp) || !flags.testFlag(QNetworkInterface::IsRunning) ||
-            flags.testFlag(QNetworkInterface::IsLoopBack))
-        {
-            continue;
-        }
-
-        for (const QNetworkAddressEntry& entry : iface.addressEntries())
-        {
-            const QHostAddress address = entry.ip();
-            if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isLoopback())
-            {
-                continue;
-            }
-
-            if (candidateLocalIp.isNull())
-            {
-                candidateLocalIp = address;
-            }
-
-            const quint32 mask = entry.netmask().toIPv4Address();
-            if (mask != 0 && (address.toIPv4Address() & mask) == (radioIpv4 & mask))
-            {
-                localIP = address;
-                break;
-            }
-        }
-
-        if (!localIP.isNull())
-        {
-            break;
-        }
-    }
-
-    if (localIP.isNull())
-    {
-        localIP = candidateLocalIp;
+        localIP = routeProbe.localAddress();
     }
 }
 
 void UdpHandler::init()
 {
-    UdpBase::init(0);
+    if (radioIP.isNull() || localIP.isNull())
+    {
+        emit haveNetworkError(errorType(true, radioIP.toString(),
+                                        "Unable to determine the local IPv4 route to the radio.",
+                                        ErrorCode::ConnectionFailed));
+        return;
+    }
+    if (!UdpBase::init(0))
+    {
+        emit haveNetworkError(errorType(true, radioIP.toString(), "Unable to bind the radio control UDP socket.",
+                                        ErrorCode::PortReservationFailed));
+        return;
+    }
 
     QUdpSocket::connect(udp, &QUdpSocket::readyRead, this, &UdpHandler::dataReceived);
 
@@ -192,33 +166,11 @@ void UdpHandler::shutdown()
     m_shuttingDown = true;
     m_disconnectStatusReceived = false;
 
-    // Delete audio/civ sub-objects; their destructors close their own
-    // sockets, dispose audio handlers, and wait on audio threads.
-    if (streamOpened)
-    {
-        if (civ != nullptr)
-        {
-            civ->closeStream();
-        }
-        if (audio != nullptr)
-        {
-            qDebug(logUdp()) << "[SHUTDOWN] deleting audio ...";
-            delete audio;
-            audio = nullptr;
-            qDebug(logUdp()) << "[SHUTDOWN] audio deleted";
-        }
-        if (civ != nullptr)
-        {
-            qDebug(logUdp()) << "[SHUTDOWN] deleting civ ...";
-            delete civ;
-            civ = nullptr;
-            qDebug(logUdp()) << "[SHUTDOWN] civ deleted";
-        }
-        qInfo(logUdp()) << "Sending token removal packet";
-        sendToken(0x01);
-        waitForDisconnectStatus(500);
-        streamOpened = false;
-    }
+    // Stream ownership and authentication are independent. Authentication can
+    // succeed before stream negotiation, and token renewal can fail while stream
+    // objects still exist, so neither cleanup operation may depend on the other.
+    closeStreams();
+    releaseAuthenticationToken(true);
 
     if (civPortReservation)
     {
@@ -254,24 +206,8 @@ void UdpHandler::shutdown()
 UdpHandler::~UdpHandler()
 {
     // Ensure the control socket is closed even if shutdown() was skipped.
-    if (streamOpened)
-    {
-        if (audio != nullptr)
-        {
-            delete audio;
-            audio = nullptr;
-        }
-
-        if (civ != nullptr)
-        {
-            civ->closeStream();
-            delete civ;
-            civ = nullptr;
-        }
-
-        qInfo(logUdp()) << "Sending token removal packet";
-        sendToken(0x01);
-    }
+    closeStreams();
+    releaseAuthenticationToken(false);
     if (civPortReservation)
     {
         delete civPortReservation;
@@ -284,6 +220,83 @@ UdpHandler::~UdpHandler()
     }
     usernameEncoded.fill('\0');
     passwordEncoded.fill('\0');
+}
+
+void UdpHandler::closeStreams()
+{
+    // Close CI-V first so the radio stops producing command traffic while the
+    // slower Qt audio worker teardown runs.
+    if (civ != nullptr)
+    {
+        civ->closeStream();
+    }
+    if (audio != nullptr)
+    {
+        qDebug(logUdp()) << "[SHUTDOWN] deleting audio ...";
+        delete audio;
+        audio = nullptr;
+        qDebug(logUdp()) << "[SHUTDOWN] audio deleted";
+    }
+    if (civ != nullptr)
+    {
+        qDebug(logUdp()) << "[SHUTDOWN] deleting civ ...";
+        delete civ;
+        civ = nullptr;
+        qDebug(logUdp()) << "[SHUTDOWN] civ deleted";
+    }
+    streamOpened = false;
+}
+
+void UdpHandler::releaseAuthenticationToken(bool waitForAcknowledgement)
+{
+    if (udp == nullptr || (!isAuthenticated && !gotAuthOK && token == 0))
+    {
+        return;
+    }
+
+    qInfo(logUdp()) << "Sending token removal packet";
+    m_disconnectStatusReceived = false;
+    sendToken(0x01);
+    if (waitForAcknowledgement)
+    {
+        waitForDisconnectStatus(500);
+    }
+    isAuthenticated = false;
+    gotAuthOK = false;
+    token = 0;
+}
+
+bool UdpHandler::reserveStreamPorts()
+{
+    if (civPortReservation)
+    {
+        civPortReservation->close();
+        delete civPortReservation;
+    }
+    if (audioPortReservation)
+    {
+        audioPortReservation->close();
+        delete audioPortReservation;
+    }
+    civPortReservation = new QUdpSocket(this);
+    audioPortReservation = new QUdpSocket(this);
+    if (!civPortReservation->bind() || !audioPortReservation->bind())
+    {
+        qWarning(logUdp()) << "Unable to reserve local CI-V/audio UDP ports";
+        delete civPortReservation;
+        civPortReservation = nullptr;
+        delete audioPortReservation;
+        audioPortReservation = nullptr;
+        civLocalPort = 0;
+        audioLocalPort = 0;
+        emit haveNetworkError(errorType(false, radioIP.toString(), "Unable to reserve local UDP ports.",
+                                        ErrorCode::PortReservationFailed));
+        return false;
+    }
+
+    civLocalPort = civPortReservation->localPort();
+    audioLocalPort = audioPortReservation->localPort();
+    return true;
 }
 
 void UdpHandler::changeLatency(quint16 value)
@@ -419,18 +432,6 @@ quint8 UdpHandler::findMax(quint8* d)
     return max;
 }
 
-bool UdpHandler::acceptDatagramFrom(const QNetworkDatagram& datagram)
-{
-    if (!datagram.senderAddress().isEqual(radioIP, QHostAddress::ConvertV4MappedToIPv4))
-    {
-        qWarning(logUdp()) << "Ignoring UDP datagram from unexpected address" << datagram.senderAddress().toString()
-                           << "expected" << radioIP.toString();
-        return false;
-    }
-
-    return true;
-}
-
 void UdpHandler::dataReceived()
 {
     while (udp->hasPendingDatagrams())
@@ -542,7 +543,9 @@ void UdpHandler::dataReceived()
                     remoteId = in->sentid;
                     tokRequest = in->tokrequest;
                     token = in->token;
-                    streamOpened = false;
+                    closeStreams();
+                    gotAuthOK = false;
+                    isAuthenticated = false;
                     sendLogin();
                 }
                 else
@@ -566,9 +569,10 @@ void UdpHandler::dataReceived()
             {
                 if (in->error == 0xffffffff && !streamOpened)
                 {
-                    emit haveNetworkError(errorType(true, radioIP.toString(),
-                                                    "Connection failed\ntry rebooting the radio.",
-                                                    ErrorCode::ConnectionFailed));
+                    emit haveNetworkError(errorType(
+                        true, radioIP.toString(),
+                        "The radio rejected the stream request. Restart the radio if the session remains busy.",
+                        ErrorCode::ConnectionFailed));
                     qInfo(logUdp()) << this->metaObject()->className()
                                     << ": Connection failed, wait a few minutes or reboot the radio.";
                 }
@@ -578,26 +582,10 @@ void UdpHandler::dataReceived()
                     if (!m_shuttingDown && !m_staleSessionReclaimInProgress)
                     {
                         emit haveNetworkError(
-                            errorType(false, radioIP.toString(), "Got radio disconnected.", ErrorCode::Disconnected));
+                            errorType(false, radioIP.toString(), "The radio disconnected.", ErrorCode::Disconnected));
                     }
                     qInfo(logUdp()) << this->metaObject()->className() << ": Got radio disconnected.";
-                    if (streamOpened)
-                    {
-                        // Close stream sockets while keeping control login state alive.
-                        if (audio != nullptr)
-                        {
-                            delete audio;
-                            audio = nullptr;
-                        }
-
-                        if (civ != nullptr)
-                        {
-                            delete civ;
-                            civ = nullptr;
-                        }
-
-                        streamOpened = false;
-                    }
+                    closeStreams();
                 }
                 else
                 {
@@ -641,6 +629,15 @@ void UdpHandler::dataReceived()
                             civPortReservation = nullptr;
                         }
                         civ = new UdpCivData(localIP, radioIP, civPort, civLocalPort);
+                        if (!civ->isSocketBound())
+                        {
+                            delete civ;
+                            civ = nullptr;
+                            emit haveNetworkError(errorType(true, radioIP.toString(),
+                                                            "Unable to bind the CI-V UDP socket.",
+                                                            ErrorCode::PortReservationFailed));
+                            break;
+                        }
                         QObject::connect(civ, &UdpCivData::receive, this, &UdpHandler::receiveFromCivStream);
                         QObject::connect(civ, &UdpCivData::ready, this,
                                          [this]()
@@ -665,6 +662,16 @@ void UdpHandler::dataReceived()
                             audioPortReservation = nullptr;
                         }
                         audio = new UdpAudio(localIP, radioIP, audioPort, audioLocalPort, rxSetup, txSetup);
+                        if (!audio->isSocketBound())
+                        {
+                            delete audio;
+                            audio = nullptr;
+                            closeStreams();
+                            emit haveNetworkError(errorType(true, radioIP.toString(),
+                                                            "Unable to bind the audio UDP socket.",
+                                                            ErrorCode::PortReservationFailed));
+                            break;
+                        }
 
                         QObject::connect(audio, &UdpAudio::haveAudioData, this, &UdpHandler::receiveAudioData);
                         QObject::connect(this, &UdpHandler::haveChangeLatency, audio, &UdpAudio::changeLatency);
@@ -692,8 +699,12 @@ void UdpHandler::dataReceived()
                 static constexpr quint8 kLpcmMono16 = 0x04;
                 if (rxSetup.codec >= 0x40 || txSetup.codec >= 0x40)
                 {
-                    emit haveNetworkError(
-                        errorType(QString("UDP"), QString("Opus codec not supported, forcing LPCM16")));
+                    qWarning(logUdp()) << "Opus LAN audio is unavailable; using mono LPCM16";
+                    networkStatus codecStatus = status;
+                    codecStatus.message = QStringLiteral("Opus LAN audio is unavailable. Using LPCM16.");
+                    codecStatus.userVisibleMessage = true;
+                    codecStatus.messageSeverity = MessageSeverity::Warning;
+                    emit haveNetworkStatus(codecStatus);
                     if (rxSetup.codec >= 0x40)
                     {
                         rxSetup.codec = kLpcmMono16;
@@ -706,8 +717,9 @@ void UdpHandler::dataReceived()
 
                 if (in->error == kLoginErrorInvalidCredentials)
                 {
-                    emit haveNetworkError(
-                        errorType(true, radioIP.toString(), "Invalid Username/Password", ErrorCode::AuthFailure));
+                    emit haveNetworkError(errorType(true, radioIP.toString(),
+                                                    "The radio rejected the username or password.",
+                                                    ErrorCode::AuthFailure));
                     qInfo(logUdp()) << this->metaObject()->className() << ": Invalid Username/Password";
                 }
                 else if (!isAuthenticated)
@@ -715,8 +727,12 @@ void UdpHandler::dataReceived()
 
                     if (in->tokrequest == tokRequest)
                     {
-                        status.message = "Radio Login OK!";
                         qInfo(logUdp()) << this->metaObject()->className() << ": Received matching token response";
+                        networkStatus loginStatus = status;
+                        loginStatus.message = QStringLiteral("Radio login accepted. Negotiating stream access...");
+                        loginStatus.userVisibleMessage = true;
+                        loginStatus.connectionStage = ConnectionStage::OpeningStreams;
+                        emit haveNetworkStatus(loginStatus);
                         token = in->token;
                         sendToken(0x02);
                         tokenTimer->start(TOKEN_RENEWAL);
@@ -791,15 +807,20 @@ void UdpHandler::dataReceived()
                         if (requestStaleSessionReclaim(inComputer))
                         {
                             networkStatus reclaimStatus = status;
-                            reclaimStatus.message = devName + " busy by this SDR9700 host; reconnecting";
+                            reclaimStatus.message = devName + " has a stale SDR9700 session. Reconnecting...";
                             reclaimStatus.userVisibleMessage = true;
+                            reclaimStatus.connectionStage = ConnectionStage::Reconnecting;
+                            reclaimStatus.messageSeverity = MessageSeverity::Warning;
                             emit haveNetworkStatus(reclaimStatus);
                         }
                         else
                         {
                             networkStatus busyStatus = status;
-                            busyStatus.message = "Waiting for " + devName + "; stale SDR9700 session did not clear";
+                            busyStatus.message =
+                                "Waiting for " + devName + ". The stale SDR9700 session did not clear.";
                             busyStatus.userVisibleMessage = true;
+                            busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
+                            busyStatus.messageSeverity = MessageSeverity::Warning;
                             emit haveNetworkStatus(busyStatus);
                             sendControl(false, 0x00, in->seq); // Respond with an idle.
                         }
@@ -808,16 +829,20 @@ void UdpHandler::dataReceived()
                     {
                         networkStatus busyStatus = status;
                         busyStatus.message =
-                            "Waiting for " + devName + "; in use by " + inComputer + " (" + ip.toString() + ")";
+                            "Waiting for " + devName + ". In use by " + inComputer + " (" + ip.toString() + ").";
                         busyStatus.userVisibleMessage = true;
+                        busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
+                        busyStatus.messageSeverity = MessageSeverity::Warning;
                         emit haveNetworkStatus(busyStatus);
                         sendControl(false, 0x00, in->seq); // Respond with an idle
                     }
                     else if (inComputer != compName)
                     {
                         networkStatus busyStatus = status;
-                        busyStatus.message = "Waiting for " + devName + "; in use by another station";
+                        busyStatus.message = "Waiting for " + devName + ". The radio is in use by another station.";
                         busyStatus.userVisibleMessage = true;
+                        busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
+                        busyStatus.messageSeverity = MessageSeverity::Warning;
                         emit haveNetworkStatus(busyStatus);
                         sendControl(false, 0x00, in->seq); // Respond with an idle
                     }
@@ -826,8 +851,9 @@ void UdpHandler::dataReceived()
                 {
                     qDebug(logUdp()) << "Attempting to connect to radio";
                     networkStatus availableStatus = status;
-                    availableStatus.message = devName + " available; connecting";
+                    availableStatus.message = devName + " is available. Opening radio streams...";
                     availableStatus.userVisibleMessage = true;
+                    availableStatus.connectionStage = ConnectionStage::OpeningStreams;
                     emit haveNetworkStatus(availableStatus);
 
                     setCurrentRadio(0);
@@ -936,7 +962,7 @@ bool UdpHandler::requestStaleSessionReclaim(const QString& ownerName)
     m_disconnectStatusReceived = false;
     gotAuthOK = false;
     isAuthenticated = false;
-    streamOpened = false;
+    closeStreams();
     sendToken(0x01);
 
     QTimer::singleShot(kStaleSessionSettleMs, this,
@@ -969,42 +995,17 @@ void UdpHandler::setCurrentRadio(quint8 radio)
         return;
     }
 
-    // Tear down any previous stream before selecting a radio.
-    if (audio != nullptr)
-    {
-        delete audio;
-        audio = nullptr;
-    }
-
-    if (civ != nullptr)
-    {
-        delete civ;
-        civ = nullptr;
-    }
-
-    streamOpened = false;
+    closeStreams();
 
     qInfo(logUdp()) << "Got Radio" << radio;
     qInfo(logUdp()) << "Find available local ports";
 
-    // Reserve local CIV/audio ports before requesting the remote stream ports.
-    if (civLocalPort == 0 || audioLocalPort == 0)
+    // Reserve fresh local CI-V/audio ports for every stream request. Reusing a
+    // remembered port after its reservation socket was released races another
+    // process and can turn a successful login into a silent stream-bind failure.
+    if (!reserveStreamPorts())
     {
-        civPortReservation = new QUdpSocket(this);
-        audioPortReservation = new QUdpSocket(this);
-        if (!civPortReservation->bind() || !audioPortReservation->bind())
-        {
-            qWarning(logUdp()) << "Unable to reserve local CIV/audio UDP ports";
-            delete civPortReservation;
-            civPortReservation = nullptr;
-            delete audioPortReservation;
-            audioPortReservation = nullptr;
-            emit haveNetworkError(errorType(false, radioIP.toString(), "Unable to reserve local UDP ports.",
-                                            ErrorCode::PortReservationFailed));
-            return;
-        }
-        civLocalPort = civPortReservation->localPort();
-        audioLocalPort = audioPortReservation->localPort();
+        return;
     }
     int baudrate = qFromBigEndian(radios[radio].baudrate);
     emit haveBaudRate(baudrate);

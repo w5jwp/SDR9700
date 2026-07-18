@@ -216,7 +216,26 @@ AppSettings& AppSettings::instance()
 
 AppSettings::AppSettings()
 {
+    m_deferredSaveTimer.setSingleShot(true);
+    m_deferredSaveTimer.setInterval(250);
+    QObject::connect(&m_deferredSaveTimer, &QTimer::timeout,
+                     [this]()
+                     {
+                         if (!save())
+                         {
+                             qWarning(logSystem()) << "Could not save deferred application settings; retrying";
+                             m_deferredSaveTimer.start(1000);
+                         }
+                     });
     load();
+}
+
+AppSettings::~AppSettings()
+{
+    if (m_deferredSavePending && !save())
+    {
+        qWarning(logSystem()) << "Could not save deferred application settings during shutdown";
+    }
 }
 
 QVariant AppSettings::value(const QString& key, const QVariant& defaultValue) const
@@ -231,9 +250,15 @@ QVariant AppSettings::value(const QString& key, const QVariant& defaultValue) co
 
 bool AppSettings::setValue(const QString& key, const QVariant& settingValue)
 {
+    const QString encodedValue = encodeValue(settingValue);
+    if (m_values.value(key) == encodedValue && m_values.contains(key))
+    {
+        return true;
+    }
+
     const bool hadPreviousValue = m_values.contains(key);
     const QString previousValue = m_values.value(key);
-    m_values.insert(key, encodeValue(settingValue));
+    m_values.insert(key, encodedValue);
     if (!save())
     {
         if (hadPreviousValue)
@@ -247,6 +272,22 @@ bool AppSettings::setValue(const QString& key, const QVariant& settingValue)
         return false;
     }
     return true;
+}
+
+void AppSettings::setValueDeferred(const QString& key, const QVariant& settingValue)
+{
+    const QString encodedValue = encodeValue(settingValue);
+    if (m_values.value(key) == encodedValue && m_values.contains(key))
+    {
+        return;
+    }
+
+    // Slider signals can arrive on every pixel of a drag. Coalesce those
+    // updates into one atomic QSaveFile replacement after interaction settles;
+    // the destructor performs a final synchronous save during normal shutdown.
+    m_values.insert(key, encodedValue);
+    m_deferredSavePending = true;
+    m_deferredSaveTimer.start();
 }
 
 bool AppSettings::contains(const QString& key) const
@@ -270,7 +311,19 @@ bool AppSettings::remove(const QString& key)
     return true;
 }
 
-bool AppSettings::save() const
+bool AppSettings::save()
+{
+    if (!writeFile())
+    {
+        return false;
+    }
+
+    m_deferredSavePending = false;
+    m_deferredSaveTimer.stop();
+    return true;
+}
+
+bool AppSettings::writeFile() const
 {
     const QString path = configPath();
     QDir().mkpath(QFileInfo(path).absolutePath());

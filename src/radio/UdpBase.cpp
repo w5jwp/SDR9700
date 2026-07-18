@@ -16,30 +16,50 @@ int congestionPercent(quint32 packetsSent, quint32 packetsLost)
 }
 } // namespace
 
-void UdpBase::init(quint16 bindPort)
+bool UdpBase::init(quint16 bindPort)
 {
     udp = new QUdpSocket(this);
     if (!udp->bind(bindPort))
     {
-        qCritical(logUdp()) << "**** Unable to bind to UDP port" << bindPort << "Cannot continue! ****";
+        qCritical(logUdp()) << "Unable to bind UDP port" << bindPort << ":" << udp->errorString();
+        delete udp;
+        udp = nullptr;
+        return false;
     }
-    else
-    {
-        localPort = udp->localPort();
-        qInfo(logUdp()) << "UDP Stream bound to local port:" << localPort << " remote port:" << port;
-        uint32_t addr = localIP.toIPv4Address();
-        // The IC-9700 LAN protocol uses a 32-bit client/session ID. SDR9700
-        // follows Icom's observed convention of combining the last two IPv4
-        // octets with the local UDP port; two hosts that collide on those
-        // values on a large subnet are an accepted protocol-level constraint.
-        myId = (addr >> 8 & 0xff) << 24 | (addr & 0xff) << 16 | (localPort & 0xffff);
 
-        retransmitTimer = new QTimer(this);
-        connect(retransmitTimer, &QTimer::timeout, this, &UdpBase::sendRetransmitRequest);
-        retransmitTimer->start(RETRANSMIT_PERIOD);
-        mono.start();
-        markPacketReceived();
+    localPort = udp->localPort();
+    qInfo(logUdp()) << "UDP Stream bound to local port:" << localPort << " remote port:" << port;
+    uint32_t addr = localIP.toIPv4Address();
+    // The IC-9700 LAN protocol uses a 32-bit client/session ID. SDR9700
+    // follows Icom's observed convention of combining the last two IPv4
+    // octets with the local UDP port; two hosts that collide on those
+    // values on a large subnet are an accepted protocol-level constraint.
+    myId = (addr >> 8 & 0xff) << 24 | (addr & 0xff) << 16 | (localPort & 0xffff);
+
+    retransmitTimer = new QTimer(this);
+    connect(retransmitTimer, &QTimer::timeout, this, &UdpBase::sendRetransmitRequest);
+    retransmitTimer->start(RETRANSMIT_PERIOD);
+    mono.start();
+    markPacketReceived();
+    return true;
+}
+
+bool UdpBase::isSocketBound() const
+{
+    return udp != nullptr && udp->state() == QAbstractSocket::BoundState;
+}
+
+bool UdpBase::acceptDatagramFrom(const QNetworkDatagram& datagram) const
+{
+    const bool addressMatches = datagram.senderAddress().isEqual(radioIP, QHostAddress::ConvertV4MappedToIPv4);
+    const bool portMatches = datagram.senderPort() == port;
+    if (!addressMatches || !portMatches)
+    {
+        qWarning(logUdp()) << "Ignoring UDP datagram from unexpected endpoint" << datagram.senderAddress().toString()
+                           << datagram.senderPort() << "expected" << radioIP.toString() << port;
+        return false;
     }
+    return true;
 }
 
 UdpBase::~UdpBase()
@@ -292,18 +312,29 @@ void UdpBase::dataReceived(const QByteArray& r)
                                      << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
                                      << " current: " << QString("0x%1").arg(in->seq, 0, 16);
                     missingMutex.lock();
-                    for (quint16 f = rxSeqBuf.lastKey() + 1; f <= in->seq; f++)
+                    // Iterate in a wider type. A quint16 loop variable wraps to
+                    // zero after sequence 65535 and would otherwise never leave
+                    // a loop whose received sequence is 65535.
+                    const quint32 firstMissing = quint32(rxSeqBuf.lastKey()) + 1U;
+                    const quint32 receivedSequence = in->seq;
+                    for (quint32 f = firstMissing; f < receivedSequence; ++f)
                     {
                         if (rxSeqBuf.size() > BUFSIZE)
                         {
                             rxSeqBuf.erase(rxSeqBuf.begin());
                         }
-                        rxSeqBuf.insert(f, receivedAtMs);
-                        if (f != in->seq && !rxMissing.contains(f))
+                        const auto sequence = static_cast<quint16>(f);
+                        rxSeqBuf.insert(sequence, receivedAtMs);
+                        if (!rxMissing.contains(sequence))
                         {
-                            rxMissing.insert(f, 0);
+                            rxMissing.insert(sequence, 0);
                         }
                     }
+                    if (rxSeqBuf.size() > BUFSIZE)
+                    {
+                        rxSeqBuf.erase(rxSeqBuf.begin());
+                    }
+                    rxSeqBuf.insert(in->seq, receivedAtMs);
                     missingMutex.unlock();
                 }
                 else

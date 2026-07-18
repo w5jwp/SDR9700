@@ -7,7 +7,7 @@
 
 #include "Types.h"
 
-inline constexpr int kMemoryNameMaxChars = 22;
+inline constexpr int kMemoryNameMaxChars = 16;
 
 struct MemoryRecord
 {

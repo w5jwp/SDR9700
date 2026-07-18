@@ -38,7 +38,29 @@ volatile sig_atomic_t shutdownSignalCount = 0;
 volatile sig_atomic_t shutdownSignalNumber = 0;
 QMutex logOutputMutex;
 std::unique_ptr<QFile> logFile;
+QByteArray logFileBuffer;
 bool consoleLogEnabled{false};
+
+void flushLogOutput()
+{
+    QMutexLocker lock(&logOutputMutex);
+    if (consoleLogEnabled)
+    {
+        std::fflush(stderr);
+    }
+    if (!logFile || !logFile->isOpen())
+    {
+        logFileBuffer.clear();
+        return;
+    }
+
+    if (!logFileBuffer.isEmpty())
+    {
+        logFile->write(logFileBuffer);
+        logFileBuffer.clear();
+    }
+    logFile->flush();
+}
 
 struct LoggingOptions
 {
@@ -78,13 +100,24 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext& context, co
     if (consoleLogEnabled)
     {
         std::fprintf(stderr, "%s\n", encoded.constData());
-        std::fflush(stderr);
+        if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
+        {
+            std::fflush(stderr);
+        }
     }
     if (logFile && logFile->isOpen())
     {
-        logFile->write(encoded);
-        logFile->write("\n");
-        logFile->flush();
+        // Radio traffic can produce thousands of lines per second. Buffer
+        // routine records so logging does not serialize the radio/audio threads
+        // on a filesystem flush; warnings remain immediately durable.
+        logFileBuffer.append(encoded);
+        logFileBuffer.append('\n');
+        if (logFileBuffer.size() >= 256 * 1024 || type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
+        {
+            logFile->write(logFileBuffer);
+            logFileBuffer.clear();
+            logFile->flush();
+        }
     }
 
     if (type == QtFatalMsg)
@@ -330,6 +363,12 @@ int main(int argc, char* argv[])
     }
     consoleLogEnabled = loggingOptions.logEnabled;
     QLoggingCategory::setFilterRules(loggingRulesForOptions(loggingOptions));
+
+    auto* logFlushTimer = new QTimer(&app);
+    logFlushTimer->setInterval(1000);
+    QObject::connect(logFlushTimer, &QTimer::timeout, &app, &flushLogOutput);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, &flushLogOutput);
+    logFlushTimer->start();
 
     app.setStyle("Fusion");
     QPalette dark;

@@ -188,7 +188,7 @@ void WaterfallController::clearDisplay()
     {
         m_waterfall.fill(kWaterfallIdleColor);
     }
-    emit imageChanged(m_waterfall);
+    emit imageChanged();
 }
 
 void WaterfallController::rebuildImage()
@@ -199,7 +199,7 @@ void WaterfallController::rebuildImage()
     }
     m_waterfall = QImage(m_canvasSize, QImage::Format_RGB32);
     m_waterfall.fill(kWaterfallIdleColor);
-    emit imageChanged(m_waterfall);
+    emit imageChanged();
 }
 
 void WaterfallController::scheduleRender()
@@ -235,7 +235,7 @@ void WaterfallController::renderPendingRow()
         {
             row[x] = kWaterfallIdleColor;
         }
-        emit imageChanged(m_waterfall);
+        emit imageChanged();
         return;
     }
 
@@ -271,5 +271,5 @@ void WaterfallController::renderPendingRow()
         const int bin = binForDisplayX(x, levels.size());
         row[x] = bin >= 0 ? levelToColor(levels[bin]) : kWaterfallIdleColor;
     }
-    emit imageChanged(m_waterfall);
+    emit imageChanged();
 }

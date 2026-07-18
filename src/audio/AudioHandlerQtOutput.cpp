@@ -5,9 +5,6 @@ bool AudioHandlerQtOutput::openDevice() noexcept
     audioOutput = new QAudioSink(deviceInfo, nativeFormat, this);
     connect(audioOutput, &QAudioSink::stateChanged, this, &AudioHandlerQtOutput::stateChanged);
 
-    emit setupConverter(radioFormat, codec, nativeFormat, codecType::LPCM, 7, setupData.resampleQuality);
-
-    connect(this, &AudioHandlerBase::sendToConverter, converter, &AudioConverter::convert);
     connect(converter, &AudioConverter::converted, this, &AudioHandlerQtOutput::onConverted);
 
     audioOutput->setBufferSize(nativeFormat.bytesForDuration(setupData.latency * 1000));
@@ -24,7 +21,10 @@ bool AudioHandlerQtOutput::openDevice() noexcept
     // before the first real audio packet arrives from the network.
     {
         const int prefillBytes = audioOutput->bufferSize() / 2;
-        QByteArray silence(prefillBytes, '\0');
+        // Unsigned 8-bit PCM is centered at 0x80; all other supported Qt
+        // formats represent silence with zero bits.
+        const char silenceByte = nativeFormat.sampleFormat() == QAudioFormat::UInt8 ? char(0x80) : '\0';
+        QByteArray silence(prefillBytes, silenceByte);
         audioDevice->write(silence.constData(), silence.size());
     }
 
@@ -45,6 +45,8 @@ void AudioHandlerQtOutput::closeDevice() noexcept
         audioOutput = nullptr;
     }
     audioDevice = nullptr;
+    m_pendingOutput.clear();
+    m_pendingOutputOffset = 0;
 }
 
 void AudioHandlerQtOutput::incomingAudio(audioPacket packet)
@@ -54,20 +56,17 @@ void AudioHandlerQtOutput::incomingAudio(audioPacket packet)
         return;
     }
     packet.volume = volume;
-    emit sendToConverter(packet);
+    queueForConversion(std::move(packet));
 }
 
-void AudioHandlerQtOutput::onConverted(audioPacket audio)
+void AudioHandlerQtOutput::onConverted(const audioPacket& audio)
 {
     if (!audioOutput || !audioDevice || audio.data.isEmpty())
     {
         return;
     }
-    const int nowToPktMs = audio.time.msecsTo(QTime::currentTime());
-    // msecsTo() wraps at midnight: a negative result means pkt.time is later
-    // in the day than currentTime, which happens when the packet was stamped
-    // just after midnight and is processed just before. Treat that as recent.
-    if (nowToPktMs > 0 && nowToPktMs > setupData.latency * 1.5)
+    const qint64 packetAgeMs = audio.createdAtMs > 0 ? audioMonotonicTimestampMs() - audio.createdAtMs : 0;
+    if (packetAgeMs > setupData.latency * 1.5)
     {
         return;
     }
@@ -92,7 +91,8 @@ void AudioHandlerQtOutput::writeToOutputDevice(const QByteArray& data, quint32 s
         const int silenceBytes = qMin(prefillBytes, freeBytes);
         if (silenceBytes > 0)
         {
-            QByteArray silence(silenceBytes, '\0');
+            const char silenceByte = nativeFormat.sampleFormat() == QAudioFormat::UInt8 ? char(0x80) : '\0';
+            QByteArray silence(silenceBytes, silenceByte);
             audioDevice->write(silence.constData(), silence.size());
         }
         isUnderrun.store(false, std::memory_order_relaxed);
@@ -109,23 +109,61 @@ void AudioHandlerQtOutput::writeToOutputDevice(const QByteArray& data, quint32 s
     int prev = currentLatency.load(std::memory_order_relaxed);
     currentLatency.store(static_cast<int>(prev * 0.8 + newLatency * 0.2), std::memory_order_relaxed);
 
-    qint64 toWrite = data.size();
-    const char* p = data.constData();
-    while (toWrite > 0)
+    if (m_pendingOutputOffset > 0)
     {
-        qint64 written = audioDevice->write(p, toWrite);
-        if (written <= 0)
-        {
-            break;
-        }
-        p += written;
-        toWrite -= written;
+        m_pendingOutput.remove(0, m_pendingOutputOffset);
+        m_pendingOutputOffset = 0;
     }
+    m_pendingOutput.append(data);
+
+    // QAudioSink's push device may accept only part of a frame. Retain that
+    // tail for the next 20 ms callback instead of discarding it. Cap the local
+    // backlog at two sink buffers so a blocked device cannot grow memory or
+    // turn a transient stall into seconds of delayed playback.
+    const qsizetype maxPendingBytes = qMax<qsizetype>(audioOutput->bufferSize() * 2, data.size());
+    if (m_pendingOutput.size() > maxPendingBytes)
+    {
+        qsizetype removeBytes = m_pendingOutput.size() - maxPendingBytes;
+        const int bytesPerFrame = qMax(1, nativeFormat.bytesPerFrame());
+        removeBytes = ((removeBytes + bytesPerFrame - 1) / bytesPerFrame) * bytesPerFrame;
+        m_pendingOutput.remove(0, qMin(removeBytes, m_pendingOutput.size()));
+        isOverrun.store(true, std::memory_order_relaxed);
+    }
+    drainPendingOutput();
 
     lastReceived.restart();
     amplitude.store(amplitudePeak, std::memory_order_relaxed);
     emit haveLevels(this->amplitudePeak(), static_cast<quint16>(amplitudeRms * 255.0f), setupData.latency,
                     currentLatency.load(), isUnderrun.load(), isOverrun.load());
+}
+
+void AudioHandlerQtOutput::drainPendingOutput()
+{
+    if (!audioOutput || !audioDevice)
+    {
+        return;
+    }
+
+    while (m_pendingOutputOffset < m_pendingOutput.size())
+    {
+        const qint64 freeBytes = audioOutput->bytesFree();
+        if (freeBytes <= 0)
+        {
+            return;
+        }
+        const qint64 remaining = m_pendingOutput.size() - m_pendingOutputOffset;
+        const qint64 requested = qMin(freeBytes, remaining);
+        const qint64 written = audioDevice->write(m_pendingOutput.constData() + m_pendingOutputOffset, requested);
+        if (written <= 0)
+        {
+            return;
+        }
+        m_pendingOutputOffset += written;
+    }
+
+    m_pendingOutput.clear();
+    m_pendingOutputOffset = 0;
+    isOverrun.store(false, std::memory_order_relaxed);
 }
 
 QAudioFormat AudioHandlerQtOutput::getNativeFormat()

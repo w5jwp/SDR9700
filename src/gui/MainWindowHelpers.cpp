@@ -116,16 +116,6 @@ QString statusLabelStyle(const char* color, bool bold)
         .arg(QString::fromLatin1(color), bold ? QStringLiteral(" font-weight: bold;") : QString());
 }
 
-QString errorStatusMessage(const QString& message)
-{
-    QString text = message.trimmed();
-    if (text.startsWith(QStringLiteral("error:"), Qt::CaseInsensitive))
-    {
-        text = text.mid(QStringLiteral("error:").size()).trimmed();
-    }
-    return text.isEmpty() ? QStringLiteral("Error") : QStringLiteral("Error: %1").arg(text);
-}
-
 QColor colorSetting(const char* key, const QColor& defaultColor)
 {
     const QColor color(

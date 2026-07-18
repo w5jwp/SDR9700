@@ -72,8 +72,9 @@ class IRadioBackend : public QObject
     void disconnected();
     void readyChanged(bool ready);
     void scopeSyncDegradedChanged(bool degraded);
-    void errorOccurred(const QString& message);
-    void statusMessage(const QString& message);
+    void connectionStageChanged(ConnectionStage stage, const QString& message);
+    void errorOccurred(ErrorCode code, const QString& message);
+    void statusMessage(const QString& message, MessageSeverity severity);
 
     void frequencyChanged(quint64 hz);
     void modeChanged(const QString& mode);

@@ -145,6 +145,7 @@ void Commander::shutdownComm()
         queue->resetSessionState();
     }
     m_pendingReplies.clear();
+    m_pendingSetCommands.clear();
     udp = nullptr;
 }
 
@@ -159,6 +160,8 @@ void Commander::commonSetup()
     lookingForRadio = true;
     foundRadio = false;
     m_pendingReplies.clear();
+    m_pendingSetCommands.clear();
+    m_pendingCommandClock.start();
 
     // Minimal commands used before the built-in IC-9700 capability table is loaded.
     radioCaps.commands.clear();
@@ -209,7 +212,8 @@ void Commander::rememberPendingReply(Funcs func, uchar receiver)
         return;
     }
 
-    m_pendingReplies.append(PendingReply{func, receiver});
+    discardExpiredPendingReplies();
+    m_pendingReplies.append(PendingReply{func, receiver, m_pendingCommandClock.elapsed()});
     if (m_pendingReplies.size() > kMaxPendingReplies)
     {
         m_pendingReplies.remove(0, m_pendingReplies.size() - kMaxPendingReplies);
@@ -223,6 +227,7 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
         return false;
     }
 
+    discardExpiredPendingReplies();
     for (int i = 0; i < m_pendingReplies.size(); ++i)
     {
         if (m_pendingReplies.at(i).func == func)
@@ -234,6 +239,48 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
     }
 
     return false;
+}
+
+void Commander::discardExpiredPendingReplies()
+{
+    static constexpr qint64 kPendingReplyLifetimeMs = 5000;
+    const qint64 oldestAllowed = m_pendingCommandClock.elapsed() - kPendingReplyLifetimeMs;
+
+    // A command reply that arrives after this window can no longer be routed
+    // confidently to MAIN or SUB. Discarding stale hints is safer than applying
+    // an unsolicited update to a receiver selected several seconds earlier.
+    m_pendingReplies.erase(std::remove_if(m_pendingReplies.begin(), m_pendingReplies.end(),
+                                          [oldestAllowed](const PendingReply& reply)
+                                          { return reply.createdAtMs < oldestAllowed; }),
+                           m_pendingReplies.end());
+}
+
+void Commander::rememberPendingSetCommand(Funcs func, const QByteArray& payload, const QVariant& value, uchar receiver,
+                                          const FuncType& command)
+{
+    static constexpr qsizetype kMaxPendingSetCommands = 128;
+
+    // CI-V FB/FA frames do not identify the command they acknowledge. Preserve
+    // send order so each acknowledgement is applied to the oldest outstanding
+    // set operation instead of whichever command happened to be sent last.
+    m_pendingSetCommands.enqueue(
+        CommandErrorType(func, payload, value, receiver, command.minVal, command.maxVal, command.bytes));
+    if (m_pendingSetCommands.size() > kMaxPendingSetCommands)
+    {
+        qCritical(logRadio()) << "CI-V acknowledgement queue overflow; dropping the oldest command correlation";
+        m_pendingSetCommands.dequeue();
+    }
+}
+
+bool Commander::takePendingSetCommand(CommandErrorType* command)
+{
+    if (!command || m_pendingSetCommands.isEmpty())
+    {
+        return false;
+    }
+
+    *command = m_pendingSetCommands.dequeue();
+    return true;
 }
 
 FuncType Commander::getCommand(Funcs func, QByteArray& payload, int value, uchar receiver)
@@ -437,7 +484,7 @@ void Commander::setCIVAddr(quint16 civAddr)
 
 void Commander::handleNewData(const QByteArray& data)
 {
-    const bool scopeDataFrame = data.size() > 64 && data.size() > 4 && static_cast<uchar>(data[4]) == 0x27;
+    const bool scopeDataFrame = data.size() > 64 && static_cast<uchar>(data[4]) == 0x27;
     if (!scopeDataFrame)
     {
         qInfo(logRadioTraffic()).noquote() << "CI-V RX" << data.toHex(' ');
@@ -1471,24 +1518,27 @@ void Commander::parseCommand()
         qWarning(logRadio()) << "Received power control command from radio" << payloadIn;
         break;
     case funcFB:
-        if (lastCommand.value.isValid() && queue != nullptr)
+    {
+        CommandErrorType acknowledgedCommand;
+        if (takePendingSetCommand(&acknowledgedCommand) && acknowledgedCommand.value.isValid() && queue != nullptr)
         {
-            qDebug(logRadio()) << "Radio (FB) acknowledged set command:" << funcString[lastCommand.func];
-            queue->receiveValue(lastCommand.func, lastCommand.value, lastCommand.receiver);
+            qDebug(logRadio()) << "Radio (FB) acknowledged set command:" << funcString[acknowledgedCommand.func];
+            queue->receiveValue(acknowledgedCommand.func, acknowledgedCommand.value, acknowledgedCommand.receiver);
         }
         break;
+    }
     case funcFA:
     {
-        if (!lastCommand.data.isEmpty())
+        CommandErrorType rejectedCommand;
+        if (takePendingSetCommand(&rejectedCommand))
         {
-            if (!warnedAboutFA)
-            {
-                qInfo(logRadio()) << "Occasional error response (FA) from radio can safely be ignored";
-                warnedAboutFA = true;
-            }
-            qWarning(logRadio()) << "Radio (FA) error, last command sent:" << funcString[lastCommand.func]
-                                 << "(min:" << lastCommand.minValue << "max:" << lastCommand.maxValue
-                                 << "bytes:" << lastCommand.bytes << ") data:" << lastCommand.data.toHex(' ');
+            qWarning(logRadio()) << "Radio rejected CI-V set command (FA):" << funcString[rejectedCommand.func]
+                                 << "(min:" << rejectedCommand.minValue << "max:" << rejectedCommand.maxValue
+                                 << "bytes:" << rejectedCommand.bytes << ") data:" << rejectedCommand.data.toHex(' ');
+        }
+        else
+        {
+            qWarning(logRadio()) << "Radio returned CI-V rejection (FA) with no pending set command";
         }
         break;
     }
@@ -2603,13 +2653,13 @@ void Commander::readCurrentFrequencyAndMode()
     // connection sync and can be backed out cleanly if later captures differ.
     QByteArray frequencyCommand;
     frequencyCommand.append(char(0x03));
-    prepDataAndSend(frequencyCommand);
     rememberPendingReply(funcFreqGet, 0);
+    prepDataAndSend(frequencyCommand);
 
     QByteArray modeCommand;
     modeCommand.append(char(0x04));
-    prepDataAndSend(modeCommand);
     rememberPendingReply(funcModeGet, 0);
+    prepDataAndSend(modeCommand);
 }
 
 void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
@@ -3278,18 +3328,19 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
                 return;
             }
         }
-        prepDataAndSend(payload);
         if (!value.isValid() && cmd.getCmd)
         {
             rememberPendingReply(func, receiver);
         }
-        lastCommand.func = func;
-        lastCommand.data = payload;
-        lastCommand.value = value;
-        lastCommand.receiver = receiver;
-        lastCommand.minValue = cmd.minVal;
-        lastCommand.maxValue = cmd.maxVal;
-        lastCommand.bytes = cmd.bytes;
+        else if (value.isValid() && cmd.setCmd)
+        {
+            rememberPendingSetCommand(func, payload, value, receiver, cmd);
+        }
+        // Register command correlation before emitting dataForComm. Most
+        // production connections are queued across threads, but this ordering
+        // also remains correct for direct test or diagnostic connections that
+        // can deliver an immediate reply synchronously.
+        prepDataAndSend(payload);
     }
     else
     {

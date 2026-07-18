@@ -116,8 +116,9 @@ SpectrumScopeDisplay::SpectrumScopeDisplay(QWidget* parent) : QWidget(parent)
             &SpectrumScopeDisplay::frequencyClicked);
     connect(m_spectrumScopeCanvas, &SpectrumScopeCanvas::wheelStepRequested, this,
             &SpectrumScopeDisplay::wheelStepRequested);
+    m_waterfallCanvas->setWaterfallImageSource(&m_waterfallController->image());
     connect(m_waterfallController, &WaterfallController::imageChanged, m_waterfallCanvas,
-            &WaterfallCanvas::setWaterfallImage);
+            QOverload<>::of(&WaterfallCanvas::update));
     connect(m_panScrollBar, &QScrollBar::sliderPressed, m_waterfallController,
             [this]() { m_waterfallController->setPaused(true); });
     connect(m_panScrollBar, &QScrollBar::sliderReleased, m_waterfallController,

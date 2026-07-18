@@ -242,7 +242,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 if (m_scopeSyncDegraded)
                 {
                     setScopeSyncDegraded(false);
-                    emit statusMessage("Spectrum Scope synced");
+                    emit statusMessage(QStringLiteral("Spectrum Scope sync complete."), MessageSeverity::Info);
                 }
                 m_scopeDataReceived = true;
                 updateReadyState();
@@ -396,7 +396,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 {
                     return;
                 }
-                emit statusMessage("Refreshing band state...");
+                emit statusMessage(QStringLiteral("Refreshing radio band state..."), MessageSeverity::Info);
                 requestInitialRadioState();
             });
 
@@ -408,7 +408,7 @@ RadioBackend::RadioBackend(QObject* parent)
 
 RadioBackend::~RadioBackend()
 {
-    shutdownConnection();
+    shutdownConnection(false, false);
     if (m_scopeController && m_radioDataThread && m_radioDataThread->isRunning())
     {
         QMetaObject::invokeMethod(m_scopeController, &ScopeController::reset, Qt::QueuedConnection);
@@ -455,12 +455,15 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
         m_syncReconnectAttempts = 0;
     }
     m_syncReconnectPending = false;
-
     // Must be called from the main thread only; m_commander is not guarded by a mutex.
     if (m_commander)
     {
-        shutdownConnection();
+        // Replacing one session is not an operator-requested disconnect. Reset
+        // backend readiness without publishing a transient Disconnected state
+        // that could start MainWindow's automatic reconnect timer.
+        shutdownConnection(false, false);
     }
+    emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1...").arg(host));
 
     QHostAddress radioAddress;
     if (radioAddress.setAddress(host) && radioAddress.protocol() != QAbstractSocket::IPv4Protocol)
@@ -469,12 +472,16 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     }
     if (radioAddress.isNull())
     {
-        emit errorOccurred(QStringLiteral("Unable to connect to radio (invalid IPv4 address)"));
+        const QString message = QStringLiteral("The radio address is not a valid IPv4 address.");
+        emit connectionStageChanged(ConnectionStage::Failed, message);
+        emit errorOccurred(ErrorCode::ConnectionFailed, message);
         return;
     }
     if (port == 0 || port > kIcomLanControlPortMax)
     {
-        emit errorOccurred(QStringLiteral("Unable to connect to radio (invalid LAN control port)"));
+        const QString message = QStringLiteral("The LAN control port is invalid.");
+        emit connectionStageChanged(ConnectionStage::Failed, message);
+        emit errorOccurred(ErrorCode::ConnectionFailed, message);
         return;
     }
 
@@ -488,6 +495,8 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     m_lastUserVisibleNetworkMessage.clear();
 
     const quint64 session = ++m_sessionId;
+    m_sessionActive = std::make_shared<std::atomic_bool>(true);
+    const auto sessionActive = m_sessionActive;
     m_lanModLevel = qBound(0, AppSettings::instance().value("LANModLevel", m_lanModLevel).toInt(), 255);
 
     m_commander = new Commander();
@@ -551,7 +560,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     }
     m_queueSendValuesConnection = connect(
         q, &CachingQueue::sendValues, this,
-        [this, session, commandSession](const QVector<CacheItem>& items)
+        [this, session, commandSession, sessionActive](const QVector<CacheItem>& items)
         {
             if (!isCurrentSession(session, commandSession))
             {
@@ -559,8 +568,16 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             }
             if (m_radioRouter)
             {
+                RadioRouter* router = m_radioRouter;
                 QMetaObject::invokeMethod(
-                    m_radioRouter, [this, session, items]() { routeRadioItemsForSession(session, items); },
+                    router,
+                    [sessionActive, router, items]()
+                    {
+                        if (sessionActive->load(std::memory_order_acquire))
+                        {
+                            router->routeBatch(items);
+                        }
+                    },
                     Qt::QueuedConnection);
             }
         },
@@ -641,14 +658,14 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     // commSetup must be invoked on the worker thread
     QMetaObject::invokeMethod(
         m_commander,
-        [this, session, commandSession, udpSettings, rxSetup, txSetup]()
+        [sessionActive, commandSession, udpSettings, rxSetup, txSetup]()
         {
-            if (!isCurrentSession(session, commandSession))
+            if (!sessionActive->load(std::memory_order_acquire))
             {
                 return;
             }
-            m_commander->commSetup(kIc9700CivAddress, udpSettings, rxSetup, txSetup, QString(), kUnusedTcpPort);
-            m_commander->process();
+            commandSession->commSetup(kIc9700CivAddress, udpSettings, rxSetup, txSetup, QString(), kUnusedTcpPort);
+            commandSession->process();
         },
         Qt::QueuedConnection);
 }
@@ -659,6 +676,7 @@ void RadioBackend::disconnectFromRadio()
     {
         m_syncWatchdogTimer->stop();
     }
+    emit connectionStageChanged(ConnectionStage::Disconnecting, QStringLiteral("Disconnecting from radio..."));
     shutdownConnection();
     m_connectionHost.clear();
     m_connectionPort = 0;
@@ -666,13 +684,17 @@ void RadioBackend::disconnectFromRadio()
     m_connectionPass.clear();
 }
 
-void RadioBackend::shutdownConnection()
+void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisconnectedStage)
 {
     if (!m_commander)
     {
         return;
     }
 
+    if (m_sessionActive)
+    {
+        m_sessionActive->store(false, std::memory_order_release);
+    }
     ++m_sessionId;
     if (m_queueSendValuesConnection)
     {
@@ -760,7 +782,14 @@ void RadioBackend::shutdownConnection()
     m_originalData1Mod.reset();
     m_lastUserVisibleNetworkMessage.clear();
     emit readyChanged(false);
-    emit disconnected();
+    if (emitDisconnectedSignal)
+    {
+        emit disconnected();
+    }
+    if (emitDisconnectedStage)
+    {
+        emit connectionStageChanged(ConnectionStage::Disconnected, QStringLiteral("Radio disconnected."));
+    }
 }
 
 void RadioBackend::setFrequencyHz(quint64 hz)
@@ -772,7 +801,7 @@ void RadioBackend::setFrequencyHz(quint64 hz)
     f.MHzDouble = hz / 1e6;
     f.VFO = activeVFO;
     invokeOnCurrentCommander(
-        [this, f](Commander* commandSession)
+        [f](Commander* commandSession)
         {
             selectMainVfoForCommand(commandSession);
             commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(f), 0);
@@ -798,7 +827,7 @@ void RadioBackend::setMode(const QString& mode)
     mi.filter = static_cast<quint8>(qBound(1, m_currentMainFilter, 3));
 
     invokeOnCurrentCommander(
-        [this, mi](Commander* commandSession)
+        [mi](Commander* commandSession)
         {
             selectMainVfoForCommand(commandSession);
             commandSession->receiveCommandNoReadback(funcModeSet, QVariant::fromValue(mi), 0);
@@ -1039,7 +1068,7 @@ void RadioBackend::setDtcsCode(ushort code)
         });
 }
 
-void RadioBackend::selectMainVfoForCommand(Commander* commandSession) const
+void RadioBackend::selectMainVfoForCommand(Commander* commandSession)
 {
     if (!commandSession)
     {
@@ -1049,7 +1078,7 @@ void RadioBackend::selectMainVfoForCommand(Commander* commandSession) const
     commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
 }
 
-void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16 group) const
+void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16 group)
 {
     if (!commandSession)
     {
@@ -1076,8 +1105,7 @@ void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16
     commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency), 0);
 }
 
-void RadioBackend::selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
-                                          bool prepareBand) const
+void RadioBackend::selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel, bool prepareBand)
 {
     if (!commandSession)
     {
@@ -1184,7 +1212,7 @@ void RadioBackend::setPtt(bool on)
         armTransmitSafety();
         const auto selectedMemory = m_selectedRadioMemory;
         invokeOnCurrentCommander(
-            [this, selectedMemory](Commander* commandSession)
+            [selectedMemory](Commander* commandSession)
             {
                 if (selectedMemory)
                 {
@@ -1296,15 +1324,6 @@ void RadioBackend::resetScopeController()
     QMetaObject::invokeMethod(m_scopeController, &ScopeController::reset, Qt::QueuedConnection);
 }
 
-void RadioBackend::routeRadioItemsForSession(quint64 session, const QVector<CacheItem>& items)
-{
-    if (m_sessionId.load(std::memory_order_relaxed) != session || !m_radioRouter)
-    {
-        return;
-    }
-    m_radioRouter->routeBatch(items);
-}
-
 void RadioBackend::forcePttOffForSafety(const QString& message)
 {
     if (!m_commander || !m_pttActive)
@@ -1314,7 +1333,7 @@ void RadioBackend::forcePttOffForSafety(const QString& message)
     }
 
     qWarning(logRadio()).noquote() << message;
-    emit statusMessage(message);
+    emit statusMessage(message, MessageSeverity::Warning);
     sendPttOffNow();
 }
 
@@ -1381,7 +1400,7 @@ void RadioBackend::selectRadioMemory(quint16 group, quint16 channel)
     m_selectedRadioMemory = std::make_pair(group, channel);
     const uint memoryAddress = (static_cast<uint>(group) << 16) | static_cast<uint>(channel);
     invokeOnCurrentCommander(
-        [this, group, channel, memoryAddress](Commander* commandSession)
+        [group, channel, memoryAddress](Commander* commandSession)
         {
             selectMemoryForCommand(commandSession, group, channel);
             commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0);
@@ -1584,8 +1603,11 @@ void RadioBackend::updateReadyState()
                                    requestPostReadyRadioState();
                                }
                            });
-        emit statusMessage(m_scopeSyncDegraded ? QStringLiteral("Radio control ready; Spectrum Scope still syncing")
-                                               : QStringLiteral("Radio connection ready..."));
+        emit connectionStageChanged(
+            ConnectionStage::SyncingRadioState,
+            m_scopeSyncDegraded
+                ? QStringLiteral("Radio state synced. Syncing memories; Spectrum Scope is still syncing...")
+                : QStringLiteral("Radio state synced. Syncing radio memories..."));
         invokeOnCurrentCommander([](Commander* c) { c->enableAudio(); });
     }
 }
@@ -1640,17 +1662,19 @@ void RadioBackend::restartAfterSyncTimeout()
         // hammers the IC-9700 LAN server and leaves the GUI stuck in Syncing,
         // so stop cleanly and let the operator choose when to retry or reboot.
         qWarning(logRadio()) << "Radio sync retry limit reached; stopping automatic reconnect loop";
-        emit statusMessage("Radio sync timed out; reconnect manually or reboot the radio");
-        shutdownConnection();
+        const QString message = QStringLiteral("Radio state sync timed out. Reconnect manually or restart the radio.");
+        shutdownConnection(true, false);
+        emit connectionStageChanged(ConnectionStage::Failed, message);
         return;
     }
 
     ++m_syncReconnectAttempts;
-    emit statusMessage("Radio sync timed out... reconnecting");
-
     // Use the normal close path so the IC-9700 receives stream close/token
-    // cleanup before the reconnect attempt.
-    shutdownConnection();
+    // cleanup before the reconnect attempt. Publish Reconnecting after cleanup
+    // so an internal Disconnected transition cannot overwrite the useful state.
+    shutdownConnection(true, false);
+    emit connectionStageChanged(ConnectionStage::Reconnecting,
+                                QStringLiteral("Radio state sync timed out. Reconnecting..."));
 
     m_syncReconnectPending = true;
     QTimer::singleShot(kSyncReconnectDelayMs, this,
@@ -1680,13 +1704,17 @@ void RadioBackend::invokeOnCurrentCommander(const std::function<void(Commander*)
         return;
     }
 
-    const quint64 session = m_sessionId.load(std::memory_order_relaxed);
     Commander* commandSession = m_commander;
+    const auto sessionActive = m_sessionActive;
+    if (!sessionActive)
+    {
+        return;
+    }
     QMetaObject::invokeMethod(
         commandSession,
-        [this, session, commandSession, command]()
+        [sessionActive, commandSession, command]()
         {
-            if (!isCurrentSession(session, commandSession))
+            if (!sessionActive->load(std::memory_order_acquire))
             {
                 return;
             }
@@ -1814,7 +1842,8 @@ void RadioBackend::onLanReady()
                        });
 
     emit connected();
-    emit statusMessage("Connected to radio... syncing radio state");
+    emit connectionStageChanged(ConnectionStage::SyncingRadioState,
+                                QStringLiteral("Connected. Syncing radio state..."));
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->start();
@@ -1942,25 +1971,38 @@ void RadioBackend::onPortError(errorType err)
     switch (err.code)
     {
     case ErrorCode::AuthFailure:
-        message = QStringLiteral("Unable to connect to radio (authentication failed)");
+        message = QStringLiteral("Login denied. Check the radio username and password.");
         break;
     case ErrorCode::ConnectionFailed:
-        message = QStringLiteral("Unable to connect to radio (unreachable)");
+        message = err.message.trimmed();
+        if (message.isEmpty())
+        {
+            message = QStringLiteral("Unable to connect to the radio.");
+        }
         break;
     case ErrorCode::Disconnected:
-        message = QStringLiteral("Radio disconnected");
+        message = QStringLiteral("The radio disconnected.");
         break;
     default:
         message = err.message.trimmed();
         if (message.isEmpty())
         {
-            message = QStringLiteral("Unable to connect to radio");
+            message = QStringLiteral("Unable to connect to the radio.");
         }
         break;
     }
 
-    emit errorOccurred(message);
-    disconnectFromRadio();
+    // Tear down the failed transport without emitting a generic disconnect
+    // toast. The typed error below is the authoritative explanation and also
+    // drives MainWindow's reconnect policy.
+    shutdownConnection(false, false);
+    m_connectionHost.clear();
+    m_connectionPort = 0;
+    m_connectionUser.clear();
+    m_connectionPass.clear();
+    emit connectionStageChanged(
+        err.code == ErrorCode::Disconnected ? ConnectionStage::Disconnected : ConnectionStage::Failed, message);
+    emit errorOccurred(err.code, message);
 }
 
 void RadioBackend::onNetworkStatus(networkStatus status)
@@ -1976,7 +2018,14 @@ void RadioBackend::onNetworkStatus(networkStatus status)
         if (!message.isEmpty() && message != m_lastUserVisibleNetworkMessage)
         {
             m_lastUserVisibleNetworkMessage = message;
-            emit statusMessage(message);
+            if (status.connectionStage != ConnectionStage::Unchanged)
+            {
+                emit connectionStageChanged(status.connectionStage, message);
+            }
+            else
+            {
+                emit statusMessage(message, status.messageSeverity);
+            }
         }
     }
 }

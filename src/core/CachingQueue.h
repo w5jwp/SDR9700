@@ -131,10 +131,10 @@ class CachingQueue : public QThread
     QQueue<QString> messages;
     QWaitCondition waiting;
 
-    void stopThread();
+    bool stopThread();
     void setCache(Funcs func, QVariant val, uchar receiver = 0);
     QueuePriority isRecurring(Funcs func, uchar receiver = 0);
-    bool compare(QVariant a, QVariant b);
+    bool compare(const QVariant& a, const QVariant& b);
 
     std::atomic_bool aborted{false};
     // Command queue pacing for queued readbacks and cache refreshes. This used

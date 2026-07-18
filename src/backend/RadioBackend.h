@@ -11,6 +11,7 @@
 #include <QVector>
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 
 struct CacheItem;
@@ -82,7 +83,7 @@ class RadioBackend : public IRadioBackend
     void onNetworkStatus(networkStatus status);
 
   private:
-    void shutdownConnection();
+    void shutdownConnection(bool emitDisconnectedSignal = true, bool emitDisconnectedStage = true);
     void requestInitialRadioState();
     void requestPostReadyRadioState();
     void updateReadyState();
@@ -94,12 +95,11 @@ class RadioBackend : public IRadioBackend
     void disarmTransmitSafety();
     void forcePttOffForSafety(const QString& message);
     void handleTransmitSwr(double swr);
-    void selectMainVfoForCommand(Commander* commandSession) const;
-    void selectMemoryBandForCommand(Commander* commandSession, quint16 group) const;
-    void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
-                                bool prepareBand = true) const;
+    static void selectMainVfoForCommand(Commander* commandSession);
+    static void selectMemoryBandForCommand(Commander* commandSession, quint16 group);
+    static void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
+                                       bool prepareBand = true);
     void resetScopeController();
-    void routeRadioItemsForSession(quint64 session, const QVector<CacheItem>& items);
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;
     void invokeOnCurrentCommander(const std::function<void(Commander*)>& command);
     void restartAfterSyncTimeout();
@@ -111,6 +111,10 @@ class RadioBackend : public IRadioBackend
     RadioRouter* m_radioRouter{nullptr};
     QMetaObject::Connection m_queueSendValuesConnection;
     std::atomic<quint64> m_sessionId{0};
+    // Worker-thread callbacks capture this token instead of RadioBackend. It is
+    // invalidated before teardown, so delayed work cannot dereference a backend
+    // that was destroyed while a radio thread was stopping.
+    std::shared_ptr<std::atomic_bool> m_sessionActive;
     QString m_connectionHost;
     quint16 m_connectionPort{0};
     QString m_connectionUser;

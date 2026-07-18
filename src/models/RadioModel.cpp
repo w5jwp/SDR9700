@@ -23,6 +23,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::disconnected, this, &RadioModel::onBackendDisconnected);
     connect(m_backend, &IRadioBackend::readyChanged, this, &RadioModel::onBackendReadyChanged);
     connect(m_backend, &IRadioBackend::scopeSyncDegradedChanged, this, &RadioModel::scopeSyncDegradedChanged);
+    connect(m_backend, &IRadioBackend::connectionStageChanged, this, &RadioModel::connectionStageChanged);
     connect(m_backend, &IRadioBackend::errorOccurred, this, &RadioModel::onBackendError);
     connect(m_backend, &IRadioBackend::statusMessage, this, &RadioModel::statusMessage);
     connect(m_backend, &IRadioBackend::frequencyChanged, this, &RadioModel::onFrequencyChanged);
@@ -134,9 +135,9 @@ void RadioModel::onBackendDisconnected()
     onPttChanged(false);
 }
 
-void RadioModel::onBackendError(const QString& msg)
+void RadioModel::onBackendError(ErrorCode code, const QString& msg)
 {
-    emit errorOccurred(msg);
+    emit errorOccurred(code, msg);
     if (m_connected)
     {
         m_connected = false;

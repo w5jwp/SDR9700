@@ -13,6 +13,7 @@ class WaterfallController : public QObject
 
   public:
     explicit WaterfallController(QObject* parent = nullptr);
+    const QImage& image() const { return m_waterfall; }
 
   public slots:
     void setCanvasSize(const QSize& size);
@@ -23,7 +24,7 @@ class WaterfallController : public QObject
     void clearDisplay();
 
   signals:
-    void imageChanged(const QImage& image);
+    void imageChanged();
 
   private:
     double xToFreq(int x) const;

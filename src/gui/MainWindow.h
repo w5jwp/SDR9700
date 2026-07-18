@@ -66,8 +66,9 @@ class MainWindow : public QMainWindow
     void onFrequencyChanged(quint64 hz);
     void onModeChanged(const QString& mode);
     void onMeterSnapshotChanged(const MeterSnapshot& snapshot);
-    void onStatusMessage(const QString& msg);
-    void onError(const QString& msg);
+    void onConnectionStageChanged(ConnectionStage stage, const QString& message);
+    void onStatusMessage(const QString& msg, MessageSeverity severity);
+    void onError(ErrorCode code, const QString& msg);
 
     void onAfGainChanged(int value);
     void onRfGainChanged(int value);
@@ -266,7 +267,6 @@ class MainWindow : public QMainWindow
     bool m_reconnecting{false};
     bool m_userDisconnected{false};
     bool m_lastErrorWasCredential{false};
-    bool m_autoReconnectSuppressedForSyncFailure{false};
     bool m_allowChooserOnDisconnect{false};
     bool m_radioUiReadyNotified{false};
     bool m_spectrumScopeStillSyncingAfterReady{false};

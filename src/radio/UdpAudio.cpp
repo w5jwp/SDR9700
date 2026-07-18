@@ -33,7 +33,10 @@ UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint
         enableTx = false;
     }
 
-    init(lport);
+    if (!init(lport))
+    {
+        return;
+    }
 
     QUdpSocket::connect(udp, &QUdpSocket::readyRead, this, &UdpAudio::dataReceived);
 
@@ -303,6 +306,10 @@ void UdpAudio::dataReceived()
     while (udp->hasPendingDatagrams())
     {
         QNetworkDatagram datagram = udp->receiveDatagram();
+        if (!acceptDatagramFrom(datagram))
+        {
+            continue;
+        }
         QByteArray r = datagram.data();
 
         switch (r.length())
@@ -380,7 +387,7 @@ void UdpAudio::dataReceived()
                 }
                 audioPacket tempAudio;
                 tempAudio.seq = (quint32(seqPrefix) << 16) | quint32(in->seq);
-                tempAudio.time = QTime::currentTime();
+                tempAudio.createdAtMs = audioMonotonicTimestampMs();
                 tempAudio.sent = 0;
                 tempAudio.data = r.mid(0x18);
 
@@ -424,7 +431,7 @@ void UdpAudio::startAudio()
 
     rxaudio->moveToThread(rxAudioThread);
 
-    rxAudioThread->start(QThread::TimeCriticalPriority);
+    rxAudioThread->start(QThread::HighPriority);
 
     connect(this, &UdpAudio::setupRxAudio, rxaudio, &AudioHandlerBase::init);
 
@@ -463,7 +470,7 @@ void UdpAudio::startAudio()
 
         txaudio->moveToThread(txAudioThread);
 
-        txAudioThread->start(QThread::TimeCriticalPriority);
+        txAudioThread->start(QThread::HighPriority);
 
         connect(this, &UdpAudio::setupTxAudio, txaudio, &AudioHandlerBase::init);
         connect(txaudio, &AudioHandlerBase::haveAudioData, this, &UdpAudio::receiveAudioData);

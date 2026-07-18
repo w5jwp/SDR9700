@@ -84,7 +84,9 @@ class UdpHandler : public UdpBase
     void sendToken(uint8_t magic);
     bool requestStaleSessionReclaim(const QString& ownerName);
     void waitForDisconnectStatus(int timeoutMs);
-    bool acceptDatagramFrom(const QNetworkDatagram& datagram);
+    void closeStreams();
+    void releaseAuthenticationToken(bool waitForAcknowledgement);
+    bool reserveStreamPorts();
 
     bool gotA8ReplyID = false;
     bool gotAuthOK = false;
