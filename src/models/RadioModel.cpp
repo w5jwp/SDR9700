@@ -2,6 +2,7 @@
 #include "VfoModel.h"
 #include "SpectrumScopeModel.h"
 #include "MeterController.h"
+#include "core/LogCategories.h"
 #include "backend/RadioBackend.h"
 
 #include <QDebug>
@@ -148,6 +149,8 @@ void RadioModel::onBackendError(const QString& msg)
 
 void RadioModel::onBackendReadyChanged(bool ready)
 {
+    qInfo(logGui()) << "RadioModel observed backend readyChanged:" << ready << "connected=" << m_connected
+                    << "currentReady=" << m_ready;
     if (m_ready == ready)
     {
         return;

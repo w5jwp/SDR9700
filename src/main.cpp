@@ -14,10 +14,13 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSocketNotifier>
+#include <QTimer>
+#include <cerrno>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <memory>
 #include <unistd.h>
 
@@ -28,7 +31,11 @@
 
 namespace
 {
+constexpr int kSignalForcedExitSeconds = 15;
+
 int signalPipe[2] = {-1, -1};
+volatile sig_atomic_t shutdownSignalCount = 0;
+volatile sig_atomic_t shutdownSignalNumber = 0;
 QMutex logOutputMutex;
 std::unique_ptr<QFile> logFile;
 bool consoleLogEnabled{false};
@@ -215,13 +222,28 @@ bool openLogFile(const QString& path)
     return true;
 }
 
-void handleUnixSignal(int)
+void handleForcedUnixExit(int signalNumber)
 {
-    const char byte = 1;
+    _exit(128 + signalNumber);
+}
+
+void handleUnixSignal(int signalNumber)
+{
+    const int savedErrno = errno;
+    shutdownSignalNumber = signalNumber;
+    if (shutdownSignalCount > 0)
+    {
+        _exit(128 + signalNumber);
+    }
+    shutdownSignalCount = 1;
+
+    const char byte = static_cast<char>(signalNumber);
     if (signalPipe[1] != -1)
     {
         write(signalPipe[1], &byte, sizeof(byte));
     }
+    alarm(kSignalForcedExitSeconds);
+    errno = savedErrno;
 }
 
 void installUnixSignalHandlers()
@@ -230,6 +252,14 @@ void installUnixSignalHandlers()
     {
         return;
     }
+    for (int fd : signalPipe)
+    {
+        const int flags = fcntl(fd, F_GETFL, 0);
+        if (flags != -1)
+        {
+            fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        }
+    }
 
     struct sigaction action;
     memset(&action, 0, sizeof(action));
@@ -237,6 +267,12 @@ void installUnixSignalHandlers()
     sigemptyset(&action.sa_mask);
     sigaction(SIGINT, &action, nullptr);
     sigaction(SIGTERM, &action, nullptr);
+
+    struct sigaction alarmAction;
+    memset(&alarmAction, 0, sizeof(alarmAction));
+    alarmAction.sa_handler = handleForcedUnixExit;
+    sigemptyset(&alarmAction.sa_mask);
+    sigaction(SIGALRM, &alarmAction, nullptr);
 }
 
 void configureQtMultimediaEnvironment()
@@ -319,16 +355,26 @@ int main(int argc, char* argv[])
     if (signalPipe[0] != -1)
     {
         auto* signalNotifier = new QSocketNotifier(signalPipe[0], QSocketNotifier::Read, &win);
-        // Route Unix signals through win.close() so closeEvent() fires:
-        // saveWindowLayout() runs, disconnectFromRadio() is called cleanly,
-        // and the last-window-closed signal causes exec() to return.
-        QObject::connect(signalNotifier, &QSocketNotifier::activated, &win,
-                         [&win](int fd)
-                         {
-                             char bytes[16];
-                             read(fd, bytes, sizeof(bytes));
-                             win.close();
-                         });
+        // Route Unix signals through Qt so closeEvent() fires and the radio
+        // disconnect path gets one bounded chance to clean up. The POSIX signal
+        // handler also arms SIGALRM and exits immediately on a second signal;
+        // that protects process managers and test runs when the GUI thread is
+        // wedged before this notifier can run.
+        QObject::connect(
+            signalNotifier, &QSocketNotifier::activated, &app,
+            [&app, signalNotifier, &win](int fd)
+            {
+                signalNotifier->setEnabled(false);
+                char bytes[16];
+                while (read(fd, bytes, sizeof(bytes)) > 0)
+                {
+                }
+                win.close();
+                QApplication::closeAllWindows();
+                QTimer::singleShot(
+                    kSignalForcedExitSeconds * 1000, &app,
+                    []() { QCoreApplication::exit(128 + int(shutdownSignalNumber ? shutdownSignalNumber : SIGTERM)); });
+            });
     }
     win.show();
 

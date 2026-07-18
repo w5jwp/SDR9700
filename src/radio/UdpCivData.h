@@ -34,6 +34,7 @@ class UdpCivData : public UdpBase
 
   signals:
     void receive(QByteArray);
+    void ready();
 
   public slots:
     void send(QByteArray d);
@@ -41,9 +42,12 @@ class UdpCivData : public UdpBase
   private:
     void watchdog();
     void dataReceived();
+    void requestDataStart();
     void sendOpenClose(bool close);
 
     QTimer* startCivDataTimer = nullptr;
     bool m_watchdogAlerted = false;
     bool m_closeSent = false;
+    bool m_readyEmitted = false;
+    int m_openStartRequestCount = 0;
 };

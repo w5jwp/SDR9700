@@ -437,7 +437,15 @@ void Commander::setCIVAddr(quint16 civAddr)
 
 void Commander::handleNewData(const QByteArray& data)
 {
-    qInfo(logRadioTraffic()).noquote() << "CI-V RX" << data.toHex(' ');
+    const bool scopeDataFrame = data.size() > 64 && data.size() > 4 && static_cast<uchar>(data[4]) == 0x27;
+    if (!scopeDataFrame)
+    {
+        qInfo(logRadioTraffic()).noquote() << "CI-V RX" << data.toHex(' ');
+    }
+    // Spectrum Scope frames arrive continuously and are hundreds of bytes long.
+    // Logging every frame hides startup and memory-sync evidence, which is
+    // exactly what we need when diagnosing radio readiness hangs. Suppress only
+    // the log line; parsing and routing still receive the complete frame.
     emit haveDataForServer(data);
     parseData(data);
 }
@@ -2583,6 +2591,25 @@ void Commander::sendDtmfPcm(const QByteArray& pcm)
         return;
     }
     QMetaObject::invokeMethod(udp, "queueDtmfPcm", Qt::QueuedConnection, Q_ARG(QByteArray, pcm));
+}
+
+void Commander::readCurrentFrequencyAndMode()
+{
+    // Startup readiness needs the simplest IC-9700 current-VFO readback. The
+    // normal routing layer may prefer selected-VFO commands 25/26, but field
+    // logs showed the radio streaming scope data while not replying to those
+    // selected-VFO probes during LAN startup. Raw 03/04 replies still parse
+    // through the same cache/router path, so this bypass stays limited to
+    // connection sync and can be backed out cleanly if later captures differ.
+    QByteArray frequencyCommand;
+    frequencyCommand.append(char(0x03));
+    prepDataAndSend(frequencyCommand);
+    rememberPendingReply(funcFreqGet, 0);
+
+    QByteArray modeCommand;
+    modeCommand.append(char(0x04));
+    prepDataAndSend(modeCommand);
+    rememberPendingReply(funcModeGet, 0);
 }
 
 void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)

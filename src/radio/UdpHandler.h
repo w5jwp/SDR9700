@@ -82,6 +82,7 @@ class UdpHandler : public UdpBase
     void sendRequestStream();
     void sendLogin();
     void sendToken(uint8_t magic);
+    bool requestStaleSessionReclaim(const QString& ownerName);
     void waitForDisconnectStatus(int timeoutMs);
     bool acceptDatagramFrom(const QNetworkDatagram& datagram);
 
@@ -94,6 +95,8 @@ class UdpHandler : public UdpBase
     bool radioInUse = false;
     bool m_shuttingDown = false;
     bool m_disconnectStatusReceived = false;
+    bool m_staleSessionReclaimInProgress = false;
+    int m_staleSessionReclaimAttempts = 0;
 
     quint16 controlPort;
     quint16 civPort;

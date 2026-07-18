@@ -10,6 +10,8 @@
 namespace
 {
 constexpr quint32 kLoginErrorInvalidCredentials = 0xfeffffff;
+constexpr int kAreYouThereMaxAttempts = 60;
+constexpr int kClientSessionCodeWidth = 6;
 
 template <size_t N> void copyPacketField(char (&destination)[N], const QByteArray& source)
 {
@@ -29,6 +31,28 @@ QString boundedLatin1(const char* s, int maxLen)
 {
     return QString::fromLatin1(parseNullTerminatedString(QByteArray::fromRawData(s, maxLen), 0));
 }
+
+QString makeClientSessionName()
+{
+    // The IC-9700 exposes this 16-byte computer name in later busy-status
+    // packets. A per-process suffix lets SDR9700 distinguish this process from
+    // a stale previous process while still keeping a recognizable app prefix.
+    const quint32 code = QRandomGenerator::global()->generate() & 0x00ffffff;
+    return QStringLiteral("%1-%2").arg(
+        QString::fromLatin1(APP_NAME),
+        QStringLiteral("%1").arg(code, kClientSessionCodeWidth, 16, QLatin1Char('0')).toUpper());
+}
+
+QString clientSessionName()
+{
+    static const QString name = makeClientSessionName();
+    return name;
+}
+
+bool isSdr9700SessionName(const QString& name)
+{
+    return name == QString::fromLatin1(APP_NAME) || name.startsWith(QStringLiteral("%1-").arg(APP_NAME));
+}
 } // namespace
 
 UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audioSetup txAudio)
@@ -44,16 +68,16 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
     this->username = settings.username;
     passcode(settings.username, usernameEncoded);
     passwordEncoded = settings.passwordEncoded;
-    this->compName = settings.clientName.isEmpty() ? APP_NAME : (settings.clientName.mid(0, 8) + "-" + APP_NAME);
+    this->compName = clientSessionName();
     std::fill(std::begin(audioLevelsTxPeak), std::end(audioLevelsTxPeak), 0);
     std::fill(std::begin(audioLevelsRxPeak), std::end(audioLevelsRxPeak), 0);
     std::fill(std::begin(audioLevelsTxRMS), std::end(audioLevelsTxRMS), 0);
     std::fill(std::begin(audioLevelsRxRMS), std::end(audioLevelsRxRMS), 0);
 
-    qInfo(logUdp()) << "Starting UdpHandler user:" << username << " rx latency:" << rxSetup.latency
-                    << " tx latency:" << txSetup.latency << " rx sample rate: " << rxSetup.sampleRate
-                    << " rx codec: " << rxSetup.codec << " tx sample rate: " << txSetup.sampleRate
-                    << " tx codec: " << txSetup.codec;
+    qInfo(logUdp()) << "Starting UdpHandler user:" << username << " client:" << compName
+                    << " rx latency:" << rxSetup.latency << " tx latency:" << txSetup.latency
+                    << " rx sample rate: " << rxSetup.sampleRate << " rx codec: " << rxSetup.codec
+                    << " tx sample rate: " << txSetup.sampleRate << " tx codec: " << txSetup.codec;
 
     // Use numeric IPv4 addresses only here. Synchronous DNS lookup can stall
     // connection setup; if hostname support is needed later, resolve it before
@@ -551,7 +575,7 @@ void UdpHandler::dataReceived()
                 else if (in->error == 0x00000000 && in->disc == 0x01)
                 {
                     m_disconnectStatusReceived = true;
-                    if (!m_shuttingDown)
+                    if (!m_shuttingDown && !m_staleSessionReclaimInProgress)
                     {
                         emit haveNetworkError(
                             errorType(false, radioIP.toString(), "Got radio disconnected.", ErrorCode::Disconnected));
@@ -585,7 +609,8 @@ void UdpHandler::dataReceived()
                                     << "rx codec=" << rxSetup.codec << "tx codec=" << txSetup.codec;
                     if (civPort == 0 || audioPort == 0)
                     {
-                        qWarning(logUdp()) << "Radio returned invalid stream ports; refusing to open CIV/audio streams";
+                        qWarning(logUdp()) << "Radio returned invalid stream ports; refusing to open CIV/audio streams"
+                                           << "civPort=" << civPort << "audioPort=" << audioPort;
                         emit haveNetworkError(errorType(true, radioIP.toString(),
                                                         "Connection failed: radio returned invalid UDP stream ports.",
                                                         ErrorCode::ConnectionFailed));
@@ -606,6 +631,8 @@ void UdpHandler::dataReceived()
                     }
                     if (!streamOpened)
                     {
+                        m_staleSessionReclaimAttempts = 0;
+                        m_staleSessionReclaimInProgress = false;
 
                         if (civPortReservation)
                         {
@@ -615,8 +642,13 @@ void UdpHandler::dataReceived()
                         }
                         civ = new UdpCivData(localIP, radioIP, civPort, civLocalPort);
                         QObject::connect(civ, &UdpCivData::receive, this, &UdpHandler::receiveFromCivStream);
+                        QObject::connect(civ, &UdpCivData::ready, this,
+                                         [this]()
+                                         {
+                                             qInfo(logUdp()) << "CI-V stream ready";
+                                             emit streamReady();
+                                         });
                         streamOpened = true;
-                        emit streamReady();
 
                         if (txSampleRates < 2)
                         {
@@ -746,7 +778,33 @@ void UdpHandler::dataReceived()
                 if (in->busy)
                 {
                     const QString inComputer = boundedLatin1(in->computer, sizeof(in->computer));
-                    if (in->ipaddress != 0x00 && inComputer != compName)
+                    const bool sameClientSession = inComputer == compName;
+                    const bool staleLocalSdr9700Session =
+                        !sameClientSession && isSdr9700SessionName(inComputer) && ip == localIP;
+                    if (sameClientSession || staleLocalSdr9700Session)
+                    {
+                        // The IC-9700 can keep reporting busy by an SDR9700
+                        // process if that process died before stream/token
+                        // close completed. Reclaim only exact current-session
+                        // matches or prior SDR9700 sessions from this same IP;
+                        // another station running SDR9700 should still block.
+                        if (requestStaleSessionReclaim(inComputer))
+                        {
+                            networkStatus reclaimStatus = status;
+                            reclaimStatus.message = devName + " busy by this SDR9700 host; reconnecting";
+                            reclaimStatus.userVisibleMessage = true;
+                            emit haveNetworkStatus(reclaimStatus);
+                        }
+                        else
+                        {
+                            networkStatus busyStatus = status;
+                            busyStatus.message = "Waiting for " + devName + "; stale SDR9700 session did not clear";
+                            busyStatus.userVisibleMessage = true;
+                            emit haveNetworkStatus(busyStatus);
+                            sendControl(false, 0x00, in->seq); // Respond with an idle.
+                        }
+                    }
+                    else if (in->ipaddress != 0x00)
                     {
                         networkStatus busyStatus = status;
                         busyStatus.message =
@@ -762,11 +820,6 @@ void UdpHandler::dataReceived()
                         busyStatus.userVisibleMessage = true;
                         emit haveNetworkStatus(busyStatus);
                         sendControl(false, 0x00, in->seq); // Respond with an idle
-                    }
-                    else
-                    {
-                        // Already connected as this SDR9700 client; no stream
-                        // request is needed for the duplicate status packet.
                     }
                 }
                 else
@@ -846,6 +899,64 @@ void UdpHandler::dataReceived()
         datagram.clear();
     }
     return;
+}
+
+bool UdpHandler::requestStaleSessionReclaim(const QString& ownerName)
+{
+    constexpr int kMaxStaleSessionReclaimAttempts = 2;
+    constexpr int kStaleSessionSettleMs = 3000;
+
+    if (m_staleSessionReclaimInProgress)
+    {
+        qInfo(logUdp()) << "Stale SDR9700 session reclaim already in progress for" << ownerName;
+        return true;
+    }
+
+    if (m_staleSessionReclaimAttempts >= kMaxStaleSessionReclaimAttempts)
+    {
+        qWarning(logUdp()) << "Stale SDR9700 session reclaim limit reached for" << ownerName;
+        return false;
+    }
+
+    ++m_staleSessionReclaimAttempts;
+    m_staleSessionReclaimInProgress = true;
+
+    // The IC-9700 may continue advertising a busy LAN stream after SDR9700 is
+    // killed by a power/network failure. Requesting a new stream immediately in
+    // that state can return success-looking status packets while the CI-V data
+    // stream never starts. Send the radio's token-removal packet first, then
+    // give the LAN server a few seconds to settle before relogging with the
+    // current process-stable client name.
+    qInfo(logUdp()) << "Clearing stale SDR9700 LAN session from" << ownerName << "attempt"
+                    << m_staleSessionReclaimAttempts << "of" << kMaxStaleSessionReclaimAttempts;
+    if (tokenTimer)
+    {
+        tokenTimer->stop();
+    }
+    m_disconnectStatusReceived = false;
+    gotAuthOK = false;
+    isAuthenticated = false;
+    streamOpened = false;
+    sendToken(0x01);
+
+    QTimer::singleShot(kStaleSessionSettleMs, this,
+                       [this]()
+                       {
+                           if (m_shuttingDown || udp == nullptr)
+                           {
+                               return;
+                           }
+
+                           qInfo(logUdp()) << "Retrying login after stale SDR9700 session cleanup";
+                           m_staleSessionReclaimInProgress = false;
+                           m_disconnectStatusReceived = false;
+                           gotAuthOK = false;
+                           isAuthenticated = false;
+                           streamOpened = false;
+                           sendLogin();
+                       });
+
+    return true;
 }
 
 void UdpHandler::setCurrentRadio(quint8 radio)
@@ -972,7 +1083,11 @@ void UdpHandler::sendRequestStream()
 
 void UdpHandler::sendAreYouThere()
 {
-    if (areYouThereCounter == 20)
+    // The IC-9700 LAN server can take longer than 10 seconds to answer after a
+    // stale stream or abrupt client shutdown. Keep probing with the same
+    // process-stable client name instead of forcing a rapid reconnect loop that
+    // makes the radio look "unreachable" while it is recovering.
+    if (areYouThereCounter == kAreYouThereMaxAttempts)
     {
         qInfo(logUdp()) << this->metaObject()->className() << ": Radio not responding.";
         status.message = "Radio not responding!";

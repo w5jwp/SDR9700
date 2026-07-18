@@ -84,6 +84,7 @@ class RadioBackend : public IRadioBackend
   private:
     void shutdownConnection();
     void requestInitialRadioState();
+    void requestPostReadyRadioState();
     void updateReadyState();
     void setScopeSyncDegraded(bool degraded);
     void handleReportedFrequency(quint64 hz);
@@ -139,6 +140,8 @@ class RadioBackend : public IRadioBackend
     bool m_initialMainModeReceived{false};
     bool m_initialStateRequested{false};
     bool m_radioReady{false};
+    int m_syncReconnectAttempts{0};
+    bool m_syncReconnectPending{false};
     std::optional<std::pair<quint16, quint16>> m_selectedRadioMemory;
     QTimer* m_smeterPollTimer{nullptr};
     QTimer* m_bandStateRefreshTimer{nullptr};

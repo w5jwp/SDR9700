@@ -266,6 +266,7 @@ class MainWindow : public QMainWindow
     bool m_reconnecting{false};
     bool m_userDisconnected{false};
     bool m_lastErrorWasCredential{false};
+    bool m_autoReconnectSuppressedForSyncFailure{false};
     bool m_allowChooserOnDisconnect{false};
     bool m_radioUiReadyNotified{false};
     bool m_spectrumScopeStillSyncingAfterReady{false};

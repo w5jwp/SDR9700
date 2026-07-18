@@ -13,7 +13,6 @@ class MemorySyncController : public QObject
 
     void forceRadioMemorySync();
     void setMemoryPollIntervalSeconds(int seconds);
-    bool initialMemorySyncComplete() const;
 
   private:
     MemoryController* m_owner{nullptr};

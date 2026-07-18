@@ -100,6 +100,7 @@ class MemoryController : public QObject
     QTimer* m_radioMemoryRefreshTimer{nullptr};
     QTimer* m_radioMemoryPeriodicRefreshTimer{nullptr};
     QTimer* m_radioMemorySyncTimeoutTimer{nullptr};
+    QTimer* m_radioMemoryReplyGraceTimer{nullptr};
     QTimer* m_memoryViewRefreshTimer{nullptr};
     QTimer* m_radioMemoryWriteTimeoutTimer{nullptr};
     QHash<quint32, MemoryType> m_radioMemoriesByKey;
@@ -113,7 +114,6 @@ class MemoryController : public QObject
     quint16 m_refreshChannel{1};
     quint16 m_currentSyncGroup{0};
     quint16 m_currentSyncChannel{0};
-    int m_refreshPass{0};
     bool m_refreshInProgress{false};
     bool m_resetAfterSync{false};
     QString m_memoryProgressLabel;

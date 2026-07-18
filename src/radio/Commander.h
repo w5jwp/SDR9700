@@ -27,6 +27,7 @@ class Commander : public RadioCommander
 
     void receiveCommand(Funcs func, QVariant value, uchar receiver) override;
     void receiveCommandNoReadback(Funcs func, QVariant value, uchar receiver);
+    void readCurrentFrequencyAndMode();
     void setPttActive(bool active);
     void sendDtmfPcm(const QByteArray& pcm);
     void enableAudio();

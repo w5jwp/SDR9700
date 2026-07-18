@@ -26,7 +26,8 @@
 namespace
 {
 constexpr int kSyncWatchdogTimeoutMs = 10000;
-constexpr int kSyncReconnectDelayMs = 500;
+constexpr int kSyncReconnectDelayMs = 3000;
+constexpr int kMaxSyncReconnectAttempts = 1;
 constexpr int kMemoryWriteReadbackDelayMs = 250;
 constexpr int kPttReleaseTailMs = 150;
 constexpr int kMaxTransmitDurationMs = 180000;
@@ -141,6 +142,7 @@ void sendDisconnectSafetyCommands(Commander* commandSession, std::optional<int> 
     // unsolicited scope data before the UDP streams close.
     commandSession->setPttActive(false);
     commandSession->receiveCommandNoReadback(funcTransceiverStatus, QVariant::fromValue<bool>(false), 0);
+    commandSession->receiveCommandNoReadback(funcScopeOnOff, QVariant::fromValue<bool>(false), 0);
     commandSession->receiveCommandNoReadback(funcScopeDataOutput, QVariant::fromValue<bool>(false), 0);
 
     if (originalDataOffMod.has_value())
@@ -448,6 +450,12 @@ RadioBackend::~RadioBackend()
 
 void RadioBackend::connectToRadio(const QString& host, quint16 port, const QString& user, const QString& pass)
 {
+    if (!m_syncReconnectPending)
+    {
+        m_syncReconnectAttempts = 0;
+    }
+    m_syncReconnectPending = false;
+
     // Must be called from the main thread only; m_commander is not guarded by a mutex.
     if (m_commander)
     {
@@ -1417,62 +1425,6 @@ void RadioBackend::requestInitialRadioState()
     }
 
     const bool firstRequest = !m_initialStateRequested;
-    if (firstRequest)
-    {
-        m_initialStateRequested = true;
-
-        invokeOnCurrentCommander(
-            [](Commander* commandSession)
-            {
-                commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(false), 0);
-                commandSession->receiveCommand(funcSatelliteMode, QVariant::fromValue<bool>(false), 0);
-                commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-                commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-                commandSession->receiveCommand(funcTimeOutTimer, QVariant::fromValue<uchar>(kHardwareTxTimeoutTimer),
-                                               0);
-                qInfo(logRadio()) << "Setting hardware TX timeout timer to 3 minutes";
-
-                const Funcs statusCommands[] = {
-                    funcTransceiverStatus,
-                    funcNoiseReduction,
-                    funcNoiseBlanker,
-                    funcPreamp,
-                    funcAttenuator,
-                    funcSplitStatus,
-                    funcReadFreqOffset,
-                    funcToneSquelchType,
-                    funcRepeaterTone,
-                    funcRepeaterTSQL,
-                    funcRepeaterDTCS,
-                    funcRepeaterCSQL,
-                    funcToneFreq,
-                    funcTSQLFreq,
-                    funcDTCSCode,
-                    funcCompressor,
-                    funcXFCStatus,
-                    funcAutoNotch,
-                    funcManualNotch,
-                    funcAGCTimeConstant,
-                    funcTuningStep,
-                    funcRitStatus,
-                    funcRitFreq,
-                    funcMonitor,
-                    funcVox,
-                    funcIPPlus,
-                };
-
-                for (const Funcs command : statusCommands)
-                {
-                    commandSession->receiveCommand(command, QVariant(), 0);
-                }
-            });
-    }
-
-    if (m_initialMainFrequencyReceived && m_initialMainModeReceived)
-    {
-        return;
-    }
-
     const auto requestMainVfoState = [this]()
     {
         if (!m_commander)
@@ -1482,25 +1434,29 @@ void RadioBackend::requestInitialRadioState()
         invokeOnCurrentCommander(
             [](Commander* commandSession)
             {
-                commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
-                commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
-                commandSession->receiveCommand(funcRfGain, QVariant(), 0);
-                commandSession->receiveCommand(funcRFPower, QVariant(), 0);
-                commandSession->receiveCommand(funcSquelch, QVariant(), 0);
+                // Use raw current-VFO 03/04 reads for connection readiness.
+                // In LAN startup captures the IC-9700 replied to scope/status
+                // traffic but did not answer selected-VFO 25/26 probes before
+                // the watchdog expired, causing an unnecessary reconnect loop.
+                commandSession->readCurrentFrequencyAndMode();
             });
     };
 
     if (firstRequest)
     {
-        QTimer::singleShot(300, this,
-                           [this, requestMainVfoState]()
-                           {
-                               if (!m_commander || m_radioReady)
-                               {
-                                   return;
-                               }
-                               requestMainVfoState();
-                           });
+        m_initialStateRequested = true;
+        requestMainVfoState();
+    }
+
+    if (m_initialMainFrequencyReceived && m_initialMainModeReceived)
+    {
+        return;
+    }
+
+    if (firstRequest)
+    {
+        // The first request already queued the critical VFO probe before the
+        // full status snapshot above. Retries use requestMainVfoState() below.
         return;
     }
 
@@ -1509,19 +1465,103 @@ void RadioBackend::requestInitialRadioState()
     requestMainVfoState();
 }
 
+void RadioBackend::requestPostReadyRadioState()
+{
+    if (!m_commander)
+    {
+        return;
+    }
+
+    const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
+    invokeOnCurrentCommander(
+        [lanModLevel](Commander* commandSession)
+        {
+            const radioInput lanInput(inputLAN, 5, QStringLiteral("LAN"));
+            commandSession->receiveCommand(funcDATAOffMod, QVariant(), 0);
+            commandSession->receiveCommand(funcDATA1Mod, QVariant(), 0);
+            commandSession->receiveCommandNoReadback(funcDATAOffMod, QVariant::fromValue(lanInput), 0);
+            commandSession->receiveCommandNoReadback(funcDATA1Mod, QVariant::fromValue(lanInput), 0);
+
+            commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue(lanModLevel), 0);
+            commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(false), 0);
+            commandSession->receiveCommand(funcSatelliteMode, QVariant::fromValue<bool>(false), 0);
+            commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+            commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
+            commandSession->receiveCommand(funcTimeOutTimer, QVariant::fromValue<uchar>(kHardwareTxTimeoutTimer), 0);
+            qInfo(logRadio()) << "Configured IC-9700 transmit modulation source for LAN audio and single MAIN VFO "
+                                 "operation";
+            qInfo(logRadio()) << "Setting hardware TX timeout timer to 3 minutes";
+
+            const Funcs statusCommands[] = {
+                funcTransceiverStatus,
+                funcRfGain,
+                funcRFPower,
+                funcSquelch,
+                funcNoiseReduction,
+                funcNoiseBlanker,
+                funcPreamp,
+                funcAttenuator,
+                funcSplitStatus,
+                funcReadFreqOffset,
+                funcToneSquelchType,
+                funcRepeaterTone,
+                funcRepeaterTSQL,
+                funcRepeaterDTCS,
+                funcRepeaterCSQL,
+                funcToneFreq,
+                funcTSQLFreq,
+                funcDTCSCode,
+                funcCompressor,
+                funcXFCStatus,
+                funcAutoNotch,
+                funcManualNotch,
+                funcAGCTimeConstant,
+                funcTuningStep,
+                funcRitStatus,
+                funcRitFreq,
+                funcMonitor,
+                funcVox,
+                funcIPPlus,
+            };
+
+            for (const Funcs command : statusCommands)
+            {
+                commandSession->receiveCommand(command, QVariant(), 0);
+            }
+        });
+}
+
 void RadioBackend::updateReadyState()
 {
     const bool mainControlReady = m_initialMainFrequencyReceived && m_initialMainModeReceived;
-    const bool ready = mainControlReady && (m_scopeDataReceived || m_scopeSyncDegraded);
+    // Do not gate radio control readiness on Spectrum Scope packets. The IC-9700
+    // can accept CI-V commands and memory reads before the UDP scope stream
+    // starts, and blocking here leaves the GUI stuck in "syncing" with no way
+    // for MemoryController to begin its required startup sync. Backout point:
+    // if scope data must become a hard startup gate again, restore the previous
+    // `(m_scopeDataReceived || m_scopeSyncDegraded)` condition and revisit the
+    // watchdog path below.
+    const bool ready = mainControlReady;
     if (m_radioReady == ready)
     {
         return;
     }
 
     m_radioReady = ready;
+    qInfo(logRadio()) << "Radio backend readiness changed: ready=" << ready
+                      << "mainFrequencyReceived=" << m_initialMainFrequencyReceived
+                      << "mainModeReceived=" << m_initialMainModeReceived << "scopeReceived=" << m_scopeDataReceived
+                      << "scopeDegraded=" << m_scopeSyncDegraded;
     emit readyChanged(ready);
     if (ready)
     {
+        m_syncReconnectAttempts = 0;
+        m_syncReconnectPending = false;
+        if (!m_scopeDataReceived)
+        {
+            setScopeSyncDegraded(true);
+        }
         if (m_syncWatchdogTimer)
         {
             m_syncWatchdogTimer->stop();
@@ -1530,6 +1570,20 @@ void RadioBackend::updateReadyState()
         {
             m_initialStateRetryTimer->stop();
         }
+        // Let MemoryController establish the startup memory poll before the
+        // broader post-ready status snapshot queues dozens of CI-V reads. This
+        // is intentionally a small, documented backout point: if future packet
+        // captures show the IC-9700 handles the full burst without delaying
+        // memory replies, this can return to a direct requestPostReadyRadioState()
+        // call.
+        QTimer::singleShot(500, this,
+                           [this]()
+                           {
+                               if (m_radioReady && m_commander)
+                               {
+                                   requestPostReadyRadioState();
+                               }
+                           });
         emit statusMessage(m_scopeSyncDegraded ? QStringLiteral("Radio control ready; Spectrum Scope still syncing")
                                                : QStringLiteral("Radio connection ready..."));
         invokeOnCurrentCommander([](Commander* c) { c->enableAudio(); });
@@ -1555,10 +1609,9 @@ void RadioBackend::restartAfterSyncTimeout()
     }
     if (m_initialMainFrequencyReceived && m_initialMainModeReceived && !m_scopeDataReceived)
     {
-        // Backout point for the current readiness policy: if operators decide
-        // that SDR9700 must never become usable until Spectrum Scope packets arrive,
-        // remove this degraded path and let the reconnect block below handle
-        // all sync-watchdog timeouts.
+        // The normal readiness path no longer waits on Spectrum Scope data, so
+        // reaching this branch means a queued readiness update was delayed. Keep
+        // it as a defensive fallback instead of reconnecting a usable radio.
         setScopeSyncDegraded(true);
         qWarning(logRadio()) << "Radio control sync completed but Spectrum Scope data did not arrive within"
                              << kSyncWatchdogTimeoutMs << "ms; enabling controls while scope retry continues";
@@ -1579,18 +1632,33 @@ void RadioBackend::restartAfterSyncTimeout()
     qWarning(logRadio()) << "Radio sync did not complete within" << kSyncWatchdogTimeoutMs
                          << "ms; scopeReceived=" << m_scopeDataReceived
                          << "mainFrequencyReceived=" << m_initialMainFrequencyReceived
-                         << "mainModeReceived=" << m_initialMainModeReceived << "; disconnecting and reconnecting";
+                         << "mainModeReceived=" << m_initialMainModeReceived;
+    if (m_syncReconnectAttempts >= kMaxSyncReconnectAttempts)
+    {
+        // A repeated failure here means LAN control authenticated but the CI-V
+        // stream never produced frequency/mode readback. Reconnecting forever
+        // hammers the IC-9700 LAN server and leaves the GUI stuck in Syncing,
+        // so stop cleanly and let the operator choose when to retry or reboot.
+        qWarning(logRadio()) << "Radio sync retry limit reached; stopping automatic reconnect loop";
+        emit statusMessage("Radio sync timed out; reconnect manually or reboot the radio");
+        shutdownConnection();
+        return;
+    }
+
+    ++m_syncReconnectAttempts;
     emit statusMessage("Radio sync timed out... reconnecting");
 
     // Use the normal close path so the IC-9700 receives stream close/token
     // cleanup before the reconnect attempt.
     shutdownConnection();
 
+    m_syncReconnectPending = true;
     QTimer::singleShot(kSyncReconnectDelayMs, this,
                        [this, host, port, user, pass]()
                        {
                            if (m_connectionHost != host || m_connectionPort != port)
                            {
+                               m_syncReconnectPending = false;
                                return;
                            }
                            connectToRadio(host, port, user, pass);
@@ -1694,26 +1762,20 @@ void RadioBackend::onLanReady()
     m_txMeterPollTick = 0;
     emit readyChanged(false);
 
-    const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
     invokeOnCurrentCommander(
-        [lanModLevel](Commander* commandSession)
+        [](Commander* commandSession)
         {
             commandSession->setRadioID(0xA2);
 
-            const radioInput lanInput(inputLAN, 5, QStringLiteral("LAN"));
-            commandSession->receiveCommand(funcDATAOffMod, QVariant(), 0);
-            commandSession->receiveCommand(funcDATA1Mod, QVariant(), 0);
-            commandSession->receiveCommandNoReadback(funcDATAOffMod, QVariant::fromValue(lanInput), 0);
-            commandSession->receiveCommandNoReadback(funcDATA1Mod, QVariant::fromValue(lanInput), 0);
-
-            commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue(lanModLevel), 0);
-            commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(false), 0);
-            commandSession->receiveCommand(funcSatelliteMode, QVariant::fromValue<bool>(false), 0);
-            commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+            // Scope output is persistent on the IC-9700. If the previous
+            // session died while scope streaming was enabled, the radio can
+            // flood the fresh CI-V socket before basic 03/04 VFO readback
+            // completes. Quiet scope data first; onLanReady() enables it again
+            // only after frequency and mode have been confirmed.
+            commandSession->receiveCommandNoReadback(funcScopeOnOff, QVariant::fromValue<bool>(false), 0);
+            commandSession->receiveCommandNoReadback(funcScopeDataOutput, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-            commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
-            qInfo(logRadio())
-                << "Configured IC-9700 transmit modulation source for LAN audio and single MAIN VFO operation";
+            commandSession->readCurrentFrequencyAndMode();
         });
 
     if (m_initialStateRetryTimer)
@@ -1777,6 +1839,10 @@ void RadioBackend::onLanReady()
         {
             return;
         }
+        if (!m_initialMainFrequencyReceived || !m_initialMainModeReceived)
+        {
+            return;
+        }
         const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
         invokeOnCurrentCommander(
             [lanModLevel](Commander* commandSession)
@@ -1803,7 +1869,9 @@ void RadioBackend::onLanReady()
                 sendScopeEnable();
             });
 
-    // First attempt shortly after the LAN CI-V stream opens, then retry until scope data arrives.
+    // First attempt shortly after the LAN CI-V stream opens, then retry until
+    // scope data arrives. The send helper intentionally waits for current VFO
+    // frequency/mode first so readiness cannot be starved by scope streaming.
     QTimer::singleShot(250, this,
                        [this, session, commandSession, sendScopeEnable]()
                        {
@@ -1811,15 +1879,15 @@ void RadioBackend::onLanReady()
                            {
                                return;
                            }
+                           if (m_scopeRetryTimer)
+                           {
+                               m_scopeRetryTimer->start();
+                           }
                            if (m_scopeDataReceived)
                            {
                                return;
                            }
                            sendScopeEnable();
-                           if (m_scopeRetryTimer)
-                           {
-                               m_scopeRetryTimer->start();
-                           }
                        });
 
     // Poll front-panel meters at 10 Hz; the IC-9700 only sends meter data on request.

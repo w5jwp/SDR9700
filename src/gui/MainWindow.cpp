@@ -117,7 +117,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     buildStatusBar();
 
     connect(m_model, &RadioModel::connectionChanged, this, &MainWindow::onConnectionChanged);
-    connect(m_model, &RadioModel::readyChanged, this, &MainWindow::onRadioReadyChanged);
+    connect(m_model, &RadioModel::readyChanged, this, &MainWindow::onRadioReadyChanged, Qt::QueuedConnection);
     connect(m_model, &RadioModel::scopeSyncDegradedChanged, this,
             [this](bool degraded) { m_spectrumScopeStillSyncingAfterReady = degraded; });
     connect(m_model, &RadioModel::meterSnapshotChanged, this, &MainWindow::onMeterSnapshotChanged);
@@ -948,6 +948,7 @@ void MainWindow::onConnectToProfile(const RadioProfile& profile)
     m_radioPort = profile.port;
     m_radioUsername = profile.username;
     m_userDisconnected = false;
+    m_autoReconnectSuppressedForSyncFailure = false;
     m_model->connectToRadio(profile.host, profile.port, profile.username, profile.password);
     if (m_connStateLabel)
     {
@@ -1458,6 +1459,7 @@ void MainWindow::onConnectionChanged(bool connected)
     }
     else
     {
+        const bool hadRadioUiReady = m_radioUiReadyNotified;
         m_radioUiReadyNotified = false;
         m_spectrumScopeStillSyncingAfterReady = false;
         if (m_spectrumScopeTuneCommitTimer)
@@ -1485,7 +1487,12 @@ void MainWindow::onConnectionChanged(bool connected)
 #endif
         updateNetworkQuality(0);
 
-        const bool canReconnect = !m_userDisconnected && !m_lastErrorWasCredential && !m_pendingProfileId.isNull() &&
+        // Auto-reconnect is only useful after the radio reached full UI-ready
+        // once. During startup sync failures, repeated reconnects can keep the
+        // IC-9700 LAN server half-open and leave the operator watching an
+        // endless Connecting/Syncing loop. Manual reconnect resets the attempt.
+        const bool canReconnect = hadRadioUiReady && !m_userDisconnected && !m_lastErrorWasCredential &&
+                                  !m_autoReconnectSuppressedForSyncFailure && !m_pendingProfileId.isNull() &&
                                   RadioProfileStore::instance().profileById(m_pendingProfileId);
 
         if (canReconnect)
@@ -1530,6 +1537,10 @@ void MainWindow::onConnectionChanged(bool connected)
             m_reconnecting = false;
             m_userDisconnected = false;
             m_lastErrorWasCredential = false;
+            // Do not clear m_autoReconnectSuppressedForSyncFailure here. A sync
+            // watchdog failure intentionally leaves the last profile selected
+            // but disables automatic reconnect until the operator starts a new
+            // manual connection, where onConnectToProfile() resets the flag.
             if (m_connStateLabel)
             {
                 m_connStateName = QStringLiteral("Disconnected");
@@ -1537,7 +1548,12 @@ void MainWindow::onConnectionChanged(bool connected)
                     QStringLiteral("<span style='color:%1'>Disconnected</span>").arg(UiTheme::Color::TextStatusLabel));
             }
             updateConnectionTooltip();
-            if (!wasUserDisconnected && m_allowChooserOnDisconnect)
+            // Do not reopen the chooser for a failed startup sync. The radio
+            // was contacted but never became operable, so throwing the chooser
+            // over the failure hides the useful connection/status message. Once
+            // the radio has reached full UI-ready, normal disconnect handling
+            // may still offer the chooser.
+            if (hadRadioUiReady && !wasUserDisconnected && m_allowChooserOnDisconnect)
             {
                 QTimer::singleShot(0, this, [this]() { showRadioChooserDialog(); });
             }
@@ -1768,6 +1784,15 @@ void MainWindow::onStatusMessage(const QString& msg)
         // Suppress these early "ready" toasts so the operator only sees the
         // final ready message after normal memory selection is actually usable.
         return;
+    }
+    if (lower.contains(QStringLiteral("radio sync timed out")))
+    {
+        // The backend owns the one controlled recovery attempt for startup
+        // sync failures. A second auto-reconnect from the GUI leaves the
+        // operator watching repeated "Syncing" attempts while the IC-9700 LAN
+        // server is still half-open. Manual reconnect remains available after
+        // the radio settles.
+        m_autoReconnectSuppressedForSyncFailure = true;
     }
     if (lower.contains(QStringLiteral("timed out")) || lower.contains(QStringLiteral("stopped")) ||
         lower.contains(QStringLiteral("blocked")) || lower.contains(QStringLiteral("locked")) ||

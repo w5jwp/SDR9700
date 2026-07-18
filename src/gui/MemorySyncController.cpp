@@ -39,8 +39,3 @@ void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
     m_owner->setMemoryPollTimerIntervalSeconds(
         qBound(kMemoryPollIntervalMinSeconds, seconds, kMemoryPollIntervalMaxSeconds));
 }
-
-bool MemorySyncController::initialMemorySyncComplete() const
-{
-    return m_owner->initialMemorySyncComplete();
-}
