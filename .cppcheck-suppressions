@@ -3,12 +3,19 @@ unusedFunction:src/models/RadioModel.h
 unusedFunction:src/models/VfoModel.h
 // QtTest invokes private test slots through generated meta-object code.
 unusedFunction:src/tests/AudioConverterTest.cpp
+unusedFunction:src/tests/CachingQueueTest.cpp
+unusedFunction:src/tests/GuiSmokeTest.cpp
 unusedFunction:src/tests/MainWindowHelpersTest.cpp
+unusedFunction:src/tests/MeterControllerTest.cpp
 unusedFunction:src/tests/MemoryStoreTest.cpp
 unusedFunction:src/tests/RadioCapabilitiesTest.cpp
+unusedFunction:src/tests/SettingsProfileTest.cpp
 unusedFunction:src/tests/SpectrumScopeModelTest.cpp
 functionConst:src/tests/SpectrumScopeModelTest.cpp
 unusedFunction:src/tests/SystemStatsTest.cpp
+unusedFunction:src/tests/UdpBaseTest.cpp
+functionStatic:src/tests/UdpBaseTest.cpp
+unusedFunction:src/tests/VfoBackendTest.cpp
 unusedFunction:src/tests/VfoModelTest.cpp
 functionConst:src/tests/SystemStatsTest.cpp
 unusedFunction:src/models/PanadapterModel.h

@@ -317,6 +317,74 @@ if(BUILD_TESTING)
     target_compile_options(RadioCapabilitiesTest PRIVATE -Wall -Wextra)
     add_test(NAME RadioCapabilitiesTest COMMAND RadioCapabilitiesTest)
 
+    add_executable(MeterControllerTest
+        tests/MeterControllerTest.cpp
+        models/MeterController.cpp
+    )
+    target_include_directories(MeterControllerTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/models
+    )
+    target_link_libraries(MeterControllerTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(MeterControllerTest PRIVATE -Wall -Wextra)
+    add_test(NAME MeterControllerTest COMMAND MeterControllerTest)
+
+    add_executable(SettingsProfileTest tests/SettingsProfileTest.cpp)
+    target_link_libraries(SettingsProfileTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(SettingsProfileTest PRIVATE -Wall -Wextra)
+    add_test(NAME SettingsProfileTest COMMAND SettingsProfileTest)
+
+    add_executable(CachingQueueTest tests/CachingQueueTest.cpp)
+    target_link_libraries(CachingQueueTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(CachingQueueTest PRIVATE -Wall -Wextra)
+    add_test(NAME CachingQueueTest COMMAND CachingQueueTest)
+
+    add_executable(UdpBaseTest tests/UdpBaseTest.cpp)
+    target_link_libraries(UdpBaseTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(UdpBaseTest PRIVATE -Wall -Wextra)
+    add_test(NAME UdpBaseTest COMMAND UdpBaseTest)
+
+    add_executable(VfoBackendTest
+        tests/VfoBackendTest.cpp
+        backend/IRadioBackend.h
+        models/VfoModel.cpp
+    )
+    target_include_directories(VfoBackendTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/backend
+        ${CMAKE_CURRENT_SOURCE_DIR}/models
+    )
+    target_link_libraries(VfoBackendTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(VfoBackendTest PRIVATE -Wall -Wextra)
+    add_test(NAME VfoBackendTest COMMAND VfoBackendTest)
+
+    set(GUI_SMOKE_TEST_SOURCES
+        tests/GuiSmokeTest.cpp
+        gui/SettingsDialog.cpp
+        gui/ApplicationConfigurationSettingsPanel.cpp
+        gui/AudioDevicesSettingsPanel.cpp
+        gui/SpectrumScopeSettingsPanel.cpp
+        gui/MemoryManagerSettingsPanel.cpp
+        gui/ConfigurationManager.cpp
+        gui/MainWindowHelpers.cpp
+    )
+    if(HIDAPI_FOUND)
+        list(APPEND GUI_SMOKE_TEST_SOURCES gui/IcomRC28SettingsPanel.cpp)
+    endif()
+    add_executable(GuiSmokeTest ${GUI_SMOKE_TEST_SOURCES})
+    target_include_directories(GuiSmokeTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(GuiSmokeTest PRIVATE
+        SDR9700_core
+        Qt6::Test
+        Qt6::Widgets
+    )
+    target_compile_options(GuiSmokeTest PRIVATE -Wall -Wextra)
+    add_test(NAME GuiSmokeTest COMMAND GuiSmokeTest)
+    set_tests_properties(GuiSmokeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     add_executable(SystemStatsTest tests/SystemStatsTest.cpp)
     target_link_libraries(SystemStatsTest PRIVATE SDR9700_core Qt6::Test)
     target_compile_options(SystemStatsTest PRIVATE -Wall -Wextra)
