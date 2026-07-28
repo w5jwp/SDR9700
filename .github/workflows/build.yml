@@ -12,7 +12,7 @@ jobs:
     name: Linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -29,7 +29,7 @@ jobs:
     name: Apple Silicon macOS
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Verify runner architecture
         run: test "$(uname -m)" = "arm64"
       - name: Install dependencies
