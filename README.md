@@ -2,7 +2,7 @@
 
 SDR9700 is a native Qt GUI for controlling the Icom IC-9700 amateur radio
 transceiver over the radio's LAN interface. Supported operating systems
-include Linux and macOS on Apple Silicon.
+include Linux and macOS (Apple Silicon).
 
 The project provides radio connection profiles, VFO control, spectrum and
 waterfall display, gain/PTT controls, and RX/TX audio routing through Qt
@@ -50,31 +50,22 @@ hardware testing and polish before a stable release.
 - Icom RC-28 rotary controller support for step tuning and button mapping,
   including LED feedback (requires `libhidapi` when building from source).
 
-## Installing on Apple Silicon macOS
+## Installation
 
-Download the `SDR9700-<version>-macOS-apple-silicon.dmg` release, open it, and drag
-SDR9700 into Applications.
+### macOS (Apple Silicon)
+
+Download the `SDR9700-<version>-macOS-apple-silicon.dmg` release, open it, and
+drag SDR9700 into Applications.
 
 The release application includes Qt and its other runtime libraries. Users do
 not need Homebrew, a separate Qt installation, or any other developer package
 to run SDR9700. macOS will request local-network and microphone access because
 the application communicates with the radio and can send transmit audio.
 
-## Future Work
+### Linux
 
-- Broaden real-radio testing for disconnect/reconnect behavior, audio startup,
-  scope/waterfall behavior, and edge-case packet handling.
-- Continue tightening CI-V parser validation for malformed or unexpected radio
-  responses.
-- Expand automated tests around settings, radio protocol parsing, connection
-  lifecycle behavior, and UI-facing models.
-- Improve packaging for common Linux distributions.
-- Add user documentation for setup, radio LAN configuration, audio routing, and
-  memory workflows.
-- Continue UI polish for accessibility, keyboard navigation, and smaller display
-  sizes.
-- Review whether additional IC-9700 features should be exposed after they are
-  verified against the manuals and real radio behavior.
+Prebuilt Linux packages are not currently published. Follow the source-build
+instructions below.
 
 ## Building from Source
 
@@ -89,7 +80,7 @@ sudo apt install build-essential cmake ninja-build pkg-config \
   libxkbcommon-dev libeigen3-dev libhidapi-dev
 ```
 
-On an Apple Silicon Mac, Homebrew may be used to install build dependencies:
+On macOS (Apple Silicon), Homebrew may be used to install build dependencies:
 
 ```bash
 brew install cmake ninja pkg-config qt openssl@3 opus speexdsp eigen hidapi
@@ -112,7 +103,7 @@ make debug
 
 ### macOS Packaging
 
-The packaging tools support Apple Silicon only:
+The macOS packaging tools support Apple Silicon only:
 
 ```bash
 make release
