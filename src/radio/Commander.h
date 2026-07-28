@@ -22,7 +22,7 @@ class Commander : public RadioCommander
     void closeComm() override;
 
     void setRadioID(quint16 radioID) override;
-    void setCIVAddr(quint16 civAddr) override;
+    void setCIVAddr(quint16 newCivAddr) override;
 
     void handleNewData(const QByteArray& data) override;
     void receiveBaudRate(quint32 baudrate) override;
@@ -40,10 +40,10 @@ class Commander : public RadioCommander
 
     void parseData(const QByteArray& dataInput);
     void parseCommand();
-    quint8 bcdHexToUChar(quint8 in);
+    static quint8 bcdHexToUChar(quint8 in);
     quint8 bcdHexToUChar(quint8 hundreds, quint8 tensunits);
-    unsigned int bcdHexToUInt(quint8 hundreds, quint8 tensunits);
-    unsigned int bcdHexToUInt(quint8 tenthou, quint8 hundreds, quint8 tensunits);
+    static unsigned int bcdHexToUInt(quint8 hundreds, quint8 tensunits);
+    static unsigned int bcdHexToUInt(quint8 tenthou, quint8 hundreds, quint8 tensunits);
 
     QByteArray bcdEncodeChar(quint8 num);
     QByteArray bcdEncodeInt(quint16 num);
@@ -59,8 +59,8 @@ class Commander : public RadioCommander
     QByteArray makeFreqPayloadRptOffset(Frequency freq);
     QByteArray makeFreqPayload(double frequency);
     QByteArray makeFreqPayload(Frequency freq, uchar numchars = 5);
-    QByteArray encodeTone(quint16 tone, bool tinv, bool rinv);
-    QByteArray encodeTone(quint16 tone);
+    QByteArray encodeTone(quint16 tone, bool tinv, bool rinv) const;
+    QByteArray encodeTone(quint16 tone) const;
 
     ToneInfo decodeTone(const QByteArray& eTone);
     uchar makeFilterWidth(ushort width, uchar receiver);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MainWindow.h"
+#include "SystemStats.h"
 
 #include <QObject>
 
@@ -22,6 +23,7 @@ class StatusBarController : public QObject
     void applyToast(const QString& message, MainWindow::ToastKind kind);
 
     MainWindow* m_window{nullptr};
+    SystemStatsProvider m_systemStatsProvider;
     QString m_persistentMessage;
     MainWindow::ToastKind m_persistentKind{MainWindow::ToastKind::Info};
 };

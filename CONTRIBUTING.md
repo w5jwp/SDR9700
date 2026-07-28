@@ -44,6 +44,8 @@ Other CMake build types are rejected by CMake.
 ## Change Guidelines
 
 - Keep each change focused on one problem.
+- Consider build and behavior impacts for both Linux and Apple Silicon macOS.
+  Prefer Qt's cross-platform APIs and isolate unavoidable native code.
 - Preserve user changes already present in the working tree.
 - Do not copy material from `resources/manuals/` into `src/`.
 - Do not promote imported material to active docs without rewriting it for
@@ -55,7 +57,7 @@ Other CMake build types are rejected by CMake.
 Useful bug reports include:
 
 - SDR9700 commit or version.
-- Linux distribution and Qt version.
+- Linux distribution or Apple Silicon Mac model, macOS version, and Qt version.
 - IC-9700 firmware version.
 - Connection type and radio LAN settings.
 - Exact steps to reproduce.
@@ -82,7 +84,7 @@ cppcheck --enable=all --inconclusive --std=c++20 \
   --suppress=toomanyconfigs \
   --suppress=preprocessorErrorDirective \
   --suppressions-list=.cppcheck-suppressions \
-  -I src src
+  -I src -i src/build src
 ```
 
 Any findings not already suppressed should be addressed or explained in the PR description.

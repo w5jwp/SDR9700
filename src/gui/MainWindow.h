@@ -242,8 +242,6 @@ class MainWindow : public QMainWindow
     bool m_statusClockUtc{true};
     QLabel* m_cpuLabel{nullptr};
     QLabel* m_memLabel{nullptr};
-    quint64 m_prevCpuTotal{0};
-    quint64 m_prevCpuIdle{0};
     bool m_controlsLocked{false};
 
 #ifdef HAVE_HIDAPI

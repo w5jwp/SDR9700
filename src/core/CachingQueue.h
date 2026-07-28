@@ -160,7 +160,7 @@ class CachingQueue : public QThread
     CachingQueue(const CachingQueue& other) = delete;
     void operator=(const CachingQueue&) = delete;
 
-    static CachingQueue* getInstance(QObject* parent = nullptr);
+    static CachingQueue* getInstance();
     static void shutdownInstance();
     void message(QString msg);
     void add(QueuePriority prio, Funcs func, bool recurring = false, uchar receiver = 0);

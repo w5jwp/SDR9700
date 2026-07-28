@@ -27,7 +27,7 @@ bool normalizeRange(double* startMhz, double* endMhz)
 
 SpectrumScopeModel::SpectrumScopeModel(QObject* parent) : QObject(parent) {}
 
-double SpectrumScopeModel::constrainedBandwidth(double bandwidthMhz) const
+double SpectrumScopeModel::constrainedBandwidth(double requestedBandwidthMhz) const
 {
     double displayStartMhz = sourceStartMhz();
     double displayEndMhz = sourceEndMhz();
@@ -38,10 +38,10 @@ double SpectrumScopeModel::constrainedBandwidth(double bandwidthMhz) const
     }
 
     const double maximumBandwidth = qMax(kMinSourceBandwidthMhz, displayEndMhz - displayStartMhz);
-    return qBound(kMinSourceBandwidthMhz, bandwidthMhz, maximumBandwidth);
+    return qBound(kMinSourceBandwidthMhz, requestedBandwidthMhz, maximumBandwidth);
 }
 
-double SpectrumScopeModel::constrainedCenter(double centerMhz, double bandwidthMhz) const
+double SpectrumScopeModel::constrainedCenter(double requestedCenterMhz, double requestedBandwidthMhz) const
 {
     double displayStartMhz = sourceStartMhz();
     double displayEndMhz = sourceEndMhz();
@@ -53,13 +53,13 @@ double SpectrumScopeModel::constrainedCenter(double centerMhz, double bandwidthM
 
     if (displayEndMhz <= displayStartMhz)
     {
-        return centerMhz;
+        return requestedCenterMhz;
     }
 
-    const double halfBandwidth = bandwidthMhz / 2.0;
+    const double halfBandwidth = requestedBandwidthMhz / 2.0;
     const double minCenter = displayStartMhz + halfBandwidth;
     const double maxCenter = displayEndMhz - halfBandwidth;
-    return qBound(qMin(minCenter, maxCenter), centerMhz, qMax(minCenter, maxCenter));
+    return qBound(qMin(minCenter, maxCenter), requestedCenterMhz, qMax(minCenter, maxCenter));
 }
 
 void SpectrumScopeModel::constrainDisplayRange()
@@ -109,20 +109,20 @@ void SpectrumScopeModel::clearDisplayCenterHold()
     m_heldSourceCenterMhz = 0.0;
 }
 
-void SpectrumScopeModel::setFrequencyLimits(double startMhz, double endMhz)
+void SpectrumScopeModel::setFrequencyLimits(double lowerMhz, double upperMhz)
 {
-    if (!normalizeRange(&startMhz, &endMhz))
+    if (!normalizeRange(&lowerMhz, &upperMhz))
     {
         clearFrequencyLimits();
         return;
     }
-    if (m_hasFrequencyLimits && qAbs(m_limitStartMhz - startMhz) < 1e-9 && qAbs(m_limitEndMhz - endMhz) < 1e-9)
+    if (m_hasFrequencyLimits && qAbs(m_limitStartMhz - lowerMhz) < 1e-9 && qAbs(m_limitEndMhz - upperMhz) < 1e-9)
     {
         return;
     }
 
-    m_limitStartMhz = startMhz;
-    m_limitEndMhz = endMhz;
+    m_limitStartMhz = lowerMhz;
+    m_limitEndMhz = upperMhz;
     m_hasFrequencyLimits = true;
     constrainDisplayRange();
 }
@@ -140,22 +140,23 @@ void SpectrumScopeModel::clearFrequencyLimits()
     constrainDisplayRange();
 }
 
-void SpectrumScopeModel::ingestSpectrum(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange)
+void SpectrumScopeModel::ingestSpectrum(const QVector<float>& levels, double lowerMhz, double upperMhz, bool outOfRange)
 {
     // Minimum change in MHz that warrants a rangeChanged emission.
     static constexpr double kRangeChangeTolerance = 0.0001;
 
-    const bool reversedRange = std::isfinite(startMhz) && std::isfinite(endMhz) && endMhz < startMhz;
-    if (!normalizeRange(&startMhz, &endMhz))
+    const bool reversedRange = std::isfinite(lowerMhz) && std::isfinite(upperMhz) && upperMhz < lowerMhz;
+    if (!normalizeRange(&lowerMhz, &upperMhz))
     {
         return;
     }
     // Update range tracking from the radio-provided spectrum bounds.
-    const double incomingCenter = (startMhz + endMhz) / 2.0;
-    const double incomingBw = endMhz - startMhz;
+    const double incomingCenter = (lowerMhz + upperMhz) / 2.0;
+    const double incomingBw = upperMhz - lowerMhz;
     if (m_hasDisplayCenterHold)
     {
-        if (m_heldCenterMhz < startMhz - kScopeRangeToleranceMhz || m_heldCenterMhz > endMhz + kScopeRangeToleranceMhz)
+        if (m_heldCenterMhz < lowerMhz - kScopeRangeToleranceMhz ||
+            m_heldCenterMhz > upperMhz + kScopeRangeToleranceMhz)
         {
             return;
         }
@@ -201,9 +202,9 @@ void SpectrumScopeModel::ingestSpectrum(const QVector<float>& levels, double sta
     {
         QVector<float> normalizedLevels = levels;
         std::reverse(normalizedLevels.begin(), normalizedLevels.end());
-        emit spectrumReady(normalizedLevels, startMhz, endMhz, outOfRange);
+        emit spectrumReady(normalizedLevels, lowerMhz, upperMhz, outOfRange);
         return;
     }
 
-    emit spectrumReady(levels, startMhz, endMhz, outOfRange);
+    emit spectrumReady(levels, lowerMhz, upperMhz, outOfRange);
 }

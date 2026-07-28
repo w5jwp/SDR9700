@@ -18,11 +18,11 @@ void VfoModel::setFrequencyHz(quint64 hz)
     }
 }
 
-void VfoModel::setMode(const QString& mode)
+void VfoModel::setMode(const QString& modeName)
 {
     if (m_backend)
     {
-        m_backend->setMode(mode);
+        m_backend->setMode(modeName);
     }
 }
 
@@ -133,13 +133,13 @@ void VfoModel::setTxPower(int level)
     }
 }
 
-void VfoModel::setAgcMode(const QString& mode)
+void VfoModel::setAgcMode(const QString& modeName)
 {
-    m_agcMode = mode;
-    emit agcModeChanged(mode);
+    m_agcMode = modeName;
+    emit agcModeChanged(modeName);
     if (m_backend)
     {
-        m_backend->setAgcMode(mode);
+        m_backend->setAgcMode(modeName);
     }
 }
 
@@ -251,17 +251,17 @@ void VfoModel::applyXfcEnabled(bool on)
     emit xfcChanged(on);
 }
 
-void VfoModel::applyAgcMode(const QString& mode)
+void VfoModel::applyAgcMode(const QString& modeName)
 {
-    m_agcMode = mode;
-    emit agcModeChanged(mode);
+    m_agcMode = modeName;
+    emit agcModeChanged(modeName);
 }
 
-void VfoModel::setDuplexMode(duplexMode_t mode)
+void VfoModel::setDuplexMode(duplexMode_t duplexMode)
 {
     if (m_backend)
     {
-        m_backend->setDuplexMode(mode);
+        m_backend->setDuplexMode(duplexMode);
     }
 }
 
@@ -273,11 +273,11 @@ void VfoModel::setRepeaterOffsetHz(quint64 hz)
     }
 }
 
-void VfoModel::setToneAccessMode(rptAccessTxRx_t mode)
+void VfoModel::setToneAccessMode(rptAccessTxRx_t toneAccessMode)
 {
     if (m_backend)
     {
-        m_backend->setToneAccessMode(mode);
+        m_backend->setToneAccessMode(toneAccessMode);
     }
 }
 
@@ -323,14 +323,14 @@ void VfoModel::applyFrequency(quint64 hz)
     emit frequencyChanged(hz);
 }
 
-void VfoModel::applyMode(const QString& mode)
+void VfoModel::applyMode(const QString& modeName)
 {
-    if (m_mode.has_value() && *m_mode == mode)
+    if (m_mode.has_value() && *m_mode == modeName)
     {
         return;
     }
-    m_mode = mode;
-    emit modeChanged(mode);
+    m_mode = modeName;
+    emit modeChanged(modeName);
 }
 
 void VfoModel::applyPtt(bool on)
@@ -425,14 +425,14 @@ void VfoModel::applyTxPower(int level)
     emit txPowerChanged(level);
 }
 
-void VfoModel::applyDuplexMode(duplexMode_t mode)
+void VfoModel::applyDuplexMode(duplexMode_t duplexMode)
 {
-    if (m_duplexMode == mode)
+    if (m_duplexMode == duplexMode)
     {
         return;
     }
-    m_duplexMode = mode;
-    emit duplexModeChanged(mode);
+    m_duplexMode = duplexMode;
+    emit duplexModeChanged(duplexMode);
 }
 
 void VfoModel::applyRepeaterOffsetHz(quint64 hz)
@@ -445,14 +445,14 @@ void VfoModel::applyRepeaterOffsetHz(quint64 hz)
     emit repeaterOffsetChanged(hz);
 }
 
-void VfoModel::applyToneAccessMode(rptAccessTxRx_t mode)
+void VfoModel::applyToneAccessMode(rptAccessTxRx_t toneAccessMode)
 {
-    if (m_toneAccessMode == mode)
+    if (m_toneAccessMode == toneAccessMode)
     {
         return;
     }
-    m_toneAccessMode = mode;
-    emit toneAccessModeChanged(mode);
+    m_toneAccessMode = toneAccessMode;
+    emit toneAccessModeChanged(toneAccessMode);
 }
 
 void VfoModel::applyToneFrequency(ushort tone)

@@ -27,6 +27,12 @@ audio routing, and station workflows.
 
 - Read `CONVENTIONS.md` before writing code.
 - Prefer C++20 and Qt 6 idioms where the surrounding code supports them.
+- Evaluate every code change for its effect on both supported desktop platforms:
+  Linux and Apple Silicon macOS. Prefer Qt APIs and Qt libraries that already
+  provide cross-platform behavior instead of adding platform-specific
+  implementations. When Qt does not provide a suitable abstraction, keep
+  platform-specific code isolated behind explicit platform guards and preserve
+  equivalent behavior on both platforms.
 - Keep classes small and single-purpose.
 - Use RAII and Qt parent ownership; avoid raw owning `new`/`delete`.
 - Use Qt signals/slots for cross-object communication.

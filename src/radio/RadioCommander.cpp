@@ -25,13 +25,13 @@ RadioCommander::~RadioCommander()
     qInfo(logRadio()) << "closing instance of RadioCommander()";
 }
 
-void RadioCommander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup,
-                               audioSetup txSetup, QString vsp, quint16 tcp)
+void RadioCommander::commSetup(quint16 radioCivAddr, UdpConnectionSettings connectionSettings, audioSetup rxAudioSetup,
+                               audioSetup txAudioSetup, QString vsp, quint16 tcp)
 {
     Q_UNUSED(radioCivAddr)
-    Q_UNUSED(settings)
-    Q_UNUSED(rxSetup)
-    Q_UNUSED(txSetup)
+    Q_UNUSED(connectionSettings)
+    Q_UNUSED(rxAudioSetup)
+    Q_UNUSED(txAudioSetup)
     Q_UNUSED(vsp)
     Q_UNUSED(tcp)
     qWarning(logRadio()) << "commSetup() (network) not implemented";
@@ -88,9 +88,9 @@ void RadioCommander::handleStatusUpdate(const networkStatus& status)
     emit haveStatusUpdate(status);
 }
 
-void RadioCommander::handleNetworkAudioLevels(const networkAudioLevels& l)
+void RadioCommander::handleNetworkAudioLevels(const networkAudioLevels& levels)
 {
-    emit haveNetworkAudioLevels(l);
+    emit haveNetworkAudioLevels(levels);
 }
 
 void RadioCommander::handleNewData(const QByteArray& data)

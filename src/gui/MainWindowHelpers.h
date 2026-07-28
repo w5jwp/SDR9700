@@ -105,7 +105,7 @@ struct OffsetPreset
 {
     QString label;
     duplexMode_t mode;
-    quint64 hz;
+    quint64 hz{0};
 };
 
 struct TonePreset

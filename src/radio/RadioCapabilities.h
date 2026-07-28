@@ -22,32 +22,32 @@ inline QString radioString(const char* value)
 
 struct RadioCommandDef
 {
-    Funcs func;
-    const char* hexData;
-    int minVal;
-    int maxVal;
-    bool padRight;
-    bool command29;
-    bool getCommand;
-    bool setCommand;
-    uchar bytes;
-    bool admin;
+    Funcs func{funcNone};
+    const char* hexData{nullptr};
+    int minVal{0};
+    int maxVal{0};
+    bool padRight{false};
+    bool command29{false};
+    bool getCommand{false};
+    bool setCommand{false};
+    uchar bytes{0};
+    bool admin{false};
 };
 
 struct RadioPeriodicDef
 {
-    Funcs func;
-    const char* priority;
-    char receiver;
+    Funcs func{funcNone};
+    const char* priority{nullptr};
+    char receiver{0};
 };
 
 struct RadioModeDef
 {
-    radioMode_t mode;
-    quint8 reg;
-    const char* name;
-    int minHz;
-    int maxHz;
+    radioMode_t mode{modeUnknown};
+    quint8 reg{0};
+    const char* name{nullptr};
+    int minHz{0};
+    int maxHz{0};
 };
 
 struct RadioToneDef
@@ -109,10 +109,10 @@ struct RadioBandDef
 
 struct RadioMeterDef
 {
-    meter_t meter;
-    int radioVal;
-    double actualVal;
-    bool redLine;
+    meter_t meter{meterUnknown};
+    int radioVal{0};
+    double actualVal{0.0};
+    bool redLine{false};
 };
 
 inline constexpr RadioCommandDef kRadioCommands[] = {

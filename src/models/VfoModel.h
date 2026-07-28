@@ -43,7 +43,7 @@ class VfoModel : public QObject
     static QStringList availableModes();
 
     void setFrequencyHz(quint64 hz);
-    void setMode(const QString& mode);
+    void setMode(const QString& modeName);
     void setFilterWidth(int lowHz, int highHz);
     void setRfGain(int level);
     void setAfGain(int level);
@@ -55,23 +55,23 @@ class VfoModel : public QObject
     void setPreampLevel(int level);
     void setAttenuatorEnabled(bool on);
     void setTxPower(int level);
-    void setAgcMode(const QString& mode);
+    void setAgcMode(const QString& modeName);
     void setAutoNotch(bool on);
     void setManualNotch(bool on);
     void setCompressor(bool on);
     void setXfcEnabled(bool on);
     void setRitEnabled(bool on);
     void setRitOffset(short hz);
-    void setDuplexMode(duplexMode_t mode);
+    void setDuplexMode(duplexMode_t duplexMode);
     void setRepeaterOffsetHz(quint64 hz);
-    void setToneAccessMode(rptAccessTxRx_t mode);
+    void setToneAccessMode(rptAccessTxRx_t toneAccessMode);
     void setToneFrequency(ushort tone);
     void setDtcsCode(ushort code);
     void setPtt(bool on);
     void sendDtmf(const QString& digits);
 
     void applyFrequency(quint64 hz);
-    void applyMode(const QString& mode);
+    void applyMode(const QString& modeName);
     void applyPtt(bool on);
     void applyNrEnabled(bool on);
     void applyNbEnabled(bool on);
@@ -85,12 +85,12 @@ class VfoModel : public QObject
     void applyManualNotch(bool on);
     void applyCompressor(bool on);
     void applyXfcEnabled(bool on);
-    void applyAgcMode(const QString& mode);
+    void applyAgcMode(const QString& modeName);
     void applyRitEnabled(bool on);
     void applyRitOffset(short hz);
-    void applyDuplexMode(duplexMode_t mode);
+    void applyDuplexMode(duplexMode_t duplexMode);
     void applyRepeaterOffsetHz(quint64 hz);
-    void applyToneAccessMode(rptAccessTxRx_t mode);
+    void applyToneAccessMode(rptAccessTxRx_t toneAccessMode);
     void applyToneFrequency(ushort tone);
     void applyDtcsCode(ushort code);
 

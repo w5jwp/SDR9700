@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            qt6-base-dev qt6-multimedia-dev libssl-dev libopus-dev \
+            libspeexdsp-dev libxkbcommon-dev libeigen3-dev libhidapi-dev
+      - name: Build
+        run: make release
+      - name: Test
+        run: ctest --test-dir src/build --output-on-failure
+
+  macos:
+    name: Apple Silicon macOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = "arm64"
+      - name: Install dependencies
+        run: brew install cmake ninja pkg-config qt openssl@3 opus speexdsp eigen hidapi
+      - name: Configure Homebrew tools
+        run: echo "$(brew --prefix qt)/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: make release
+      - name: Test
+        run: ctest --test-dir src/build --output-on-failure
+      - name: Verify self-contained application bundle
+        run: make bundle

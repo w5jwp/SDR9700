@@ -4,9 +4,13 @@ find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(OPUS REQUIRED IMPORTED_TARGET opus)
 pkg_check_modules(SPEEXDSP REQUIRED IMPORTED_TARGET speexdsp)
-pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi-hidraw)
-if(NOT HIDAPI_FOUND)
+if(APPLE)
     pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi)
+else()
+    pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi-hidraw)
+    if(NOT HIDAPI_FOUND)
+        pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi)
+    endif()
 endif()
 find_path(EIGEN3_INCLUDE_DIR
     NAMES Eigen/Dense
@@ -43,9 +47,11 @@ set(SDR9700_CORE_SOURCES
 
     # Core utilities
     core/CachingQueue.cpp
+    core/AppPaths.cpp
     core/LogCategories.cpp
     core/AppSettings.cpp
     core/RadioProfile.cpp
+    core/SystemStats.cpp
     core/Types.cpp
 
     # Audio - Qt Multimedia handlers only
@@ -188,6 +194,14 @@ set(SDR9700_SOURCES
     gui/MainWindow.cpp
 )
 
+if(APPLE)
+    set(SDR9700_MACOS_ICON "${CMAKE_SOURCE_DIR}/resources/images/icons/sdr9700_app_icon.png")
+    set_source_files_properties(${SDR9700_MACOS_ICON} PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources
+    )
+    list(APPEND SDR9700_SOURCES ${SDR9700_MACOS_ICON})
+endif()
+
 if(HIDAPI_FOUND)
     list(APPEND SDR9700_SOURCES
         gui/IcomRC28SettingsPanel.h
@@ -195,7 +209,11 @@ if(HIDAPI_FOUND)
     )
 endif()
 
-add_executable(SDR9700 ${SDR9700_SOURCES})
+if(APPLE)
+    add_executable(SDR9700 MACOSX_BUNDLE ${SDR9700_SOURCES})
+else()
+    add_executable(SDR9700 ${SDR9700_SOURCES})
+endif()
 
 target_include_directories(SDR9700 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -219,6 +237,18 @@ set_target_properties(SDR9700 PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
+if(APPLE)
+    set_target_properties(SDR9700 PROPERTIES
+        MACOSX_BUNDLE_BUNDLE_NAME "SDR9700"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_COPYRIGHT "Copyright SDR9700 contributors"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "org.sdr9700.SDR9700"
+        MACOSX_BUNDLE_ICON_FILE "sdr9700_app_icon.png"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/resources/macos/Info.plist.in"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${SDR9700_DISPLAY_VERSION}"
+    )
+endif()
+
 if(BUILD_TESTING)
     add_executable(AudioConverterTest tests/AudioConverterTest.cpp)
     target_link_libraries(AudioConverterTest PRIVATE SDR9700_core Qt6::Test)
@@ -241,4 +271,9 @@ if(BUILD_TESTING)
     )
     target_compile_options(MemoryStoreTest PRIVATE -Wall -Wextra)
     add_test(NAME MemoryStoreTest COMMAND MemoryStoreTest)
+
+    add_executable(SystemStatsTest tests/SystemStatsTest.cpp)
+    target_link_libraries(SystemStatsTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(SystemStatsTest PRIVATE -Wall -Wextra)
+    add_test(NAME SystemStatsTest COMMAND SystemStatsTest)
 endif()

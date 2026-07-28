@@ -19,7 +19,6 @@ constexpr int kClickMoveTolerancePx = 6;
 constexpr int kLevelScaleTopInsetPx = 6;
 constexpr int kLevelScaleBottomInsetPx = 9;
 constexpr int kGridDensityFewer = 0;
-constexpr int kGridDensityNormal = 1;
 constexpr int kGridDensityMore = 2;
 constexpr double kWheelStepAngleDelta = 120.0;
 constexpr double kMinFrequencyRangeMhz = 0.001;
@@ -102,7 +101,7 @@ int SpectrumScopeCanvas::spectrumPaneHeight() const
     return plotHeight();
 }
 
-int SpectrumScopeCanvas::plotLeftX() const
+int SpectrumScopeCanvas::plotLeftX()
 {
     return levelScalePanelWidth();
 }

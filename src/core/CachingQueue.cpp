@@ -21,7 +21,7 @@ int priorityValue(const QString& name)
 CachingQueue* CachingQueue::instance{};
 QMutex CachingQueue::instanceMutex;
 
-CachingQueue* CachingQueue::getInstance(QObject* parent)
+CachingQueue* CachingQueue::getInstance()
 {
     QMutexLocker locker(&instanceMutex);
     if (instance == nullptr)
@@ -38,8 +38,7 @@ CachingQueue* CachingQueue::getInstance(QObject* parent)
         // CI-V polling needs prompt service but must never outrank the audio
         // pipeline or the OS networking stack on a loaded station computer.
         instance->start(QThread::HighPriority);
-        qDebug(logRadio()) << "Created new CachingQueue() for:"
-                           << ((parent != nullptr) ? parent->objectName() : "<unknown>");
+        qDebug(logRadio()) << "Created shared application CachingQueue";
     }
     return instance;
 }

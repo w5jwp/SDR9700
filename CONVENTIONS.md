@@ -12,6 +12,13 @@ tests, build scripts, and documentation that describes implementation details.
   or upstream project references inside active source comments.
 - Treat `resources/manuals/` as read-only research material.
 - Treat imported material as reference only until it has been validated.
+- Evaluate every code change for its impact on both Linux and Apple Silicon
+  macOS users. A change is not complete until behavior, build implications, and
+  user-facing differences have been considered for both platforms.
+- Prefer Qt APIs and Qt libraries that provide cross-platform behavior. Use
+  platform-specific APIs only when Qt has no suitable abstraction; isolate
+  those implementations behind explicit platform guards and retain equivalent
+  behavior on Linux and macOS.
 - Prefer small, direct changes over broad rewrites.
 
 ## C++ and Qt

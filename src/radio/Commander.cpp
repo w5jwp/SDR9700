@@ -405,12 +405,12 @@ QByteArray Commander::makeFreqPayload(double frequency)
     return result;
 }
 
-QByteArray Commander::encodeTone(quint16 tone)
+QByteArray Commander::encodeTone(quint16 tone) const
 {
     return encodeTone(tone, false, false);
 }
 
-QByteArray Commander::encodeTone(quint16 tone, bool tinv, bool rinv)
+QByteArray Commander::encodeTone(quint16 tone, bool tinv, bool rinv) const
 {
     // CTCSS and DTCS use the same packed decimal tone payload.
     QByteArray enct;
@@ -472,13 +472,13 @@ ToneInfo Commander::decodeTone(const QByteArray& eTone)
     return t;
 }
 
-void Commander::setCIVAddr(quint16 civAddr)
+void Commander::setCIVAddr(quint16 newCivAddr)
 {
     // The controller CI-V address is defined in the header.
 
-    this->civAddr = civAddr;
+    civAddr = newCivAddr;
     payloadPrefix = QByteArray("\xFE\xFE");
-    payloadPrefix.append((char)civAddr);
+    payloadPrefix.append((char)newCivAddr);
     payloadPrefix.append((char)compCivAddr);
 }
 
@@ -1070,7 +1070,7 @@ void Commander::parseCommand()
         }
         MeterKind m;
         m.value = double(bcdHexToUInt(payloadIn.at(0), payloadIn.at(1))) / 10.0;
-        if (bool(payloadIn.at(2)) == true)
+        if (payloadIn.at(2) != '\0')
         {
             m.value = -m.value;
         }
@@ -3332,7 +3332,8 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
         {
             rememberPendingReply(func, receiver);
         }
-        else if (value.isValid() && cmd.setCmd)
+        else if (value.isValid() && cmd.setCmd &&
+                 !(func == funcMemoryContents && value.metaType().id() == qMetaTypeId<uint>()))
         {
             rememberPendingSetCommand(func, payload, value, receiver, cmd);
         }

@@ -409,24 +409,24 @@ void UdpHandler::getTxLevels(quint16 amplitudePeak, quint16 amplitudeRMS, quint1
     audioLevelsTxPosition++;
 }
 
-quint8 UdpHandler::findMean(quint8* d)
+quint8 UdpHandler::findMean(const quint8* data)
 {
     unsigned int sum = 0;
     for (int p = 0; p < audioLevelBufferSize; p++)
     {
-        sum += d[p];
+        sum += data[p];
     }
     return sum / audioLevelBufferSize;
 }
 
-quint8 UdpHandler::findMax(quint8* d)
+quint8 UdpHandler::findMax(const quint8* data)
 {
     unsigned int max = 0;
     for (int p = 0; p < audioLevelBufferSize; p++)
     {
-        if (d[p] > max)
+        if (data[p] > max)
         {
-            max = d[p];
+            max = data[p];
         }
     }
     return max;

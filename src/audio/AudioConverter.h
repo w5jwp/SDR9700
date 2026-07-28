@@ -40,19 +40,19 @@ struct audioPacket
 
 struct audioSetup
 {
-    audioType type;
+    audioType type{qtAudio};
     QString name;
-    quint16 latency;
-    quint8 codec;
-    bool ulaw = false;
-    bool isinput;
-    quint32 sampleRate;
+    quint16 latency{0};
+    quint8 codec{0};
+    bool ulaw{false};
+    bool isinput{false};
+    quint32 sampleRate{0};
     QAudioDevice port;
     int portInt{0};
-    quint8 resampleQuality;
-    quint8 localAFgain;
-    quint16 blockSize = 20; // milliseconds
-    quint8 guid[GUIDLEN];
+    quint8 resampleQuality{0};
+    quint8 localAFgain{0};
+    quint16 blockSize{20}; // milliseconds
+    quint8 guid[GUIDLEN]{};
 };
 
 class AudioConverter : public QObject
@@ -64,8 +64,8 @@ class AudioConverter : public QObject
     ~AudioConverter();
 
   public slots:
-    bool init(QAudioFormat inFormat, codecType inCodec, QAudioFormat outFormat, codecType outCodec,
-              quint8 opusComplexity, quint8 resampleQuality);
+    bool init(QAudioFormat inputFormat, codecType inputCodec, QAudioFormat outputFormat, codecType outputCodec,
+              quint8 encoderComplexity, quint8 converterResampleQuality);
     bool convert(audioPacket audio);
     void process(audioPacket audio);
 
@@ -85,8 +85,8 @@ class AudioConverter : public QObject
     quint8 resampleQuality = 4;
     double resampleRatio = 1.0;
     quint32 lastAudioSequence{0};
-    codecType inCodec;
-    codecType outCodec;
+    codecType inCodec{LPCM};
+    codecType outCodec{LPCM};
     bool initialized = false;
     QByteArray scratchIn;
     QByteArray scratchOut;

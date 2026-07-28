@@ -24,39 +24,39 @@ bool sampleCountMatchesChannels(qsizetype sampleCount, int channelCount)
 
 AudioConverter::AudioConverter(QObject* parent) : QObject(parent) {}
 
-bool AudioConverter::init(QAudioFormat inFormat, codecType inCodec, QAudioFormat outFormat, codecType outCodec,
-                          quint8 opusComplexity, quint8 resampleQuality)
+bool AudioConverter::init(QAudioFormat inputFormat, codecType inputCodec, QAudioFormat outputFormat,
+                          codecType outputCodec, quint8 encoderComplexity, quint8 converterResampleQuality)
 {
 
     releaseCodecState();
-    this->inFormat = inFormat;
-    this->inCodec = inCodec;
-    this->outFormat = outFormat;
-    this->outCodec = outCodec;
-    this->opusComplexity = opusComplexity;
-    this->resampleQuality = resampleQuality;
+    inFormat = inputFormat;
+    inCodec = inputCodec;
+    outFormat = outputFormat;
+    outCodec = outputCodec;
+    opusComplexity = encoderComplexity;
+    resampleQuality = converterResampleQuality;
 
-    qInfo(logAudioConverter) << "Starting AudioConverter() Input:" << inFormat.channelCount() << "Channels of"
-                             << inCodec << inFormat.sampleRate() << inFormat.sampleFormat()
-                             << "Output:" << outFormat.channelCount() << "Channels of" << outCodec
-                             << outFormat.sampleRate() << outFormat.sampleFormat();
+    qInfo(logAudioConverter) << "Starting AudioConverter() Input:" << inputFormat.channelCount() << "Channels of"
+                             << inputCodec << inputFormat.sampleRate() << inputFormat.sampleFormat()
+                             << "Output:" << outputFormat.channelCount() << "Channels of" << outputCodec
+                             << outputFormat.sampleRate() << outputFormat.sampleFormat();
 
     initialized = false;
-    if (inFormat.channelCount() <= 0 || outFormat.channelCount() <= 0 || inFormat.sampleRate() <= 0 ||
-        outFormat.sampleRate() <= 0)
+    if (inputFormat.channelCount() <= 0 || outputFormat.channelCount() <= 0 || inputFormat.sampleRate() <= 0 ||
+        outputFormat.sampleRate() <= 0)
     {
         const QString message = QStringLiteral("Invalid audio converter format");
         qCritical(logAudioConverter()).noquote()
-            << message << "input channels" << inFormat.channelCount() << "input rate" << inFormat.sampleRate()
-            << "output channels" << outFormat.channelCount() << "output rate" << outFormat.sampleRate();
+            << message << "input channels" << inputFormat.channelCount() << "input rate" << inputFormat.sampleRate()
+            << "output channels" << outputFormat.channelCount() << "output rate" << outputFormat.sampleRate();
         emit initFailed(message);
         return false;
     }
 
-    if (inCodec == OPUS)
+    if (inputCodec == OPUS)
     {
         int opus_err = 0;
-        opusDecoder = opus_decoder_create(inFormat.sampleRate(), inFormat.channelCount(), &opus_err);
+        opusDecoder = opus_decoder_create(inputFormat.sampleRate(), inputFormat.channelCount(), &opus_err);
         qInfo(logAudioConverter()) << "Creating opus decoder: " << opus_strerror(opus_err);
         if (opusDecoder == nullptr)
         {
@@ -68,17 +68,17 @@ bool AudioConverter::init(QAudioFormat inFormat, codecType inCodec, QAudioFormat
         }
     }
 
-    if (outCodec == OPUS)
+    if (outputCodec == OPUS)
     {
         int opus_err = 0;
-        opusEncoder =
-            opus_encoder_create(outFormat.sampleRate(), outFormat.channelCount(), OPUS_APPLICATION_AUDIO, &opus_err);
+        opusEncoder = opus_encoder_create(outputFormat.sampleRate(), outputFormat.channelCount(),
+                                          OPUS_APPLICATION_AUDIO, &opus_err);
         if (opusEncoder)
         {
             opus_encoder_ctl(opusEncoder, OPUS_SET_BITRATE(64000));
             opus_encoder_ctl(opusEncoder, OPUS_SET_VBR(1));
             opus_encoder_ctl(opusEncoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
-            opus_encoder_ctl(opusEncoder, OPUS_SET_COMPLEXITY(opusComplexity));
+            opus_encoder_ctl(opusEncoder, OPUS_SET_COMPLEXITY(encoderComplexity));
         }
 
         qInfo(logAudioConverter()) << "Creating opus encoder: " << opus_strerror(opus_err);
@@ -92,13 +92,13 @@ bool AudioConverter::init(QAudioFormat inFormat, codecType inCodec, QAudioFormat
         }
     }
 
-    if (inFormat.sampleRate() != outFormat.sampleRate())
+    if (inputFormat.sampleRate() != outputFormat.sampleRate())
     {
         int resampleError = 0;
         unsigned int ratioNum;
         unsigned int ratioDen;
-        resampler = speex_resampler_init(outFormat.channelCount(), inFormat.sampleRate(), outFormat.sampleRate(),
-                                         resampleQuality, &resampleError);
+        resampler = speex_resampler_init(outputFormat.channelCount(), inputFormat.sampleRate(),
+                                         outputFormat.sampleRate(), converterResampleQuality, &resampleError);
         if (resampler == nullptr || resampleError != RESAMPLER_ERR_SUCCESS)
         {
             const QString message = QStringLiteral("Could not create Speex resampler: %1")

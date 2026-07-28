@@ -10,7 +10,6 @@
 #endif
 
 #include <QAbstractItemView>
-#include <QAction>
 #include <QFont>
 #include <QHBoxLayout>
 #include <QKeySequence>
@@ -19,6 +18,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QShortcut>
 #include <QShowEvent>
 #include <QSize>
 #include <QStackedWidget>
@@ -65,7 +65,7 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     const QString title = QStringLiteral("Settings");
     setWindowTitle(title);
     setMinimumSize(780, 520);
-    setWindowFlags(Qt::FramelessWindowHint);
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setWindowModality(Qt::NonModal);
     setStyleSheet(QStringLiteral("SettingsDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
@@ -241,16 +241,14 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
             });
     connect(search, &QLineEdit::textChanged, this, &SettingsDialog::filterNavigation);
 
-    auto* findAction = new QAction(this);
-    findAction->setShortcut(QKeySequence::Find);
-    findAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
-    connect(findAction, &QAction::triggered, search,
+    auto* findShortcut = new QShortcut(QKeySequence::Find, this);
+    findShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(findShortcut, &QShortcut::activated, search,
             [search]()
             {
                 search->setFocus();
                 search->selectAll();
             });
-    addAction(findAction);
 
     selectPage(page);
 

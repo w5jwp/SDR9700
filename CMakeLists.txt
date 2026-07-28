@@ -5,6 +5,19 @@ include(CTest)
 
 set(SDR9700_DISPLAY_VERSION "26.07.01")
 
+if(APPLE)
+    if(NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+        message(FATAL_ERROR "SDR9700 supports macOS on Apple Silicon only.")
+    endif()
+
+    if(NOT CMAKE_OSX_ARCHITECTURES)
+        set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "macOS target architecture" FORCE)
+    endif()
+    if(NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+        message(FATAL_ERROR "SDR9700 macOS builds must use CMAKE_OSX_ARCHITECTURES=arm64.")
+    endif()
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)

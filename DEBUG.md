@@ -25,6 +25,7 @@ Supported logging categories:
 - `audioconverter`
 - `ci-v`
 - `gui`
+- `icom-rc-28`
 - `radio`
 - `repeater`
 - `sdr9700-radio-control`
@@ -32,3 +33,5 @@ Supported logging categories:
 - `udp`
 
 `--log-file=<path>` appends the same formatted console output to a file.
+Each line includes a conventional severity name: `DEBUG`, `INFO`, `WARN`,
+`ERROR`, or `FATAL`.

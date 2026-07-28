@@ -552,7 +552,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     // CachingQueue's batched sendValues signal.  Connect once per connectToRadio()
     // call; disconnect the previous session's queue connection first because
     // CachingQueue is a process-wide singleton.
-    CachingQueue* q = CachingQueue::getInstance(m_commander);
+    CachingQueue* q = CachingQueue::getInstance();
     if (m_queueSendValuesConnection)
     {
         QObject::disconnect(m_queueSendValuesConnection);
@@ -1936,31 +1936,29 @@ void RadioBackend::onLanReady()
                 }
                 if (m_pttActive)
                 {
-                    const uchar receiver = kMainReceiver;
                     const int pollTick = m_txMeterPollTick++;
                     invokeOnCurrentCommander(
-                        [receiver, pollTick](Commander* commandSession)
+                        [pollTick](Commander* commandSession)
                         {
-                            commandSession->receiveCommand(funcSWRMeter, QVariant(), receiver);
-                            commandSession->receiveCommand(funcPowerMeter, QVariant(), receiver);
-                            commandSession->receiveCommand(funcALCMeter, QVariant(), receiver);
+                            commandSession->receiveCommand(funcSWRMeter, QVariant(), kMainReceiver);
+                            commandSession->receiveCommand(funcPowerMeter, QVariant(), kMainReceiver);
+                            commandSession->receiveCommand(funcALCMeter, QVariant(), kMainReceiver);
                             if (pollTick % 2 == 0)
                             {
-                                commandSession->receiveCommand(funcCompMeter, QVariant(), receiver);
+                                commandSession->receiveCommand(funcCompMeter, QVariant(), kMainReceiver);
                             }
                             if (pollTick % 5 == 0)
                             {
-                                commandSession->receiveCommand(funcVdMeter, QVariant(), receiver);
-                                commandSession->receiveCommand(funcIdMeter, QVariant(), receiver);
+                                commandSession->receiveCommand(funcVdMeter, QVariant(), kMainReceiver);
+                                commandSession->receiveCommand(funcIdMeter, QVariant(), kMainReceiver);
                             }
                         });
                     return;
                 }
 
                 m_txMeterPollTick = 0;
-                const uchar receiver = kMainReceiver;
-                invokeOnCurrentCommander([receiver](Commander* commandSession)
-                                         { commandSession->receiveCommand(funcSMeter, QVariant(), receiver); });
+                invokeOnCurrentCommander([](Commander* commandSession)
+                                         { commandSession->receiveCommand(funcSMeter, QVariant(), kMainReceiver); });
             });
     m_smeterPollTimer->start();
 }

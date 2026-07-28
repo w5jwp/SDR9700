@@ -2741,9 +2741,8 @@ void MemoryController::showMemoryEditorPane(const QString& memoryId)
         resizeEditorToContents();
     };
 
-    auto copyCurrentSettings = [this, editor, nameEdit, frequencyEdit, modeCombo, offsetCombo, customOffsetModeCombo,
-                                customOffsetSpin, toneOptionCombo, setTonePick, setCtcssPick, setDtcsPick,
-                                populateToneValues, populateOffsetOptions, setOffsetSelection,
+    auto copyCurrentSettings = [this, editor, nameEdit, frequencyEdit, modeCombo, toneOptionCombo, setTonePick,
+                                setDtcsPick, populateToneValues, populateOffsetOptions, setOffsetSelection,
                                 updateCustomOffsetVisibility, updateConditionalSections]()
     {
         if (!m_window->m_model->isReady() || !m_window->m_vfo)

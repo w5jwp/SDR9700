@@ -8,14 +8,12 @@
 #include "VfoPanel.h"
 #include "models/RadioModel.h"
 
-#include <QFile>
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QStatusBar>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <numeric>
 
 using namespace sdr9700::ui::main_window;
 
@@ -161,7 +159,6 @@ void StatusBarController::updateSystemStats()
         return;
     }
 
-    // CPU usage from /proc/stat — delta between two calls
     auto cpuColor = [](int pct) -> const char*
     {
         if (pct < 50)
@@ -175,69 +172,21 @@ void StatusBarController::updateSystemStats()
         return UiTheme::Color::Danger;
     };
 
+    const SystemStats stats = m_systemStatsProvider.sample();
+    if (stats.cpuPercent)
     {
-        QFile f(QStringLiteral("/proc/stat"));
-        if (f.open(QIODevice::ReadOnly))
-        {
-            const QByteArray line = f.readLine();
-            const QList<QByteArray> parts = line.split(' ');
-            // Format: cpu  user nice system idle iowait irq softirq steal ...
-            // Leading spaces mean parts[1] may be empty; filter empties
-            QList<quint64> vals;
-            for (const QByteArray& p : parts)
-            {
-                if (!p.isEmpty() && p != "cpu")
-                {
-                    vals.append(p.trimmed().toULongLong());
-                }
-            }
-
-            if (vals.size() >= 4)
-            {
-                const quint64 idle = vals[3] + (vals.size() > 4 ? vals[4] : 0); // idle + iowait
-                const quint64 total = std::accumulate(vals.cbegin(), vals.cend(), quint64{0});
-
-                double cpuPct = 0.0;
-                if (m_window->m_prevCpuTotal > 0 && total > m_window->m_prevCpuTotal)
-                {
-                    const quint64 dTotal = total - m_window->m_prevCpuTotal;
-                    const quint64 dIdle = idle - m_window->m_prevCpuIdle;
-                    cpuPct = 100.0 * static_cast<double>(dTotal - dIdle) / static_cast<double>(dTotal);
-                    cpuPct = qBound(0.0, cpuPct, 100.0);
-                }
-                m_window->m_prevCpuTotal = total;
-                m_window->m_prevCpuIdle = idle;
-
-                const int cpuPctInt = static_cast<int>(cpuPct);
-                m_window->m_cpuLabel->setText(
-                    QStringLiteral("<span style='color:%1'>%2%</span>")
-                        .arg(QLatin1String(cpuColor(cpuPctInt)), QString::number(cpuPct, 'f', 1)));
-            }
-        }
+        const int cpuPercent = static_cast<int>(*stats.cpuPercent);
+        m_window->m_cpuLabel->setText(
+            QStringLiteral("<span style='color:%1'>%2%</span>")
+                .arg(QLatin1String(cpuColor(cpuPercent)), QString::number(*stats.cpuPercent, 'f', 1)));
     }
-
-    // Process RSS from /proc/self/status (VmRSS field)
+    if (stats.processResidentBytes)
     {
-        QFile f(QStringLiteral("/proc/self/status"));
-        if (f.open(QIODevice::ReadOnly))
-        {
-            const QString content = QString::fromLatin1(f.readAll());
-            const QStringList lines = content.split('\n');
-            const auto lineIt = std::find_if(lines.cbegin(), lines.cend(), [](const QString& line)
-                                             { return line.startsWith(QLatin1String("VmRSS:")); });
-            if (lineIt != lines.cend())
-            {
-                const QStringList parts = lineIt->simplified().split(' ', Qt::SkipEmptyParts);
-                if (parts.size() >= 2)
-                {
-                    const double rssGb = parts[1].toDouble() / (1024.0 * 1024.0);
-                    const QString rssStr = rssGb >= 1.0 ? QStringLiteral("%1G").arg(rssGb, 0, 'f', 1)
-                                                        : QStringLiteral("%1M").arg(static_cast<int>(rssGb * 1024));
-                    m_window->m_memLabel->setText(QStringLiteral("<span style='color:%1'>%2</span>")
-                                                      .arg(QLatin1String(UiTheme::Color::TextStatusSecondary), rssStr));
-                }
-            }
-        }
+        const double rssMb = static_cast<double>(*stats.processResidentBytes) / (1024.0 * 1024.0);
+        const QString rssText = rssMb >= 1024.0 ? QStringLiteral("%1G").arg(rssMb / 1024.0, 0, 'f', 1)
+                                                : QStringLiteral("%1M").arg(static_cast<int>(rssMb));
+        m_window->m_memLabel->setText(QStringLiteral("<span style='color:%1'>%2</span>")
+                                          .arg(QLatin1String(UiTheme::Color::TextStatusSecondary), rssText));
     }
 }
 

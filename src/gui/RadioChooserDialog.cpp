@@ -27,7 +27,7 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     const QString titleText = QStringLiteral("Radio Chooser");
     setWindowTitle(titleText);
     setMinimumSize(720, 430);
-    setWindowFlags(Qt::FramelessWindowHint);
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setStyleSheet(QStringLiteral("RadioChooserDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 

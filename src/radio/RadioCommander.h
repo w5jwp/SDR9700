@@ -28,15 +28,15 @@ class RadioCommander : public QObject
     void receiveAudioData(const audioPacket& data);
     void handlePortError(errorType err);
     void handleStatusUpdate(const networkStatus& status);
-    void handleNetworkAudioLevels(const networkAudioLevels&);
+    void handleNetworkAudioLevels(const networkAudioLevels& levels);
     void changeLatency(const quint16 value);
     void radioSelection(const QList<radio_cap_packet>& radios);
     void radioUsage(quint8 radio, bool admin, quint8 busy, const QString& name, const QString& ip);
     void setCurrentRadio(quint8 radio);
 
     virtual void process();
-    virtual void commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup,
-                           QString vsp, quint16 tcp);
+    virtual void commSetup(quint16 radioCivAddr, UdpConnectionSettings connectionSettings, audioSetup rxAudioSetup,
+                           audioSetup txAudioSetup, QString vsp, quint16 tcp);
     virtual void closeComm();
 
     virtual void setRadioID(quint16 radioID);

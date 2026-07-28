@@ -49,7 +49,7 @@ enum class SignalMeterMode
 struct ScaleMark
 {
     QString label;
-    double fraction;
+    double fraction{0.0};
 };
 
 double rfPowerMeterFraction(double watts)
@@ -134,13 +134,7 @@ class SMeter : public QProgressBar
         m_samplePosition = (m_samplePosition + 1) % static_cast<int>(m_samples.size());
         m_sampleCount = qMin(m_sampleCount + 1, static_cast<int>(m_samples.size()));
 
-        int peak = 0;
-        for (int i = 0; i < m_sampleCount; ++i)
-        {
-            peak = qMax(peak, m_samples[i]);
-        }
-
-        m_peakValue = peak;
+        m_peakValue = *std::max_element(m_samples.cbegin(), m_samples.cbegin() + m_sampleCount);
         update();
     }
 

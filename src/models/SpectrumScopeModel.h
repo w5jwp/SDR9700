@@ -20,20 +20,20 @@ class SpectrumScopeModel : public QObject
     double sourceEndMhz() const { return m_sourceCenterMhz + m_sourceBandwidthMhz / 2.0; }
 
     void centerOnFrequency(double freqMhz);
-    void setFrequencyLimits(double startMhz, double endMhz);
+    void setFrequencyLimits(double lowerMhz, double upperMhz);
     void clearFrequencyLimits();
     void holdDisplayCenter(double displayCenterMhz, double expectedSourceCenterMhz);
     void clearDisplayCenterHold();
 
-    void ingestSpectrum(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange);
+    void ingestSpectrum(const QVector<float>& levels, double lowerMhz, double upperMhz, bool outOfRange);
 
   signals:
     void rangeChanged(double centerMhz, double bandwidthMhz);
     void spectrumReady(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange);
 
   private:
-    double constrainedBandwidth(double bandwidthMhz) const;
-    double constrainedCenter(double centerMhz, double bandwidthMhz) const;
+    double constrainedBandwidth(double requestedBandwidthMhz) const;
+    double constrainedCenter(double requestedCenterMhz, double requestedBandwidthMhz) const;
     void constrainDisplayRange();
 
     double m_centerMhz{145.0};

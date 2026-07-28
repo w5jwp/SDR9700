@@ -24,20 +24,27 @@ void TwoLineButton::paintEvent(QPaintEvent* event)
 
     QFont primaryFont = font();
     primaryFont.setBold(true);
-    primaryFont.setPointSize(9);
+    primaryFont.setPixelSize(12);
 
     QFont secondaryFont = font();
     secondaryFont.setBold(true);
-    secondaryFont.setPointSize(8);
+    secondaryFont.setPixelSize(10);
+
+    const QFontMetrics primaryMetrics(primaryFont);
+    const QFontMetrics secondaryMetrics(secondaryFont);
+    constexpr int kLineSpacing = 1;
+    const int textHeight = primaryMetrics.height() + kLineSpacing + secondaryMetrics.height();
+    const int textTop = content.top() + qMax(0, (content.height() - textHeight) / 2);
+    const QRect primaryRect(content.left(), textTop, content.width(), primaryMetrics.height());
+    const QRect secondaryRect(content.left(), primaryRect.bottom() + 1 + kLineSpacing, content.width(),
+                              secondaryMetrics.height());
 
     painter.setPen(textColor);
     painter.setFont(primaryFont);
-    painter.drawText(QRect(content.left(), content.top(), content.width(), content.height() / 2 + 2),
-                     Qt::AlignHCenter | Qt::AlignBottom, m_primary);
+    painter.drawText(primaryRect, Qt::AlignHCenter | Qt::AlignVCenter, m_primary);
 
     painter.setFont(secondaryFont);
-    painter.drawText(QRect(content.left(), content.center().y() - 1, content.width(), content.height() / 2 + 3),
-                     Qt::AlignHCenter | Qt::AlignTop, m_secondary);
+    painter.drawText(secondaryRect, Qt::AlignHCenter | Qt::AlignVCenter, m_secondary);
 }
 
 QString commandButtonStyle(bool active)

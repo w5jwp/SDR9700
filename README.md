@@ -1,11 +1,12 @@
 # SDR9700
 
-SDR9700 is a Linux-native Qt GUI for controlling the Icom IC-9700 amateur
-radio transceiver over the radio's LAN interface.
+SDR9700 is a native Qt GUI for controlling the Icom IC-9700 amateur radio
+transceiver over the radio's LAN interface. It supports Linux and Apple
+Silicon macOS; Intel Macs and universal macOS binaries are not supported.
 
-The project is open source and focused on a native Linux operator experience:
-radio connection profiles, VFO control, spectrum and waterfall display, basic
-gain/PTT controls, and RX/TX audio routing through Qt Multimedia.
+The project provides radio connection profiles, VFO control, spectrum and
+waterfall display, gain/PTT controls, and RX/TX audio routing through Qt
+Multimedia.
 
 ![Icom IC-9700 Transceiver](resources/images/radio/ic-9700.webp)
 
@@ -47,7 +48,17 @@ hardware testing and polish before a stable release.
 - Main-window lock mode that prevents accidental radio-control changes while
   leaving PTT, mute, and AF gain usable.
 - Icom RC-28 rotary controller support for step tuning and button mapping,
-  including LED feedback (requires `libhidapi` at build time).
+  including LED feedback (requires `libhidapi` when building from source).
+
+## Installing on Apple Silicon macOS
+
+Download the `SDR9700-<version>-macOS-apple-silicon.dmg` release, open it, and drag
+SDR9700 into Applications.
+
+The release application includes Qt and its other runtime libraries. Users do
+not need Homebrew, a separate Qt installation, or any other developer package
+to run SDR9700. macOS will request local-network and microphone access because
+the application communicates with the radio and can send transmit audio.
 
 ## Future Work
 
@@ -65,40 +76,71 @@ hardware testing and polish before a stable release.
 - Review whether additional IC-9700 features should be exposed after they are
   verified against the manuals and real radio behavior.
 
-## Build
+## Building from Source
 
-Install the required build packages first. SDR9700 needs a C++ toolchain, CMake,
-Ninja, GNU Make, pkg-config, Qt 6, OpenSSL, Opus, SpeexDSP, xkbcommon, and
-Eigen. On Debian, Ubuntu, and related distributions:
+Building requires a C++ toolchain, CMake, Ninja, GNU Make, pkg-config, Qt 6,
+OpenSSL, Opus, SpeexDSP, Eigen, and optionally HIDAPI for RC-28 support.
+
+On Debian, Ubuntu, and related Linux distributions:
 
 ```bash
 sudo apt install build-essential cmake ninja-build pkg-config \
   qt6-base-dev qt6-multimedia-dev libssl-dev libopus-dev libspeexdsp-dev \
-  libxkbcommon-dev libeigen3-dev
+  libxkbcommon-dev libeigen3-dev libhidapi-dev
 ```
 
-SpeexDSP is provided by the system `libspeexdsp-dev` package.
+On an Apple Silicon Mac, Homebrew may be used to install build dependencies:
 
 ```bash
-make
-./src/build/bin/SDR9700
+brew install cmake ninja pkg-config qt openssl@3 opus speexdsp eigen hidapi
 ```
 
-For an explicit production build:
+Homebrew is needed only by developers building from source. It is not an
+end-user runtime requirement.
 
 ```bash
 make release
+make run
 ```
 
-To reset the build tree:
+`make release` performs a clean Release build in `src/build`. Only Release and
+Debug CMake configurations are supported:
 
 ```bash
-make clean
+make debug
 ```
 
-Use `src/build` as the project build directory. The `release` target cleans and
-reconfigures that directory. Do not create agent-specific build directories such
-as `build-codex`, `build-claude`, or similar variants.
+### macOS Packaging
+
+The packaging tools support Apple Silicon only:
+
+```bash
+make release
+make dmg
+```
+
+This creates a self-contained, locally ad-hoc-signed disk image at
+`src/build/package/SDR9700-<version>-macOS-apple-silicon.dmg`. The deployment step
+fails if any bundled executable still refers to Homebrew libraries.
+
+For a release signed with an Apple Developer ID:
+
+```bash
+export SDR9700_SIGN_IDENTITY="Developer ID Application: Example (TEAMID)"
+make release
+make release-dmg
+```
+
+To submit the signed disk image using a `notarytool` keychain profile:
+
+```bash
+export SDR9700_NOTARY_PROFILE="sdr9700-notary"
+make notarize DMG=src/build/package/SDR9700-<version>-macOS-apple-silicon.dmg
+```
+
+Signing and notarization require the maintainer's Apple credentials. Do not
+store identities, passwords, API keys, or keychain material in the repository.
+The scripts used by these targets live in `resources/scripts/`.
 
 ## Repository Layout
 
@@ -108,7 +150,8 @@ as `build-codex`, `build-claude`, or similar variants.
 - `src/radio/`: IC-9700 LAN and CI-V radio protocol code.
 - `src/audio/`: Qt Multimedia audio handlers and conversion utilities.
 - `src/core/`: settings, profile storage, queues, and shared types.
-- `resources/`: manuals and README images.
+- `resources/`: images, manuals, macOS metadata, packaging scripts, and Qt
+  resources.
 
 ## Root Documentation
 
@@ -126,7 +169,7 @@ SDR9700 benefited from the public work, operator experience, and hard-won
 lessons of the AetherSDR, wfview, and radio-webop projects. Their codebases and
 communities helped validate radio behavior, highlight practical implementation
 details, and provide useful points of comparison while SDR9700 was shaped into
-its own IC-9700-focused Linux application.
+its own IC-9700-focused application.
 
 ## License
 

@@ -1,6 +1,6 @@
 #include <QtGlobal>
-#if !defined(Q_OS_LINUX)
-#error "SDR9700 is Linux-only; POSIX signal handling and IC-9700 LAN code are not portable."
+#if !defined(Q_OS_UNIX)
+#error "SDR9700 requires a Unix platform for POSIX signal handling."
 #endif
 
 #include <QApplication>
@@ -75,15 +75,15 @@ QString logLevelName(QtMsgType type)
     switch (type)
     {
     case QtDebugMsg:
-        return QStringLiteral("DBG");
+        return QStringLiteral("DEBUG");
     case QtInfoMsg:
-        return QStringLiteral("INF");
+        return QStringLiteral("INFO");
     case QtWarningMsg:
-        return QStringLiteral("WRN");
+        return QStringLiteral("WARN");
     case QtCriticalMsg:
-        return QStringLiteral("CRT");
+        return QStringLiteral("ERROR");
     case QtFatalMsg:
-        return QStringLiteral("FTL");
+        return QStringLiteral("FATAL");
     }
     return QStringLiteral("LOG");
 }
@@ -333,7 +333,9 @@ int main(int argc, char* argv[])
     app.setApplicationName("SDR9700");
     app.setOrganizationName("SDR9700");
     app.setApplicationVersion(APP_VERSION);
+#if defined(Q_OS_LINUX)
     app.setDesktopFileName(QStringLiteral("sdr9700"));
+#endif
     app.setWindowIcon(QIcon(QStringLiteral(":/images/icons/sdr9700_app_icon.png")));
 
     LoggingOptions loggingOptions;
@@ -385,11 +387,8 @@ int main(int argc, char* argv[])
     app.setStyleSheet(QStringLiteral("QComboBox { padding-left: 10px; padding-right: 24px; }"
                                      "QComboBox QAbstractItemView::item { padding: 4px 10px; }"));
 
-    auto* model = new RadioModel;
-    MainWindow win(model);
-    // Transfer model ownership to win so the destructor order is always
-    // win -> model, whether the app exits via closeEvent or signal kill.
-    model->setParent(&win);
+    auto model = std::make_unique<RadioModel>();
+    MainWindow win(model.get());
 
     if (signalPipe[0] != -1)
     {
@@ -417,5 +416,13 @@ int main(int argc, char* argv[])
     }
     win.show();
 
-    return app.exec();
+    const int exitCode = app.exec();
+
+    // The backend owns radio, data, and audio worker threads. Stop and destroy
+    // it before MainWindow's QWidget tree is torn down so queued backend
+    // activity cannot overlap widget destruction after a Unix signal or a
+    // normal application quit.
+    model.reset();
+
+    return exitCode;
 }

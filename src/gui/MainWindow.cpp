@@ -58,6 +58,7 @@
 #include <QFormLayout>
 #include <QFile>
 #include <QHeaderView>
+#include <QKeySequence>
 #include <QMessageBox>
 #include <QCloseEvent>
 #include <QEvent>
@@ -272,7 +273,8 @@ void MainWindow::buildToolBar()
     fileMenu->addAction("Connect to Radio", this, [this]() { showRadioChooserDialog(); });
     fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction("Quit", this, &QWidget::close);
-    quitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Q")));
+    quitAction->setMenuRole(QAction::QuitRole);
+    quitAction->setShortcut(QKeySequence::Quit);
     m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
 
     m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
@@ -2098,7 +2100,7 @@ void MainWindow::commitFrequencyEdit(VfoPanel* panel)
     }
 
     const quint64 currentHz = m_vfoFrequencyHz;
-    const auto restoreFrequencyText = [this, panel, currentHz]()
+    const auto restoreFrequencyText = [panel, currentHz]()
     {
         if (currentHz > 0)
         {

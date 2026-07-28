@@ -209,62 +209,62 @@ struct widthsType
 
 struct bsrRequest
 {
-    availableBands band;
-    int bsrPosition = 1;
+    availableBands band{band3cm};
+    int bsrPosition{1};
 };
 
 struct radioCapabilities
 {
-    quint16 model;
-    quint16 modelID = 0; // CIV address
-    manufacturersType_t manufacturer = manufIcom;
+    quint16 model{0};
+    quint16 modelID{0}; // CIV address
+    manufacturersType_t manufacturer{manufIcom};
     QString filename;
-    int radioControlModel;
+    int radioControlModel{0};
     QString modelName;
 
-    bool hasLan; // OEM ethernet or wifi connection
-    bool hasEthernet;
-    bool hasWiFi;
-    bool hasFDcomms;
+    bool hasLan{false}; // OEM ethernet or wifi connection
+    bool hasEthernet{false};
+    bool hasWiFi{false};
+    bool hasFDcomms{false};
 
     QVector<radioInput> inputs;
 
-    bool hasSpectrum = true;
-    quint8 spectSeqMax;
-    quint16 spectAmpMax;
-    quint16 spectLenMax;
-    quint8 numReceiver;
-    quint8 numVFO;
+    bool hasSpectrum{true};
+    quint8 spectSeqMax{0};
+    quint16 spectAmpMax{0};
+    quint16 spectLenMax{0};
+    quint8 numReceiver{0};
+    quint8 numVFO{0};
 
-    bool hasNB = false;
+    bool hasNB{false};
     QByteArray nbCommand;
 
-    bool hasDD;
-    bool hasDV;
-    bool hasATU;
+    bool hasDD{false};
+    bool hasDV{false};
+    bool hasATU{false};
 
-    bool hasCTCSS;
-    bool hasDTCS;
-    bool hasRepeaterModes = false;
+    bool hasCTCSS{false};
+    bool hasDTCS{false};
+    bool hasRepeaterModes{false};
 
-    bool hasTransmit;
-    bool hasPTTCommand;
-    bool hasAttenuator;
-    bool hasPreamp;
-    bool hasAntennaSel;
-    bool hasIFShift;
-    bool hasTBPF;
+    bool hasTransmit{false};
+    bool hasPTTCommand{false};
+    bool hasAttenuator{false};
+    bool hasPreamp{false};
+    bool hasAntennaSel{false};
+    bool hasIFShift{false};
+    bool hasTBPF{false};
 
-    bool hasRXAntenna;
+    bool hasRXAntenna{false};
 
-    bool hasSpecifyMainSubCmd = false;
-    bool hasVFOMS = false;
-    bool hasVFOAB = true;
+    bool hasSpecifyMainSubCmd{false};
+    bool hasVFOMS{false};
+    bool hasVFOAB{true};
 
-    bool hasAdvancedRptrToneCmds = false;
-    bool hasQuickSplitCommand = false;
+    bool hasAdvancedRptrToneCmds{false};
+    bool hasQuickSplitCommand{false};
 
-    bool hasCommand29 = false;
+    bool hasCommand29{false};
 
     QByteArray quickSplitCommand;
     QHash<Funcs, FuncType> commands;
@@ -286,19 +286,19 @@ struct radioCapabilities
     std::vector<ModeInfo> modes;
 
     QByteArray transceiveCommand;
-    quint8 guid[GUIDLEN] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    quint32 baudRate;
-    quint16 memGroups;
-    quint16 memories;
-    quint16 memStart;
+    quint8 guid[GUIDLEN]{};
+    quint32 baudRate{0};
+    quint16 memGroups{0};
+    quint16 memories{0};
+    quint16 memStart{0};
     QString memFormat;
     QVector<MemParserFormat> memParser;
-    quint16 satMemories;
+    quint16 satMemories{0};
     QString satFormat;
     QVector<MemParserFormat> satParser;
     QVector<PeriodicType> periodic;
     QMap<int, double> meters[meterUnknown + 1];
-    double meterLines[meterUnknown + 1];
+    double meterLines[meterUnknown + 1]{};
 };
 
 Q_DECLARE_METATYPE(manufacturersType_t)

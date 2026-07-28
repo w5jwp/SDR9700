@@ -19,7 +19,7 @@ class SpectrumScopeDisplay : public QWidget
   public:
     struct SpanChoice
     {
-        quint64 hz;
+        quint64 hz{0};
         QString label;
     };
 

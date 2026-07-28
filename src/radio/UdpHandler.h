@@ -45,7 +45,7 @@ class UdpHandler : public UdpBase
 
   public slots:
     void enableAudio();
-    void receiveDataFromUserToRadio(QByteArray);
+    void receiveDataFromUserToRadio(QByteArray data);
     void receiveFromCivStream(const QByteArray& data);
     void receiveAudioData(const audioPacket& data);
     void changeLatency(quint16 value);
@@ -140,6 +140,6 @@ class UdpHandler : public UdpBase
 
     quint8 audioLevelsTxPosition = 0;
     quint8 audioLevelsRxPosition = 0;
-    quint8 findMean(quint8* d);
-    quint8 findMax(quint8* d);
+    static quint8 findMean(const quint8* data);
+    static quint8 findMax(const quint8* data);
 };

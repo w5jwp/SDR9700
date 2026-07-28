@@ -48,7 +48,7 @@ class SpectrumScopeCanvas : public QWidget
 
   private:
     int plotHeight() const;
-    int plotLeftX() const;
+    static int plotLeftX();
     int plotRightX() const;
     int plotWidthPx() const;
     double xToFreq(int x) const;

@@ -6,10 +6,12 @@
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPointer>
 #include <QPushButton>
+#include <QShortcut>
 #include <QShowEvent>
 #include <QTimer>
 #include <QWindow>
@@ -188,7 +190,12 @@ class UtilityTitleBar : public QWidget
                            "QPushButton:hover { background: %2; color: %3; }")
                 .arg(QLatin1String(UiTheme::Color::TextMuted), QLatin1String(UiTheme::Color::Danger),
                      QLatin1String(UiTheme::Color::White)));
+        m_closeBtn->setAccessibleName(QStringLiteral("Close window"));
         layout->addWidget(m_closeBtn);
+
+        auto* closeShortcut = new QShortcut(QKeySequence::Close, this);
+        closeShortcut->setContext(Qt::WindowShortcut);
+        connect(closeShortcut, &QShortcut::activated, m_closeBtn, &QPushButton::click);
     }
 
     QPushButton* closeButton() const { return m_closeBtn; }

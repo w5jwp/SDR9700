@@ -1,4 +1,5 @@
 #include "AppSettings.h"
+#include "AppPaths.h"
 #include "LogCategories.h"
 
 #include <QDir>
@@ -12,7 +13,6 @@
 #include <QJsonValue>
 #include <QList>
 #include <QSaveFile>
-#include <QStandardPaths>
 #include <QStringList>
 #include <algorithm>
 
@@ -539,12 +539,7 @@ bool AppSettings::loadJson(const QString& path)
 
 QString AppSettings::configPath()
 {
-    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    if (configRoot.isEmpty())
-    {
-        configRoot = QDir::homePath() + "/.config";
-    }
-    return QDir(configRoot).filePath("SDR9700/sdr9700.json");
+    return QDir(sdr9700::configDirectory()).filePath(QStringLiteral("sdr9700.json"));
 }
 
 QString AppSettings::encodeValue(const QVariant& value)

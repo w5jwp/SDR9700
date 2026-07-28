@@ -3,6 +3,7 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QKeySequence>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
@@ -222,12 +223,14 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     m_minimizeBtn->setFixedSize(kWindowButtonSize, kTitleBarHeight);
     m_minimizeBtn->setStyleSheet(windowButtonStyle(UiTheme::Color::ButtonHover));
     m_minimizeBtn->setToolTip(QStringLiteral("Minimize"));
+    m_minimizeBtn->setAccessibleName(QStringLiteral("Minimize window"));
     root->addWidget(m_minimizeBtn);
 
     m_closeBtn = new QPushButton(QStringLiteral("✕"), this);
     m_closeBtn->setFixedSize(kWindowButtonSize, kTitleBarHeight);
     m_closeBtn->setStyleSheet(windowButtonStyle(UiTheme::Color::Danger));
     m_closeBtn->setToolTip(QStringLiteral("Close"));
+    m_closeBtn->setAccessibleName(QStringLiteral("Close window"));
     root->addWidget(m_closeBtn);
 
     connect(m_volumeSlider, &QSlider::valueChanged, this,
@@ -246,6 +249,10 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     connect(m_txDurationButton, &QPushButton::clicked, this, &MainTitleBar::txDurationResetRequested);
     connect(m_minimizeBtn, &QPushButton::clicked, this, &MainTitleBar::minimizeRequested);
     connect(m_closeBtn, &QPushButton::clicked, this, &MainTitleBar::closeRequested);
+
+    auto* closeShortcut = new QShortcut(QKeySequence::Close, this);
+    closeShortcut->setContext(Qt::WindowShortcut);
+    connect(closeShortcut, &QShortcut::activated, this, &MainTitleBar::closeRequested);
 }
 
 void MainTitleBar::addMenu(const QString& label, QMenu* menu)

@@ -47,7 +47,8 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
 - `IcomRC28Manager` (optional, HAVE_HIDAPI): HID driver for the Icom RC-28 rotary
   controller; emits tuning step and button events, and accepts LED state.
 - `AppSettings`: JSON-backed client settings at
-  `~/.config/SDR9700/sdr9700.json`.
+  `~/.config/SDR9700/sdr9700.json` on Linux and
+  `~/Library/Application Support/SDR9700/sdr9700.json` on macOS.
 
 ## Threading
 

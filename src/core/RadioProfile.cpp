@@ -1,4 +1,5 @@
 #include "RadioProfile.h"
+#include "AppPaths.h"
 #include "AppSettings.h"
 #include "LogCategories.h"
 
@@ -10,7 +11,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
-#include <QStandardPaths>
 #include <QDebug>
 
 #include <openssl/evp.h>
@@ -53,20 +53,11 @@ QByteArray derivePasswordKey(const QByteArray& material, const QByteArray& salt)
 
 QString profileKeyPath()
 {
-    // Store the SDR9700 profile key beside other app-owned settings under
-    // ~/.config (QStandardPaths::GenericConfigLocation) because it is part of
-    // this application's configuration, not user content. We intentionally do
-    // not depend on libsecret/KWallet yet: those services vary by Linux desktop
-    // environment, while SDR9700 needs deterministic headless/test behavior and
-    // no additional runtime package requirement. The tradeoff is explicit: if
-    // an attacker obtains both sdr9700.json and this owner-readable key file,
-    // saved radio passwords can be decrypted offline.
-    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    if (configRoot.isEmpty())
-    {
-        configRoot = QDir::homePath() + "/.config";
-    }
-    return QDir(configRoot).filePath(QStringLiteral("SDR9700/%1").arg(QString::fromLatin1(kPasswordKeyFileName)));
+    // Keep the profile key beside other app-owned settings. This avoids an
+    // additional credential-service dependency and keeps headless tests
+    // deterministic. If an attacker obtains both the settings and this
+    // owner-readable key file, saved radio passwords can be decrypted offline.
+    return QDir(sdr9700::configDirectory()).filePath(QString::fromLatin1(kPasswordKeyFileName));
 }
 
 void secureZero(QByteArray& data)

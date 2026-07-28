@@ -239,14 +239,14 @@ struct AntennaInfo
 
 struct ScopeData
 {
-    bool valid = false;
+    bool valid{false};
     QByteArray data;
-    uchar receiver;
-    uchar mode;
-    uchar fixedEdge = 0;
-    bool oor = false;
-    double startFreq;
-    double endFreq;
+    uchar receiver{0};
+    uchar mode{0};
+    uchar fixedEdge{0};
+    bool oor{false};
+    double startFreq{0.0};
+    double endFreq{0.0};
 };
 
 struct ToneInfo
