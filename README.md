@@ -1,8 +1,8 @@
 # SDR9700
 
 SDR9700 is a native Qt GUI for controlling the Icom IC-9700 amateur radio
-transceiver over the radio's LAN interface. It supports Linux and Apple
-Silicon macOS; Intel Macs and universal macOS binaries are not supported.
+transceiver over the radio's LAN interface. Supported operating systems
+include Linux and macOS on Apple Silicon.
 
 The project provides radio connection profiles, VFO control, spectrum and
 waterfall display, gain/PTT controls, and RX/TX audio routing through Qt
