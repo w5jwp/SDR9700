@@ -36,6 +36,9 @@ audio routing, and station workflows.
 - Keep classes small and single-purpose.
 - Use RAII and Qt parent ownership; avoid raw owning `new`/`delete`.
 - Use Qt signals/slots for cross-object communication.
+- Attempt to add or update automated tests for every code change wherever
+  practical. Run the complete existing test suite after code changes and do
+  not leave previously passing tests broken.
 - Keep IC-9700 protocol decisions grounded in logs, packet captures, or radio
   behavior; ask for captures when behavior is uncertain.
 - Use `AppSettings` for SDR9700 client settings. Do not add new app-owned
@@ -109,6 +112,7 @@ here; update `CONVENTIONS.md` when a coding rule changes.
 
 ```bash
 make release
+ctest --test-dir src/build --output-on-failure
 ./src/build/bin/SDR9700
 ```
 

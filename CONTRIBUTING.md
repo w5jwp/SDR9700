@@ -46,6 +46,9 @@ Other CMake build types are rejected by CMake.
 - Keep each change focused on one problem.
 - Consider build and behavior impacts for both Linux and Apple Silicon macOS.
   Prefer Qt's cross-platform APIs and isolate unavoidable native code.
+- Attempt to add or update automated tests for every code change wherever
+  practical. Regression fixes should include a test when the failure can be
+  reproduced reliably.
 - Preserve user changes already present in the working tree.
 - Do not copy material from `resources/manuals/` into `src/`.
 - Do not promote imported material to active docs without rewriting it for
@@ -92,7 +95,8 @@ Any findings not already suppressed should be addressed or explained in the PR d
 Then:
 
 - Build locally.
-- Run any relevant tests.
+- Run the complete existing test suite with
+  `ctest --test-dir src/build --output-on-failure`; all tests must pass.
 - Explain what changed and how it was verified.
 - Note any behavior that needs validation against real IC-9700 hardware.
 

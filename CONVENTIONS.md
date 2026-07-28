@@ -64,6 +64,29 @@ Run it before submitting source changes.
 - If `src/build` has the wrong CMake generator or stale cache state, clear and
   reconfigure `src/build` instead of creating another build directory.
 
+## Testing
+
+- Attempt to add or update automated tests for every code change wherever
+  practical. Favor deterministic tests that run without radio hardware,
+  platform-specific services, or user interaction.
+- A defect fix should include a regression test that demonstrates the previous
+  failure whenever the behavior can be reproduced reliably in the test suite.
+- Prefer Qt Test and CTest so the same tests run on Linux and macOS (Apple
+  Silicon).
+- Before a code change is considered complete, build the affected targets and
+  run the complete existing test suite with:
+
+  ```bash
+  ctest --test-dir src/build --output-on-failure
+  ```
+
+- All existing tests must continue to pass. Do not remove, disable, or weaken a
+  test merely to make a code change pass; update a test only when the intended
+  behavior has deliberately changed.
+- When behavior requires an IC-9700, RC-28, audio device, or other physical
+  hardware, document the manual verification performed and still test the
+  hardware-independent logic where possible.
+
 ## Naming
 
 - Classes and structs: `PascalCase`.
