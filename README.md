@@ -101,38 +101,6 @@ Debug CMake configurations are supported:
 make debug
 ```
 
-### macOS Packaging
-
-The macOS packaging tools support Apple Silicon only:
-
-```bash
-make release
-make dmg
-```
-
-This creates a self-contained, locally ad-hoc-signed disk image at
-`src/build/package/SDR9700-<version>-macOS-apple-silicon.dmg`. The deployment step
-fails if any bundled executable still refers to Homebrew libraries.
-
-For a release signed with an Apple Developer ID:
-
-```bash
-export SDR9700_SIGN_IDENTITY="Developer ID Application: Example (TEAMID)"
-make release
-make release-dmg
-```
-
-To submit the signed disk image using a `notarytool` keychain profile:
-
-```bash
-export SDR9700_NOTARY_PROFILE="sdr9700-notary"
-make notarize DMG=src/build/package/SDR9700-<version>-macOS-apple-silicon.dmg
-```
-
-Signing and notarization require the maintainer's Apple credentials. Do not
-store identities, passwords, API keys, or keychain material in the repository.
-The scripts used by these targets live in `resources/macos/scripts/`.
-
 ## Repository Layout
 
 - `src/gui/`: Qt widgets and dialogs.
