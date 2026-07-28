@@ -1,4 +1,5 @@
 #include "SpectrumScopeController.h"
+#include "SpectrumTuningPolicy.h"
 
 #include "AppSettings.h"
 #include "SpectrumScopeDisplay.h"
@@ -216,12 +217,7 @@ void SpectrumScopeController::applySpectrumScopeSettings()
 
 quint64 SpectrumScopeController::roundFrequencyToStep(quint64 hz) const
 {
-    const quint64 stepHz = static_cast<quint64>(m_window->tuningStepHz());
-    if (stepHz <= 1)
-    {
-        return hz;
-    }
-    return ((hz + stepHz / 2) / stepHz) * stepHz;
+    return sdr9700::roundFrequencyToStep(hz, static_cast<quint64>(m_window->tuningStepHz()));
 }
 
 void SpectrumScopeController::panSpectrumScopeToCenter(quint64 centerHz)
@@ -263,48 +259,14 @@ quint64 SpectrumScopeController::clampSpectrumScopeCenterHz(quint64 hz, double b
 {
     const quint64 referenceHz = m_window->m_vfoFrequencyHz > 0 ? m_window->m_vfoFrequencyHz
                                                                : (m_window->m_vfo ? m_window->m_vfo->frequencyHz() : 0);
-    availableBands band = sdr9700::radioBandForFrequency(referenceHz);
-    if (band == bandUnknown)
-    {
-        band = sdr9700::radioBandForFrequency(hz);
-    }
-
-    quint64 startHz = 0;
-    quint64 endHz = 0;
-    if (band == bandUnknown || !sdr9700::radioBandEdges(band, &startHz, &endHz))
-    {
-        return hz;
-    }
-
-    const double startMhz = startHz / 1e6;
-    const double endMhz = endHz / 1e6;
-    const double halfBandwidthMhz = qMax(0.0, bandwidthMhz) / 2.0;
-    const double minCenterMhz = startMhz + halfBandwidthMhz;
-    const double maxCenterMhz = endMhz - halfBandwidthMhz;
-    const double requestedMhz = hz / 1e6;
-    const double clampedMhz =
-        maxCenterMhz >= minCenterMhz ? qBound(minCenterMhz, requestedMhz, maxCenterMhz) : (startMhz + endMhz) / 2.0;
-    return static_cast<quint64>(std::llround(clampedMhz * 1e6));
+    return sdr9700::clampScopeCenterToBand(hz, referenceHz, bandwidthMhz);
 }
 
 quint64 SpectrumScopeController::clampFrequencyHzToActiveBand(quint64 hz) const
 {
     const quint64 referenceHz = m_window->m_vfoFrequencyHz > 0 ? m_window->m_vfoFrequencyHz
                                                                : (m_window->m_vfo ? m_window->m_vfo->frequencyHz() : 0);
-    availableBands band = sdr9700::radioBandForFrequency(referenceHz);
-    if (band == bandUnknown)
-    {
-        band = sdr9700::radioBandForFrequency(hz);
-    }
-
-    quint64 startHz = 0;
-    quint64 endHz = 0;
-    if (band == bandUnknown || !sdr9700::radioBandEdges(band, &startHz, &endHz))
-    {
-        return hz;
-    }
-
-    return std::clamp(hz, startHz, endHz);
+    return sdr9700::clampFrequencyToBand(hz, referenceHz);
 }
 
 void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz)

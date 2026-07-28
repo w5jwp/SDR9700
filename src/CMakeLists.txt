@@ -56,6 +56,7 @@ set(SDR9700_CORE_SOURCES
 
     # Audio - Qt Multimedia handlers only
     audio/AudioConverter.cpp
+    audio/DtmfGenerator.cpp
     audio/AudioHandlerBase.cpp
     audio/AudioHandlerQtInput.cpp
     audio/AudioHandlerQtOutput.cpp
@@ -343,6 +344,52 @@ if(BUILD_TESTING)
     target_link_libraries(UdpBaseTest PRIVATE SDR9700_core Qt6::Test)
     target_compile_options(UdpBaseTest PRIVATE -Wall -Wextra)
     add_test(NAME UdpBaseTest COMMAND UdpBaseTest)
+
+    add_executable(WaterfallScopeTest
+        tests/WaterfallScopeTest.cpp
+        backend/ScopeController.cpp
+        gui/WaterfallController.cpp
+    )
+    target_include_directories(WaterfallScopeTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/backend
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(WaterfallScopeTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(WaterfallScopeTest PRIVATE -Wall -Wextra)
+    add_test(NAME WaterfallScopeTest COMMAND WaterfallScopeTest)
+
+    add_executable(RadioRouterTest
+        tests/RadioRouterTest.cpp
+        backend/RadioRouter.cpp
+    )
+    target_include_directories(RadioRouterTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/backend)
+    target_link_libraries(RadioRouterTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(RadioRouterTest PRIVATE -Wall -Wextra)
+    add_test(NAME RadioRouterTest COMMAND RadioRouterTest)
+
+    add_executable(OfflinePoliciesTest tests/OfflinePoliciesTest.cpp)
+    target_include_directories(OfflinePoliciesTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/backend
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(OfflinePoliciesTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(OfflinePoliciesTest PRIVATE -Wall -Wextra)
+    add_test(NAME OfflinePoliciesTest COMMAND OfflinePoliciesTest)
+
+    add_executable(DtmfGeneratorTest tests/DtmfGeneratorTest.cpp)
+    target_link_libraries(DtmfGeneratorTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(DtmfGeneratorTest PRIVATE -Wall -Wextra)
+    add_test(NAME DtmfGeneratorTest COMMAND DtmfGeneratorTest)
+
+    add_executable(DtmfDialogTest
+        tests/DtmfDialogTest.cpp
+        gui/DtmfDialog.cpp
+    )
+    target_include_directories(DtmfDialogTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
+    target_link_libraries(DtmfDialogTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
+    target_compile_options(DtmfDialogTest PRIVATE -Wall -Wextra)
+    add_test(NAME DtmfDialogTest COMMAND DtmfDialogTest)
+    set_tests_properties(DtmfDialogTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(VfoBackendTest
         tests/VfoBackendTest.cpp

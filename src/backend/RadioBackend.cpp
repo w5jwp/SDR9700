@@ -6,6 +6,7 @@
 #include "ScopeController.h"
 #include "Types.h"
 #include "AppSettings.h"
+#include "DtmfGenerator.h"
 #include "LogCategories.h"
 #include "RadioCapabilities.h"
 #include "RadioIdentities.h"
@@ -31,11 +32,9 @@ constexpr int kMaxSyncReconnectAttempts = 1;
 constexpr int kMemoryWriteReadbackDelayMs = 250;
 constexpr int kPttReleaseTailMs = 150;
 constexpr int kMaxTransmitDurationMs = 180000;
-constexpr int kHighSwrConsecutiveReadings = 3;
 constexpr uchar kHardwareTxTimeoutTimer = 1; // 3 minutes, the IC-9700's shortest non-off value.
 constexpr uchar kMainReceiver = 0;
 constexpr quint32 kTxAudioSampleRate = 16000;
-constexpr double kHighSwrCutoff = 3.0;
 
 quint64 memoryGroupDefaultFrequencyHz(quint16 group)
 {
@@ -155,65 +154,6 @@ void sendDisconnectSafetyCommands(Commander* commandSession, std::optional<int> 
         commandSession->receiveCommandNoReadback(funcDATA1Mod,
                                                  QVariant::fromValue(restoreInputForModSource(*originalData1Mod)), 0);
     }
-}
-
-// Standard DTMF dual-tone frequencies (row × column).
-// Row:    697, 770, 852, 941 Hz
-// Column: 1209, 1336, 1477, 1633 Hz
-struct DtmfEntry
-{
-    char digit;
-    double f1; // row
-    double f2; // column
-};
-
-constexpr DtmfEntry kDtmfTable[] = {
-    {'0', 941.0, 1336.0}, {'1', 697.0, 1209.0}, {'2', 697.0, 1336.0}, {'3', 697.0, 1477.0},
-    {'4', 770.0, 1209.0}, {'5', 770.0, 1336.0}, {'6', 770.0, 1477.0}, {'7', 852.0, 1209.0},
-    {'8', 852.0, 1336.0}, {'9', 852.0, 1477.0}, {'*', 941.0, 1209.0}, {'#', 941.0, 1477.0},
-    {'A', 697.0, 1633.0}, {'B', 770.0, 1633.0}, {'C', 852.0, 1633.0}, {'D', 941.0, 1633.0},
-};
-
-// Generates interleaved 16-bit signed little-endian mono PCM for a DTMF digit sequence.
-// Each digit is 100 ms of dual-tone followed by 100 ms of silence (200 ms total).
-// The buffer uses the same LPCM16 mono sample rate requested for TX audio.
-QByteArray generateDtmfPcm(const QString& digits)
-{
-    constexpr int kToneMs = 200;
-    constexpr int kGapMs = 200;
-    constexpr double kAmplitude = 0.45; // each sine; combined peak ≤ 0.9 of full scale
-    constexpr double kPi = 3.14159265358979323846;
-
-    const int toneSamples = kTxAudioSampleRate * kToneMs / 1000;
-    const int gapSamples = kTxAudioSampleRate * kGapMs / 1000;
-
-    QByteArray pcm;
-    pcm.reserve(digits.size() * (toneSamples + gapSamples) * int(sizeof(qint16)));
-
-    for (QChar qch : digits)
-    {
-        const char ch = qch.toUpper().toLatin1();
-        const auto entryIt = std::find_if(std::begin(kDtmfTable), std::end(kDtmfTable),
-                                          [ch](const auto& entry) { return entry.digit == ch; });
-        if (entryIt == std::end(kDtmfTable))
-        {
-            continue;
-        }
-        const double f1 = entryIt->f1;
-        const double f2 = entryIt->f2;
-
-        for (int i = 0; i < toneSamples; ++i)
-        {
-            const double t = double(i) / kTxAudioSampleRate;
-            const double v = kAmplitude * (std::sin(2.0 * kPi * f1 * t) + std::sin(2.0 * kPi * f2 * t));
-            const qint16 s = qint16(std::clamp(v, -1.0, 1.0) * 32767.0);
-            pcm.append(reinterpret_cast<const char*>(&s), sizeof(s));
-        }
-
-        pcm.append(gapSamples * int(sizeof(qint16)), '\0');
-    }
-
-    return pcm;
 }
 
 } // namespace
@@ -1294,7 +1234,7 @@ void RadioBackend::armTransmitSafety()
 
     if (!m_pttMaxDurationTimer->isActive())
     {
-        m_highSwrReadingCount = 0;
+        m_transmitSafetyPolicy.reset();
         m_pttMaxDurationTimer->start();
     }
 }
@@ -1305,7 +1245,7 @@ void RadioBackend::disarmTransmitSafety()
     {
         m_pttMaxDurationTimer->stop();
     }
-    m_highSwrReadingCount = 0;
+    m_transmitSafetyPolicy.reset();
 }
 
 void RadioBackend::resetScopeController()
@@ -1343,18 +1283,11 @@ void RadioBackend::handleTransmitSwr(double swr)
 
     if (!m_pttActive)
     {
-        m_highSwrReadingCount = 0;
+        m_transmitSafetyPolicy.observe(false, swr);
         return;
     }
 
-    if (swr < kHighSwrCutoff)
-    {
-        m_highSwrReadingCount = 0;
-        return;
-    }
-
-    ++m_highSwrReadingCount;
-    if (m_highSwrReadingCount < kHighSwrConsecutiveReadings)
+    if (!m_transmitSafetyPolicy.observe(true, swr))
     {
         return;
     }
@@ -1369,7 +1302,7 @@ void RadioBackend::sendDtmf(const QString& digits)
         return;
     }
 
-    const QByteArray pcm = generateDtmfPcm(digits);
+    const QByteArray pcm = sdr9700::audio::generateDtmfPcm(digits, kTxAudioSampleRate);
     if (pcm.isEmpty())
     {
         return;

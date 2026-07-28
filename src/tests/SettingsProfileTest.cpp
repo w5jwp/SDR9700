@@ -19,8 +19,12 @@ class SettingsProfileTest : public QObject
     void initTestCase();
     void cleanupTestCase();
     void storesSettingsInCurrentSchema();
+    void storesAllSettingsGroupsAndValueTypes();
+    void removesSettings();
     void profilePasswordIsEncryptedAndRoundTrips();
     void corruptedProfilePasswordIsRejected();
+    void managesProfileLifecycleAndLastSelection();
+    void ignoresMalformedAndIncompleteProfiles();
 
   private:
     static QJsonObject settingsDocument();
@@ -66,6 +70,50 @@ void SettingsProfileTest::storesSettingsInCurrentSchema()
     QCOMPARE(root.value(QStringLiteral("radio")).toObject().value(QStringLiteral("tuningStepHZ")).toString(),
              QStringLiteral("100"));
     QVERIFY(!root.contains(QStringLiteral("autoConnect")));
+}
+
+void SettingsProfileTest::storesAllSettingsGroupsAndValueTypes()
+{
+    AppSettings& settings = AppSettings::instance();
+    QVERIFY(settings.setValue(QStringLiteral("audioInputDeviceID"), QStringLiteral("input-id")));
+    QVERIFY(settings.setValue(QStringLiteral("spectrumScopeInvertMouseWheel"), false));
+    QVERIFY(settings.setValue(QStringLiteral("mainWindowPositionX"), -42));
+    QVERIFY(settings.setValue(QStringLiteral("memoryPollIntervalSeconds"), 900));
+    QVERIFY(settings.setValue(QStringLiteral("LANModLevel"), 127));
+    QVERIFY(settings.setValue(QStringLiteral("ICOMRC28ButtonMapping"), QStringLiteral("{\"1\":\"mute\"}")));
+
+    const QJsonObject root = settingsDocument();
+    QCOMPARE(root.value(QStringLiteral("audio")).toObject().value(QStringLiteral("inputDeviceID")).toString(),
+             QStringLiteral("input-id"));
+    QCOMPARE(
+        root.value(QStringLiteral("spectrumScope")).toObject().value(QStringLiteral("invertMouseWheel")).toString(),
+        QStringLiteral("False"));
+    QCOMPARE(root.value(QStringLiteral("mainWindow")).toObject().value(QStringLiteral("positionX")).toString(),
+             QStringLiteral("-42"));
+    QCOMPARE(
+        root.value(QStringLiteral("memoryManager")).toObject().value(QStringLiteral("pollIntervalSeconds")).toString(),
+        QStringLiteral("900"));
+    QCOMPARE(root.value(QStringLiteral("radio")).toObject().value(QStringLiteral("LANModLevel")).toString(),
+             QStringLiteral("127"));
+    QCOMPARE(root.value(QStringLiteral("accessories"))
+                 .toObject()
+                 .value(QStringLiteral("ICOMRC28ButtonMapping"))
+                 .toObject()
+                 .value(QStringLiteral("1"))
+                 .toString(),
+             QStringLiteral("mute"));
+}
+
+void SettingsProfileTest::removesSettings()
+{
+    AppSettings& settings = AppSettings::instance();
+    QVERIFY(settings.setValue(QStringLiteral("statusClockUTC"), true));
+    QVERIFY(settings.contains(QStringLiteral("statusClockUTC")));
+    QVERIFY(settings.remove(QStringLiteral("statusClockUTC")));
+    QVERIFY(!settings.contains(QStringLiteral("statusClockUTC")));
+    QCOMPARE(settings.value(QStringLiteral("statusClockUTC"), QStringLiteral("fallback")).toString(),
+             QStringLiteral("fallback"));
+    QVERIFY(settings.remove(QStringLiteral("statusClockUTC")));
 }
 
 void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()
@@ -118,6 +166,58 @@ void SettingsProfileTest::corruptedProfilePasswordIsRejected()
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Skipping radio profile.*")));
     RadioProfileStore::instance().load();
     QVERIFY(RadioProfileStore::instance().profiles().isEmpty());
+}
+
+void SettingsProfileTest::managesProfileLifecycleAndLastSelection()
+{
+    RadioProfileStore& store = RadioProfileStore::instance();
+    store.load();
+    const RadioProfile first{
+        QUuid::createUuid(), QStringLiteral("First"), QStringLiteral("192.0.2.1"), 50001, QString(), QString()};
+    RadioProfile second{
+        QUuid::createUuid(), QStringLiteral("Second"), QStringLiteral("192.0.2.2"), 50002, QString(), QString()};
+
+    QVERIFY(store.addProfile(first));
+    QVERIFY(store.addProfile(second));
+    QCOMPARE(store.profiles().size(), 2);
+    QVERIFY(store.setLastProfileId(second.id));
+    QCOMPARE(store.lastProfileId(), second.id);
+
+    second.name = QStringLiteral("Updated");
+    second.port = 50003;
+    QVERIFY(store.updateProfile(second));
+    QCOMPARE(store.profileById(second.id)->name, QStringLiteral("Updated"));
+    QCOMPARE(store.profileById(second.id)->port, quint16(50003));
+    RadioProfile missing;
+    missing.id = QUuid::createUuid();
+    QVERIFY(!store.updateProfile(missing));
+
+    QVERIFY(store.removeProfile(second.id));
+    QVERIFY(store.profileById(second.id) == nullptr);
+    QVERIFY(store.lastProfileId().isNull());
+    QVERIFY(store.removeProfile(QUuid::createUuid()));
+
+    store.load();
+    QCOMPARE(store.profiles().size(), 1);
+    QVERIFY(store.profileById(first.id) != nullptr);
+}
+
+void SettingsProfileTest::ignoresMalformedAndIncompleteProfiles()
+{
+    QJsonObject malformed;
+    malformed.insert(QStringLiteral("lastProfileID"), QStringLiteral("not-a-uuid"));
+    QJsonArray profiles;
+    profiles.append(QJsonObject{{QStringLiteral("ID"), QUuid::createUuid().toString()},
+                                {QStringLiteral("name"), QStringLiteral("Missing host")}});
+    profiles.append(QJsonObject{{QStringLiteral("ID"), QStringLiteral("not-a-uuid")},
+                                {QStringLiteral("host"), QStringLiteral("192.0.2.3")}});
+    malformed.insert(QStringLiteral("profiles"), profiles);
+    QVERIFY(AppSettings::instance().setValue(
+        QStringLiteral("radioProfiles"), QString::fromUtf8(QJsonDocument(malformed).toJson(QJsonDocument::Compact))));
+
+    RadioProfileStore::instance().load();
+    QVERIFY(RadioProfileStore::instance().profiles().isEmpty());
+    QVERIFY(RadioProfileStore::instance().lastProfileId().isNull());
 }
 
 QTEST_GUILESS_MAIN(SettingsProfileTest)

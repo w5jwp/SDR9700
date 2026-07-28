@@ -6,6 +6,7 @@
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
 #include "MemoryEditorController.h"
+#include "MemorySyncPolicy.h"
 #include "MemoryPanel.h"
 #include "MemorySyncController.h"
 #include "RadioCapabilities.h"
@@ -1110,9 +1111,7 @@ void MemoryController::requestNextRadioMemory()
 
 bool MemoryController::allExpectedRadioMemoriesReceived() const
 {
-    return !m_expectedRadioMemoryKeys.isEmpty() &&
-           std::all_of(m_expectedRadioMemoryKeys.cbegin(), m_expectedRadioMemoryKeys.cend(),
-                       [this](quint32 key) { return m_receivedRadioMemoryKeys.contains(key); });
+    return sdr9700::memorySyncComplete(m_expectedRadioMemoryKeys, m_receivedRadioMemoryKeys);
 }
 
 bool MemoryController::radioConnected() const

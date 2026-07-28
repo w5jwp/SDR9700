@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QTimer>
 #include <QVector>
+#include "TransmitSafetyPolicy.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -151,6 +152,6 @@ class RadioBackend : public IRadioBackend
     QTimer* m_bandStateRefreshTimer{nullptr};
     int m_currentBandKey{-1};
     int m_currentMainFilter{1};
-    int m_highSwrReadingCount{0};
+    sdr9700::TransmitSafetyPolicy m_transmitSafetyPolicy;
     int m_txMeterPollTick{0};
 };

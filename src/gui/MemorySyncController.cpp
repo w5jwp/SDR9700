@@ -2,6 +2,7 @@
 
 #include "MemoryController.h"
 #include "MainWindowHelpers.h"
+#include "MemorySyncPolicy.h"
 
 #include <QMessageBox>
 
@@ -36,6 +37,5 @@ void MemorySyncController::forceRadioMemorySync()
 
 void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
 {
-    m_owner->setMemoryPollTimerIntervalSeconds(
-        qBound(kMemoryPollIntervalMinSeconds, seconds, kMemoryPollIntervalMaxSeconds));
+    m_owner->setMemoryPollTimerIntervalSeconds(sdr9700::clampMemoryPollIntervalSeconds(seconds));
 }
