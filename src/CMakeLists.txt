@@ -272,6 +272,22 @@ if(BUILD_TESTING)
     target_compile_options(MemoryStoreTest PRIVATE -Wall -Wextra)
     add_test(NAME MemoryStoreTest COMMAND MemoryStoreTest)
 
+    add_executable(MainWindowHelpersTest
+        tests/MainWindowHelpersTest.cpp
+        gui/MainWindowHelpers.cpp
+    )
+    target_include_directories(MainWindowHelpersTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(MainWindowHelpersTest PRIVATE
+        SDR9700_core
+        Qt6::Test
+        Qt6::Widgets
+    )
+    target_compile_options(MainWindowHelpersTest PRIVATE -Wall -Wextra)
+    add_test(NAME MainWindowHelpersTest COMMAND MainWindowHelpersTest)
+
     add_executable(SystemStatsTest tests/SystemStatsTest.cpp)
     target_link_libraries(SystemStatsTest PRIVATE SDR9700_core Qt6::Test)
     target_compile_options(SystemStatsTest PRIVATE -Wall -Wextra)

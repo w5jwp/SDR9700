@@ -10,17 +10,80 @@ class AudioConverterTest : public QObject
     Q_OBJECT
 
   private slots:
+    void rejectsInvalidFormat();
+    void rejectsConversionBeforeInitialization();
+    void rejectsMalformedSampleData_data();
+    void rejectsMalformedSampleData();
     void stereoInputAveragesBothChannels();
+    void monoInputDuplicatesToBothChannels();
     void pcmuEncoderUsesStandardEdgeCodes();
     void pcmuDecoderPreservesSampleSign();
 };
 
+namespace
+{
+QAudioFormat audioFormat(int channels, QAudioFormat::SampleFormat sampleFormat)
+{
+    QAudioFormat format;
+    format.setSampleRate(48000);
+    format.setChannelCount(channels);
+    format.setSampleFormat(sampleFormat);
+    return format;
+}
+} // namespace
+
+void AudioConverterTest::rejectsInvalidFormat()
+{
+    AudioConverter converter;
+    QSignalSpy failedSpy(&converter, &AudioConverter::initFailed);
+
+    QTest::ignoreMessage(QtCriticalMsg, QRegularExpression(QStringLiteral("Invalid audio converter format.*")));
+    QVERIFY(!converter.init(QAudioFormat(), LPCM, audioFormat(1, QAudioFormat::Int16), LPCM, 7, 4));
+    QCOMPARE(failedSpy.count(), 1);
+    QCOMPARE(failedSpy.constFirst().constFirst().toString(), QStringLiteral("Invalid audio converter format"));
+}
+
+void AudioConverterTest::rejectsConversionBeforeInitialization()
+{
+    AudioConverter converter;
+
+    QTest::ignoreMessage(QtWarningMsg, "AudioConverter::convert() called before successful initialization");
+    QVERIFY(!converter.convert(audioPacket{}));
+}
+
+void AudioConverterTest::rejectsMalformedSampleData_data()
+{
+    QTest::addColumn<QAudioFormat::SampleFormat>("sampleFormat");
+    QTest::addColumn<int>("byteCount");
+    QTest::addColumn<QString>("warningPattern");
+
+    QTest::newRow("partial-int16") << QAudioFormat::Int16 << 1
+                                   << QStringLiteral("Dropping malformed Int16 audio packet.*");
+    QTest::newRow("partial-int32") << QAudioFormat::Int32 << 3
+                                   << QStringLiteral("Dropping malformed Int32 audio packet.*");
+    QTest::newRow("partial-float") << QAudioFormat::Float << 3
+                                   << QStringLiteral("Dropping malformed float audio packet.*");
+}
+
+void AudioConverterTest::rejectsMalformedSampleData()
+{
+    QFETCH(QAudioFormat::SampleFormat, sampleFormat);
+    QFETCH(int, byteCount);
+    QFETCH(QString, warningPattern);
+
+    const QAudioFormat format = audioFormat(1, sampleFormat);
+    AudioConverter converter;
+    QVERIFY(converter.init(format, LPCM, format, LPCM, 7, 4));
+
+    audioPacket packet;
+    packet.data = QByteArray(byteCount, '\0');
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(warningPattern));
+    QVERIFY(!converter.convert(packet));
+}
+
 void AudioConverterTest::stereoInputAveragesBothChannels()
 {
-    QAudioFormat input;
-    input.setSampleRate(48000);
-    input.setChannelCount(2);
-    input.setSampleFormat(QAudioFormat::Int16);
+    QAudioFormat input = audioFormat(2, QAudioFormat::Int16);
 
     QAudioFormat output = input;
     output.setChannelCount(1);
@@ -43,6 +106,34 @@ void AudioConverterTest::stereoInputAveragesBothChannels()
     std::memcpy(mono, converted.data.constData(), sizeof(mono));
     QCOMPARE(mono[0], qint16(5000));
     QCOMPARE(mono[1], qint16(-5000));
+}
+
+void AudioConverterTest::monoInputDuplicatesToBothChannels()
+{
+    QAudioFormat input = audioFormat(1, QAudioFormat::Int16);
+    QAudioFormat output = input;
+    output.setChannelCount(2);
+
+    AudioConverter converter;
+    QVERIFY(converter.init(input, LPCM, output, LPCM, 7, 4));
+
+    const qint16 samples[] = {1000, -2000};
+    audioPacket packet;
+    packet.data.resize(sizeof(samples));
+    std::memcpy(packet.data.data(), samples, sizeof(samples));
+
+    audioPacket converted;
+    connect(&converter, &AudioConverter::converted, this,
+            [&converted](const audioPacket& result) { converted = result; });
+    QVERIFY(converter.convert(packet));
+
+    qint16 stereo[4]{};
+    QCOMPARE(converted.data.size(), qsizetype(sizeof(stereo)));
+    std::memcpy(stereo, converted.data.constData(), sizeof(stereo));
+    QCOMPARE(stereo[0], qint16(1000));
+    QCOMPARE(stereo[1], qint16(1000));
+    QCOMPARE(stereo[2], qint16(-2000));
+    QCOMPARE(stereo[3], qint16(-2000));
 }
 
 void AudioConverterTest::pcmuEncoderUsesStandardEdgeCodes()

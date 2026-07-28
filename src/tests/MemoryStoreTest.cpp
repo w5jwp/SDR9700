@@ -9,7 +9,11 @@ class MemoryStoreTest : public QObject
 
   private slots:
     void wholeNumberToneRoundTrips();
+    void quotedTextRoundTrips();
     void malformedCsvIsRejected();
+    void missingRequiredColumnIsRejected();
+    void frequencyOutsideSelectedBandIsRejected();
+    void overlongNameIsRejected();
     void duplicateBandChannelIsRejected();
 };
 
@@ -52,6 +56,19 @@ void MemoryStoreTest::wholeNumberToneRoundTrips()
     QCOMPARE(imported.constFirst().toneMode, int(ratrTN));
 }
 
+void MemoryStoreTest::quotedTextRoundTrips()
+{
+    MemoryRecord memory = validMemory();
+    memory.name = QStringLiteral("A,\"B\",C");
+
+    QStringList errors;
+    const QVector<MemoryRecord> imported = memoriesFromCsv(memoriesExportCsv({memory}), &errors);
+
+    QCOMPARE(errors, QStringList());
+    QCOMPARE(imported.size(), 1);
+    QCOMPARE(imported.constFirst().name, memory.name);
+}
+
 void MemoryStoreTest::malformedCsvIsRejected()
 {
     QByteArray csv = memoriesExportCsv({validMemory()});
@@ -61,6 +78,36 @@ void MemoryStoreTest::malformedCsvIsRejected()
     QVERIFY(memoriesFromCsv(csv, &errors).isEmpty());
     QVERIFY(!errors.isEmpty());
     QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("unterminated"), Qt::CaseInsensitive));
+}
+
+void MemoryStoreTest::missingRequiredColumnIsRejected()
+{
+    QByteArray csv = memoriesExportCsv({validMemory()});
+    csv.replace("receiveHZ", "otherHZ");
+
+    QStringList errors;
+    QVERIFY(memoriesFromCsv(csv, &errors).isEmpty());
+    QVERIFY(errors.contains(QStringLiteral("Missing CSV column: receiveHZ")));
+}
+
+void MemoryStoreTest::frequencyOutsideSelectedBandIsRejected()
+{
+    QByteArray csv = memoriesExportCsv({validMemory()});
+    csv.replace("146520000", "440000000");
+
+    QStringList errors;
+    QVERIFY(memoriesFromCsv(csv, &errors).isEmpty());
+    QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("not in the selected radio band")));
+}
+
+void MemoryStoreTest::overlongNameIsRejected()
+{
+    MemoryRecord memory = validMemory();
+    memory.name = QString(kMemoryNameMaxChars + 1, QLatin1Char('X'));
+
+    QStringList errors;
+    QVERIFY(memoriesFromCsv(memoriesExportCsv({memory}), &errors).isEmpty());
+    QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("name is limited")));
 }
 
 void MemoryStoreTest::duplicateBandChannelIsRejected()
