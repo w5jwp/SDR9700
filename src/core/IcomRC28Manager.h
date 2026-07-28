@@ -6,7 +6,7 @@
 #include <QByteArray>
 #include <QString>
 #include <atomic>
-#include <hidapi/hidapi.h>
+#include <hidapi.h>
 
 class IcomRC28Manager : public QObject
 {
