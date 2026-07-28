@@ -5,7 +5,11 @@ unusedFunction:src/models/VfoModel.h
 unusedFunction:src/tests/AudioConverterTest.cpp
 unusedFunction:src/tests/MainWindowHelpersTest.cpp
 unusedFunction:src/tests/MemoryStoreTest.cpp
+unusedFunction:src/tests/RadioCapabilitiesTest.cpp
+unusedFunction:src/tests/SpectrumScopeModelTest.cpp
+functionConst:src/tests/SpectrumScopeModelTest.cpp
 unusedFunction:src/tests/SystemStatsTest.cpp
+unusedFunction:src/tests/VfoModelTest.cpp
 functionConst:src/tests/SystemStatsTest.cpp
 unusedFunction:src/models/PanadapterModel.h
 unusedFunction:src/models/PanadapterModel.cpp

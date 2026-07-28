@@ -288,6 +288,35 @@ if(BUILD_TESTING)
     target_compile_options(MainWindowHelpersTest PRIVATE -Wall -Wextra)
     add_test(NAME MainWindowHelpersTest COMMAND MainWindowHelpersTest)
 
+    add_executable(VfoModelTest
+        tests/VfoModelTest.cpp
+        models/VfoModel.cpp
+    )
+    target_include_directories(VfoModelTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/models
+    )
+    target_link_libraries(VfoModelTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(VfoModelTest PRIVATE -Wall -Wextra)
+    add_test(NAME VfoModelTest COMMAND VfoModelTest)
+
+    add_executable(SpectrumScopeModelTest
+        tests/SpectrumScopeModelTest.cpp
+        models/SpectrumScopeModel.cpp
+    )
+    target_include_directories(SpectrumScopeModelTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/models
+    )
+    target_link_libraries(SpectrumScopeModelTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(SpectrumScopeModelTest PRIVATE -Wall -Wextra)
+    add_test(NAME SpectrumScopeModelTest COMMAND SpectrumScopeModelTest)
+
+    add_executable(RadioCapabilitiesTest tests/RadioCapabilitiesTest.cpp)
+    target_link_libraries(RadioCapabilitiesTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(RadioCapabilitiesTest PRIVATE -Wall -Wextra)
+    add_test(NAME RadioCapabilitiesTest COMMAND RadioCapabilitiesTest)
+
     add_executable(SystemStatsTest tests/SystemStatsTest.cpp)
     target_link_libraries(SystemStatsTest PRIVATE SDR9700_core Qt6::Test)
     target_compile_options(SystemStatsTest PRIVATE -Wall -Wextra)
