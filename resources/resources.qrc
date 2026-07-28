@@ -1,6 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>images/icons/sdr9700_app_icon.png</file>
-        <file>images/icons/sdr9700_app_icon.ico</file>
-    </qresource>
-</RCC>

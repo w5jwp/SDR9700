@@ -104,7 +104,7 @@ target_compile_options(SDR9700_core PRIVATE -Wall -Wextra)
 # SDR9700 executable
 set(SDR9700_SOURCES
     main.cpp
-    ../resources/resources.qrc
+    ../resources/qt/resources.qrc
 
     backend/IRadioBackend.h
     backend/ScopeController.h

@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="images/icons/sdr9700_app_icon.png">../images/icons/sdr9700_app_icon.png</file>
+        <file alias="images/icons/sdr9700_app_icon.ico">../images/icons/sdr9700_app_icon.ico</file>
+    </qresource>
+</RCC>

@@ -140,7 +140,7 @@ make notarize DMG=src/build/package/SDR9700-<version>-macOS-apple-silicon.dmg
 
 Signing and notarization require the maintainer's Apple credentials. Do not
 store identities, passwords, API keys, or keychain material in the repository.
-The scripts used by these targets live in `resources/scripts/`.
+The scripts used by these targets live in `resources/macos/scripts/`.
 
 ## Repository Layout
 
@@ -150,8 +150,8 @@ The scripts used by these targets live in `resources/scripts/`.
 - `src/radio/`: IC-9700 LAN and CI-V radio protocol code.
 - `src/audio/`: Qt Multimedia audio handlers and conversion utilities.
 - `src/core/`: settings, profile storage, queues, and shared types.
-- `resources/`: images, manuals, macOS metadata, packaging scripts, and Qt
-  resources.
+- `resources/`: shared images and platform-specific Linux, macOS, and Qt
+  application resources.
 
 ## Root Documentation
 
