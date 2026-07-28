@@ -12,7 +12,7 @@
 #include <QAudioSink>
 #include <chrono>
 
-#include "opus/opus.h"
+#include <opus.h>
 #include <Eigen/Eigen>
 #include <Eigen/Dense>
 
