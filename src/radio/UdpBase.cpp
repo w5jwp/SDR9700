@@ -86,13 +86,13 @@ void UdpBase::dataReceived(const QByteArray& r)
     {
     case (CONTROL_SIZE):
     {
-        const control_packet* in = reinterpret_cast<const control_packet*>(r.constData());
-        if (in->type == 0x01 && in->len == 0x10)
+        const control_packet in = *decodePacket<control_packet>(r);
+        if (in.type == 0x01 && in.len == 0x10)
         {
             packetsLost++;
             congestion = congestionPercent(packetsSent, packetsLost);
             txBufferMutex.lock();
-            auto match = txSeqBuf.find(in->seq);
+            auto match = txSeqBuf.find(in.seq);
             if (match != txSeqBuf.end())
             {
                 // Retransmits are untracked because the original packet is already in the send buffer.
@@ -110,24 +110,24 @@ void UdpBase::dataReceived(const QByteArray& r)
                                                                         .arg(txSeqBuf.firstKey(), 0, 16)
                                                                         .arg(txSeqBuf.lastKey(), 0, 16);
                 qDebug(logUdp()) << this->metaObject()->className() << ": Remote requested packet"
-                                 << QString("0x%1").arg(in->seq, 0, 16) << "not found," << availableRange;
+                                 << QString("0x%1").arg(in.seq, 0, 16) << "not found," << availableRange;
             }
             txBufferMutex.unlock();
         }
-        if (in->type == 0x04)
+        if (in.type == 0x04)
         {
             qInfo(logUdp()) << this->metaObject()->className() << ": Received I am here ";
             areYouThereCounter = 0;
             // IC-9700 sends "I am here" during discovery in response to this
             // client's "Are you there" probe.
-            remoteId = in->sentid;
+            remoteId = in.sentid;
             if (areYouThereTimer != nullptr && areYouThereTimer->isActive())
             {
                 areYouThereTimer->stop();
             }
             sendControl(false, 0x06, 0x01);
         }
-        else if (in->type == 0x06)
+        else if (in.type == 0x06)
         {
             // Sequence bookkeeping happens in the shared receive path below.
         }
@@ -135,10 +135,10 @@ void UdpBase::dataReceived(const QByteArray& r)
     }
     case (PING_SIZE):
     {
-        const ping_packet* in = reinterpret_cast<const ping_packet*>(r.constData());
-        if (in->type == 0x07)
+        const ping_packet in = *decodePacket<ping_packet>(r);
+        if (in.type == 0x07)
         {
-            if (in->reply == 0x00)
+            if (in.reply == 0x00)
             {
 
                 static constexpr int kDayMs = 24 * 60 * 60 * 1000;
@@ -166,8 +166,8 @@ void UdpBase::dataReceived(const QByteArray& r)
                     return d;
                 };
 
-                const qint64 localNow = mono.elapsed();      // monotonic ms
-                const int radioNow = normDay(int(in->time)); // ms since startup, wrapped daily
+                const qint64 localNow = mono.elapsed();     // monotonic ms
+                const int radioNow = normDay(int(in.time)); // ms since startup, wrapped daily
 
                 // Maintain a prediction of radioNow from monotonic time for this
                 // UDP stream. These values must be per-instance because SDR9700
@@ -204,23 +204,21 @@ void UdpBase::dataReceived(const QByteArray& r)
                     }
                 }
 
-                ping_packet p;
-                memset(p.packet, 0x0, sizeof(p));
+                ping_packet p{};
                 p.len = sizeof(p);
                 p.type = 0x07;
                 p.sentid = myId;
                 p.rcvdid = remoteId;
                 p.reply = 0x01;
-                p.seq = in->seq;
-                p.time = in->time;
+                p.seq = in.seq;
+                p.time = in.time;
                 udpMutex.lock();
-                udp->writeDatagram(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)), radioIP,
-                                   port);
+                udp->writeDatagram(encodePacket(p), radioIP, port);
                 udpMutex.unlock();
             }
-            else if (in->reply == 0x01)
+            else if (in.reply == 0x01)
             {
-                if (in->seq == pingSendSeq)
+                if (in.seq == pingSendSeq)
                 {
                     pingSendSeq++;
                 }
@@ -239,9 +237,9 @@ void UdpBase::dataReceived(const QByteArray& r)
     break;
     }
 
-    const control_packet* in = reinterpret_cast<const control_packet*>(r.constData());
+    const control_packet in = *decodePacket<control_packet>(r);
 
-    if (in->type == 0x01 && in->len != 0x10)
+    if (in.type == 0x01 && in.len != 0x10)
     {
 
         txBufferMutex.lock();
@@ -278,24 +276,24 @@ void UdpBase::dataReceived(const QByteArray& r)
                                << ": Ignoring malformed odd-length retransmit request:" << r.length();
         }
     }
-    else if (in->len != PING_SIZE && in->type == 0x00 && in->seq != 0x00)
+    else if (in.len != PING_SIZE && in.type == 0x00 && in.seq != 0x00)
     {
         rxBufferMutex.lock();
         if (rxSeqBuf.isEmpty())
         {
-            rxSeqBuf.insert(in->seq, receivedAtMs);
+            rxSeqBuf.insert(in.seq, receivedAtMs);
         }
         else
         {
-            if (in->seq < rxSeqBuf.firstKey() ||
-                static_cast<qint16>(in->seq - rxSeqBuf.lastKey()) > static_cast<qint16>(MAX_MISSING))
+            if (in.seq < rxSeqBuf.firstKey() ||
+                static_cast<qint16>(in.seq - rxSeqBuf.lastKey()) > static_cast<qint16>(MAX_MISSING))
             {
                 qDebug(logUdp()) << this->metaObject()->className()
                                  << "Large seq number gap detected, previous highest: "
                                  << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
-                                 << " current: " << QString("0x%1").arg(in->seq, 0, 16);
+                                 << " current: " << QString("0x%1").arg(in.seq, 0, 16);
                 rxSeqBuf.clear();
-                rxSeqBuf.insert(in->seq, receivedAtMs);
+                rxSeqBuf.insert(in.seq, receivedAtMs);
                 rxBufferMutex.unlock();
                 missingMutex.lock();
                 rxMissing.clear();
@@ -303,20 +301,20 @@ void UdpBase::dataReceived(const QByteArray& r)
                 return;
             }
 
-            if (!rxSeqBuf.contains(in->seq))
+            if (!rxSeqBuf.contains(in.seq))
             {
-                if (in->seq > rxSeqBuf.lastKey() + 1)
+                if (in.seq > rxSeqBuf.lastKey() + 1)
                 {
                     qDebug(logUdp()) << this->metaObject()->className()
                                      << "1 or more missing packets detected, previous: "
                                      << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
-                                     << " current: " << QString("0x%1").arg(in->seq, 0, 16);
+                                     << " current: " << QString("0x%1").arg(in.seq, 0, 16);
                     missingMutex.lock();
                     // Iterate in a wider type. A quint16 loop variable wraps to
                     // zero after sequence 65535 and would otherwise never leave
                     // a loop whose received sequence is 65535.
                     const quint32 firstMissing = quint32(rxSeqBuf.lastKey()) + 1U;
-                    const quint32 receivedSequence = in->seq;
+                    const quint32 receivedSequence = in.seq;
                     for (quint32 f = firstMissing; f < receivedSequence; ++f)
                     {
                         if (rxSeqBuf.size() > BUFSIZE)
@@ -334,7 +332,7 @@ void UdpBase::dataReceived(const QByteArray& r)
                     {
                         rxSeqBuf.erase(rxSeqBuf.begin());
                     }
-                    rxSeqBuf.insert(in->seq, receivedAtMs);
+                    rxSeqBuf.insert(in.seq, receivedAtMs);
                     missingMutex.unlock();
                 }
                 else
@@ -343,17 +341,17 @@ void UdpBase::dataReceived(const QByteArray& r)
                     {
                         rxSeqBuf.erase(rxSeqBuf.begin());
                     }
-                    rxSeqBuf.insert(in->seq, receivedAtMs);
+                    rxSeqBuf.insert(in.seq, receivedAtMs);
                 }
             }
             else
             {
                 missingMutex.lock();
-                auto s = rxMissing.find(in->seq);
+                auto s = rxMissing.find(in.seq);
                 if (s != rxMissing.end())
                 {
                     qDebug(logUdp()) << this->metaObject()->className() << ": Missing SEQ has been received! "
-                                     << QString("0x%1").arg(in->seq, 0, 16);
+                                     << QString("0x%1").arg(in.seq, 0, 16);
 
                     s = rxMissing.erase(s);
                 }
@@ -420,8 +418,7 @@ void UdpBase::sendRetransmitRequest()
 
     if (missingSeqs.length() != 0)
     {
-        control_packet p;
-        memset(p.packet, 0x0, sizeof(p));
+        control_packet p{};
         p.len = sizeof(p);
         p.type = 0x01;
         p.seq = 0x0000;
@@ -433,8 +430,7 @@ void UdpBase::sendRetransmitRequest()
             qInfo(logUdp()) << this->metaObject()->className()
                             << ": sending request for missing packet : " << QString("0x%1").arg(p.seq, 0, 16);
             udpMutex.lock();
-            udp->writeDatagram(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)), radioIP,
-                               port);
+            udp->writeDatagram(encodePacket(p), radioIP, port);
             udpMutex.unlock();
         }
         else
@@ -457,8 +453,7 @@ void UdpBase::sendControl(bool tracked, quint8 type, quint16 seq)
     {
         return;
     }
-    control_packet p;
-    memset(p.packet, 0x0, sizeof(p));
+    control_packet p{};
     p.len = sizeof(p);
     p.type = type;
     p.sentid = myId;
@@ -468,12 +463,12 @@ void UdpBase::sendControl(bool tracked, quint8 type, quint16 seq)
     {
         p.seq = seq;
         udpMutex.lock();
-        udp->writeDatagram(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)), radioIP, port);
+        udp->writeDatagram(encodePacket(p), radioIP, port);
         udpMutex.unlock();
     }
     else
     {
-        sendTrackedPacket(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)));
+        sendTrackedPacket(encodePacket(p));
     }
     return;
 }
@@ -484,8 +479,7 @@ void UdpBase::sendPing()
     {
         return;
     }
-    ping_packet p;
-    memset(p.packet, 0x0, sizeof(p));
+    ping_packet p{};
     p.len = sizeof(p);
     p.type = 0x07;
     p.sentid = myId;
@@ -495,7 +489,7 @@ void UdpBase::sendPing()
     p.time = (quint32)now.msecsSinceStartOfDay();
     lastPingSentMs = elapsedMs();
     udpMutex.lock();
-    udp->writeDatagram(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)), radioIP, port);
+    udp->writeDatagram(encodePacket(p), radioIP, port);
     udpMutex.unlock();
     return;
 }

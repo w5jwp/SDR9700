@@ -25,6 +25,7 @@ class SettingsProfileTest : public QObject
     void corruptedProfilePasswordIsRejected();
     void managesProfileLifecycleAndLastSelection();
     void ignoresMalformedAndIncompleteProfiles();
+    void rejectsInvalidProfilePorts();
 
   private:
     static QJsonObject settingsDocument();
@@ -218,6 +219,28 @@ void SettingsProfileTest::ignoresMalformedAndIncompleteProfiles()
     RadioProfileStore::instance().load();
     QVERIFY(RadioProfileStore::instance().profiles().isEmpty());
     QVERIFY(RadioProfileStore::instance().lastProfileId().isNull());
+}
+
+void SettingsProfileTest::rejectsInvalidProfilePorts()
+{
+    QJsonArray profiles;
+    for (int port : {-1, 0, 65536, 70000})
+    {
+        profiles.append(QJsonObject{{QStringLiteral("ID"), QUuid::createUuid().toString()},
+                                    {QStringLiteral("name"), QStringLiteral("Bad port")},
+                                    {QStringLiteral("host"), QStringLiteral("192.0.2.4")},
+                                    {QStringLiteral("port"), port}});
+    }
+    const QJsonObject root{{QStringLiteral("profiles"), profiles}};
+    QVERIFY(AppSettings::instance().setValue(QStringLiteral("radioProfiles"),
+                                             QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact))));
+
+    for (int i = 0; i < profiles.size(); ++i)
+    {
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Skipping radio profile.*")));
+    }
+    RadioProfileStore::instance().load();
+    QVERIFY(RadioProfileStore::instance().profiles().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(SettingsProfileTest)

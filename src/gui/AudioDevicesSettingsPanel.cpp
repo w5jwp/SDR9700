@@ -8,10 +8,12 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QMediaDevices>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(parent)
 {
+    m_mediaDevices = new QMediaDevices(this);
     auto* vbox = new QVBoxLayout(this);
     vbox->setContentsMargins(12, 4, 12, 0);
     vbox->setSpacing(8);
@@ -22,21 +24,9 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     inputForm->setSpacing(8);
 
     m_inputCombo = new QComboBox(inputGroup);
-    for (const QAudioDevice& dev : QMediaDevices::audioInputs())
-    {
-        m_inputCombo->addItem(dev.description(), dev.id());
-    }
-
     const AppSettings& settings = AppSettings::instance();
     const QByteArray savedIn = settings.value("audioInputDeviceID").toString().toUtf8();
-    if (!savedIn.isEmpty())
-    {
-        const int idx = m_inputCombo->findData(savedIn);
-        if (idx >= 0)
-        {
-            m_inputCombo->setCurrentIndex(idx);
-        }
-    }
+    repopulateDeviceCombo(m_inputCombo, QMediaDevices::audioInputs(), savedIn);
 
     inputForm->addRow("Device:", m_inputCombo);
     vbox->addWidget(inputGroup);
@@ -47,10 +37,6 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     outputForm->setSpacing(8);
 
     m_outputCombo = new QComboBox(outputGroup);
-    for (const QAudioDevice& dev : QMediaDevices::audioOutputs())
-    {
-        m_outputCombo->addItem(dev.description(), dev.id());
-    }
 
     m_outputChannelsCombo = new QComboBox(outputGroup);
     m_outputChannelsCombo->addItem(QStringLiteral("LPCM 16-bit, 1 channel"), 1);
@@ -58,15 +44,7 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
 
     const QByteArray savedOut = settings.value("audioOutputDeviceID").toString().toUtf8();
     const int savedOutputChannels = qBound(1, settings.value("audioOutputChannels", 2).toInt(), 2);
-
-    if (!savedOut.isEmpty())
-    {
-        const int idx = m_outputCombo->findData(savedOut);
-        if (idx >= 0)
-        {
-            m_outputCombo->setCurrentIndex(idx);
-        }
-    }
+    repopulateDeviceCombo(m_outputCombo, QMediaDevices::audioOutputs(), savedOut);
     if (const int idx = m_outputChannelsCombo->findData(savedOutputChannels); idx >= 0)
     {
         m_outputChannelsCombo->setCurrentIndex(idx);
@@ -87,4 +65,39 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
                 AppSettings::instance().setValue("audioOutputChannels",
                                                  qBound(1, m_outputChannelsCombo->currentData().toInt(), 2));
             });
+    connect(m_mediaDevices, &QMediaDevices::audioInputsChanged, this, &AudioDevicesSettingsPanel::refreshInputDevices);
+    connect(m_mediaDevices, &QMediaDevices::audioOutputsChanged, this,
+            &AudioDevicesSettingsPanel::refreshOutputDevices);
+}
+
+void AudioDevicesSettingsPanel::repopulateDeviceCombo(QComboBox* combo, const QList<QAudioDevice>& devices,
+                                                      const QByteArray& preferredID)
+{
+    if (!combo)
+    {
+        return;
+    }
+    const QSignalBlocker blocker(combo);
+    combo->clear();
+    for (const QAudioDevice& device : devices)
+    {
+        combo->addItem(device.description(), device.id());
+    }
+    const int preferredIndex = combo->findData(preferredID);
+    if (preferredIndex >= 0)
+    {
+        combo->setCurrentIndex(preferredIndex);
+    }
+}
+
+void AudioDevicesSettingsPanel::refreshInputDevices()
+{
+    const QByteArray selectedID = m_inputCombo->currentData().toByteArray();
+    repopulateDeviceCombo(m_inputCombo, QMediaDevices::audioInputs(), selectedID);
+}
+
+void AudioDevicesSettingsPanel::refreshOutputDevices()
+{
+    const QByteArray selectedID = m_outputCombo->currentData().toByteArray();
+    repopulateDeviceCombo(m_outputCombo, QMediaDevices::audioOutputs(), selectedID);
 }

@@ -2,8 +2,13 @@
 // backed by received datagrams, and outgoing packet instances are zeroed before
 // individual protocol fields are written.
 #pragma once
+#include <QByteArray>
+#include <QByteArrayView>
 #include <QObject>
 #include <QtEndian>
+#include <cstring>
+#include <optional>
+#include <type_traits>
 
 // IC-9700 LAN protocol timing and packet-size constants.
 inline constexpr int PURGE_SECONDS = 10;
@@ -417,8 +422,8 @@ typedef union rtp_header
         quint8 payloadType : 7;
         quint8 marker : 1;
 #elif Q_BYTE_ORDER == Q_BIG_ENDIAN
-        // SDR9700 currently targets Linux/x86-64, but this branch documents the
-        // RTP bitfield layout if the packet code is ever built on big-endian Qt.
+        // Linux and Apple Silicon macOS are little-endian today; retain the
+        // explicit big-endian layout so the wire representation remains defined.
         quint8 version : 2;
         quint8 padding : 1;
         quint8 extension : 1;
@@ -451,3 +456,23 @@ static_assert(sizeof(conninfo_packet) == CONNINFO_SIZE);
 static_assert(sizeof(radio_cap_packet) == RADIO_CAP_SIZE);
 static_assert(sizeof(capabilities_packet) == CAPABILITIES_SIZE);
 static_assert(sizeof(rtp_header) == 12);
+
+template <typename Packet> std::optional<Packet> decodePacket(QByteArrayView bytes)
+{
+    static_assert(std::is_trivially_copyable_v<Packet>);
+    if (bytes.size() < static_cast<qsizetype>(sizeof(Packet)))
+    {
+        return std::nullopt;
+    }
+    Packet packet{};
+    std::memcpy(&packet, bytes.data(), sizeof(Packet));
+    return packet;
+}
+
+template <typename Packet> QByteArray encodePacket(const Packet& packet)
+{
+    static_assert(std::is_trivially_copyable_v<Packet>);
+    QByteArray bytes(sizeof(Packet), Qt::Uninitialized);
+    std::memcpy(bytes.data(), &packet, sizeof(Packet));
+    return bytes;
+}

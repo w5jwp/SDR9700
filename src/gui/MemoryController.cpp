@@ -848,14 +848,11 @@ void MemoryController::buildMemoryWindow()
     root->addWidget(m_memoryEditorSeparator);
     root->addWidget(m_memoryEditorPane);
 
-    auto* memTitleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("Memory Manager"), m_window->m_memoryWindow);
-    connect(memTitleBar->closeButton(), &QPushButton::clicked, m_window->m_memoryWindow, &QWidget::hide);
     connect(closeButton, &QPushButton::clicked, m_window->m_memoryWindow, &QWidget::hide);
 
     auto* windowLayout = new QVBoxLayout(m_window->m_memoryWindow);
     windowLayout->setContentsMargins(kNoMargins);
     windowLayout->setSpacing(0);
-    windowLayout->addWidget(memTitleBar);
     windowLayout->addWidget(panel, 1);
 
     connect(m_window->m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this,

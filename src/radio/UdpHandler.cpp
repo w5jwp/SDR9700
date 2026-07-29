@@ -448,7 +448,8 @@ void UdpHandler::dataReceived()
         {
         case (CONTROL_SIZE):
         {
-            const control_packet* in = reinterpret_cast<const control_packet*>(r.constData());
+            const auto decoded = decodePacket<control_packet>(r);
+            const control_packet* in = &*decoded;
             if (in->type == 0x04)
             {
                 qInfo(logUdp()) << this->metaObject()->className()
@@ -470,7 +471,8 @@ void UdpHandler::dataReceived()
         }
         case (PING_SIZE):
         {
-            const ping_packet* in = reinterpret_cast<const ping_packet*>(r.constData());
+            const auto decoded = decodePacket<ping_packet>(r);
+            const ping_packet* in = &*decoded;
             if (in->type == 0x07 && in->reply == 0x01 && streamOpened)
             {
                 status.networkLatency += elapsedMs() - lastPingSentMs;
@@ -523,7 +525,8 @@ void UdpHandler::dataReceived()
         }
         case (TOKEN_SIZE):
         {
-            const token_packet* in = reinterpret_cast<const token_packet*>(r.constData());
+            const auto decoded = decodePacket<token_packet>(r);
+            const token_packet* in = &*decoded;
             if (in->requesttype == 0x05 && in->requestreply == 0x02 && in->type != 0x01)
             {
                 if (in->response == 0x0000)
@@ -564,7 +567,8 @@ void UdpHandler::dataReceived()
         }
         case (STATUS_SIZE):
         {
-            const status_packet* in = reinterpret_cast<const status_packet*>(r.constData());
+            const auto decoded = decodePacket<status_packet>(r);
+            const status_packet* in = &*decoded;
             if (in->type != 0x01)
             {
                 if (in->error == 0xffffffff && !streamOpened)
@@ -688,7 +692,8 @@ void UdpHandler::dataReceived()
         }
         case (LOGIN_RESPONSE_SIZE):
         {
-            const login_response_packet* in = reinterpret_cast<const login_response_packet*>(r.constData());
+            const auto decoded = decodePacket<login_response_packet>(r);
+            const login_response_packet* in = &*decoded;
             if (in->type != 0x01)
             {
 
@@ -754,7 +759,8 @@ void UdpHandler::dataReceived()
         {
             // Connection status for one radio advertised by the IC-9700 LAN server.
 
-            const conninfo_packet* in = reinterpret_cast<const conninfo_packet*>(r.constData());
+            const auto decoded = decodePacket<conninfo_packet>(r);
+            const conninfo_packet* in = &*decoded;
             QHostAddress ip = QHostAddress(qToBigEndian(in->ipaddress));
 
             qInfo(logUdp()) << "Got Connection status for:" << in->name << "Busy:" << in->busy << "Computer"
@@ -874,7 +880,8 @@ void UdpHandler::dataReceived()
                 break;
             }
 
-            const capabilities_packet* in = reinterpret_cast<const capabilities_packet*>(r.constData());
+            const auto decoded = decodePacket<capabilities_packet>(r);
+            const capabilities_packet* in = &*decoded;
             const int capabilityBytes = r.length() - CAPABILITIES_SIZE;
             if (capabilityBytes % RADIO_CAP_SIZE != 0)
             {
@@ -896,7 +903,7 @@ void UdpHandler::dataReceived()
 
             for (int i = 0; i < radioCount; ++i)
             {
-                radio_cap_packet rad;
+                radio_cap_packet rad{};
                 const char* tmpRad = r.constData();
                 memcpy(&rad, tmpRad + CAPABILITIES_SIZE + i * RADIO_CAP_SIZE, RADIO_CAP_SIZE);
                 radios.append(rad);
@@ -1037,8 +1044,7 @@ void UdpHandler::setCurrentRadio(quint8 radio)
 
 void UdpHandler::sendRequestStream()
 {
-    conninfo_packet p;
-    memset(p.packet, 0x0, sizeof(p));
+    conninfo_packet p{};
     p.len = sizeof(p);
     p.sentid = myId;
     p.rcvdid = remoteId;
@@ -1073,7 +1079,7 @@ void UdpHandler::sendRequestStream()
     p.civport = qToBigEndian((quint32)civLocalPort);
     p.audioport = qToBigEndian((quint32)audioLocalPort);
     p.convert = 1;
-    QByteArray request = QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p));
+    QByteArray request = encodePacket(p);
     qInfo(logUdp()) << "Requesting stream: rx codec=" << quint8(p.rxcodec) << "rx sample=" << qFromBigEndian(p.rxsample)
                     << "tx enabled=" << quint8(p.txenable) << "tx codec=" << quint8(p.txcodec)
                     << "tx sample=" << qFromBigEndian(p.txsample) << "civ local port=" << civLocalPort
@@ -1110,8 +1116,7 @@ void UdpHandler::sendLogin()
 
     tokRequest = static_cast<quint16>(QRandomGenerator::global()->generate());
 
-    login_packet p;
-    memset(p.packet, 0x0, sizeof(p));
+    login_packet p{};
     p.len = sizeof(p);
     p.sentid = myId;
     p.rcvdid = remoteId;
@@ -1125,7 +1130,7 @@ void UdpHandler::sendLogin()
     copyPacketField(p.password, passwordEncoded);
     copyPacketField(p.name, compName);
 
-    sendTrackedPacket(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)));
+    sendTrackedPacket(encodePacket(p));
     return;
 }
 
@@ -1133,8 +1138,7 @@ void UdpHandler::sendToken(uint8_t magic)
 {
     qDebug(logUdp()) << this->metaObject()->className() << "Sending Token request: " << magic;
 
-    token_packet p;
-    memset(p.packet, 0x0, sizeof(p));
+    token_packet p{};
     p.len = sizeof(p);
     p.sentid = myId;
     p.rcvdid = remoteId;
@@ -1146,7 +1150,7 @@ void UdpHandler::sendToken(uint8_t magic)
     p.resetcap = qToBigEndian((quint16)0x0798);
     p.token = token;
 
-    sendTrackedPacket(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)));
+    sendTrackedPacket(encodePacket(p));
     return;
 }
 

@@ -33,6 +33,7 @@ class IcomRC28Manager : public QObject
     static constexpr uint8_t kLedBitF2 = 0x04u;
     static constexpr uint8_t kLedBitLink = 0x08u;
     static constexpr uint8_t kLedsAllOff = 0x0Fu;
+    static QByteArray ledReport(uint8_t ledByte);
 
   public slots:
     void loadSettings();
@@ -50,7 +51,8 @@ class IcomRC28Manager : public QObject
 
   private:
     bool open();
-    void sendLeds(uint8_t ledByte);
+    bool sendLeds(uint8_t ledByte);
+    static bool writeLeds(hid_device* device, uint8_t ledByte);
 
     bool parseIcomRC28Report(const uint8_t* buf, size_t len, int* steps, int* button, int* action);
 

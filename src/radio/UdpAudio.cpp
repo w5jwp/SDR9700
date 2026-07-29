@@ -141,8 +141,7 @@ void UdpAudio::sendAudioBuffer(const QByteArray& data)
         const int chunkLen = qMin(1364, data.length() - len);
         const char* chunk = data.constData() + len;
         len += chunkLen;
-        audio_packet p;
-        memset(p.packet, 0x0, sizeof(p));
+        audio_packet p{};
         p.len = (quint32)sizeof(p) + chunkLen;
         p.sentid = myId;
         p.rcvdid = remoteId;
@@ -152,7 +151,7 @@ void UdpAudio::sendAudioBuffer(const QByteArray& data)
         p.ident = 0x0080;
         p.datalen = (quint16)qToBigEndian((quint16)chunkLen);
         p.sendseq = (quint16)qToBigEndian((quint16)sendAudioSeq);
-        QByteArray tx = QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p));
+        QByteArray tx = encodePacket(p);
         // Append directly from the source frame so TX packetization performs
         // one payload copy instead of building an intermediate QByteArray.
         tx.append(chunk, chunkLen);
@@ -325,7 +324,8 @@ void UdpAudio::dataReceived()
                 break;
             }
 
-            const control_packet* in = reinterpret_cast<const control_packet*>(r.constData());
+            const auto decodedControl = decodePacket<control_packet>(r);
+            const control_packet* in = &*decodedControl;
 
             if (in->type != 0x01 && in->len >= 0x20)
             {
@@ -337,7 +337,8 @@ void UdpAudio::dataReceived()
                     break;
                 }
 
-                const audio_packet* audioIn = reinterpret_cast<const audio_packet*>(r.constData());
+                const auto decodedAudio = decodePacket<audio_packet>(r);
+                const audio_packet* audioIn = &*decodedAudio;
                 const int payloadLength = r.length() - AUDIO_SIZE;
                 const quint16 declaredPayloadLength = qFromBigEndian(audioIn->datalen);
                 if (declaredPayloadLength != payloadLength)

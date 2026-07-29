@@ -100,9 +100,9 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     m_radioCommandController = new RadioCommandController(this);
     m_statusBarController = new StatusBarController(this);
 
-    setWindowFlag(Qt::FramelessWindowHint);
     updateWindowTitle();
-    setFixedSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
+    setMinimumSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
+    resize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
 
     auto* central = new QWidget(this);
     auto* vbox = new QVBoxLayout(central);
@@ -297,7 +297,6 @@ void MainWindow::buildToolBar()
                         });
     m_titleBar->addMenu(QStringLiteral("&Help"), helpMenu);
 
-    connect(m_titleBar, &MainTitleBar::minimizeRequested, this, &QWidget::showMinimized);
     connect(m_titleBar, &MainTitleBar::closeRequested, this, &QWidget::close);
     connect(m_titleBar, &MainTitleBar::muteToggled, this, &MainWindow::toggleMute);
     connect(m_titleBar, &MainTitleBar::lockToggled, this, &MainWindow::toggleControlLock);

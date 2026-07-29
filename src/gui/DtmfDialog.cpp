@@ -36,10 +36,6 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
 
-    auto* titleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("DTMF"), this);
-    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QWidget::close);
-    root->addWidget(titleBar);
-
     // Content
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);

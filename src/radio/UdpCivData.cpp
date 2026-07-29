@@ -139,8 +139,7 @@ void UdpCivData::send(QByteArray d)
 {
     qDebug(logUdp()) << "UdpCivData::send() port=" << port << "radioIP=" << radioIP.toString() << "len=" << d.length()
                      << "data=" << d.toHex(' ');
-    data_packet p;
-    memset(p.packet, 0x0, sizeof(p));
+    data_packet p{};
     p.len = (quint32)sizeof(p) + d.length();
     p.sentid = myId;
     p.rcvdid = remoteId;
@@ -148,7 +147,7 @@ void UdpCivData::send(QByteArray d)
     p.datalen = d.length();
     p.sendseq = qToBigEndian(sendSeqB);
 
-    QByteArray t = QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p));
+    QByteArray t = encodePacket(p);
     t.append(d);
     sendTrackedPacket(t);
     sendSeqB++;
@@ -165,8 +164,7 @@ void UdpCivData::sendOpenClose(bool close)
     }
     qDebug(logUdp()) << "UdpCivData::sendOpenClose close=" << close << "remoteId=0x" << Qt::hex << remoteId;
 
-    openclose_packet p;
-    memset(p.packet, 0x0, sizeof(p));
+    openclose_packet p{};
     p.len = sizeof(p);
     p.sentid = myId;
     p.rcvdid = remoteId;
@@ -176,7 +174,7 @@ void UdpCivData::sendOpenClose(bool close)
 
     sendSeqB++;
 
-    sendTrackedPacket(QByteArray::fromRawData(reinterpret_cast<const char*>(p.packet), sizeof(p)));
+    sendTrackedPacket(encodePacket(p));
     return;
 }
 
@@ -196,7 +194,8 @@ void UdpCivData::dataReceived()
         {
         case (CONTROL_SIZE):
         {
-            const control_packet* in = reinterpret_cast<const control_packet*>(r.constData());
+            const auto decoded = decodePacket<control_packet>(r);
+            const control_packet* in = &*decoded;
             // Type 0 control packets are the steady-state LAN keepalive/ack
             // stream. Logging every one can overwhelm stderr and hide the
             // startup/memory-sync evidence we actually need in field logs.
@@ -238,7 +237,8 @@ void UdpCivData::dataReceived()
         {
             if (r.length() > 21)
             {
-                const ping_packet* in = reinterpret_cast<const ping_packet*>(r.constData());
+                const auto decoded = decodePacket<ping_packet>(r);
+                const ping_packet* in = &*decoded;
                 if (in->type != 0x01)
                 {
                     if (in->len != quint32(r.length()))

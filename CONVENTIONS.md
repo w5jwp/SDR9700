@@ -100,8 +100,8 @@ Run it before submitting source changes.
 ## Settings
 
 - Use `AppSettings` for SDR9700 client settings.
-- Store client settings in `~/.config/SDR9700/sdr9700.json`.
-- Store local memory channels in `~/.config/SDR9700/sdr9700-memories.json`.
+- Store client settings below Qt's `QStandardPaths::GenericConfigLocation` in
+  `SDR9700/sdr9700.json`.
 - Do not add new app-owned `QSettings` persistence.
 - Do not add configuration fallback paths, migration keys, or migration
   holdover code. Configuration import may clean and accept the current schema;

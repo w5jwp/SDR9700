@@ -128,10 +128,13 @@ Debug builds default to `--log=all` when no log option is supplied.
 
 ## Settings
 
-Client-side application settings are stored by `AppSettings` at:
+Client-side application settings are stored by `AppSettings` beneath Qt's
+`QStandardPaths::GenericConfigLocation`, in an `SDR9700` directory. Typical
+locations are:
 
 ```text
-~/.config/SDR9700/sdr9700.json
+Linux: ~/.config/SDR9700/sdr9700.json
+macOS: ~/Library/Preferences/SDR9700/sdr9700.json
 ```
 
 Memory records are synchronized with the IC-9700 and are not persisted in a

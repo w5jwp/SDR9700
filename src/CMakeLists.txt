@@ -251,6 +251,13 @@ if(APPLE)
 endif()
 
 if(BUILD_TESTING)
+    if(HIDAPI_FOUND)
+        add_executable(IcomRC28ManagerTest tests/IcomRC28ManagerTest.cpp)
+        target_link_libraries(IcomRC28ManagerTest PRIVATE SDR9700_core Qt6::Test)
+        target_compile_options(IcomRC28ManagerTest PRIVATE -Wall -Wextra)
+        add_test(NAME IcomRC28ManagerTest COMMAND IcomRC28ManagerTest)
+    endif()
+
     add_executable(AudioConverterTest tests/AudioConverterTest.cpp)
     target_link_libraries(AudioConverterTest PRIVATE SDR9700_core Qt6::Test)
     target_compile_options(AudioConverterTest PRIVATE -Wall -Wextra)

@@ -1,7 +1,6 @@
 #include "RadioChooserDialog.h"
 #include "AppSettings.h"
 #include "DialogPlacement.h"
-#include "FramelessTitleBar.h"
 #include "RadioProfile.h"
 #include "UdpBase.h"
 #include "UiTheme.h"
@@ -27,17 +26,12 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     const QString titleText = QStringLiteral("Radio Chooser");
     setWindowTitle(titleText);
     setMinimumSize(720, 430);
-    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setStyleSheet(QStringLiteral("RadioChooserDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
-
-    auto* titleBar = new FramelessTitleBar(titleText, this);
-    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QDialog::reject);
-    root->addWidget(titleBar);
 
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);

@@ -14,6 +14,7 @@ class VfoModelTest : public QObject
     void preampLevelUpdatesDerivedState();
     void ritOffsetIsClamped();
     void filterAndPttSignalsAreDeduplicated();
+    void radioRequestsDoNotPublishUnconfirmedState();
 };
 
 void VfoModelTest::startsWithDocumentedDefaults()
@@ -124,6 +125,35 @@ void VfoModelTest::filterAndPttSignalsAreDeduplicated()
     QCOMPARE(filterSpy.count(), 1);
     QVERIFY(model.txActive());
     QCOMPARE(pttSpy.count(), 1);
+}
+
+void VfoModelTest::radioRequestsDoNotPublishUnconfirmedState()
+{
+    VfoModel model(nullptr);
+    QSignalSpy preampSpy(&model, &VfoModel::preampLevelChanged);
+    QSignalSpy agcSpy(&model, &VfoModel::agcModeChanged);
+    QSignalSpy notchSpy(&model, &VfoModel::autoNotchChanged);
+    QSignalSpy manualNotchSpy(&model, &VfoModel::manualNotchChanged);
+    QSignalSpy compressorSpy(&model, &VfoModel::compressorChanged);
+    QSignalSpy ritSpy(&model, &VfoModel::ritChanged);
+
+    model.setPreampLevel(2);
+    model.setAgcMode(QStringLiteral("slow"));
+    model.setAutoNotch(true);
+    model.setManualNotch(true);
+    model.setCompressor(true);
+    model.setRitEnabled(true);
+    model.setRitOffset(500);
+
+    QCOMPARE(preampSpy.count(), 0);
+    QCOMPARE(agcSpy.count(), 0);
+    QCOMPARE(notchSpy.count(), 0);
+    QCOMPARE(manualNotchSpy.count(), 0);
+    QCOMPARE(compressorSpy.count(), 0);
+    QCOMPARE(ritSpy.count(), 0);
+    QCOMPARE(model.preampLevel(), 0);
+    QVERIFY(!model.ritOn());
+    QCOMPARE(model.ritHz(), short(0));
 }
 
 QTEST_GUILESS_MAIN(VfoModelTest)

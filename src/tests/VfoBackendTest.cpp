@@ -144,8 +144,9 @@ void VfoBackendTest::boundedRequestsAreClampedBeforeForwarding()
     model.setTxPower(300);
 
     QCOMPARE(backend.preampLevel, 3);
-    QCOMPARE(model.preampLevel(), 3);
+    QCOMPARE(model.preampLevel(), 0);
     QCOMPARE(backend.ritOffset, short(999));
+    QCOMPARE(model.ritHz(), short(0));
     QCOMPARE(backend.rfGain, 300);
     QVERIFY(backend.squelchOn);
     QCOMPARE(backend.squelchLevel, 300);

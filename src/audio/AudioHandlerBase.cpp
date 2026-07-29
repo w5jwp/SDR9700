@@ -128,60 +128,75 @@ void AudioHandlerBase::reportError(const QString& msg)
 
 bool AudioHandlerBase::negotiateFormat(int minSampleRate)
 {
-    nativeFormat = getNativeFormat();
+    const QAudioFormat preferred = getNativeFormat();
 
-    if (nativeFormat.channelCount() < 1)
+    if (preferred.channelCount() < 1 || preferred.sampleRate() < 1)
     {
-        reportError("Cannot initialize audio device, no channels found");
+        reportError("Cannot initialize audio device, preferred format is invalid");
         return false;
     }
 
-    if (nativeFormat.channelCount() > 2)
+    QList<int> channelCandidates;
+    const int preferredChannels = qBound(1, preferred.channelCount(), 2);
+    if (radioFormat.channelCount() == 2)
     {
-        nativeFormat.setChannelCount(2);
+        channelCandidates.append(2);
+    }
+    if (!channelCandidates.contains(preferredChannels))
+    {
+        channelCandidates.append(preferredChannels);
+    }
+    if (!channelCandidates.contains(1))
+    {
+        channelCandidates.append(1);
     }
 
-    if (nativeFormat.channelCount() == 1 && radioFormat.channelCount() == 2)
+    QList<int> sampleRateCandidates;
+    if (preferred.sampleRate() < minSampleRate)
     {
-        nativeFormat.setChannelCount(2);
+        sampleRateCandidates.append(minSampleRate);
+    }
+    sampleRateCandidates.append(preferred.sampleRate());
 
-        if (!isFormatSupported(nativeFormat))
+    QList<QAudioFormat::SampleFormat> formatCandidates;
+    if (preferred.sampleFormat() != QAudioFormat::UInt8 && preferred.sampleFormat() != QAudioFormat::Unknown)
+    {
+        formatCandidates.append(preferred.sampleFormat());
+    }
+    for (const QAudioFormat::SampleFormat format :
+         {QAudioFormat::Int16, QAudioFormat::Float, QAudioFormat::Int32, QAudioFormat::UInt8})
+    {
+        if (!formatCandidates.contains(format))
         {
-            nativeFormat.setChannelCount(1);
+            formatCandidates.append(format);
         }
     }
 
-    if (nativeFormat.sampleRate() < minSampleRate)
+    for (int channels : channelCandidates)
     {
-        const int prev = nativeFormat.sampleRate();
-        nativeFormat.setSampleRate(minSampleRate);
-        if (!isFormatSupported(nativeFormat))
+        for (int sampleRate : sampleRateCandidates)
         {
-            nativeFormat.setSampleRate(prev);
+            for (QAudioFormat::SampleFormat sampleFormat : formatCandidates)
+            {
+                QAudioFormat candidate = preferred;
+                candidate.setChannelCount(channels);
+                candidate.setSampleRate(sampleRate);
+                candidate.setSampleFormat(sampleFormat);
+                if (isFormatSupported(candidate))
+                {
+                    nativeFormat = candidate;
+                    qDebug(logAudio()) << role() << "Selected format: ch=" << nativeFormat.channelCount()
+                                       << " rate=" << nativeFormat.sampleRate()
+                                       << " fmt=" << nativeFormat.sampleFormat();
+                    return true;
+                }
+            }
         }
     }
 
-    if (nativeFormat.sampleFormat() == QAudioFormat::UInt8)
-    {
-        nativeFormat.setSampleFormat(QAudioFormat::Int16);
-        if (!isFormatSupported(nativeFormat))
-        {
-            nativeFormat.setSampleFormat(QAudioFormat::UInt8);
-        }
-    }
-    // ALSA/Qt can return Unknown sample format; default to Int16.
-    if (nativeFormat.sampleFormat() == QAudioFormat::Unknown)
-    {
-        nativeFormat.setSampleFormat(QAudioFormat::Int16);
-        if (!isFormatSupported(nativeFormat))
-        {
-            nativeFormat.setSampleFormat(QAudioFormat::Float);
-        }
-    }
-
-    qDebug(logAudio()) << role() << "Selected format: ch=" << nativeFormat.channelCount()
-                       << " rate=" << nativeFormat.sampleRate() << " fmt=" << nativeFormat.sampleFormat();
-    return true;
+    reportError("Cannot initialize audio device, no supported PCM format was found");
+    nativeFormat = {};
+    return false;
 }
 
 bool AudioHandlerBase::init(const audioSetup& setup)

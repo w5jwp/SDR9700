@@ -14,6 +14,8 @@ class PacketLayoutTest : public QObject
     void variableHeaderOffsetsAreStable();
     void endianConversionsRoundTrip();
     void rtpBitFieldsOccupyExpectedBytes();
+    void packetDecoderRejectsShortInputAndCopiesAlignedData();
+    void packetEncoderCopiesWireBytes();
 };
 
 void PacketLayoutTest::packetSizesMatchProtocolConstants()
@@ -67,6 +69,37 @@ void PacketLayoutTest::rtpBitFieldsOccupyExpectedBytes()
     header.marker = 1;
     QCOMPARE(header.packet[0], quint8(0x80));
     QCOMPARE(header.packet[1], quint8(0xe0));
+}
+
+void PacketLayoutTest::packetDecoderRejectsShortInputAndCopiesAlignedData()
+{
+    QByteArray bytes(CONTROL_SIZE, '\0');
+    const quint32 length = qToLittleEndian(quint32(CONTROL_SIZE));
+    const quint16 sequence = qToLittleEndian(quint16(0x4321));
+    std::memcpy(bytes.data(), &length, sizeof(length));
+    std::memcpy(bytes.data() + offsetof(control_packet, seq), &sequence, sizeof(sequence));
+
+    QVERIFY(!decodePacket<control_packet>(QByteArrayView(bytes).first(CONTROL_SIZE - 1)).has_value());
+    const auto decoded = decodePacket<control_packet>(bytes);
+    QVERIFY(decoded.has_value());
+    QCOMPARE(qFromLittleEndian(decoded->len), quint32(CONTROL_SIZE));
+    QCOMPARE(qFromLittleEndian(decoded->seq), quint16(0x4321));
+}
+
+void PacketLayoutTest::packetEncoderCopiesWireBytes()
+{
+    control_packet packet{};
+    packet.len = qToLittleEndian(quint32(CONTROL_SIZE));
+    packet.type = 0x04;
+    packet.seq = qToLittleEndian(quint16(0x1234));
+
+    const QByteArray encoded = encodePacket(packet);
+    QCOMPARE(encoded.size(), CONTROL_SIZE);
+
+    const auto decoded = decodePacket<control_packet>(encoded);
+    QVERIFY(decoded.has_value());
+    QCOMPARE(decoded->type, quint8(0x04));
+    QCOMPARE(qFromLittleEndian(decoded->seq), quint16(0x1234));
 }
 
 QTEST_GUILESS_MAIN(PacketLayoutTest)

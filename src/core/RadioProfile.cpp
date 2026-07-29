@@ -29,6 +29,11 @@ constexpr int kPasswordKeyBytes = 32;
 constexpr int kPasswordKdfIterations = 210000;
 constexpr auto kPasswordKeyFileName = "profile-key.bin";
 
+bool validRadioPort(int port)
+{
+    return port >= 1 && port <= 65535;
+}
+
 QByteArray randomBytes(int size)
 {
     QByteArray bytes(size, Qt::Uninitialized);
@@ -275,7 +280,13 @@ void RadioProfileStore::load()
         p.id = QUuid(obj.value("ID").toString());
         p.name = obj.value("name").toString();
         p.host = obj.value("host").toString();
-        p.port = static_cast<quint16>(obj.value("port").toInt(50001));
+        const int port = obj.value("port").toInt(50001);
+        if (!validRadioPort(port))
+        {
+            qWarning(logSystem()) << "Skipping radio profile with invalid LAN port:" << p.name << port;
+            continue;
+        }
+        p.port = static_cast<quint16>(port);
         p.username = obj.value("username").toString();
         const QString storedPassword = obj.value("password").toString();
         p.password = decryptPassword(storedPassword);
@@ -329,6 +340,10 @@ const RadioProfile* RadioProfileStore::profileById(const QUuid& id) const
 
 bool RadioProfileStore::addProfile(const RadioProfile& p)
 {
+    if (p.id.isNull() || p.host.trimmed().isEmpty() || !validRadioPort(p.port))
+    {
+        return false;
+    }
     m_profiles.append(p);
     if (!save())
     {
@@ -340,6 +355,10 @@ bool RadioProfileStore::addProfile(const RadioProfile& p)
 
 bool RadioProfileStore::updateProfile(const RadioProfile& p)
 {
+    if (p.id.isNull() || p.host.trimmed().isEmpty() || !validRadioPort(p.port))
+    {
+        return false;
+    }
     for (RadioProfile& existing : m_profiles)
     {
         if (existing.id == p.id)

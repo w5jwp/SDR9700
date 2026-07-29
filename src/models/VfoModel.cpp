@@ -106,11 +106,6 @@ void VfoModel::setNbLevel(int level)
 void VfoModel::setPreampLevel(int level)
 {
     level = qBound(0, level, 3);
-    m_preampLevel = level;
-    const bool on = level != 0;
-    m_preampOn = on;
-    emit preampLevelChanged(level);
-    emit preampChanged(on);
     if (m_backend)
     {
         m_backend->setPreampLevel(level);
@@ -135,8 +130,6 @@ void VfoModel::setTxPower(int level)
 
 void VfoModel::setAgcMode(const QString& modeName)
 {
-    m_agcMode = modeName;
-    emit agcModeChanged(modeName);
     if (m_backend)
     {
         m_backend->setAgcMode(modeName);
@@ -145,8 +138,6 @@ void VfoModel::setAgcMode(const QString& modeName)
 
 void VfoModel::setAutoNotch(bool on)
 {
-    m_autoNotchOn = on;
-    emit autoNotchChanged(on);
     if (m_backend)
     {
         m_backend->setAutoNotch(on);
@@ -155,8 +146,6 @@ void VfoModel::setAutoNotch(bool on)
 
 void VfoModel::setManualNotch(bool on)
 {
-    m_manualNotchOn = on;
-    emit manualNotchChanged(on);
     if (m_backend)
     {
         m_backend->setManualNotch(on);
@@ -165,8 +154,6 @@ void VfoModel::setManualNotch(bool on)
 
 void VfoModel::setCompressor(bool on)
 {
-    m_compressorOn = on;
-    emit compressorChanged(on);
     if (m_backend)
     {
         m_backend->setCompressor(on);
@@ -183,8 +170,6 @@ void VfoModel::setXfcEnabled(bool on)
 
 void VfoModel::setRitEnabled(bool on)
 {
-    m_ritOn = on;
-    emit ritChanged(on, m_ritHz);
     if (m_backend)
     {
         m_backend->setRitEnabled(on);
@@ -194,8 +179,6 @@ void VfoModel::setRitEnabled(bool on)
 void VfoModel::setRitOffset(short hz)
 {
     hz = qBound(static_cast<short>(-999), hz, static_cast<short>(999));
-    m_ritHz = hz;
-    emit ritChanged(m_ritOn, hz);
     if (m_backend)
     {
         m_backend->setRitOffset(hz);

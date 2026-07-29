@@ -17,53 +17,19 @@ if [ ! -x "${contents_path}/MacOS/SDR9700" ]; then
 fi
 
 deployqt_path="$(command -v macdeployqt || true)"
-qtpaths_path="$(command -v qtpaths6 || command -v qtpaths || true)"
-if [ -z "${deployqt_path}" ] || [ -z "${qtpaths_path}" ]; then
-    echo "macdeployqt and qtpaths are required on the build machine." >&2
+if [ -z "${deployqt_path}" ]; then
+    echo "macdeployqt is required on the build machine." >&2
     exit 1
 fi
 
-qt_plugins_path="$("${qtpaths_path}" --plugin-dir)"
-if [ ! -d "${qt_plugins_path}" ]; then
-    echo "Qt plugin directory not found: ${qt_plugins_path}" >&2
-    exit 1
-fi
-
-# SDR9700 uses Qt Widgets, Qt Network, and Qt Multimedia. Stage only the
-# corresponding native macOS runtime plugins instead of deploying every plugin
-# installed on the build machine.
-plugin_files="
-platforms/libqcocoa.dylib
-styles/libqmacstyle.dylib
-multimedia/libdarwinmediaplugin.dylib
-networkinformation/libqapplenetworkinformation.dylib
-tls/libqsecuretransportbackend.dylib
-"
-
+# Let Qt's deployment tool select plugins for this Qt build. Plugin filenames
+# and backend composition change between Qt releases; maintaining a local list
+# made routine Homebrew Qt upgrades unnecessarily brittle.
 rm -rf "${plugins_path}"
-deployqt_args=""
-for plugin_file in ${plugin_files}; do
-    source_file="${qt_plugins_path}/${plugin_file}"
-    destination_file="${plugins_path}/${plugin_file}"
-    if [ ! -f "${source_file}" ]; then
-        echo "Required Qt plugin not found: ${source_file}" >&2
-        exit 1
-    fi
-    mkdir -p "$(dirname "${destination_file}")"
-    /usr/bin/ditto "${source_file}" "${destination_file}"
-    deployqt_args="${deployqt_args} -executable=${destination_file}"
-done
-
-# macdeployqt rewrites the application and staged plugins to use libraries
-# inside Contents/Frameworks. Third-party libraries linked by SDR9700 are
-# discovered from the build machine and copied transitively.
-# shellcheck disable=SC2086
 "${deployqt_path}" "${app_path}" \
     -verbose=1 \
     -always-overwrite \
-    -no-plugins \
-    -no-codesign \
-    ${deployqt_args}
+    -no-codesign
 
 # Homebrew libraries may retain an absolute LC_ID_DYLIB even after their
 # consumers have been rewritten. The ID is not used to locate that same file,

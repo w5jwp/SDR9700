@@ -8,6 +8,7 @@ unusedFunction:src/tests/CommanderCodecTest.cpp
 unusedFunction:src/tests/DtmfDialogTest.cpp
 unusedFunction:src/tests/DtmfGeneratorTest.cpp
 unusedFunction:src/tests/GuiSmokeTest.cpp
+unusedFunction:src/tests/IcomRC28ManagerTest.cpp
 unusedFunction:src/tests/MainWindowHelpersTest.cpp
 unusedFunction:src/tests/MeterControllerTest.cpp
 unusedFunction:src/tests/MemoryStoreTest.cpp

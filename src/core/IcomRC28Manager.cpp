@@ -24,7 +24,10 @@ QString readIcomRC28SettingsJson()
 
 IcomRC28Manager::IcomRC28Manager(QObject* parent) : QObject(parent)
 {
-    hid_init();
+    if (hid_init() != 0)
+    {
+        qWarning(logIcomRC28()) << "hidapi initialization failed; RC-28 support will remain unavailable";
+    }
 
     m_pollTimer = new QTimer(this);
     m_pollTimer->setInterval(kPollIntervalMs);
@@ -190,7 +193,12 @@ bool IcomRC28Manager::open()
         return false;
     }
 
-    hid_set_nonblocking(device, 1);
+    if (hid_set_nonblocking(device, 1) != 0)
+    {
+        qWarning(logIcomRC28()) << "Could not configure the RC-28 for nonblocking reads";
+        hid_close(device);
+        return false;
+    }
     m_device.store(device, std::memory_order_release);
     m_deviceName = QStringLiteral("Icom RC-28 Remote Encoder");
     m_devicePath.clear();
@@ -219,7 +227,10 @@ void IcomRC28Manager::close()
     hid_device* device = m_device.exchange(nullptr);
     if (device)
     {
-        sendLeds(kIcomRC28LedsOff);
+        if (!writeLeds(device, kIcomRC28LedsOff))
+        {
+            qWarning(logIcomRC28()) << "Could not turn off RC-28 LEDs before closing the device";
+        }
         hid_close(device);
     }
 
@@ -232,24 +243,41 @@ void IcomRC28Manager::close()
     }
 }
 
-void IcomRC28Manager::sendLeds(uint8_t ledByte)
+QByteArray IcomRC28Manager::ledReport(uint8_t ledByte)
+{
+    QByteArray report(33, '\0');
+    report[1] = '\x01';
+    report[2] = static_cast<char>(ledByte);
+    return report;
+}
+
+bool IcomRC28Manager::writeLeds(hid_device* device, uint8_t ledByte)
+{
+    if (!device)
+    {
+        return false;
+    }
+    const QByteArray report = ledReport(ledByte);
+    return hid_write(device, reinterpret_cast<const unsigned char*>(report.constData()), report.size()) ==
+           report.size();
+}
+
+bool IcomRC28Manager::sendLeds(uint8_t ledByte)
 {
     hid_device* device = m_device.load(std::memory_order_relaxed);
     if (!device)
     {
-        return;
+        return false;
     }
-
-    uint8_t report[33] = {};
-    report[0] = 0x00;
-    report[1] = 0x01;
-    report[2] = ledByte;
-    hid_write(device, report, sizeof(report));
+    return writeLeds(device, ledByte);
 }
 
 void IcomRC28Manager::setIcomRC28Leds(uint8_t ledByte)
 {
-    sendLeds(ledByte);
+    if (!sendLeds(ledByte) && isOpen())
+    {
+        qWarning(logIcomRC28()) << "Could not update RC-28 LEDs";
+    }
 }
 
 void IcomRC28Manager::poll()

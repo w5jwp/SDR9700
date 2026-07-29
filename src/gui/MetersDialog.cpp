@@ -2,6 +2,7 @@
 #include "UiTheme.h"
 
 #include <QGridLayout>
+#include <QFontDatabase>
 #include <QLabel>
 #include <QProgressBar>
 #include <QPushButton>
@@ -78,10 +79,6 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
 
-    auto* titleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("Meters"), this);
-    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QWidget::close);
-    root->addWidget(titleBar);
-
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
     contentLayout->setContentsMargins(12, 10, 12, 12);
@@ -131,8 +128,8 @@ MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, c
     valueLabel->setFixedWidth(76);
     valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     valueLabel->setToolTip(description);
-    valueLabel->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 12px; font-family: monospace; }")
-                                  .arg(UiTheme::Color::TextBright));
+    valueLabel->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    valueLabel->setStyleSheet(QStringLiteral("QLabel { color: %1; }").arg(QLatin1String(UiTheme::Color::TextBright)));
 
     layout->addWidget(labelWidget, row, 0);
     layout->addWidget(bar, row, 1);

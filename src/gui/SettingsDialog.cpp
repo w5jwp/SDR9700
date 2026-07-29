@@ -3,8 +3,8 @@
 #include "AudioDevicesSettingsPanel.h"
 #include "SpectrumScopeSettingsPanel.h"
 #include "DialogPlacement.h"
-#include "FramelessTitleBar.h"
 #include "MemoryManagerSettingsPanel.h"
+#include "UiTheme.h"
 #ifdef HAVE_HIDAPI
 #include "IcomRC28SettingsPanel.h"
 #endif
@@ -65,19 +65,13 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
     const QString title = QStringLiteral("Settings");
     setWindowTitle(title);
     setMinimumSize(780, 520);
-    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setWindowModality(Qt::NonModal);
     setStyleSheet(QStringLiteral("SettingsDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
-    auto* titleBar = new FramelessTitleBar(title, this);
-    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QDialog::reject);
-
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
-    root->addWidget(titleBar);
-
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
     contentLayout->setContentsMargins(12, 12, 12, 12);
@@ -226,8 +220,6 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_
                 m_pageTitle->setText(current->text(0));
                 if (m_pageScroll)
                 {
-                    m_pageScroll->verticalScrollBar()->setValue(0);
-                    m_pageScroll->horizontalScrollBar()->setValue(0);
                     QTimer::singleShot(0, this,
                                        [this]()
                                        {
