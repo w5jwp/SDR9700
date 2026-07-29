@@ -2,6 +2,7 @@
 #include "MemoryStore.h"
 #include "MemoryControllerHelpers.h"
 
+#include <QTemporaryDir>
 #include <QtTest>
 
 class MemoryStoreTest : public QObject
@@ -17,6 +18,8 @@ class MemoryStoreTest : public QObject
     void overlongNameIsRejected();
     void duplicateBandChannelIsRejected();
     void radioMemoryConversionRoundTrips();
+    void csvFileRoundTrips();
+    void csvFileIoFailuresAreReported();
     void arbitraryCsvInputNeverCrashes();
 };
 
@@ -154,6 +157,42 @@ void MemoryStoreTest::radioMemoryConversionRoundTrips()
     QCOMPARE(converted.toneMode, memory.toneMode);
     QCOMPARE(converted.tone, memory.tone);
     QCOMPARE(converted.tsql, memory.tsql);
+}
+
+void MemoryStoreTest::csvFileRoundTrips()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("memories.csv"));
+
+    QString writeError;
+    QVERIFY2(writeMemoriesCsvFile(path, {validMemory()}, &writeError), qPrintable(writeError));
+
+    QStringList importErrors;
+    QString fileError;
+    const QVector<MemoryRecord> imported = readMemoriesCsvFile(path, &importErrors, &fileError);
+    QCOMPARE(fileError, QString());
+    QCOMPARE(importErrors, QStringList());
+    QCOMPARE(imported.size(), 1);
+    QCOMPARE(imported.constFirst().name, validMemory().name);
+    QCOMPARE(imported.constFirst().receiveHz, validMemory().receiveHz);
+}
+
+void MemoryStoreTest::csvFileIoFailuresAreReported()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    QString writeError;
+    QVERIFY(!writeMemoriesCsvFile(directory.path(), {validMemory()}, &writeError));
+    QVERIFY(!writeError.isEmpty());
+
+    QStringList importErrors;
+    QString fileError;
+    QVERIFY(
+        readMemoriesCsvFile(directory.filePath(QStringLiteral("missing.csv")), &importErrors, &fileError).isEmpty());
+    QVERIFY(!fileError.isEmpty());
+    QCOMPARE(importErrors, QStringList());
 }
 
 void MemoryStoreTest::arbitraryCsvInputNeverCrashes()

@@ -145,6 +145,8 @@ set(SDR9700_SOURCES
     gui/ControlPanelController.cpp
     gui/IcomRC28Controller.h
     gui/IcomRC28Controller.cpp
+    gui/MemoryCsvController.h
+    gui/MemoryCsvController.cpp
     gui/MemoryEditorController.h
     gui/MemoryEditorController.cpp
     gui/MemoryControllerHelpers.h

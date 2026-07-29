@@ -11,6 +11,7 @@
 #include "Types.h"
 
 class MainWindow;
+class MemoryCsvController;
 class MemoryEditorController;
 class MemorySyncController;
 class QPushButton;
@@ -61,6 +62,8 @@ class MemoryController : public QObject
     void initialMemorySyncChanged(bool complete);
 
   private:
+    friend class MemoryCsvController;
+
     // The editor controller owns the extracted editor workflow and operates on
     // the memory state whose lifetime remains managed by this controller.
     friend class MemoryEditorController;
@@ -91,12 +94,12 @@ class MemoryController : public QObject
     void writeNextQueuedRadioMemory();
     void finishQueuedRadioMemoryWrites(bool timedOut);
     bool firstOpenChannelForGroup(quint16 group, quint16* channel) const;
-    void restoreRadioMemoriesAfterFailedImport(const QVector<MemoryType>& backup);
     void setMemoryProgress(const QString& label, int value, int maximum);
     void clearMemoryProgress();
     void closeMemoryEditorPane(bool resizeWindow = true);
 
     MainWindow* m_window{nullptr};
+    MemoryCsvController* m_memoryCsvController{nullptr};
     MemoryEditorController* m_memoryEditorController{nullptr};
     MemorySyncController* m_memorySyncController{nullptr};
     QTimer* m_radioMemoryRefreshTimer{nullptr};

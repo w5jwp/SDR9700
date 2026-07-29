@@ -6,6 +6,7 @@
 #include "LogCategories.h"
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
+#include "MemoryCsvController.h"
 #include "MemoryEditorController.h"
 #include "MemorySyncPolicy.h"
 #include "MemoryPanel.h"
@@ -20,8 +21,6 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
-#include <QFile>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -34,7 +33,6 @@
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QSaveFile>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStringList>
@@ -54,6 +52,7 @@ using namespace sdr9700::ui::main_window;
 
 MemoryController::MemoryController(MainWindow* window) : QObject(window), m_window(window)
 {
+    m_memoryCsvController = new MemoryCsvController(this);
     m_memoryEditorController = new MemoryEditorController(this);
     m_memorySyncController = new MemorySyncController(this);
 
@@ -1184,44 +1183,6 @@ bool MemoryController::firstOpenChannelForGroup(quint16 group, quint16* channel)
     return false;
 }
 
-void MemoryController::restoreRadioMemoriesAfterFailedImport(const QVector<MemoryType>& backup)
-{
-    if (!m_window->m_model || !m_window->m_model->isConnected())
-    {
-        m_window->showToast(QStringLiteral("Memory import failed. Reconnect and restore the previous export."), 8000,
-                            MainWindow::ToastKind::Error);
-        return;
-    }
-
-    // An import can fail after only part of its clear/upload batch reached the
-    // radio. Clear the user slots again before replaying the in-memory snapshot;
-    // otherwise imported rows beyond the failure point could survive beside the
-    // restored set. This is operational rollback, not configuration migration.
-    queueRadioMemoryWrites(
-        deletedUserRadioMemories(), 0, QStringLiteral("Rolling back memory import"),
-        [this, backup](bool cleared)
-        {
-            if (!cleared)
-            {
-                m_window->showToast(QStringLiteral("Memory import rollback failed while clearing channels."), 8000,
-                                    MainWindow::ToastKind::Error);
-                requestRadioMemoryRefresh();
-                return;
-            }
-            m_radioMemoriesByKey.clear();
-            queueRadioMemoryWrites(
-                backup, 0, QStringLiteral("Restoring previous memories"),
-                [this](bool restored)
-                {
-                    m_window->showToast(restored
-                                            ? QStringLiteral("Memory import failed. Previous memories restored.")
-                                            : QStringLiteral("Memory import rollback failed while restoring memories."),
-                                        8000, restored ? MainWindow::ToastKind::Warning : MainWindow::ToastKind::Error);
-                    requestRadioMemoryRefresh();
-                });
-        });
-}
-
 void MemoryController::setMemoryProgress(const QString& label, int value, int maximum)
 {
     m_memoryProgressLabel = label;
@@ -1258,137 +1219,12 @@ void MemoryController::clearMemoryProgress()
 
 bool MemoryController::exportRadioMemories()
 {
-    const QString path =
-        QFileDialog::getSaveFileName(popupParent(), QStringLiteral("Export Memories"),
-                                     QStringLiteral("sdr9700-memories.csv"), QString::fromLatin1(kMemoryFileFilter));
-    if (path.isEmpty())
-    {
-        return false;
-    }
-
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-    {
-        QMessageBox::warning(popupParent(), QStringLiteral("Export Memories Failed"),
-                             QStringLiteral("Memory export failed. Could not save the selected file."));
-        return false;
-    }
-
-    const QByteArray data = memoriesExportCsv(currentMemories());
-    if (file.write(data) != static_cast<qint64>(data.size()) || !file.commit())
-    {
-        QMessageBox::warning(popupParent(), QStringLiteral("Export Memories Failed"),
-                             QStringLiteral("Memory export failed. Could not save the selected file."));
-        return false;
-    }
-
-    QMessageBox::information(popupParent(), QStringLiteral("Export Memories Successful"),
-                             QStringLiteral("Memory export successful."));
-    return true;
+    return m_memoryCsvController->exportRadioMemories();
 }
 
 void MemoryController::importRadioMemories()
 {
-    if (!m_window->m_model || !m_window->m_model->isConnected())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Import Memories"),
-                                 QStringLiteral("Connect to the radio before importing memories."));
-        return;
-    }
-    if (m_refreshInProgress)
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Import Memories"),
-                                 QStringLiteral("Wait for the current radio memory sync to finish before importing."));
-        return;
-    }
-    if (!m_memoryProgressLabel.isEmpty())
-    {
-        QMessageBox::information(popupParent(), QStringLiteral("Import Memories"),
-                                 QStringLiteral("Wait for the current memory operation to finish before importing."));
-        return;
-    }
-
-    const QString path = QFileDialog::getOpenFileName(popupParent(), QStringLiteral("Import Memories"), QString(),
-                                                      QString::fromLatin1(kMemoryFileFilter));
-    if (path.isEmpty())
-    {
-        return;
-    }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        QMessageBox::warning(popupParent(), QStringLiteral("Import Memories Failed"),
-                             QStringLiteral("Memory import failed. Could not open the selected file."));
-        return;
-    }
-
-    QStringList importErrors;
-    const QVector<MemoryRecord> records = memoriesFromCsv(file.readAll(), &importErrors);
-    if (!importErrors.isEmpty())
-    {
-        const QString details = importErrors.mid(0, 12).join(QLatin1Char('\n'));
-        const QString suffix =
-            importErrors.size() > 12 ? QStringLiteral("\n...and %1 more").arg(importErrors.size() - 12) : QString();
-        QMessageBox::warning(
-            popupParent(), QStringLiteral("Import Memories Failed"),
-            QStringLiteral("Memory import failed. Fix the CSV file and try again.\n\n%1%2").arg(details, suffix));
-        return;
-    }
-    if (records.isEmpty())
-    {
-        QMessageBox::warning(
-            popupParent(), QStringLiteral("Import Memories Failed"),
-            QStringLiteral("Memory import failed. The selected file does not contain importable CSV memories."));
-        return;
-    }
-
-    if (QMessageBox::question(
-            popupParent(), QStringLiteral("Import Memories"),
-            QStringLiteral("Import these memories to the radio?\n\n"
-                           "User memory channels 1-99 on 2M, 70CM, and 23CM will be cleared first.")) !=
-        QMessageBox::Yes)
-    {
-        return;
-    }
-
-    QVector<MemoryType> backup;
-    backup.reserve(m_radioMemoriesByKey.size());
-    for (const MemoryType& memory : m_radioMemoriesByKey)
-    {
-        backup.append(memory);
-    }
-    QVector<MemoryType> uploads;
-    uploads.reserve(records.size());
-    for (const MemoryRecord& record : records)
-    {
-        uploads.append(radioMemoryFromRecord(record, record.group, record.channel));
-    }
-
-    const QVector<MemoryType> deletes = deletedUserRadioMemories();
-    queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing existing memories"),
-                           [this, uploads, backup](bool cleared)
-                           {
-                               if (!cleared)
-                               {
-                                   restoreRadioMemoriesAfterFailedImport(backup);
-                                   return;
-                               }
-                               m_radioMemoriesByKey.clear();
-                               queueRadioMemoryWrites(
-                                   uploads, 0, QStringLiteral("Uploading memories"),
-                                   [this, backup, importedCount = uploads.size()](bool uploaded)
-                                   {
-                                       if (!uploaded)
-                                       {
-                                           restoreRadioMemoriesAfterFailedImport(backup);
-                                           return;
-                                       }
-                                       m_window->showToast(
-                                           QStringLiteral("Imported %1 memories successfully.").arg(importedCount));
-                                       requestRadioMemoryRefresh();
-                                   });
-                           });
+    m_memoryCsvController->importRadioMemories();
 }
 
 void MemoryController::rebuildMemoryViews()

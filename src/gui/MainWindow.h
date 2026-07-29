@@ -37,6 +37,7 @@ class DtmfDialog;
 class IcomRC28Controller;
 class MainTitleBar;
 class MemoryController;
+class MemoryCsvController;
 class MemoryEditorController;
 class MetersDialog;
 class RadioCommandController;
@@ -54,6 +55,7 @@ class MainWindow : public QMainWindow
     friend class ControlPanelController;
     friend class IcomRC28Controller;
     friend class MemoryController;
+    friend class MemoryCsvController;
     friend class MemoryEditorController;
     friend class RadioCommandController;
     friend class StatusBarController;

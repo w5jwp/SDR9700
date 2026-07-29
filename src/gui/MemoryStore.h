@@ -47,3 +47,6 @@ int memoryBandKeyForHz(quint64 hz);
 QString memoryBandLabelForGroup(quint16 group);
 QByteArray memoriesExportCsv(const QVector<MemoryRecord>& memories);
 QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* errors = nullptr);
+bool writeMemoriesCsvFile(const QString& path, const QVector<MemoryRecord>& memories, QString* error = nullptr);
+QVector<MemoryRecord> readMemoriesCsvFile(const QString& path, QStringList* errors = nullptr,
+                                          QString* fileError = nullptr);

@@ -3,7 +3,9 @@
 #include "MainWindowHelpers.h"
 #include "RadioCapabilities.h"
 
+#include <QFile>
 #include <QHash>
+#include <QSaveFile>
 #include <QSet>
 #include <QStringDecoder>
 #include <QUuid>
@@ -614,4 +616,42 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
         }
     }
     return memories;
+}
+
+bool writeMemoriesCsvFile(const QString& path, const QVector<MemoryRecord>& memories, QString* error)
+{
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        if (error)
+        {
+            *error = file.errorString();
+        }
+        return false;
+    }
+
+    const QByteArray data = memoriesExportCsv(memories);
+    if (file.write(data) != static_cast<qint64>(data.size()) || !file.commit())
+    {
+        if (error)
+        {
+            *error = file.errorString();
+        }
+        return false;
+    }
+    return true;
+}
+
+QVector<MemoryRecord> readMemoriesCsvFile(const QString& path, QStringList* errors, QString* fileError)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        if (fileError)
+        {
+            *fileError = file.errorString();
+        }
+        return {};
+    }
+    return memoriesFromCsv(file.readAll(), errors);
 }
