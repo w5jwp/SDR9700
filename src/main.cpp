@@ -28,6 +28,7 @@
 #include "gui/MainWindow.h"
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
+#include "CachingQueue.h"
 
 namespace
 {
@@ -389,6 +390,15 @@ int main(int argc, char* argv[])
 
     auto model = std::make_unique<RadioModel>();
     MainWindow win(model.get());
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
+                     [&model]()
+                     {
+                         // Destroy the radio/backend hierarchy while Qt can still
+                         // deliver DeferredDelete events, then stop the shared
+                         // cache after every Commander has released its pointer.
+                         model.reset();
+                         CachingQueue::shutdownInstance();
+                     });
 
     if (signalPipe[0] != -1)
     {
@@ -418,11 +428,10 @@ int main(int argc, char* argv[])
 
     const int exitCode = app.exec();
 
-    // The backend owns radio, data, and audio worker threads. Stop and destroy
-    // it before MainWindow's QWidget tree is torn down so queued backend
-    // activity cannot overlap widget destruction after a Unix signal or a
-    // normal application quit.
+    // aboutToQuit performs the normal ordered teardown. These calls also cover
+    // an early event-loop exit that bypasses that signal.
     model.reset();
+    CachingQueue::shutdownInstance();
 
     return exitCode;
 }

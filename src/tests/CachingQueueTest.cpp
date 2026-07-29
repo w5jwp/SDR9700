@@ -24,6 +24,8 @@ class CachingQueueTest : public QObject
     void comparesRegisteredValueTypes();
     void deliversUnsupportedPayloadTypesConservatively();
     void resetClearsSessionState();
+    void emitsCacheChangesWithoutHoldingMutex();
+    void restartsAfterExplicitShutdown();
 };
 
 void CachingQueueTest::init()
@@ -63,30 +65,24 @@ void CachingQueueTest::queueItemsHaveStableIdentity()
 void CachingQueueTest::dispatchesImmediateCommandsInOrder()
 {
     CachingQueue* queue = CachingQueue::getInstance();
-    QVector<Funcs> dispatched;
-    connect(queue, &CachingQueue::haveCommand, this,
-            [&dispatched](Funcs command, const QVariant&, uchar) { dispatched.append(command); });
+    QSignalSpy dispatched(queue, &CachingQueue::haveCommand);
 
     queue->add(kPriorityImmediate, funcFreqGet);
     queue->add(kPriorityImmediate, funcModeGet);
 
     QTRY_COMPARE(dispatched.size(), 2);
-    QCOMPARE(dispatched.at(0), funcFreqGet);
-    QCOMPARE(dispatched.at(1), funcModeGet);
+    QCOMPARE(dispatched.at(0).at(0).value<Funcs>(), funcFreqGet);
+    QCOMPARE(dispatched.at(1).at(0).value<Funcs>(), funcModeGet);
 }
 
 void CachingQueueTest::receivesAndCachesAuthoritativeValues()
 {
     CachingQueue* queue = CachingQueue::getInstance();
-    QVector<CacheItem> delivered;
-    connect(queue, &CachingQueue::sendValues, this,
-            [&delivered](const QVector<CacheItem>& values) { delivered += values; });
+    QSignalSpy delivered(queue, &CachingQueue::sendValues);
 
     queue->receiveValue(funcRfGain, 123, 0);
 
     QTRY_COMPARE(delivered.size(), 1);
-    QCOMPARE(delivered.constFirst().command, funcRfGain);
-    QCOMPARE(delivered.constFirst().value.toInt(), 123);
     const CacheItem cached = queue->getCache(funcRfGain, 0);
     QCOMPARE(cached.command, funcRfGain);
     QCOMPARE(cached.value.toInt(), 123);
@@ -120,6 +116,39 @@ void CachingQueueTest::resetClearsSessionState()
     QCOMPARE(queue->getState().receiver, uchar(0));
     const CacheItem cached = queue->getCache(funcVFOBandMS, 0);
     QVERIFY(!cached.value.isValid());
+}
+
+void CachingQueueTest::emitsCacheChangesWithoutHoldingMutex()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    queue->receiveValue(funcRfGain, 100, 0);
+
+    bool signalObserved = false;
+    const QMetaObject::Connection connection = connect(
+        queue, &CachingQueue::cacheUpdated, this,
+        [queue, &signalObserved](const CacheItem&)
+        {
+            // A direct callback can safely re-enter the queue only when the
+            // signal is emitted after updateCache releases its mutex.
+            QCOMPARE(queue->getCache(funcRfGain, 0).value.toInt(), 101);
+            signalObserved = true;
+        },
+        Qt::DirectConnection);
+
+    queue->receiveValue(funcRfGain, 101, 0);
+    disconnect(connection);
+    QVERIFY(signalObserved);
+}
+
+void CachingQueueTest::restartsAfterExplicitShutdown()
+{
+    CachingQueue::shutdownInstance();
+    CachingQueue* queue = CachingQueue::getInstance();
+    QSignalSpy dispatched(queue, &CachingQueue::haveCommand);
+
+    queue->add(kPriorityImmediate, funcFreqGet);
+
+    QTRY_COMPARE(dispatched.size(), 1);
 }
 
 QTEST_GUILESS_MAIN(CachingQueueTest)

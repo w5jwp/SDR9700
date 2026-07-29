@@ -2,11 +2,10 @@
 #include "CachingQueue.h"
 
 #include <QMetaType>
+#include <QThread>
 
 namespace
 {
-bool shutdownHookInstalled = false;
-
 const QMap<QString, int> kPriorityMap = {{"None", 0},        {"Immediate", 1},   {"Highest", 2},
                                          {"High", 3},        {"Medium High", 5}, {"Medium", 7},
                                          {"Medium Low", 11}, {"Low", 19},        {"Lowest", 23}};
@@ -19,25 +18,17 @@ int priorityValue(const QString& name)
 }
 
 CachingQueue* CachingQueue::instance{};
-QMutex CachingQueue::instanceMutex;
+std::mutex CachingQueue::instanceMutex;
 
 CachingQueue* CachingQueue::getInstance()
 {
-    QMutexLocker locker(&instanceMutex);
+    std::lock_guard locker(instanceMutex);
     if (instance == nullptr)
     {
         qRegisterMetaType<QVector<CacheItem>>("QVector<CacheItem>");
         instance = new CachingQueue();
         instance->setObjectName(QStringLiteral("CachingQueue()"));
-        if (!shutdownHookInstalled)
-        {
-            shutdownHookInstalled = true;
-            QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit,
-                             &CachingQueue::shutdownInstance);
-        }
-        // CI-V polling needs prompt service but must never outrank the audio
-        // pipeline or the OS networking stack on a loaded station computer.
-        instance->start(QThread::HighPriority);
+        instance->startWorker();
         qDebug(logRadio()) << "Created shared application CachingQueue";
     }
     return instance;
@@ -45,8 +36,8 @@ CachingQueue* CachingQueue::getInstance()
 
 CachingQueue::~CachingQueue()
 {
-    stopThread();
-    QMutexLocker locker(&instanceMutex);
+    stopWorker();
+    std::lock_guard locker(instanceMutex);
     if (instance == this)
     {
         instance = nullptr;
@@ -56,53 +47,46 @@ CachingQueue::~CachingQueue()
 
 void CachingQueue::shutdownInstance()
 {
-    instanceMutex.lock();
-    CachingQueue* queue = instance;
-    instance = nullptr;
-    instanceMutex.unlock();
+    CachingQueue* queue = nullptr;
+    {
+        std::lock_guard locker(instanceMutex);
+        queue = instance;
+        instance = nullptr;
+    }
 
     if (queue == nullptr)
     {
         return;
     }
 
-    if (queue->stopThread())
-    {
-        delete queue;
-    }
-    else
-    {
-        // Deleting a running QThread is undefined and was a source of forced
-        // shutdowns. The worker normally exits immediately after wakeAll(); in
-        // the pathological timeout case, retain the object until its run loop
-        // actually finishes rather than tearing memory out from under it.
-        QObject::connect(queue, &QThread::finished, queue, &QObject::deleteLater);
-    }
+    delete queue;
 }
 
-bool CachingQueue::stopThread()
+void CachingQueue::startWorker()
+{
+    aborted.store(false, std::memory_order_release);
+    m_worker = std::thread([this]() { run(); });
+}
+
+void CachingQueue::stopWorker()
 {
     aborted.store(true, std::memory_order_release);
     {
-        QMutexLocker locker(&mutex);
-        waiting.wakeAll();
+        std::lock_guard locker(mutex);
+        waiting.notify_all();
     }
-    if (isRunning() && QThread::currentThread() != this)
+    if (m_worker.joinable())
     {
-        if (!wait(3000))
-        {
-            qCritical(logRadio()) << "CachingQueue() did not stop within 3000 ms; deferring object deletion";
-            return false;
-        }
+        Q_ASSERT(m_worker.get_id() != std::this_thread::get_id());
+        m_worker.join();
     }
-    return !isRunning();
 }
 
 void CachingQueue::run()
 {
     qInfo(logRadio()) << "Starting caching queue handler thread (ThreadId:" << QThread::currentThreadId() << ")";
 
-    QMutexLocker locker(&mutex);
+    std::unique_lock locker(mutex);
     QDeadlineTimer deadline(queueInterval);
 
     quint64 counter = kPriorityImmediate;
@@ -112,8 +96,16 @@ void CachingQueue::run()
         // With no queued commands, wait indefinitely for a cache/message update
         // or a new command. When commands exist, wake on the normal queue
         // interval so recurring polls keep their pacing.
-        const bool woke =
-            queue.isEmpty() ? waiting.wait(&mutex) : waiting.wait(&mutex, qMax<qint64>(0, deadline.remainingTime()));
+        bool woke = true;
+        if (queue.isEmpty())
+        {
+            waiting.wait(locker);
+        }
+        else
+        {
+            woke = waiting.wait_for(locker, std::chrono::milliseconds(qMax<qint64>(0, deadline.remainingTime()))) ==
+                   std::cv_status::no_timeout;
+        }
         if (aborted.load(std::memory_order_acquire))
         {
             break;
@@ -129,6 +121,7 @@ void CachingQueue::run()
 
         QueueItem item;
         bool haveCommandToEmit = false;
+        std::optional<CacheItem> changedCacheItem;
         const bool commandDispatchDue = !queue.isEmpty() && (!woke || commandWakeRequested);
         if (commandDispatchDue)
         {
@@ -193,7 +186,7 @@ void CachingQueue::run()
 
                 if (!item.recurring)
                 {
-                    updateCache(false, item.command, item.param, item.receiver);
+                    changedCacheItem = updateCache(false, item.command, item.param, item.receiver);
                 }
                 haveCommandToEmit = true;
             }
@@ -205,9 +198,13 @@ void CachingQueue::run()
             // recurring polls indefinitely.
             deadline.setRemainingTime(queueInterval);
         }
-        if (!pendingItems.isEmpty() || !pendingMessages.isEmpty() || haveCommandToEmit)
+        if (!pendingItems.isEmpty() || !pendingMessages.isEmpty() || haveCommandToEmit || changedCacheItem.has_value())
         {
             locker.unlock();
+            if (changedCacheItem.has_value())
+            {
+                emit cacheUpdated(*changedCacheItem);
+            }
             if (!pendingItems.isEmpty())
             {
                 QVector<CacheItem> batch;
@@ -233,7 +230,7 @@ void CachingQueue::run()
             {
                 emit haveCommand(item.command, item.param, item.receiver);
             }
-            locker.relock();
+            locker.lock();
         }
     }
 }
@@ -267,7 +264,7 @@ void CachingQueue::addUnique(QueuePriority prio, QueueItem item)
 
 void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
 {
-    QMutexLocker locker(&mutex);
+    std::lock_guard locker(mutex);
 
     if (queueInterval == -1)
     {
@@ -310,7 +307,7 @@ void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
             }
             queue.insert(prio, item);
             m_queueWakeRequested = true;
-            waiting.wakeOne();
+            waiting.notify_one();
         }
     }
 }
@@ -320,7 +317,7 @@ VfoCommandType CachingQueue::getVfoCommand(vfo_t vfo, uchar rx, bool set)
     VfoCommandType cmd;
     cmd.receiver = rx;
     cmd.vfo = vfo;
-    QMutexLocker locker(&mutex);
+    std::lock_guard locker(mutex);
     if (radioCaps != nullptr)
     {
         if (set)
@@ -372,7 +369,7 @@ QueuePriority CachingQueue::del(Funcs func, uchar receiver)
     QueuePriority prio = kPriorityNone;
     if (func != funcNone)
     {
-        QMutexLocker locker(&mutex);
+        std::lock_guard locker(mutex);
         auto it = std::find_if(queue.begin(), queue.end(), [func, receiver](const QueueItem& c)
                                { return (c.command == func && c.receiver == receiver && c.recurring == true); });
         if (it != queue.end())
@@ -403,7 +400,7 @@ QueuePriority CachingQueue::isRecurring(Funcs func, uchar receiver)
 
 void CachingQueue::clear()
 {
-    QMutexLocker locker(&mutex);
+    std::lock_guard locker(mutex);
     queue.clear();
 }
 
@@ -411,7 +408,7 @@ void CachingQueue::resetSessionState()
 {
     const radioCapabilities* previousCaps = nullptr;
     {
-        QMutexLocker locker(&mutex);
+        std::lock_guard locker(mutex);
         previousCaps = radioCaps;
         radioCaps = nullptr;
         queue.clear();
@@ -425,14 +422,14 @@ void CachingQueue::resetSessionState()
     {
         emit radioCapsUpdated(nullptr);
     }
-    waiting.wakeAll();
+    waiting.notify_all();
 }
 
 void CachingQueue::setRadioCaps(radioCapabilities* caps)
 {
     bool changed = false;
     {
-        QMutexLocker locker(&mutex);
+        std::lock_guard locker(mutex);
         if (radioCaps != caps)
         {
             radioCaps = caps;
@@ -449,27 +446,32 @@ void CachingQueue::setRadioCaps(radioCapabilities* caps)
 void CachingQueue::message(QString msg)
 {
     {
-        QMutexLocker locker(&mutex);
+        std::lock_guard locker(mutex);
         messages.append(msg);
     }
     qDebug(logRadio()) << "Received:" << msg;
-    waiting.wakeOne();
+    waiting.notify_one();
 }
 
 void CachingQueue::receiveValue(Funcs func, QVariant value, uchar receiver)
 {
+    std::optional<CacheItem> changedCacheItem;
     {
         // Parsed CI-V replies are authoritative state. Wait for the queue lock
         // instead of dropping an update during heavy polling or memory sync.
-        QMutexLocker locker(&mutex);
+        std::lock_guard locker(mutex);
         CacheItem c = CacheItem(func, value, receiver);
         items.enqueue(c);
-        updateCache(true, func, value, receiver);
+        changedCacheItem = updateCache(true, func, value, receiver);
     }
-    waiting.wakeOne();
+    if (changedCacheItem.has_value())
+    {
+        emit cacheUpdated(*changedCacheItem);
+    }
+    waiting.notify_one();
 }
 
-void CachingQueue::updateCache(bool reply, QueueItem item)
+std::optional<CacheItem> CachingQueue::updateCache(bool reply, QueueItem item)
 {
     // Caller must hold mutex.
 
@@ -550,9 +552,9 @@ void CachingQueue::updateCache(bool reply, QueueItem item)
                 cv->value.clear();
                 cv->value.setValue(item.param);
 
-                emit cacheUpdated(cv.value());
+                return cv.value();
             }
-            return;
+            return std::nullopt;
         }
         ++cv;
     }
@@ -575,18 +577,26 @@ void CachingQueue::updateCache(bool reply, QueueItem item)
     }
 
     cache.insert(item.command, c);
+    return std::nullopt;
 }
 
-void CachingQueue::updateCache(bool reply, Funcs func, QVariant value, uchar receiver)
+std::optional<CacheItem> CachingQueue::updateCache(bool reply, Funcs func, QVariant value, uchar receiver)
 {
     QueueItem q(func, value, false, receiver);
-    updateCache(reply, q);
+    return updateCache(reply, q);
 }
 
 void CachingQueue::recordLocalRoutingState(Funcs func, QVariant value, uchar receiver)
 {
-    QMutexLocker locker(&mutex);
-    updateCache(false, QueueItem(func, value, false, receiver));
+    std::optional<CacheItem> changedCacheItem;
+    {
+        std::lock_guard locker(mutex);
+        changedCacheItem = updateCache(false, QueueItem(func, value, false, receiver));
+    }
+    if (changedCacheItem.has_value())
+    {
+        emit cacheUpdated(*changedCacheItem);
+    }
 }
 
 CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
@@ -594,7 +604,7 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
     CacheItem ret;
     if (func != funcNone)
     {
-        QMutexLocker locker(&mutex);
+        std::lock_guard locker(mutex);
         auto it = cache.find(func);
         while (it != cache.end() && it->command == func)
         {

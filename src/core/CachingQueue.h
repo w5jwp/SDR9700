@@ -1,20 +1,20 @@
 // cppcheck-suppress-file unusedStructMember
 #pragma once
-#include <QCoreApplication>
 #include <QObject>
-#include <QThread>
-#include <QMutex>
-#include <QMutexLocker>
 #include <QMap>
 #include <QMultiMap>
 #include <QVariant>
 #include <QVector>
 #include <QQueue>
 #include <QRect>
-#include <QWaitCondition>
 #include <QDateTime>
 #include <QRandomGenerator>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <optional>
+#include <thread>
 
 #include "Types.h"
 #include "RadioIdentities.h"
@@ -121,7 +121,7 @@ struct CacheItem
     }
 };
 
-class CachingQueue : public QThread
+class CachingQueue : public QObject
 {
     Q_OBJECT
 
@@ -138,20 +138,22 @@ class CachingQueue : public QThread
 
   private:
     static CachingQueue* instance;
-    static QMutex instanceMutex;
+    static std::mutex instanceMutex;
 
-    QMutex mutex;
+    std::mutex mutex;
 
     QMultiMap<QueuePriority, QueueItem> queue;
     QMultiMap<Funcs, CacheItem> cache;
     QQueue<CacheItem> items;
     QQueue<QString> messages;
-    QWaitCondition waiting;
+    std::condition_variable waiting;
 
-    bool stopThread();
+    void startWorker();
+    void stopWorker();
     void setCache(Funcs func, QVariant val, uchar receiver = 0);
     QueuePriority isRecurring(Funcs func, uchar receiver = 0);
     std::atomic_bool aborted{false};
+    std::thread m_worker;
     // Command queue pacing for queued readbacks and cache refreshes. This used
     // to be initialized to -1, which disables CachingQueue::add(); keep this
     // positive unless intentionally backing out queued command scheduling.
@@ -165,10 +167,12 @@ class CachingQueue : public QThread
 
     void run();
     Funcs checkCommandAvailable(Funcs cmd, bool set = false) const;
+    std::optional<CacheItem> updateCache(bool reply, QueueItem item);
+    std::optional<CacheItem> updateCache(bool reply, Funcs func, QVariant value = QVariant(), uchar receiver = 0);
     RadioStateType radioState;
 
   protected:
-    explicit CachingQueue(QObject* parent = nullptr) : QThread(parent) {}
+    explicit CachingQueue(QObject* parent = nullptr) : QObject(parent) {}
     ~CachingQueue();
 
   public:
@@ -187,11 +191,6 @@ class CachingQueue : public QThread
     QueuePriority del(Funcs func, uchar receiver = 0);
     void clear();
     void resetSessionState();
-    // Caller must already hold mutex. This overload updates an existing queued
-    // command after a matching radio reply has been processed.
-    void updateCache(bool reply, QueueItem item);
-    void updateCache(bool reply, Funcs func, QVariant value = QVariant(), uchar receiver = 0);
-
     CacheItem getCache(Funcs func, uchar receiver = 0);
 
     void setRadioCaps(radioCapabilities* caps);
@@ -199,7 +198,7 @@ class CachingQueue : public QThread
     VfoCommandType getVfoCommand(vfo_t vfo, uchar rx, bool set = false);
     RadioStateType getState()
     {
-        QMutexLocker locker(&mutex);
+        std::lock_guard locker(mutex);
         return radioState;
     }
 };

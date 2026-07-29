@@ -366,7 +366,8 @@ RadioBackend::~RadioBackend()
                 qCritical(logRadio()) << "[SHUTDOWN] radio-data did not stop after bounded shutdown; leaving thread "
                                          "detached to avoid blocking the UI";
                 m_radioDataThread->setParent(nullptr);
-                connect(m_radioDataThread, &QThread::finished, m_radioDataThread, &QObject::deleteLater);
+                connect(m_radioDataThread, &QThread::finished, m_radioDataThread, &QObject::deleteLater,
+                        Qt::DirectConnection);
                 m_radioDataThread = nullptr;
             }
         }
@@ -382,7 +383,7 @@ RadioBackend::~RadioBackend()
             qCritical(logRadio()) << "[SHUTDOWN] radio-worker did not stop after bounded shutdown; leaving thread "
                                      "detached to avoid blocking the UI";
             m_workerThread->setParent(nullptr);
-            connect(m_workerThread, &QThread::finished, m_workerThread, &QObject::deleteLater);
+            connect(m_workerThread, &QThread::finished, m_workerThread, &QObject::deleteLater, Qt::DirectConnection);
             m_workerThread = nullptr;
         }
     }

@@ -12,6 +12,7 @@
 #include <QTableWidget>
 #include <QWidget>
 #include <QtTest>
+#include <algorithm>
 
 class MemoryManagerSmokeTest : public QObject
 {
@@ -34,15 +35,12 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     RadioModel model;
     MainWindow window(&model);
 
-    QDialog* memoryWindow = nullptr;
-    for (QWidget* candidate : QApplication::topLevelWidgets())
-    {
-        if (candidate->objectName() == QLatin1String("memoryWindow"))
-        {
-            memoryWindow = qobject_cast<QDialog*>(candidate);
-            break;
-        }
-    }
+    const QWidgetList topLevelWidgets = QApplication::topLevelWidgets();
+    const auto memoryWindowIt =
+        std::find_if(topLevelWidgets.cbegin(), topLevelWidgets.cend(),
+                     [](const QWidget* candidate) { return candidate->objectName() == QLatin1String("memoryWindow"); });
+    QDialog* memoryWindow =
+        memoryWindowIt != topLevelWidgets.cend() ? qobject_cast<QDialog*>(*memoryWindowIt) : nullptr;
     QVERIFY(memoryWindow != nullptr);
     auto* table = memoryWindow->findChild<QTableWidget*>(QStringLiteral("memoryManagerTable"));
     auto* editor = memoryWindow->findChild<QWidget*>(QStringLiteral("memoryEditorPane"));

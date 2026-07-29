@@ -5,6 +5,7 @@ include(CTest)
 
 set(SDR9700_DISPLAY_VERSION "26.07.01")
 option(SDR9700_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer instrumentation" OFF)
+option(SDR9700_THREAD_SANITIZE "Enable ThreadSanitizer instrumentation" OFF)
 
 if(APPLE)
     if(NOT CMAKE_OSX_ARCHITECTURES)
@@ -21,12 +22,24 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-if(SDR9700_SANITIZE)
+if(SDR9700_SANITIZE AND SDR9700_THREAD_SANITIZE)
+    message(FATAL_ERROR "SDR9700_SANITIZE and SDR9700_THREAD_SANITIZE cannot be enabled together.")
+endif()
+
+if(SDR9700_SANITIZE OR SDR9700_THREAD_SANITIZE)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
-        message(FATAL_ERROR "SDR9700_SANITIZE requires GCC or Clang.")
+        message(FATAL_ERROR "SDR9700 sanitizer builds require GCC or Clang.")
     endif()
+endif()
+
+if(SDR9700_SANITIZE)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address,undefined)
+endif()
+
+if(SDR9700_THREAD_SANITIZE)
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
 endif()
 
 if(NOT CMAKE_BUILD_TYPE)

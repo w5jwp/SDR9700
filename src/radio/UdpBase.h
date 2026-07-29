@@ -122,8 +122,8 @@ class UdpBase : public QObject
     bool periodicRunning = false;
     bool sentPacketConnect2 = false;
     qint64 lastReceivedMs = 0; // Monotonic timestamp from mono; safe across wall-clock midnight.
-    // Lock ordering (always acquire in this order to prevent deadlock):
-    //   udpMutex → txBufferMutex → rxBufferMutex → missingMutex
+    // udpMutex and txBufferMutex are never nested. Receive bookkeeping may
+    // acquire rxBufferMutex followed by missingMutex, never the reverse.
     QMutex udpMutex;
     QMutex txBufferMutex;
     QMutex rxBufferMutex;

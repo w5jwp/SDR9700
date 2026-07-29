@@ -46,7 +46,7 @@ void AudioHandlerBase::stopConverterThread(const QString& roleName)
             qCritical(logAudio()) << "[SHUTDOWN] converterThread did not stop after bounded shutdown, role="
                                   << roleName;
             converterThread->setParent(nullptr);
-            connect(converterThread, &QThread::finished, converterThread, &QObject::deleteLater);
+            connect(converterThread, &QThread::finished, converterThread, &QObject::deleteLater, Qt::DirectConnection);
             converterThread = nullptr;
             converter = nullptr;
             return;

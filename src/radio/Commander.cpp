@@ -51,6 +51,7 @@ void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, 
     {
         closeComm();
     }
+    m_shutdownComplete = false;
 
     udp = new UdpHandler(settings, rxSetup, txSetup);
 
@@ -91,6 +92,11 @@ void Commander::closeComm()
 
 void Commander::shutdownComm()
 {
+    if (m_shutdownComplete)
+    {
+        return;
+    }
+
     qDebug(logRadio()) << "[SHUTDOWN] closeComm() enter";
     if (udpHandlerThread != nullptr)
     {
@@ -126,7 +132,8 @@ void Commander::shutdownComm()
                 qCritical(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread did not stop after bounded "
                                          "shutdown; leaving thread detached";
                 udpHandlerThread->setParent(nullptr);
-                connect(udpHandlerThread, &QThread::finished, udpHandlerThread, &QObject::deleteLater);
+                connect(udpHandlerThread, &QThread::finished, udpHandlerThread, &QObject::deleteLater,
+                        Qt::DirectConnection);
                 udpHandlerThread = nullptr;
             }
         }
@@ -147,6 +154,7 @@ void Commander::shutdownComm()
     m_pendingReplies.clear();
     m_pendingSetCommands.clear();
     udp = nullptr;
+    m_shutdownComplete = true;
 }
 
 void Commander::commonSetup()
@@ -2936,9 +2944,7 @@ void Commander::setPttActive(bool active)
         return;
     }
 
-    const Qt::ConnectionType connectionType =
-        QThread::currentThread() == udp->thread() ? Qt::DirectConnection : Qt::BlockingQueuedConnection;
-    QMetaObject::invokeMethod(udp, "setPttActive", connectionType, Q_ARG(bool, active));
+    QMetaObject::invokeMethod(udp, "setPttActive", Qt::QueuedConnection, Q_ARG(bool, active));
 }
 
 void Commander::sendDtmfPcm(const QByteArray& pcm)

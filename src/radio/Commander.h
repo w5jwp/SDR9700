@@ -142,6 +142,7 @@ class Commander : public RadioCommander
     QQueue<CommandErrorType> m_pendingSetCommands;
     QElapsedTimer m_pendingCommandClock;
     bool m_suppressReadbackForCurrentCommand{false};
+    bool m_shutdownComplete{false};
 
     ScopeData mainScopeData;
     ScopeData subScopeData;

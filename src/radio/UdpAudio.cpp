@@ -104,7 +104,7 @@ void UdpAudio::stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThrea
             qCritical(logUdp()) << "[SHUTDOWN]" << name
                                 << "did not stop after bounded shutdown; leaving thread detached";
             workerThread->setParent(nullptr);
-            connect(workerThread, &QThread::finished, workerThread, &QObject::deleteLater);
+            connect(workerThread, &QThread::finished, workerThread, &QObject::deleteLater, Qt::DirectConnection);
             workerThread = nullptr;
             return;
         }
@@ -523,7 +523,7 @@ void UdpAudio::onRxAudioInitFailed()
         // asynchronously. Null the member so dataReceived() can call startAudio()
         // again if a new stream arrives.
         rxAudioThread->setParent(nullptr);
-        connect(rxAudioThread, &QThread::finished, rxAudioThread, &QObject::deleteLater);
+        connect(rxAudioThread, &QThread::finished, rxAudioThread, &QObject::deleteLater, Qt::DirectConnection);
         rxAudioThread = nullptr;
     }
     rxaudio = nullptr;
@@ -536,7 +536,7 @@ void UdpAudio::onTxAudioInitFailed()
     {
         txAudioThread->quit();
         txAudioThread->setParent(nullptr);
-        connect(txAudioThread, &QThread::finished, txAudioThread, &QObject::deleteLater);
+        connect(txAudioThread, &QThread::finished, txAudioThread, &QObject::deleteLater, Qt::DirectConnection);
         txAudioThread = nullptr;
     }
     txaudio = nullptr;
