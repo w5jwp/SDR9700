@@ -14,6 +14,7 @@ class MainWindow;
 class MemoryCsvController;
 class MemoryEditorController;
 class MemorySyncController;
+class MemoryWriteController;
 class QPushButton;
 class QTimer;
 class QWidget;
@@ -63,6 +64,7 @@ class MemoryController : public QObject
 
   private:
     friend class MemoryCsvController;
+    friend class MemoryWriteController;
 
     // The editor controller owns the extracted editor workflow and operates on
     // the memory state whose lifetime remains managed by this controller.
@@ -89,10 +91,6 @@ class MemoryController : public QObject
     void deleteRadioMemory(quint16 group, quint16 channel, MemoryWriteCompletion completion = {});
     void queueRadioMemoryWrites(const QVector<MemoryType>& memories, int startDelayMs = 0,
                                 const QString& progressLabel = QString(), MemoryWriteCompletion completion = {});
-    void startQueuedRadioMemoryWrites(const QVector<MemoryType>& memories, const QString& progressLabel,
-                                      MemoryWriteCompletion completion);
-    void writeNextQueuedRadioMemory();
-    void finishQueuedRadioMemoryWrites(bool timedOut);
     bool firstOpenChannelForGroup(quint16 group, quint16* channel) const;
     void setMemoryProgress(const QString& label, int value, int maximum);
     void clearMemoryProgress();
@@ -102,12 +100,12 @@ class MemoryController : public QObject
     MemoryCsvController* m_memoryCsvController{nullptr};
     MemoryEditorController* m_memoryEditorController{nullptr};
     MemorySyncController* m_memorySyncController{nullptr};
+    MemoryWriteController* m_memoryWriteController{nullptr};
     QTimer* m_radioMemoryRefreshTimer{nullptr};
     QTimer* m_radioMemoryPeriodicRefreshTimer{nullptr};
     QTimer* m_radioMemorySyncTimeoutTimer{nullptr};
     QTimer* m_radioMemoryReplyGraceTimer{nullptr};
     QTimer* m_memoryViewRefreshTimer{nullptr};
-    QTimer* m_radioMemoryWriteTimeoutTimer{nullptr};
     QHash<quint32, MemoryType> m_radioMemoriesByKey;
     QSet<quint32> m_receivedRadioMemoryKeys;
     QSet<quint32> m_expectedRadioMemoryKeys;
@@ -124,11 +122,5 @@ class MemoryController : public QObject
     QString m_memoryProgressLabel;
     int m_memoryProgressValue{0};
     int m_memoryProgressMaximum{0};
-    QVector<MemoryType> m_queuedRadioMemoryWrites;
-    int m_queuedRadioMemoryWriteIndex{0};
-    quint32 m_expectedRadioMemoryWriteKey{0};
-    bool m_waitingForRadioMemoryWriteReadback{false};
-    QString m_queuedRadioMemoryWriteLabel;
-    MemoryWriteCompletion m_queuedRadioMemoryWriteCompletion;
     bool m_initialMemorySyncComplete{false};
 };

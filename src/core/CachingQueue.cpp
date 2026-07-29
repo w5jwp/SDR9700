@@ -633,63 +633,14 @@ bool CachingQueue::cacheValuesDiffer(const QVariant& a, const QVariant& b)
             return true;
         }
 
-        if (valueHolds(qMetaTypeId<bool>()))
+        // Qt handles built-in values, enums, and custom metatypes that expose
+        // an equality comparator. Only protocol structs with deliberately
+        // partial or always-notify policies need cases below.
+        if (a.metaType().isEqualityComparable())
         {
-            if (a.value<bool>() != b.value<bool>())
-            {
-                changed = true;
-            }
+            return a != b;
         }
-        else if (valueHolds(qMetaTypeId<QString>()))
-        {
-            if (a.value<QString>() != b.value<QString>())
-            {
-                changed = true;
-            }
-        }
-        else if (valueHolds(qMetaTypeId<uchar>()))
-        {
-            if (a.value<uchar>() != b.value<uchar>())
-            {
-                changed = true;
-            }
-        }
-        else if (valueHolds(qMetaTypeId<ushort>()))
-        {
-            if (a.value<ushort>() != b.value<ushort>())
-            {
-                changed = true;
-            }
-        }
-        else if (valueHolds(qMetaTypeId<short>()))
-        {
-            if (a.value<short>() != b.value<short>())
-            {
-                changed = true;
-            }
-        }
-        else if (valueHolds(qMetaTypeId<uint>()))
-        {
-            if (a.value<uint>() != b.value<uint>())
-            {
-                changed = true;
-            }
-        }
-        else if (valueHolds(qMetaTypeId<int>()))
-        {
-            if (a.value<int>() != b.value<int>())
-            {
-                changed = true;
-            }
-        }
-        else if (valueHolds(qMetaTypeId<double>()))
-        {
-            if (a.value<double>() != b.value<double>())
-            {
-                changed = true;
-            }
-        }
-        else if (valueHolds(qMetaTypeId<ModeInfo>()))
+        if (valueHolds(qMetaTypeId<ModeInfo>()))
         {
             if (a.value<ModeInfo>().mk != b.value<ModeInfo>().mk ||
                 a.value<ModeInfo>().reg != b.value<ModeInfo>().reg ||

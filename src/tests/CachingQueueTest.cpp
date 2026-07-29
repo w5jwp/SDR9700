@@ -3,6 +3,12 @@
 
 #include <QtTest>
 
+struct UnsupportedCachePayload
+{
+    int value{0};
+};
+Q_DECLARE_METATYPE(UnsupportedCachePayload)
+
 class CachingQueueTest : public QObject
 {
     Q_OBJECT
@@ -15,6 +21,7 @@ class CachingQueueTest : public QObject
     void queueItemsHaveStableIdentity();
     void dispatchesImmediateCommandsInOrder();
     void receivesAndCachesAuthoritativeValues();
+    void comparesRegisteredValueTypes();
     void deliversUnsupportedPayloadTypesConservatively();
     void resetClearsSessionState();
 };
@@ -88,9 +95,18 @@ void CachingQueueTest::receivesAndCachesAuthoritativeValues()
 
 void CachingQueueTest::deliversUnsupportedPayloadTypesConservatively()
 {
-    const QByteArray payload("new-cache-payload");
+    const QVariant payload = QVariant::fromValue(UnsupportedCachePayload{42});
     QTest::ignoreMessage(QtInfoMsg, QRegularExpression(QStringLiteral("Unsupported cache value.*")));
     QVERIFY(CachingQueue::cacheValuesDiffer(payload, payload));
+}
+
+void CachingQueueTest::comparesRegisteredValueTypes()
+{
+    QVERIFY(!CachingQueue::cacheValuesDiffer(123, 123));
+    QVERIFY(CachingQueue::cacheValuesDiffer(123, 124));
+    QVERIFY(!CachingQueue::cacheValuesDiffer(QStringLiteral("same"), QStringLiteral("same")));
+    QVERIFY(CachingQueue::cacheValuesDiffer(QStringLiteral("before"), QStringLiteral("after")));
+    QVERIFY(!CachingQueue::cacheValuesDiffer(QByteArray("same"), QByteArray("same")));
 }
 
 void CachingQueueTest::resetClearsSessionState()

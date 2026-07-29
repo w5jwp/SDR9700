@@ -39,6 +39,7 @@ class MainTitleBar;
 class MemoryController;
 class MemoryCsvController;
 class MemoryEditorController;
+class MemoryWriteController;
 class MetersDialog;
 class RadioCommandController;
 class RadioChooserDialog;
@@ -57,6 +58,7 @@ class MainWindow : public QMainWindow
     friend class MemoryController;
     friend class MemoryCsvController;
     friend class MemoryEditorController;
+    friend class MemoryWriteController;
     friend class RadioCommandController;
     friend class StatusBarController;
 
