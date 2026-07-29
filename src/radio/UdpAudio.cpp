@@ -415,6 +415,10 @@ void UdpAudio::enableAudio()
     {
         startAudio();
     }
+    if (m_txActive.load())
+    {
+        startTxAudio();
+    }
 }
 
 void UdpAudio::startAudio()
@@ -457,40 +461,47 @@ void UdpAudio::startAudio()
     connect(pingTimer, &QTimer::timeout, this, &UdpBase::sendPing);
     pingTimer->start(PING_PERIOD);
 
-    if (enableTx)
+    emit setupRxAudio(rxSetup);
+}
+
+void UdpAudio::startTxAudio()
+{
+    if (!enableTx || txAudioThread != nullptr)
     {
-        if (txSetup.type == qtAudio)
-        {
-            txaudio = new AudioHandlerQtInput();
-        }
-        else
-        {
-            qCritical(logAudio()) << "Unsupported Transmit Audio Handler selected! Only qtAudio is supported.";
-            return;
-        }
-
-        txAudioThread = new QThread(this);
-        txAudioThread->setObjectName("txAudio()");
-
-        txaudio->moveToThread(txAudioThread);
-
-        txAudioThread->start(QThread::HighPriority);
-
-        connect(this, &UdpAudio::setupTxAudio, txaudio, &AudioHandlerBase::init);
-        connect(txaudio, &AudioHandlerBase::haveAudioData, this, &UdpAudio::receiveAudioData);
-        connect(txaudio, &AudioHandlerBase::haveLevels, this, &UdpAudio::getTxLevels);
-
-        connect(txAudioThread, &QThread::finished, txaudio, &QObject::deleteLater);
-        connect(txaudio, &AudioHandlerBase::initFailed, this, &UdpAudio::onTxAudioInitFailed);
-
-        emit setupTxAudio(txSetup);
+        return;
     }
 
-    emit setupRxAudio(rxSetup);
+    if (txSetup.type != qtAudio)
+    {
+        qCritical(logAudio()) << "Unsupported Transmit Audio Handler selected! Only qtAudio is supported.";
+        return;
+    }
+
+    // Opening an idle microphone at connection time needlessly holds the
+    // capture device and makes rapid application shutdown race CoreAudio
+    // initialization on macOS. Create it only when transmission first needs
+    // local audio, then retain it for the connection.
+    txaudio = new AudioHandlerQtInput();
+    txAudioThread = new QThread(this);
+    txAudioThread->setObjectName("txAudio()");
+    txaudio->moveToThread(txAudioThread);
+    txAudioThread->start(QThread::HighPriority);
+
+    connect(this, &UdpAudio::setupTxAudio, txaudio, &AudioHandlerBase::init);
+    connect(txaudio, &AudioHandlerBase::haveAudioData, this, &UdpAudio::receiveAudioData);
+    connect(txaudio, &AudioHandlerBase::haveLevels, this, &UdpAudio::getTxLevels);
+    connect(txAudioThread, &QThread::finished, txaudio, &QObject::deleteLater);
+    connect(txaudio, &AudioHandlerBase::initFailed, this, &UdpAudio::onTxAudioInitFailed);
+
+    emit setupTxAudio(txSetup);
 }
 
 void UdpAudio::setTxActive(bool active)
 {
+    if (active && m_audioReady)
+    {
+        startTxAudio();
+    }
     m_txActive.store(active);
     m_txAudioQueue.clear();
     if (!active)
