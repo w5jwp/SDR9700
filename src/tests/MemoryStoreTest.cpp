@@ -1,5 +1,6 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MemoryStore.h"
+#include "MemoryControllerHelpers.h"
 
 #include <QtTest>
 
@@ -15,6 +16,7 @@ class MemoryStoreTest : public QObject
     void frequencyOutsideSelectedBandIsRejected();
     void overlongNameIsRejected();
     void duplicateBandChannelIsRejected();
+    void radioMemoryConversionRoundTrips();
     void arbitraryCsvInputNeverCrashes();
 };
 
@@ -119,6 +121,39 @@ void MemoryStoreTest::duplicateBandChannelIsRejected()
 
     QVERIFY(imported.size() < 2);
     QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("duplicate band/channel")));
+}
+
+void MemoryStoreTest::radioMemoryConversionRoundTrips()
+{
+    MemoryRecord memory = validMemory();
+    memory.name = QStringLiteral("SAT TEST");
+    memory.receiveHz = 145825000;
+    memory.mode = modeFM;
+    memory.filter = 2;
+    memory.dataMode = 1;
+    memory.scan = 2;
+    memory.duplexMode = dmDupMinus;
+    memory.offsetHz = 600000;
+    memory.toneMode = ratrTT;
+    memory.toneValue = 1000;
+    memory.tone = QStringLiteral("100.0");
+    memory.tsql = QStringLiteral("100.0");
+
+    const MemoryRecord converted = recordFromRadioMemory(radioMemoryFromRecord(memory, 1, 5));
+
+    QCOMPARE(converted.group, quint16(1));
+    QCOMPARE(converted.channel, quint16(5));
+    QCOMPARE(converted.name, memory.name);
+    QCOMPARE(converted.receiveHz, memory.receiveHz);
+    QCOMPARE(converted.mode, memory.mode);
+    QCOMPARE(converted.filter, memory.filter);
+    QCOMPARE(converted.dataMode, memory.dataMode);
+    QCOMPARE(converted.scan, memory.scan);
+    QCOMPARE(converted.duplexMode, memory.duplexMode);
+    QCOMPARE(converted.offsetHz, memory.offsetHz);
+    QCOMPARE(converted.toneMode, memory.toneMode);
+    QCOMPARE(converted.tone, memory.tone);
+    QCOMPARE(converted.tsql, memory.tsql);
 }
 
 void MemoryStoreTest::arbitraryCsvInputNeverCrashes()

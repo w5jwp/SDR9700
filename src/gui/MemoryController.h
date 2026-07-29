@@ -44,8 +44,7 @@ class MemoryController : public QObject
     void importRadioMemories();
     bool initialMemorySyncComplete() const;
 
-    // Narrow controller-facing hooks. Keep these explicit instead of granting
-    // helper controllers blanket friend access to all MemoryController state.
+    // Narrow synchronization-controller-facing hooks.
     bool radioConnected() const;
     bool memoryRefreshInProgress() const;
     bool memoryOperationInProgress() const;
@@ -55,7 +54,6 @@ class MemoryController : public QObject
     void setMemoryPollTimerIntervalSeconds(int seconds);
     void clearMemoryEditButtonChecked();
     void closeMemoryEditorFromController();
-    void showMemoryEditorPane(const QString& memoryId);
     void showMemoryToast(const QString& message);
     QWidget* popupParent() const;
 
@@ -63,6 +61,10 @@ class MemoryController : public QObject
     void initialMemorySyncChanged(bool complete);
 
   private:
+    // The editor controller owns the extracted editor workflow and operates on
+    // the memory state whose lifetime remains managed by this controller.
+    friend class MemoryEditorController;
+
     using MemoryWriteCompletion = std::function<void(bool success)>;
 
     void requestRadioMemoryRefresh();
