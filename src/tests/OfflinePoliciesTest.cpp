@@ -12,6 +12,7 @@ class OfflinePoliciesTest : public QObject
   private slots:
     void clampsMemoryPollingInterval();
     void tracksMemorySynchronization();
+    void advancesMemorySynchronizationSlots();
     void identifiesExpectedMemoryWriteReadback();
     void roundsTuningFrequency();
     void clampsFrequencyAndScopeCenterToBand();
@@ -34,6 +35,26 @@ void OfflinePoliciesTest::tracksMemorySynchronization()
     QVERIFY(sdr9700::memorySyncComplete(expected, {0x00010001, 0x00010002, 0x00020001}));
     QVERIFY(sdr9700::memorySyncComplete(expected, {0x00010001, 0x00010002, 0x00020001, 0x00090009}));
     QVERIFY(!sdr9700::memorySyncComplete({}, {}));
+}
+
+void OfflinePoliciesTest::advancesMemorySynchronizationSlots()
+{
+    quint16 group = 1;
+    quint16 channel = 1;
+    QCOMPARE(sdr9700::memorySyncProgressIndex(group, channel, 1, 1, 99), 1);
+
+    channel = 99;
+    QCOMPARE(sdr9700::memorySyncProgressIndex(group, channel, 1, 1, 99), 99);
+    sdr9700::advanceMemorySyncSlot(group, channel, 1, 99);
+    QCOMPARE(group, quint16(2));
+    QCOMPARE(channel, quint16(1));
+    QCOMPARE(sdr9700::memorySyncProgressIndex(group, channel, 1, 1, 99), 100);
+
+    group = 3;
+    channel = 99;
+    sdr9700::advanceMemorySyncSlot(group, channel, 1, 99);
+    QCOMPARE(group, quint16(4));
+    QCOMPARE(channel, quint16(1));
 }
 
 void OfflinePoliciesTest::identifiesExpectedMemoryWriteReadback()

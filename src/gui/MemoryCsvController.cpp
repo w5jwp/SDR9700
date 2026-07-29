@@ -40,7 +40,7 @@ void MemoryCsvController::importRadioMemories()
                                  QStringLiteral("Connect to the radio before importing memories."));
         return;
     }
-    if (m_owner->m_refreshInProgress)
+    if (m_owner->memoryRefreshInProgress())
     {
         QMessageBox::information(m_owner->popupParent(), QStringLiteral("Import Memories"),
                                  QStringLiteral("Wait for the current radio memory sync to finish before importing."));

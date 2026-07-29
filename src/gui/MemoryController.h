@@ -2,7 +2,6 @@
 
 #include <QObject>
 #include <QHash>
-#include <QSet>
 #include <QString>
 #include <QVector>
 #include <functional>
@@ -46,14 +45,9 @@ class MemoryController : public QObject
     void importRadioMemories();
     bool initialMemorySyncComplete() const;
 
-    // Narrow synchronization-controller-facing hooks.
-    bool radioConnected() const;
     bool memoryRefreshInProgress() const;
     bool memoryOperationInProgress() const;
     bool memoryEditorVisible() const;
-    void cancelMemoryRefresh();
-    void requestRadioMemoryRefreshFromController();
-    void setMemoryPollTimerIntervalSeconds(int seconds);
     void clearMemoryEditButtonChecked();
     void closeMemoryEditorFromController();
     void showMemoryToast(const QString& message);
@@ -64,6 +58,7 @@ class MemoryController : public QObject
 
   private:
     friend class MemoryCsvController;
+    friend class MemorySyncController;
     friend class MemoryWriteController;
 
     // The editor controller owns the extracted editor workflow and operates on
@@ -73,12 +68,8 @@ class MemoryController : public QObject
     using MemoryWriteCompletion = std::function<void(bool success)>;
 
     void requestRadioMemoryRefresh();
-    void requestNextRadioMemory();
     void handleRadioMemoryReceived(MemoryType memory);
-    void finishRadioMemoryRefresh(bool timedOut = false);
-    bool allExpectedRadioMemoriesReceived() const;
     void scheduleMemoryViewsRebuild();
-    void resetStoredRadioMemoriesAfterSync();
     void updateMemoryTableInteraction();
     void rebuildMemoryViews();
     QVector<MemoryRecord> currentMemories() const;
@@ -101,26 +92,13 @@ class MemoryController : public QObject
     MemoryEditorController* m_memoryEditorController{nullptr};
     MemorySyncController* m_memorySyncController{nullptr};
     MemoryWriteController* m_memoryWriteController{nullptr};
-    QTimer* m_radioMemoryRefreshTimer{nullptr};
-    QTimer* m_radioMemoryPeriodicRefreshTimer{nullptr};
-    QTimer* m_radioMemorySyncTimeoutTimer{nullptr};
-    QTimer* m_radioMemoryReplyGraceTimer{nullptr};
     QTimer* m_memoryViewRefreshTimer{nullptr};
     QHash<quint32, MemoryType> m_radioMemoriesByKey;
-    QSet<quint32> m_receivedRadioMemoryKeys;
-    QSet<quint32> m_expectedRadioMemoryKeys;
     QString m_openMemoryEditorId;
     QPushButton* m_memoryEditButton{nullptr};
     QWidget* m_memoryEditorPane{nullptr};
     QWidget* m_memoryEditorSeparator{nullptr};
-    quint16 m_refreshGroup{1};
-    quint16 m_refreshChannel{1};
-    quint16 m_currentSyncGroup{0};
-    quint16 m_currentSyncChannel{0};
-    bool m_refreshInProgress{false};
-    bool m_resetAfterSync{false};
     QString m_memoryProgressLabel;
     int m_memoryProgressValue{0};
     int m_memoryProgressMaximum{0};
-    bool m_initialMemorySyncComplete{false};
 };
