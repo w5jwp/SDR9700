@@ -482,24 +482,18 @@ void MemoryViewController::rebuild()
 
     if (m_owner->m_window->m_memoryCountLabel)
     {
+        m_owner->m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
         const int totalCount = memories.size();
-        const quint16 syncGroup = m_owner->m_memorySyncController->currentGroup();
-        const quint16 syncChannel = m_owner->m_memorySyncController->currentChannel();
-        if (m_owner->m_memorySyncController->refreshInProgress() && syncGroup >= kRadioMemoryFirstGroup &&
-            syncChannel >= kRadioMemoryFirstChannel)
-        {
-            const int syncIndex =
-                (syncGroup - kRadioMemoryFirstGroup) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1) +
-                (syncChannel - kRadioMemoryFirstChannel + 1);
-            setProgress(QStringLiteral("Syncing %1 channel %2")
-                            .arg(memoryBandLabelForGroup(syncGroup))
-                            .arg(syncChannel, 3, 10, QLatin1Char('0')),
-                        syncIndex, kRadioMemorySyncTotal);
-            return;
-        }
         if (m_owner->m_memorySyncController->refreshInProgress())
         {
-            setProgress(QStringLiteral("Syncing memories"), 0, kRadioMemorySyncTotal);
+            if (m_progressLabel.isEmpty())
+            {
+                setProgress(QStringLiteral("Syncing memories"), 0, kRadioMemorySyncTotal);
+            }
+            else
+            {
+                setProgress(m_progressLabel, m_progressValue, m_progressMaximum);
+            }
             return;
         }
         if (!m_progressLabel.isEmpty())

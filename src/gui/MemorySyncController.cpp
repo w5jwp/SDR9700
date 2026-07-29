@@ -148,6 +148,21 @@ void MemorySyncController::requestRadioMemoryRefresh()
     m_owner->rebuildMemoryViews();
 }
 
+void MemorySyncController::requestRadioMemoryRefreshForOperation(Completion completion)
+{
+    if (!m_owner->m_window->m_model || !m_owner->m_window->m_model->isConnected() || m_refreshInProgress)
+    {
+        if (completion)
+        {
+            completion(false);
+        }
+        return;
+    }
+
+    m_operationCompletion = std::move(completion);
+    requestRadioMemoryRefresh();
+}
+
 void MemorySyncController::requestNextRadioMemory()
 {
     if (!m_refreshInProgress)
@@ -232,6 +247,7 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     const bool wasInProgress = m_refreshInProgress;
     const bool completedPollPass = wasInProgress && !timedOut && m_owner->m_window->m_model &&
                                    m_owner->m_window->m_model->isConnected() && m_refreshGroup > kRadioMemoryLastGroup;
+    const bool receivedAllExpected = wasInProgress && allExpectedRadioMemoriesReceived();
     const bool noRadioReplies = completedPollPass && m_receivedMemoryKeys.isEmpty();
     timedOut = timedOut || noRadioReplies;
     m_refreshInProgress = false;
@@ -272,6 +288,13 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
                         << "stored memories";
     }
     m_owner->rebuildMemoryViews();
+
+    Completion operationCompletion = std::move(m_operationCompletion);
+    m_operationCompletion = {};
+    if (operationCompletion)
+    {
+        operationCompletion(completedPollPass && !timedOut && receivedAllExpected);
+    }
 }
 
 void MemorySyncController::cancelRadioMemoryRefresh()

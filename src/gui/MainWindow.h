@@ -111,6 +111,7 @@ class MainWindow : public QMainWindow
     void centerPopupWindow(QWidget* popup) const;
     void bringDialogToFront(QWidget* dialog) const;
     void updateWindowTitle();
+    bool scheduleRadioReconnect();
     void showSettingsDialog();
     void showRadioChooserDialog();
     void tryAutoConnect();
@@ -309,6 +310,7 @@ class MainWindow : public QMainWindow
         Error,
     };
     void showToast(const QString& msg, int durationMs = 4000, ToastKind kind = ToastKind::Info);
+    void clearPersistentToast(const QString& expectedMessage);
     void updateNetworkQuality(int rttMs);
 
     void updateTxIndicator(bool on);

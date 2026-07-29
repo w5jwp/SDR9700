@@ -29,15 +29,7 @@ PttPanel::PttPanel(QPushButton* pttButton, QPushButton* dtmfButton, QWidget* par
     if (pttButton)
     {
         pttButton->setFixedSize(kPttButtonSize);
-        pttButton->setStyleSheet(QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: "
-                                                "3px; color: %3; font-weight: bold; }"
-                                                "QPushButton:hover { background: %4; border-color: %5; }"
-                                                "QPushButton:pressed, QPushButton[pttActive=\"true\"] { background: "
-                                                "%6; border-color: %7; color: %8; font-weight: bold; }")
-                                     .arg(UiTheme::Color::PttButton, UiTheme::Color::PttBorder,
-                                          UiTheme::Color::TextField, UiTheme::Color::PttHover,
-                                          UiTheme::Color::PttHoverBorder, UiTheme::Color::PttActive,
-                                          UiTheme::Color::PttActiveBorder, UiTheme::Color::White));
+        pttButton->setProperty("pttButton", true);
         layout->addStretch();
         layout->addWidget(pttButton, 0, Qt::AlignHCenter);
 

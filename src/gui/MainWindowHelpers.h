@@ -179,8 +179,6 @@ class TwoLineButton : public QPushButton
     QString m_secondary;
 };
 
-QString commandButtonStyle(bool active);
-QString levelButtonStyle(bool active);
 void setSelectorButtonLines(QPushButton* button, const QString& primary, const QString& secondary);
 void setCommandButtonActive(QPushButton* button, bool active);
 void styleCompactMenu(QMenu* menu);

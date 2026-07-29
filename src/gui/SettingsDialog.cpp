@@ -14,6 +14,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -21,6 +22,8 @@
 #include <QShowEvent>
 #include <QSize>
 #include <QStackedWidget>
+#include <QStyledItemDelegate>
+#include <QStyleOptionViewItem>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -48,6 +51,109 @@ class CurrentPageStackedWidget : public QStackedWidget
     QSize minimumSizeHint() const override
     {
         return currentWidget() ? currentWidget()->minimumSizeHint() : QStackedWidget::minimumSizeHint();
+    }
+};
+
+class SettingsNavigationTree : public QTreeWidget
+{
+  public:
+    using QTreeWidget::QTreeWidget;
+
+  protected:
+    void drawBranches(QPainter* painter, const QRect& rect, const QModelIndex& index) const override
+    {
+        if (!index.isValid())
+        {
+            return;
+        }
+
+        constexpr int kArrowHalfWidth = 5;
+        const int branchCenterX = rect.right() - indentation() / 2;
+        const int rowCenterY = rect.center().y();
+        const QPen linePen(QColor(UiTheme::Color::BorderMedium), 1.0);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, false);
+        painter->setPen(linePen);
+
+        const QModelIndex parent = index.parent();
+        const int siblingCount = model()->rowCount(parent);
+        if (index.row() > 0 || parent.isValid())
+        {
+            painter->drawLine(branchCenterX, rect.top(), branchCenterX, rowCenterY);
+        }
+        if (index.row() + 1 < siblingCount)
+        {
+            painter->drawLine(branchCenterX, rowCenterY, branchCenterX, rect.bottom());
+        }
+        if (parent.isValid())
+        {
+            painter->drawLine(branchCenterX, rowCenterY, rect.right(), rowCenterY);
+
+            QModelIndex ancestor = parent;
+            int ancestorX = branchCenterX - indentation();
+            while (ancestor.isValid())
+            {
+                const QModelIndex ancestorParent = ancestor.parent();
+                if (ancestor.row() + 1 < model()->rowCount(ancestorParent))
+                {
+                    painter->drawLine(ancestorX, rect.top(), ancestorX, rect.bottom());
+                }
+                ancestor = ancestorParent;
+                ancestorX -= indentation();
+            }
+        }
+
+        if (model()->hasChildren(index))
+        {
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(QColor(UiTheme::Color::TextMuted));
+            QPolygon arrow;
+            if (isExpanded(index))
+            {
+                arrow << QPoint(branchCenterX - kArrowHalfWidth, rowCenterY - 3)
+                      << QPoint(branchCenterX + kArrowHalfWidth, rowCenterY - 3)
+                      << QPoint(branchCenterX, rowCenterY + 4);
+            }
+            else
+            {
+                arrow << QPoint(branchCenterX - 3, rowCenterY - kArrowHalfWidth)
+                      << QPoint(branchCenterX - 3, rowCenterY + kArrowHalfWidth)
+                      << QPoint(branchCenterX + 4, rowCenterY);
+            }
+            painter->drawPolygon(arrow);
+        }
+        painter->restore();
+    }
+};
+
+class SettingsNavigationDelegate : public QStyledItemDelegate
+{
+  public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        QStyleOptionViewItem itemOption(option);
+        const bool selected = itemOption.state.testFlag(QStyle::State_Selected);
+        const bool hovered = itemOption.state.testFlag(QStyle::State_MouseOver);
+        if (selected || hovered)
+        {
+            const QString text = index.data(Qt::DisplayRole).toString();
+            const int highlightWidth = itemOption.fontMetrics.horizontalAdvance(text) + 6;
+            const QRect highlightRect(itemOption.rect.left(), itemOption.rect.top(),
+                                      qMin(highlightWidth, itemOption.rect.width()), itemOption.rect.height());
+            painter->fillRect(highlightRect,
+                              QColor(selected ? UiTheme::Color::AccentDark : UiTheme::Color::ButtonHover));
+            itemOption.state.setFlag(QStyle::State_Selected, false);
+            itemOption.state.setFlag(QStyle::State_MouseOver, false);
+            itemOption.state.setFlag(QStyle::State_HasFocus, false);
+            if (selected)
+            {
+                itemOption.palette.setColor(QPalette::Text, QColor(UiTheme::Color::TextBright));
+            }
+        }
+        QStyledItemDelegate::paint(painter, itemOption, index);
     }
 };
 } // namespace
@@ -85,24 +191,44 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
     search->setClearButtonEnabled(true);
     search->setAccessibleName(QStringLiteral("Search settings"));
     search->setMinimumHeight(34);
+    search->setStyleSheet(
+        QStringLiteral("QLineEdit { background: %1; border: 1px solid %2; color: %3; padding: 0 8px; }"
+                       "QLineEdit:focus { border-color: %4; }")
+            .arg(QLatin1String(UiTheme::Color::Field), QLatin1String(UiTheme::Color::BorderFocus),
+                 QLatin1String(UiTheme::Color::TextField), QLatin1String(UiTheme::Color::Accent)));
+    QPalette searchPalette = search->palette();
+    searchPalette.setColor(QPalette::PlaceholderText, QColor(UiTheme::Color::TextStatusSecondary));
+    search->setPalette(searchPalette);
     contentLayout->addWidget(search);
 
     auto* body = new QHBoxLayout;
     body->setContentsMargins(0, 0, 0, 0);
     body->setSpacing(12);
 
-    m_navigation = new QTreeWidget(content);
+    m_navigation = new SettingsNavigationTree(content);
     m_navigation->setObjectName(QStringLiteral("settingsNavigation"));
     m_navigation->setHeaderHidden(true);
     m_navigation->setRootIsDecorated(true);
-    m_navigation->setItemsExpandable(false);
-    m_navigation->setIndentation(16);
+    m_navigation->setItemsExpandable(true);
+    m_navigation->setExpandsOnDoubleClick(true);
+    m_navigation->setAnimated(true);
+    m_navigation->setIndentation(20);
     m_navigation->setMinimumWidth(190);
     m_navigation->setMaximumWidth(245);
     m_navigation->setUniformRowHeights(false);
+    m_navigation->setItemDelegate(new SettingsNavigationDelegate(m_navigation));
     m_navigation->setAccessibleName(QStringLiteral("Settings pages"));
     m_navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_navigation->setStyleSheet(
+        QStringLiteral("QTreeWidget#settingsNavigation { background: %1; border: 1px solid %2; color: %3;"
+                       " show-decoration-selected: 0; }"
+                       "QTreeWidget#settingsNavigation::item { padding: 1px 4px 1px 0; border: none; }"
+                       "QTreeWidget#settingsNavigation::item:hover { background: transparent; }"
+                       "QTreeWidget#settingsNavigation::item:selected { background: transparent; color: %4; }"
+                       "QTreeWidget#settingsNavigation::branch { background: transparent; }")
+            .arg(QLatin1String(UiTheme::Color::Field), QLatin1String(UiTheme::Color::Border),
+                 QLatin1String(UiTheme::Color::TextPrimary), QLatin1String(UiTheme::Color::TextBright)));
     body->addWidget(m_navigation);
 
     auto* divider = new QWidget(content);
@@ -141,8 +267,10 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
 
 #ifdef HAVE_HIDAPI
     QTreeWidgetItem* accessoriesCategory =
-        addCategory(QStringLiteral("ACCESSORIES"), QStringLiteral("accessories hardware controller remote encoder"));
+        addCategory(QStringLiteral("ACCESSORIES"), QStringLiteral("Configure supported radio-control accessories."),
+                    QStringLiteral("accessories hardware controller remote encoder"));
     addPage(accessoriesCategory, Page::IcomRC28, QStringLiteral("Icom RC-28 Remote Encoder"),
+            QStringLiteral("Configure RC-28 tuning and F1, F2, and PTT button assignments."),
             QStringLiteral("hardware icom icomRC28 rc-28 remote encoder controller knob button f1 f2 ptt mapping"),
             [this]()
             {
@@ -154,11 +282,14 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
 #endif
     QTreeWidgetItem* applicationCategory =
         addCategory(QStringLiteral("APPLICATION"),
+                    QStringLiteral("Configure SDR9700 behavior, memory synchronization, and display appearance."),
                     QStringLiteral("application configuration backup restore reset memory manager spectrum scope"));
     addPage(applicationCategory, Page::ApplicationConfiguration, QStringLiteral("Configuration"),
+            QStringLiteral("Back up, restore, or reset SDR9700 configuration."),
             QStringLiteral("application configuration backup restore reset settings"),
             [] { return new ApplicationConfigurationSettingsPanel; });
     addPage(applicationCategory, Page::MemoryManager, QStringLiteral("Memory Manager"),
+            QStringLiteral("Set how often SDR9700 refreshes memory information from the radio."),
             QStringLiteral("application memory manager memories radio sync poll polling interval refresh"),
             [this]()
             {
@@ -168,6 +299,7 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
                 return panel;
             });
     addPage(applicationCategory, Page::SpectrumScope, QStringLiteral("Spectrum Scope"),
+            QStringLiteral("Customize spectrum colors, grid density, and mouse-wheel tuning."),
             QStringLiteral("application appearance display visual spectrum scope center line color vfo marker "
                            "background gridlines grid density fewer normal more"),
             [this]()
@@ -187,8 +319,10 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
             });
 
     QTreeWidgetItem* audioCategory = addCategory(QStringLiteral("RECEIVE & TRANSMIT"),
+                                                 QStringLiteral("Configure computer audio used with the radio."),
                                                  QStringLiteral("receive transmit audio input output computer radio"));
     addPage(audioCategory, Page::AudioDevices, QStringLiteral("Audio Devices"),
+            QStringLiteral("Choose audio devices for radio receive and transmit."),
             QStringLiteral("audio input output device microphone speaker codec channels receive transmit playback"),
             []() { return new AudioDevicesSettingsPanel; });
     for (int i = 0; i < m_navigation->topLevelItemCount(); ++i)
@@ -261,19 +395,24 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
     root->addWidget(content, 1);
 }
 
-QTreeWidgetItem* SettingsDialog::addCategory(const QString& title, const QString& keywords)
+QTreeWidgetItem* SettingsDialog::addCategory(const QString& title, const QString& tooltip, const QString& keywords)
 {
     auto* item = new QTreeWidgetItem(m_navigation, {title});
     item->setData(0, Qt::UserRole + 1, keywords);
-    item->setToolTip(0, keywords);
+    item->setToolTip(0, tooltip);
     QFont font = item->font(0);
     font.setBold(true);
+    if (font.pointSizeF() > 1.0)
+    {
+        font.setPointSizeF(font.pointSizeF() - 0.5);
+    }
     item->setFont(0, font);
+    item->setSizeHint(0, QSize(0, 30));
     return item;
 }
 
-void SettingsDialog::addPage(QTreeWidgetItem* parent, Page page, const QString& title, const QString& keywords,
-                             std::function<QWidget*()> builder)
+void SettingsDialog::addPage(QTreeWidgetItem* parent, Page page, const QString& title, const QString& tooltip,
+                             const QString& keywords, std::function<QWidget*()> builder)
 {
     auto* placeholder = new QWidget;
     const int stackIndex = m_pages->addWidget(placeholder);
@@ -282,7 +421,8 @@ void SettingsDialog::addPage(QTreeWidgetItem* parent, Page page, const QString& 
     auto* item = parent ? new QTreeWidgetItem(parent, {title}) : new QTreeWidgetItem(m_navigation, {title});
     item->setData(0, Qt::UserRole, key);
     item->setData(0, Qt::UserRole + 1, keywords);
-    item->setToolTip(0, keywords);
+    item->setSizeHint(0, QSize(0, 26));
+    item->setToolTip(0, tooltip);
 
     m_pageIndexes.insert(key, stackIndex);
     m_pageItems.insert(key, item);

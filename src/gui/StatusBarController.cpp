@@ -307,6 +307,7 @@ void StatusBarController::buildStatusBar()
     connect(m_window->m_txDurationTimer, &QTimer::timeout, this, &StatusBarController::updateTxDurationLabel);
 
     m_window->m_toastLabel = new QLabel(QString(), m_window);
+    m_window->m_toastLabel->setObjectName(QStringLiteral("statusToastLabel"));
     m_window->m_toastLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusPrimary));
     m_window->m_toastLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     hbox->addWidget(m_window->m_toastLabel);
@@ -469,6 +470,11 @@ void StatusBarController::buildStatusBar()
     updateSystemStats();
 }
 
+void StatusBarController::showToast(const QString& msg, int durationMs)
+{
+    showToast(msg, durationMs, MainWindow::ToastKind::Info);
+}
+
 void StatusBarController::showToast(const QString& msg, int durationMs, MainWindow::ToastKind kind)
 {
     if (!m_window->m_toastLabel || !m_window->m_toastTimer)
@@ -487,6 +493,21 @@ void StatusBarController::showToast(const QString& msg, int durationMs, MainWind
     if (durationMs > 0)
     {
         m_window->m_toastTimer->start(durationMs);
+    }
+}
+
+void StatusBarController::clearPersistentToast(const QString& expectedMessage)
+{
+    if (m_persistentMessage != expectedMessage)
+    {
+        return;
+    }
+
+    m_persistentMessage.clear();
+    m_persistentKind = MainWindow::ToastKind::Info;
+    if (!m_window->m_toastTimer || !m_window->m_toastTimer->isActive())
+    {
+        applyToast(QString(), MainWindow::ToastKind::Info);
     }
 }
 

@@ -1,7 +1,10 @@
 // QtTest invokes private slots through the generated meta-object.
+#include "ConfirmationDialog.h"
 #include "SettingsDialog.h"
 
 #include <QLineEdit>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QTreeWidget>
@@ -15,6 +18,7 @@ class GuiSmokeTest : public QObject
     void initTestCase();
     void settingsDialogOpensSearchesAndCloses();
     void settingsFindShortcutFocusesSearch();
+    void confirmationDialogsUseSafeSemanticButtons();
 };
 
 void GuiSmokeTest::initTestCase()
@@ -35,6 +39,22 @@ void GuiSmokeTest::settingsDialogOpensSearchesAndCloses()
     QVERIFY(search != nullptr);
     QVERIFY(navigation != nullptr);
     QVERIFY(navigation->topLevelItemCount() > 0);
+    QVERIFY(navigation->itemsExpandable());
+    QTreeWidgetItem* category = navigation->topLevelItem(0);
+    QVERIFY(category != nullptr);
+    QVERIFY(category->childCount() > 0);
+    category->setExpanded(false);
+    QVERIFY(!category->isExpanded());
+    category->setExpanded(true);
+    QVERIFY(category->isExpanded());
+    QTreeWidgetItemIterator itemIterator(navigation);
+    while (*itemIterator)
+    {
+        QTreeWidgetItem* item = *itemIterator;
+        QVERIFY(!item->toolTip(0).isEmpty());
+        QVERIFY(item->toolTip(0) != item->data(0, Qt::UserRole + 1).toString());
+        ++itemIterator;
+    }
 
     search->setText(QStringLiteral("spectrum"));
     QCoreApplication::processEvents();
@@ -60,6 +80,20 @@ void GuiSmokeTest::settingsFindShortcutFocusesSearch()
     search->setText(QStringLiteral("spectrum"));
     QVERIFY(QMetaObject::invokeMethod(shortcut, "activated", Qt::DirectConnection));
     QCOMPARE(search->selectedText(), QStringLiteral("spectrum"));
+}
+
+void GuiSmokeTest::confirmationDialogsUseSafeSemanticButtons()
+{
+    QMessageBox dialog;
+    QPushButton* action = sdr9700::ui::configureConfirmationButtons(dialog, QStringLiteral("Import"), true);
+    auto* cancel = qobject_cast<QPushButton*>(dialog.button(QMessageBox::Cancel));
+
+    QVERIFY(action != nullptr);
+    QVERIFY(cancel != nullptr);
+    QCOMPARE(action->text(), QStringLiteral("Import"));
+    QCOMPARE(dialog.buttonRole(action), QMessageBox::DestructiveRole);
+    QCOMPARE(dialog.defaultButton(), cancel);
+    QCOMPARE(dialog.escapeButton(), cancel);
 }
 
 QTEST_MAIN(GuiSmokeTest)

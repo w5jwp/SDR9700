@@ -19,6 +19,7 @@
 #include "UiTheme.h"
 #include "UtilityWindow.h"
 #include "ConfigurationManager.h"
+#include "backend/ConnectionRetryPolicy.h"
 #include "ControlPanelController.h"
 #include "MemoryStore.h"
 #include "AppBuildConfig.h"
@@ -269,7 +270,7 @@ void MainWindow::buildToolBar()
 
     m_titleBar = new MainTitleBar(this);
     m_titleBar->setTitle(
-        QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 v%2</span>")
+        QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 %2</span>")
             .arg(QString::fromLatin1(APP_NAME).toHtmlEscaped(), QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
 
     auto* fileMenu = new QMenu(this);
@@ -558,7 +559,6 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
         button->setCheckable(false);
         button->setFixedSize(kSelectorButtonSize);
         button->setAccessibleDescription(description);
-        button->setStyleSheet(commandButtonStyle(false));
         setSelectorButtonLines(button, primary, secondary);
         button->setAccessibleName(name);
         return button;
@@ -1507,45 +1507,14 @@ void MainWindow::onConnectionChanged(bool connected)
         // once. During startup sync failures, repeated reconnects can keep the
         // IC-9700 LAN server half-open and leave the operator watching an
         // endless Connecting/Syncing loop. Manual reconnect resets the attempt.
-        const bool canReconnect = hadRadioUiReady && !m_userDisconnected && !m_lastErrorWasCredential &&
-                                  !m_pendingProfileId.isNull() &&
-                                  RadioProfileStore::instance().profileById(m_pendingProfileId);
+        const bool profileAvailable =
+            !m_pendingProfileId.isNull() && RadioProfileStore::instance().profileById(m_pendingProfileId) != nullptr;
+        const bool canReconnect = sdr9700::shouldRetryRadioConnection(hadRadioUiReady, false, m_userDisconnected,
+                                                                      m_lastErrorWasCredential, profileAvailable);
 
         if (canReconnect)
         {
-            m_reconnecting = true;
-            if (m_connStateLabel)
-            {
-                m_connStateName = QStringLiteral("Reconnecting");
-                m_connStateLabel->setText(
-                    QStringLiteral("<span style='color:%1'>Reconnecting</span>").arg(UiTheme::Color::Danger));
-            }
-            // Keep the IP in the detail label so the user knows which radio is reconnecting.
-            updateConnectionTooltip();
-
-            if (!m_reconnectTimer)
-            {
-                m_reconnectTimer = new QTimer(this);
-                m_reconnectTimer->setSingleShot(true);
-                connect(m_reconnectTimer, &QTimer::timeout, this,
-                        [this]()
-                        {
-                            if (!m_reconnecting)
-                            {
-                                return;
-                            }
-                            const RadioProfile* p = RadioProfileStore::instance().profileById(m_pendingProfileId);
-                            if (p)
-                            {
-                                onConnectToProfile(*p);
-                            }
-                            else
-                            {
-                                m_reconnecting = false;
-                            }
-                        });
-            }
-            m_reconnectTimer->start(5000);
+            scheduleRadioReconnect();
         }
         else
         {
@@ -1774,6 +1743,11 @@ void MainWindow::showToast(const QString& msg, int durationMs, ToastKind kind)
     m_statusBarController->showToast(msg, durationMs, kind);
 }
 
+void MainWindow::clearPersistentToast(const QString& expectedMessage)
+{
+    m_statusBarController->clearPersistentToast(expectedMessage);
+}
+
 void MainWindow::updateNetworkQuality(int rttMs)
 {
     m_statusBarController->updateNetworkQuality(rttMs);
@@ -1848,6 +1822,60 @@ void MainWindow::onError(ErrorCode code, const QString& msg)
     // which owns the persistent operator-facing toast. Keep this typed signal
     // solely for reconnect policy so one failure does not produce two messages.
     m_lastErrorWasCredential = code == ErrorCode::AuthFailure;
+    const bool connectionAttemptFailed = code == ErrorCode::ConnectionFailed || code == ErrorCode::Disconnected ||
+                                         code == ErrorCode::PortReservationFailed;
+    const bool profileAvailable =
+        !m_pendingProfileId.isNull() && RadioProfileStore::instance().profileById(m_pendingProfileId) != nullptr;
+    if (sdr9700::shouldRetryRadioConnection(false, connectionAttemptFailed, m_userDisconnected,
+                                            m_lastErrorWasCredential, profileAvailable) &&
+        (!m_model || !m_model->isConnected()))
+    {
+        scheduleRadioReconnect();
+    }
+}
+
+bool MainWindow::scheduleRadioReconnect()
+{
+    if (m_pendingProfileId.isNull() || !RadioProfileStore::instance().profileById(m_pendingProfileId))
+    {
+        m_reconnecting = false;
+        return false;
+    }
+
+    m_reconnecting = true;
+    if (m_connStateLabel)
+    {
+        m_connStateName = QStringLiteral("Reconnecting");
+        m_connStateLabel->setText(
+            QStringLiteral("<span style='color:%1'>Reconnecting</span>").arg(UiTheme::Color::Danger));
+    }
+    // Keep the IP in the detail label so the user knows which radio is reconnecting.
+    updateConnectionTooltip();
+
+    if (!m_reconnectTimer)
+    {
+        m_reconnectTimer = new QTimer(this);
+        m_reconnectTimer->setSingleShot(true);
+        connect(m_reconnectTimer, &QTimer::timeout, this,
+                [this]()
+                {
+                    if (!m_reconnecting)
+                    {
+                        return;
+                    }
+                    const RadioProfile* profile = RadioProfileStore::instance().profileById(m_pendingProfileId);
+                    if (profile)
+                    {
+                        onConnectToProfile(*profile);
+                    }
+                    else
+                    {
+                        m_reconnecting = false;
+                    }
+                });
+    }
+    m_reconnectTimer->start(5000);
+    return true;
 }
 
 void MainWindow::onAfGainChanged(int value)
@@ -2000,8 +2028,6 @@ void MainWindow::onPttChanged(bool on)
     }
     updateTxIndicator(on);
     m_pttBtn->setProperty("pttActive", on);
-    m_pttBtn->style()->unpolish(m_pttBtn);
-    m_pttBtn->style()->polish(m_pttBtn);
     m_pttBtn->update();
     setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), on ? QStringLiteral("ON") : QStringLiteral("OFF"));
 }

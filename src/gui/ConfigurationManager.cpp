@@ -1,5 +1,6 @@
 #include "ConfigurationManager.h"
 
+#include "ConfirmationDialog.h"
 #include "AppSettings.h"
 #include "UdpBase.h"
 
@@ -446,9 +447,11 @@ bool ConfigurationManager::restoreConfigurationAndRestart(QWidget* parent)
         return false;
     }
 
-    if (QMessageBox::question(parent, QStringLiteral("Restore Configuration"),
-                              QStringLiteral("Restore this configuration backup and restart SDR9700? Current "
-                                             "configuration will be replaced.")) != QMessageBox::Yes)
+    if (!sdr9700::ui::confirmAction(
+            parent, QStringLiteral("Restore Configuration"),
+            QStringLiteral("Restore this configuration backup and restart SDR9700? Current configuration will be "
+                           "replaced."),
+            QStringLiteral("Restore"), true))
     {
         return false;
     }
@@ -470,10 +473,11 @@ bool ConfigurationManager::restoreConfigurationAndRestart(QWidget* parent)
 
 bool ConfigurationManager::resetConfigurationAndRestart(QWidget* parent)
 {
-    if (QMessageBox::question(parent, QStringLiteral("Reset Configuration"),
-                              QStringLiteral("Reset SDR9700 configuration and restart the application? This removes "
-                                             "local settings and radio profiles. Memories are stored separately.")) !=
-        QMessageBox::Yes)
+    if (!sdr9700::ui::confirmAction(
+            parent, QStringLiteral("Reset Configuration"),
+            QStringLiteral("Reset SDR9700 configuration and restart the application? This removes local settings "
+                           "and radio profiles. Memories are stored separately."),
+            QStringLiteral("Reset"), true))
     {
         return false;
     }

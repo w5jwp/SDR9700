@@ -16,6 +16,7 @@ constexpr int kRadioMemorySyncReplyGraceMs = 1000;
 constexpr int kRadioMemorySyncSafetyMarginMs = 5000;
 constexpr int kRadioMemoryInitialSyncRetryDelayMs = 2000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
+constexpr int kRadioMemoryWriteReadbackRetryMs = 500;
 constexpr int kRadioMemoryWriteReadbackTimeoutMs = 3000;
 constexpr int kRadioMemoryNameMaxChars = 16;
 constexpr int kMemoryEditorPaneWidth = 420;

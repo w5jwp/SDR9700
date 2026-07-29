@@ -27,10 +27,12 @@ class MemoryWriteController : public QObject
   private:
     void startWrites(const QVector<MemoryType>& memories, const QString& progressLabel, Completion completion);
     void writeNext();
+    void requestExpectedReadback();
     void finish(bool failed);
 
     MemoryController* m_owner{nullptr};
     QTimer* m_timeoutTimer{nullptr};
+    QTimer* m_readbackRetryTimer{nullptr};
     QVector<MemoryType> m_memories;
     int m_index{0};
     quint32 m_expectedKey{0};

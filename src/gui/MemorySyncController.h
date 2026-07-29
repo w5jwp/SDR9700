@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QSet>
+#include <functional>
 
 class MemoryController;
 class QTimer;
@@ -11,6 +12,8 @@ class MemorySyncController : public QObject
     Q_OBJECT
 
   public:
+    using Completion = std::function<void(bool success)>;
+
     explicit MemorySyncController(MemoryController* owner);
 
     void forceRadioMemorySync();
@@ -18,6 +21,7 @@ class MemorySyncController : public QObject
     void handleRadioReadyChanged(bool ready);
     void handleRadioMemoryReceived(quint32 key);
     void requestRadioMemoryRefresh();
+    void requestRadioMemoryRefreshForOperation(Completion completion);
     void cancelRadioMemoryRefresh();
     void clearReceivedMemories();
 
@@ -45,4 +49,5 @@ class MemorySyncController : public QObject
     quint16 m_currentChannel{0};
     bool m_refreshInProgress{false};
     bool m_initialSyncComplete{false};
+    Completion m_operationCompletion;
 };

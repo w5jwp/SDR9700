@@ -16,7 +16,9 @@ class StatusBarController : public QObject
     void toggleStatusClockMode();
     void updateSystemStats();
     void buildStatusBar();
+    void showToast(const QString& msg, int durationMs);
     void showToast(const QString& msg, int durationMs, MainWindow::ToastKind kind);
+    void clearPersistentToast(const QString& expectedMessage);
     void updateNetworkQuality(int rttMs);
 
   private:

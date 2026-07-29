@@ -23,6 +23,8 @@ class MemoryStoreTest : public QObject
     void duplicateBandChannelIsRejected();
     void oversizedUnsignedFieldsAreRejectedBeforeNarrowing();
     void radioMemoryConversionRoundTrips();
+    void radioMemoryReadbackNormalizesRepeaterOffsetUnits();
+    void onlyStoredRadioMemoriesAreSelectedForDeletion();
     void editorPolicyNormalizesOffsets();
     void csvFileRoundTrips();
     void csvFileIoFailuresAreReported();
@@ -177,6 +179,47 @@ void MemoryStoreTest::radioMemoryConversionRoundTrips()
     QCOMPARE(converted.toneMode, memory.toneMode);
     QCOMPARE(converted.tone, memory.tone);
     QCOMPARE(converted.tsql, memory.tsql);
+
+    for (const radioMode_t mode : {modeCW_R, modeRTTY_R, modeDV, modeDD})
+    {
+        memory.mode = mode;
+        const MemoryType encoded = radioMemoryFromRecord(memory, 1, 5);
+        QCOMPARE(memoryModeKindFromRegister(encoded.mode), mode);
+        QCOMPARE(recordFromRadioMemory(encoded).mode, static_cast<int>(mode));
+    }
+}
+
+void MemoryStoreTest::onlyStoredRadioMemoriesAreSelectedForDeletion()
+{
+    MemoryType first = radioMemoryFromRecord(validMemory(), 2, 12);
+    MemoryType second = radioMemoryFromRecord(validMemory(), 1, 4);
+    MemoryType empty = deletedRadioMemory(3, 8);
+    MemoryType outOfRange = radioMemoryFromRecord(validMemory(), 4, 1);
+
+    const QVector<MemoryType> deletes = deletedStoredRadioMemories({first, empty, outOfRange, second});
+
+    QCOMPARE(deletes.size(), 2);
+    QCOMPARE(deletes.at(0).group, quint16(1));
+    QCOMPARE(deletes.at(0).channel, quint16(4));
+    QVERIFY(deletes.at(0).del);
+    QCOMPARE(deletes.at(1).group, quint16(2));
+    QCOMPARE(deletes.at(1).channel, quint16(12));
+    QVERIFY(deletes.at(1).del);
+}
+
+void MemoryStoreTest::radioMemoryReadbackNormalizesRepeaterOffsetUnits()
+{
+    MemoryRecord record = validMemory();
+    record.duplexMode = dmDupMinus;
+    record.offsetHz = 600000;
+    const MemoryType expected = radioMemoryFromRecord(record, 1, 1);
+    MemoryType actual = expected;
+    actual.duplexOffset.Hz = 6000;
+
+    QVERIFY(radioMemoryReadbackMatches(expected, actual));
+
+    actual.duplexOffset.Hz = 5000;
+    QVERIFY(!radioMemoryReadbackMatches(expected, actual));
 }
 
 void MemoryStoreTest::editorPolicyNormalizesOffsets()

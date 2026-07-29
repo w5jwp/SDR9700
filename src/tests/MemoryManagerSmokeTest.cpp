@@ -1,5 +1,7 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MainWindow.h"
+#include "MainWindowHelpers.h"
+#include "StatusBarController.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
 #include "models/RadioModel.h"
@@ -8,7 +10,9 @@
 #include <QComboBox>
 #include <QApplication>
 #include <QDialog>
+#include <QLabel>
 #include <QPointer>
+#include <QPushButton>
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QWidget>
@@ -23,8 +27,10 @@ class MemoryManagerSmokeTest : public QObject
     void initTestCase();
     void constructsMemoryManagerUi();
     void mainWindowRetainsFixedFramelessDesign();
+    void selectorButtonsAvoidDynamicStyleSheets();
     void utilityWindowIsDestroyedWithHost();
     void quitActionDefersWindowClose();
+    void persistentToastCanBeClearedByOwner();
 };
 
 void MemoryManagerSmokeTest::initTestCase()
@@ -65,6 +71,27 @@ void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
     QCOMPARE(window.minimumSize(), QSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight));
 }
 
+void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
+{
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+
+    int selectorCount = 0;
+    for (QPushButton* button : window.findChildren<QPushButton*>())
+    {
+        if (dynamic_cast<sdr9700::ui::main_window::TwoLineButton*>(button))
+        {
+            ++selectorCount;
+            QVERIFY(button->styleSheet().isEmpty());
+            sdr9700::ui::main_window::setCommandButtonActive(button, true);
+            sdr9700::ui::main_window::setCommandButtonActive(button, false);
+            QVERIFY(button->styleSheet().isEmpty());
+        }
+    }
+    QVERIFY(selectorCount > 0);
+}
+
 void MemoryManagerSmokeTest::utilityWindowIsDestroyedWithHost()
 {
     auto* host = new QWidget;
@@ -97,6 +124,36 @@ void MemoryManagerSmokeTest::quitActionDefersWindowClose()
     QVERIFY(window.isVisible());
     QCoreApplication::sendPostedEvents(&window, QEvent::MetaCall);
     QVERIFY(!window.isVisible());
+}
+
+void MemoryManagerSmokeTest::persistentToastCanBeClearedByOwner()
+{
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+
+    auto* toastLabel = window.findChild<QLabel*>(QStringLiteral("statusToastLabel"));
+    StatusBarController* statusBarController = nullptr;
+    for (QObject* child : window.children())
+    {
+        if (auto* candidate = dynamic_cast<StatusBarController*>(child))
+        {
+            statusBarController = candidate;
+            break;
+        }
+    }
+    QVERIFY(toastLabel != nullptr);
+    QVERIFY(statusBarController != nullptr);
+
+    const QString importMessage = QStringLiteral("Syncing radio memories before import...");
+    statusBarController->showToast(importMessage, 0);
+    QCOMPARE(toastLabel->text(), importMessage);
+
+    statusBarController->clearPersistentToast(QStringLiteral("A different operation"));
+    QCOMPARE(toastLabel->text(), importMessage);
+
+    statusBarController->clearPersistentToast(importMessage);
+    QVERIFY(toastLabel->text().isEmpty());
 }
 
 QTEST_MAIN(MemoryManagerSmokeTest)

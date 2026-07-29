@@ -2,7 +2,6 @@
 
 #include <QFontMetrics>
 #include <QPainter>
-#include <QStyle>
 #include <QStringList>
 
 namespace sdr9700::ui::main_window
@@ -11,16 +10,50 @@ void TwoLineButton::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
-    QStyleOptionButton option;
-    initStyleOption(&option);
-    option.text.clear();
-
     QPainter painter(this);
-    style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
+    painter.setRenderHint(QPainter::Antialiasing);
 
-    const QRect content = style()->subElementRect(QStyle::SE_PushButtonContents, &option, this).adjusted(2, 3, -2, -3);
-    const QColor textColor =
-        isEnabled() ? palette().color(QPalette::ButtonText) : palette().color(QPalette::Disabled, QPalette::ButtonText);
+    const bool pttButton = property("pttButton").toBool();
+    const bool active =
+        pttButton ? (isDown() || property("pttActive").toBool()) : (isChecked() || property("commandActive").toBool());
+    const bool hovered = underMouse() && isEnabled();
+    QColor background;
+    QColor border;
+    QColor textColor;
+    if (pttButton)
+    {
+        background = active    ? QColor(UiTheme::Color::PttActive)
+                     : hovered ? QColor(UiTheme::Color::PttHover)
+                               : QColor(UiTheme::Color::PttButton);
+        border = active    ? QColor(UiTheme::Color::PttActiveBorder)
+                 : hovered ? QColor(UiTheme::Color::PttHoverBorder)
+                           : QColor(UiTheme::Color::PttBorder);
+        textColor = active ? QColor(UiTheme::Color::White) : QColor(UiTheme::Color::TextField);
+    }
+    else if (active)
+    {
+        background =
+            property("levelControl").toBool() ? QColor(UiTheme::Color::Field) : QColor(UiTheme::Color::AccentDark);
+        border = hovered ? QColor(UiTheme::Color::AccentBright) : QColor(UiTheme::Color::Accent);
+        textColor = QColor(UiTheme::Color::TextBright);
+    }
+    else
+    {
+        background = QColor(hovered ? UiTheme::Color::ButtonHover : UiTheme::Color::Button);
+        border = QColor(hovered ? UiTheme::Color::ButtonHoverBorder : UiTheme::Color::BorderLight);
+        textColor = QColor(UiTheme::Color::TextPrimary);
+    }
+    if (!isEnabled())
+    {
+        textColor = palette().color(QPalette::Disabled, QPalette::ButtonText);
+    }
+
+    const QRectF buttonRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    painter.setPen(QPen(border, 1.0));
+    painter.setBrush(background);
+    painter.drawRoundedRect(buttonRect, 3.0, 3.0);
+
+    const QRect content = rect().adjusted(4, 3, -4, -3);
 
     QFont primaryFont = font();
     primaryFont.setBold(true);
@@ -47,30 +80,6 @@ void TwoLineButton::paintEvent(QPaintEvent* event)
     painter.drawText(secondaryRect, Qt::AlignHCenter | Qt::AlignVCenter, m_secondary);
 }
 
-QString commandButtonStyle(bool active)
-{
-    return active ? QStringLiteral("QPushButton { background: %1; border: 1px solid %2; "
-                                   "border-radius: 3px; color: %3; font-weight: bold; }"
-                                   "QPushButton:hover { background: %4; border-color: %5; }")
-                        .arg(UiTheme::Color::AccentDark, UiTheme::Color::Accent, UiTheme::Color::TextBright,
-                             UiTheme::Color::AccentHover, UiTheme::Color::AccentBright)
-                  : QStringLiteral("QPushButton { background: %1; border: 1px solid %2; "
-                                   "border-radius: 3px; color: %3; font-weight: bold; }"
-                                   "QPushButton:hover { background: %4; border-color: %5; }")
-                        .arg(UiTheme::Color::Button, UiTheme::Color::BorderLight, UiTheme::Color::TextPrimary,
-                             UiTheme::Color::ButtonHover, UiTheme::Color::ButtonHoverBorder);
-}
-
-QString levelButtonStyle(bool active)
-{
-    return active ? QStringLiteral("QPushButton { background: %1; border: 1px solid %2; "
-                                   "border-radius: 3px; color: %3; font-weight: bold; }"
-                                   "QPushButton:hover { background: %4; border-color: %5; }")
-                        .arg(UiTheme::Color::Field, UiTheme::Color::Accent, UiTheme::Color::TextBright,
-                             UiTheme::Color::ButtonHover, UiTheme::Color::AccentBright)
-                  : commandButtonStyle(false);
-}
-
 void setSelectorButtonLines(QPushButton* button, const QString& primary, const QString& secondary)
 {
     if (auto* selector = dynamic_cast<TwoLineButton*>(button))
@@ -90,8 +99,8 @@ void setCommandButtonActive(QPushButton* button, bool active)
     }
     QSignalBlocker block(button);
     button->setChecked(active);
-    const bool levelControl = button->property("levelControl").toBool();
-    button->setStyleSheet(levelControl ? levelButtonStyle(active) : commandButtonStyle(active));
+    button->setProperty("commandActive", active);
+    button->update();
     if (button->property("toggleLabel").isValid())
     {
         if (auto* tlb = dynamic_cast<TwoLineButton*>(button))

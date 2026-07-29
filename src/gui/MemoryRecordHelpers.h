@@ -179,6 +179,40 @@ inline int modeRegisterFromLabel(const QString& mode)
     return modeFM;
 }
 
+inline quint8 memoryModeRegister(radioMode_t mode)
+{
+    switch (mode)
+    {
+    case modeCW_R:
+        return 7;
+    case modeRTTY_R:
+        return 8;
+    case modeDV:
+        return 17;
+    case modeDD:
+        return 22;
+    default:
+        return static_cast<quint8>(mode);
+    }
+}
+
+inline radioMode_t memoryModeKindFromRegister(quint8 reg)
+{
+    switch (reg)
+    {
+    case 7:
+        return modeCW_R;
+    case 8:
+        return modeRTTY_R;
+    case 17:
+        return modeDV;
+    case 22:
+        return modeDD;
+    default:
+        return static_cast<radioMode_t>(reg);
+    }
+}
+
 inline MemoryRecord recordFromRadioMemory(const MemoryType& radioMemory)
 {
     MemoryRecord memory;
@@ -191,7 +225,7 @@ inline MemoryRecord recordFromRadioMemory(const MemoryType& radioMemory)
         memory.name = memoryFrequencyLabel(radioMemory.frequency.Hz);
     }
     memory.receiveHz = radioMemory.frequency.Hz;
-    memory.mode = radioMemory.mode;
+    memory.mode = memoryModeKindFromRegister(radioMemory.mode);
     memory.filter = radioMemory.filter;
     memory.dataMode = radioMemory.datamode;
     memory.scan = radioMemory.scan;
@@ -235,7 +269,7 @@ inline MemoryType radioMemoryFromRecord(const MemoryRecord& memory, quint16 grou
     radioMemory.scan = static_cast<quint8>(qBound(0, memory.scan, 3));
     radioMemory.frequency.Hz = memory.receiveHz;
     radioMemory.frequency.VFO = activeVFO;
-    radioMemory.mode = static_cast<quint8>(memory.mode);
+    radioMemory.mode = memoryModeRegister(static_cast<radioMode_t>(memory.mode));
     radioMemory.filter = static_cast<quint8>(qBound(1, memory.filter, 3));
     radioMemory.datamode = static_cast<quint8>(qBound(0, memory.dataMode, 1));
     radioMemory.duplex = radioDuplexFromRecord(memory.duplexMode);
@@ -287,58 +321,107 @@ inline MemoryType deletedRadioMemory(quint16 group, quint16 channel)
     return memory;
 }
 
-inline QVector<MemoryType> deletedUserRadioMemories()
+inline QVector<MemoryType> deletedStoredRadioMemories(const QVector<MemoryType>& memories)
 {
     QVector<MemoryType> deletes;
-    deletes.reserve((kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * kRadioMemoryLastChannel);
-    for (quint16 group = kRadioMemoryFirstGroup; group <= kRadioMemoryLastGroup; ++group)
+    deletes.reserve(memories.size());
+    for (const MemoryType& memory : memories)
     {
-        for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
+        if (radioMemoryIsStored(memory) && memory.group >= kRadioMemoryFirstGroup &&
+            memory.group <= kRadioMemoryLastGroup && memory.channel >= kRadioMemoryFirstChannel &&
+            memory.channel <= kRadioMemoryLastChannel)
         {
-            deletes.append(deletedRadioMemory(group, channel));
+            deletes.append(deletedRadioMemory(memory.group, memory.channel));
         }
     }
+    std::sort(deletes.begin(), deletes.end(), [](const MemoryType& left, const MemoryType& right)
+              { return left.group == right.group ? left.channel < right.channel : left.group < right.group; });
     return deletes;
+}
+
+inline QStringList radioMemoryReadbackDifferences(const MemoryType& expected, const MemoryType& actual)
+{
+    QStringList differences;
+    if (expected.group != actual.group || expected.channel != actual.channel)
+    {
+        differences.append(QStringLiteral("slot"));
+        return differences;
+    }
+    if (expected.del)
+    {
+        if (radioMemoryIsStored(actual))
+        {
+            differences.append(QStringLiteral("not deleted"));
+        }
+        return differences;
+    }
+    if (!radioMemoryIsStored(actual))
+    {
+        differences.append(QStringLiteral("empty"));
+        return differences;
+    }
+
+    const auto compare = [&differences](bool differs, const QString& field)
+    {
+        if (differs)
+        {
+            differences.append(field);
+        }
+    };
+    compare(expected.frequency.Hz != actual.frequency.Hz, QStringLiteral("frequency"));
+    compare(expected.mode != actual.mode, QStringLiteral("mode"));
+    compare(expected.filter != actual.filter, QStringLiteral("filter"));
+    compare(expected.datamode != actual.datamode, QStringLiteral("data mode"));
+    compare(expected.scan != actual.scan, QStringLiteral("scan group"));
+    compare(expected.duplex != actual.duplex, QStringLiteral("duplex mode"));
+    if (expected.duplex == 1 || expected.duplex == 2)
+    {
+        const duplexMode_t duplexMode = expected.duplex == 1 ? dmDupMinus : dmDupPlus;
+        const quint64 expectedOffset =
+            normalizedOffsetForModeAndHz(duplexMode, expected.duplexOffset.Hz, expected.frequency.Hz);
+        const quint64 actualOffset =
+            normalizedOffsetForModeAndHz(duplexMode, actual.duplexOffset.Hz, actual.frequency.Hz);
+        compare(expectedOffset != actualOffset, QStringLiteral("duplex offset"));
+    }
+    compare(expected.tonemode != actual.tonemode, QStringLiteral("tone mode"));
+    compare(radioMemoryName(expected) != radioMemoryName(actual), QStringLiteral("name"));
+
+    const auto toneMode = static_cast<rptAccessTxRx_t>(expected.tonemode);
+    if (memoryToneModeUsesTxTone(toneMode))
+    {
+        compare(normalizedToneText(expected.tone) != normalizedToneText(actual.tone), QStringLiteral("TX tone"));
+    }
+    if (memoryToneModeUsesRxTone(toneMode))
+    {
+        compare(normalizedToneText(expected.tsql) != normalizedToneText(actual.tsql), QStringLiteral("RX tone"));
+    }
+    if (isDtcsToneMode(toneMode))
+    {
+        compare(expected.dtcs != actual.dtcs || expected.dtcsp != actual.dtcsp, QStringLiteral("TX DTCS"));
+        if (toneMode == ratrDD)
+        {
+            compare(expected.dtcsB != actual.dtcsB || expected.dtcspB != actual.dtcspB, QStringLiteral("RX DTCS"));
+        }
+    }
+
+    const radioMode_t mode = memoryModeKindFromRegister(expected.mode);
+    if (mode == modeDV || mode == modeDD)
+    {
+        compare(expected.dsql != actual.dsql, QStringLiteral("digital squelch"));
+        compare(expected.dvsql != actual.dvsql, QStringLiteral("digital code"));
+        compare(memoryCharField(expected.UR, sizeof expected.UR) != memoryCharField(actual.UR, sizeof actual.UR),
+                QStringLiteral("UR callsign"));
+        compare(memoryCharField(expected.R1, sizeof expected.R1) != memoryCharField(actual.R1, sizeof actual.R1),
+                QStringLiteral("R1 callsign"));
+        compare(memoryCharField(expected.R2, sizeof expected.R2) != memoryCharField(actual.R2, sizeof actual.R2),
+                QStringLiteral("R2 callsign"));
+    }
+    return differences;
 }
 
 inline bool radioMemoryReadbackMatches(const MemoryType& expected, const MemoryType& actual)
 {
-    if (expected.group != actual.group || expected.channel != actual.channel)
-    {
-        return false;
-    }
-    if (expected.del)
-    {
-        return !radioMemoryIsStored(actual);
-    }
-    if (!radioMemoryIsStored(actual) || expected.frequency.Hz != actual.frequency.Hz || expected.mode != actual.mode ||
-        expected.filter != actual.filter || expected.datamode != actual.datamode || expected.scan != actual.scan ||
-        expected.duplex != actual.duplex || expected.duplexOffset.Hz != actual.duplexOffset.Hz ||
-        expected.tonemode != actual.tonemode || expected.dsql != actual.dsql || expected.dvsql != actual.dvsql ||
-        radioMemoryName(expected) != radioMemoryName(actual) ||
-        memoryCharField(expected.UR, sizeof expected.UR) != memoryCharField(actual.UR, sizeof actual.UR) ||
-        memoryCharField(expected.R1, sizeof expected.R1) != memoryCharField(actual.R1, sizeof actual.R1) ||
-        memoryCharField(expected.R2, sizeof expected.R2) != memoryCharField(actual.R2, sizeof actual.R2))
-    {
-        return false;
-    }
-
-    const auto toneMode = static_cast<rptAccessTxRx_t>(expected.tonemode);
-    if (memoryToneModeUsesTxTone(toneMode) && normalizedToneText(expected.tone) != normalizedToneText(actual.tone))
-    {
-        return false;
-    }
-    if (memoryToneModeUsesRxTone(toneMode) && normalizedToneText(expected.tsql) != normalizedToneText(actual.tsql))
-    {
-        return false;
-    }
-    if (isDtcsToneMode(toneMode) &&
-        (expected.dtcs != actual.dtcs || expected.dtcsp != actual.dtcsp ||
-         (toneMode == ratrDD && (expected.dtcsB != actual.dtcsB || expected.dtcspB != actual.dtcspB))))
-    {
-        return false;
-    }
-    return true;
+    return radioMemoryReadbackDifferences(expected, actual).isEmpty();
 }
 
 

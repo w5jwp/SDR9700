@@ -56,9 +56,9 @@ class SettingsDialog : public sdr9700::ui::UtilityWindow
 #endif
 
   private:
-    QTreeWidgetItem* addCategory(const QString& title, const QString& keywords);
-    void addPage(QTreeWidgetItem* parent, Page page, const QString& title, const QString& keywords,
-                 std::function<QWidget*()> builder);
+    QTreeWidgetItem* addCategory(const QString& title, const QString& tooltip, const QString& keywords);
+    void addPage(QTreeWidgetItem* parent, Page page, const QString& title, const QString& tooltip,
+                 const QString& keywords, std::function<QWidget*()> builder);
     void buildDeferredPage(Page page);
     void filterNavigation(const QString& text);
     void selectPage(Page page);

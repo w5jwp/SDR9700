@@ -1,3 +1,4 @@
+#include "ConnectionRetryPolicy.h"
 #include "MemorySyncPolicy.h"
 #include "PttConfirmationPolicy.h"
 #include "SpectrumTuningPolicy.h"
@@ -15,6 +16,7 @@ class OfflinePoliciesTest : public QObject
     void tracksMemorySynchronization();
     void advancesMemorySynchronizationSlots();
     void identifiesExpectedMemoryWriteReadback();
+    void retriesRecoverableRadioConnectionFailures();
     void roundsTuningFrequency();
     void clampsFrequencyAndScopeCenterToBand();
     void requiresConsecutiveHighSwrReadings();
@@ -65,6 +67,16 @@ void OfflinePoliciesTest::identifiesExpectedMemoryWriteReadback()
     QVERIFY(!sdr9700::memoryReadbackExpected(false, 0x00010002, 0x00010002));
     QVERIFY(!sdr9700::memoryReadbackExpected(true, 0x00010002, 0x00010003));
     QVERIFY(!sdr9700::memoryReadbackExpected(true, 0, 0));
+}
+
+void OfflinePoliciesTest::retriesRecoverableRadioConnectionFailures()
+{
+    QVERIFY(sdr9700::shouldRetryRadioConnection(true, false, false, false, true));
+    QVERIFY(sdr9700::shouldRetryRadioConnection(false, true, false, false, true));
+    QVERIFY(!sdr9700::shouldRetryRadioConnection(false, false, false, false, true));
+    QVERIFY(!sdr9700::shouldRetryRadioConnection(false, true, true, false, true));
+    QVERIFY(!sdr9700::shouldRetryRadioConnection(false, true, false, true, true));
+    QVERIFY(!sdr9700::shouldRetryRadioConnection(false, true, false, false, false));
 }
 
 void OfflinePoliciesTest::roundsTuningFrequency()

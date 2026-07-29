@@ -110,6 +110,7 @@ endif()
 # SDR9700 application implementation shared by the executable and GUI smoke tests.
 set(SDR9700_APP_SOURCES
     backend/IRadioBackend.h
+    backend/ConnectionRetryPolicy.h
     backend/ScopeController.h
     backend/ScopeController.cpp
     backend/RadioRouter.h
@@ -135,6 +136,7 @@ set(SDR9700_APP_SOURCES
     gui/WaterfallController.h
     gui/WaterfallController.cpp
     gui/DialogPlacement.h
+    gui/ConfirmationDialog.h
     gui/UiTheme.h
     gui/MemoryStore.h
     gui/MemoryStore.cpp

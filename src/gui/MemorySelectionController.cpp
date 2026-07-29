@@ -1,6 +1,7 @@
 #include "MemorySelectionController.h"
 
 #include "MainWindow.h"
+#include "ConfirmationDialog.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
@@ -203,8 +204,9 @@ void MemorySelectionController::removeSelectedMemory()
     {
         return;
     }
-    if (QMessageBox::question(m_owner->popupParent(), "Remove Memory",
-                              QStringLiteral("Remove memory \"%1\"?").arg(memory.name)) != QMessageBox::Yes)
+    if (!sdr9700::ui::confirmAction(m_owner->popupParent(), QStringLiteral("Remove Memory"),
+                                    QStringLiteral("Remove memory \"%1\"?").arg(memory.name), QStringLiteral("Remove"),
+                                    true))
     {
         return;
     }

@@ -1,4 +1,5 @@
 #include "RadioChooserDialog.h"
+#include "ConfirmationDialog.h"
 #include "AppSettings.h"
 #include "DialogPlacement.h"
 #include "RadioProfile.h"
@@ -305,8 +306,8 @@ void RadioChooserDialog::onRemoveProfile()
 
     const RadioProfile* profile = RadioProfileStore::instance().profileById(m_currentId);
     const QString name = profile ? profile->name : "this radio";
-    if (QMessageBox::question(this, "Remove Radio", QString("Remove \"%1\"?").arg(name),
-                              QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+    if (!sdr9700::ui::confirmAction(this, QStringLiteral("Remove Radio"), QStringLiteral("Remove \"%1\"?").arg(name),
+                                    QStringLiteral("Remove"), true))
     {
         return;
     }

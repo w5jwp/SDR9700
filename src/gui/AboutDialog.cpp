@@ -56,7 +56,7 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent)
 
     root->addStretch(1);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     root->addWidget(buttons);
 }

@@ -1,5 +1,6 @@
 #include "MemoryEditorForm.h"
 
+#include "ConfirmationDialog.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
@@ -873,8 +874,8 @@ void MemoryEditorForm::show(const QString& memoryId)
     auto* cancelButton = new QPushButton("Cancel", buttonRow);
     buttonRowLayout->addWidget(copyButton, 0, Qt::AlignLeft);
     buttonRowLayout->addStretch(1);
-    buttonRowLayout->addWidget(saveButton, 0, Qt::AlignRight);
     buttonRowLayout->addWidget(cancelButton, 0, Qt::AlignRight);
+    buttonRowLayout->addWidget(saveButton, 0, Qt::AlignRight);
     footerLayout->addWidget(buttonRow);
     root->addWidget(footerContainer);
     resizeEditorToContents();
@@ -1020,10 +1021,11 @@ void MemoryEditorForm::show(const QString& memoryId)
                 {
                     if (m_owner->m_radioMemoriesByKey.contains(radioMemoryKey(group, channel)))
                     {
-                        if (QMessageBox::question(parent, "Add/Edit Memory",
-                                                  QStringLiteral("Overwrite radio memory %1 channel %2?")
-                                                      .arg(memoryBandLabelForGroup(group))
-                                                      .arg(channel, 3, 10, QLatin1Char('0'))) != QMessageBox::Yes)
+                        if (!sdr9700::ui::confirmAction(parent, QStringLiteral("Add/Edit Memory"),
+                                                        QStringLiteral("Overwrite radio memory %1 channel %2?")
+                                                            .arg(memoryBandLabelForGroup(group))
+                                                            .arg(channel, 3, 10, QLatin1Char('0')),
+                                                        QStringLiteral("Overwrite"), true))
                         {
                             return;
                         }
@@ -1033,10 +1035,11 @@ void MemoryEditorForm::show(const QString& memoryId)
             }
             else if (m_owner->m_radioMemoriesByKey.contains(radioMemoryKey(group, channel)))
             {
-                if (QMessageBox::question(parent, "Add/Edit Memory",
-                                          QStringLiteral("Overwrite radio memory %1 channel %2?")
-                                              .arg(memoryBandLabelForGroup(group))
-                                              .arg(channel, 3, 10, QLatin1Char('0'))) != QMessageBox::Yes)
+                if (!sdr9700::ui::confirmAction(parent, QStringLiteral("Add/Edit Memory"),
+                                                QStringLiteral("Overwrite radio memory %1 channel %2?")
+                                                    .arg(memoryBandLabelForGroup(group))
+                                                    .arg(channel, 3, 10, QLatin1Char('0')),
+                                                QStringLiteral("Overwrite"), true))
                 {
                     return;
                 }
