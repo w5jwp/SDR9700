@@ -31,7 +31,7 @@ MemorySyncController::MemorySyncController(MemoryController* owner) : QObject(ow
         AppSettings::instance()
             .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
             .toInt());
-    connect(m_periodicRefreshTimer, &QTimer::timeout, this, &MemorySyncController::requestRadioMemoryRefresh);
+    connect(m_periodicRefreshTimer, &QTimer::timeout, this, &MemorySyncController::startScheduledRadioMemoryRefresh);
 
     m_syncTimeoutTimer = new QTimer(this);
     m_syncTimeoutTimer->setSingleShot(true);
@@ -64,7 +64,7 @@ void MemorySyncController::forceRadioMemorySync()
 
     requestRadioMemoryRefresh();
     m_owner->reloadMemoryTable();
-    m_owner->showMemoryToast(QStringLiteral("Radio memory sync started"));
+    m_owner->showMemoryToast(QStringLiteral("Memory sync started"));
 }
 
 void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
@@ -82,7 +82,7 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
             m_initialSyncComplete = false;
             emit m_owner->initialMemorySyncChanged(false);
         }
-        m_owner->m_window->showToast(QStringLiteral("Syncing radio memories..."), 0);
+        m_owner->m_window->showToast(QStringLiteral("Syncing memories"), 4000);
         requestRadioMemoryRefresh();
         m_periodicRefreshTimer->start();
         return;
@@ -100,6 +100,19 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
     m_owner->m_radioMemoriesByKey.clear();
     clearReceivedMemories();
     m_owner->rebuildMemoryViews();
+}
+
+void MemorySyncController::startScheduledRadioMemoryRefresh()
+{
+    if (!m_owner->m_window->m_model || !m_owner->m_window->m_model->isConnected() || m_refreshInProgress ||
+        m_owner->memoryOperationInProgress())
+    {
+        return;
+    }
+
+    m_scheduledRefreshInProgress = true;
+    m_owner->m_window->showToast(QStringLiteral("Scheduled memory sync started"));
+    requestRadioMemoryRefresh();
 }
 
 void MemorySyncController::requestRadioMemoryRefresh()
@@ -160,6 +173,7 @@ void MemorySyncController::requestRadioMemoryRefreshForOperation(Completion comp
     }
 
     m_operationCompletion = std::move(completion);
+    m_operationSyncAttempt = 1;
     requestRadioMemoryRefresh();
 }
 
@@ -249,7 +263,27 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
                                    m_owner->m_window->m_model->isConnected() && m_refreshGroup > kRadioMemoryLastGroup;
     const bool receivedAllExpected = wasInProgress && allExpectedRadioMemoriesReceived();
     const bool noRadioReplies = completedPollPass && m_receivedMemoryKeys.isEmpty();
+    const bool scheduledRefresh = m_scheduledRefreshInProgress;
+    m_scheduledRefreshInProgress = false;
     timedOut = timedOut || noRadioReplies;
+
+    if (sdr9700::shouldRetryIncompleteMemoryOperationSync(static_cast<bool>(m_operationCompletion), completedPollPass,
+                                                          receivedAllExpected, m_operationSyncAttempt,
+                                                          kRadioMemoryOperationSyncMaxAttempts))
+    {
+        qWarning(logGui()) << "Radio memory operation sync attempt" << m_operationSyncAttempt << "received"
+                           << m_receivedMemoryKeys.size() << "of" << m_expectedMemoryKeys.size()
+                           << "expected replies; retrying the complete poll";
+        ++m_operationSyncAttempt;
+        m_refreshInProgress = false;
+        m_currentGroup = 0;
+        m_currentChannel = 0;
+        m_expectedMemoryKeys.clear();
+        m_owner->clearMemoryProgress();
+        requestRadioMemoryRefresh();
+        return;
+    }
+
     m_refreshInProgress = false;
     m_currentGroup = 0;
     m_currentChannel = 0;
@@ -260,8 +294,8 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     {
         qWarning(logGui()) << "Radio memory sync failed after receiving" << m_receivedMemoryKeys.size()
                            << "memory replies" << (noRadioReplies ? "(no CI-V memory replies)" : "(timeout)");
-        m_owner->m_window->showToast(m_initialSyncComplete ? QStringLiteral("Radio memory sync timed out")
-                                                           : QStringLiteral("Radio memory sync timed out; retrying"),
+        m_owner->m_window->showToast(m_initialSyncComplete ? QStringLiteral("Memory sync timed out")
+                                                           : QStringLiteral("Memory sync timed out; retrying"),
                                      5000, MainWindow::ToastKind::Warning);
         if (!m_initialSyncComplete && m_owner->m_window->m_model && m_owner->m_window->m_model->isConnected())
         {
@@ -286,11 +320,16 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     {
         qInfo(logGui()) << "Radio memory sync complete with" << m_owner->m_radioMemoriesByKey.size()
                         << "stored memories";
+        if (scheduledRefresh)
+        {
+            m_owner->m_window->showToast(QStringLiteral("Scheduled memory sync complete"));
+        }
     }
     m_owner->rebuildMemoryViews();
 
     Completion operationCompletion = std::move(m_operationCompletion);
     m_operationCompletion = {};
+    m_operationSyncAttempt = 0;
     if (operationCompletion)
     {
         operationCompletion(completedPollPass && !timedOut && receivedAllExpected);

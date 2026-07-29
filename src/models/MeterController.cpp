@@ -5,8 +5,10 @@
 
 namespace
 {
-constexpr int kMeterFlushIntervalMs = 33;
-}
+// Keep GUI updates coalesced to approximately one display frame without
+// adding a noticeable delay after each 10 Hz radio meter reply.
+constexpr int kMeterFlushIntervalMs = 16;
+} // namespace
 
 MeterController::MeterController(QObject* parent) : QObject(parent)
 {
@@ -15,6 +17,7 @@ MeterController::MeterController(QObject* parent) : QObject(parent)
     m_flushTimer = new QTimer(this);
     m_flushTimer->setSingleShot(true);
     m_flushTimer->setInterval(kMeterFlushIntervalMs);
+    m_flushTimer->setTimerType(Qt::PreciseTimer);
     connect(m_flushTimer, &QTimer::timeout, this, &MeterController::flush);
 }
 

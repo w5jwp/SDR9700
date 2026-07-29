@@ -17,6 +17,12 @@ inline bool memorySyncComplete(const QSet<quint32>& expected, const QSet<quint32
            std::all_of(expected.cbegin(), expected.cend(), [&received](quint32 key) { return received.contains(key); });
 }
 
+inline bool shouldRetryIncompleteMemoryOperationSync(bool operationPending, bool completedPollPass,
+                                                     bool receivedAllExpected, int attempt, int maximumAttempts)
+{
+    return operationPending && completedPollPass && !receivedAllExpected && attempt < maximumAttempts;
+}
+
 inline int memorySyncProgressIndex(quint16 group, quint16 channel, quint16 firstGroup, quint16 firstChannel,
                                    quint16 lastChannel)
 {

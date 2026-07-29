@@ -14,6 +14,7 @@ constexpr int kRadioMemorySyncTotal =
 constexpr int kRadioMemoryRefreshIntervalMs = 25;
 constexpr int kRadioMemorySyncReplyGraceMs = 1000;
 constexpr int kRadioMemorySyncSafetyMarginMs = 5000;
+constexpr int kRadioMemoryOperationSyncMaxAttempts = 3;
 constexpr int kRadioMemoryInitialSyncRetryDelayMs = 2000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
 constexpr int kRadioMemoryWriteReadbackRetryMs = 500;

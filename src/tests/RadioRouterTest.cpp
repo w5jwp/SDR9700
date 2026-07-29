@@ -12,6 +12,7 @@ class RadioRouterTest : public QObject
     void routesOnlyMainReceiverFrequencyAndMode();
     void clampsMeterAndLevelValues();
     void mapsAgcAndPreampValues();
+    void routesToneRegisterForActiveToneMode();
     void routesProtocolPayloadTypes();
     void routesAllSimpleControlBranches();
     void routesBatchInOrder();
@@ -85,6 +86,41 @@ void RadioRouterTest::mapsAgcAndPreampValues()
     router.route(CacheItem(funcPreamp, 9));
     QCOMPARE(preampLevelSpy.takeFirst().at(0).toInt(), 3);
     QCOMPARE(preampEnabledSpy.takeFirst().at(0).toBool(), true);
+}
+
+void RadioRouterTest::routesToneRegisterForActiveToneMode()
+{
+    RadioRouter router;
+    QSignalSpy toneSpy(&router, &RadioRouter::toneFrequencyChanged);
+    QSignalSpy dtcsSpy(&router, &RadioRouter::dtcsCodeChanged);
+
+    RptrAccessData access;
+    ToneInfo txTone(885);
+    ToneInfo rxTone(670);
+    ToneInfo dtcs(245);
+
+    access.accessMode = ratrTN;
+    router.route(CacheItem(funcToneSquelchType, QVariant::fromValue(access)));
+    router.route(CacheItem(funcToneFreq, QVariant::fromValue(txTone)));
+    router.route(CacheItem(funcTSQLFreq, QVariant::fromValue(rxTone)));
+    QCOMPARE(toneSpy.count(), 1);
+    QCOMPARE(toneSpy.takeFirst().at(0).value<ushort>(), ushort(885));
+
+    access.accessMode = ratrNT;
+    router.route(CacheItem(funcToneSquelchType, QVariant::fromValue(access)));
+    router.route(CacheItem(funcToneFreq, QVariant::fromValue(txTone)));
+    router.route(CacheItem(funcTSQLFreq, QVariant::fromValue(rxTone)));
+    QCOMPARE(toneSpy.count(), 1);
+    QCOMPARE(toneSpy.takeFirst().at(0).value<ushort>(), ushort(670));
+
+    access.accessMode = ratrDD;
+    router.route(CacheItem(funcToneSquelchType, QVariant::fromValue(access)));
+    router.route(CacheItem(funcToneFreq, QVariant::fromValue(txTone)));
+    router.route(CacheItem(funcTSQLFreq, QVariant::fromValue(rxTone)));
+    router.route(CacheItem(funcDTCSCode, QVariant::fromValue(dtcs)));
+    QCOMPARE(toneSpy.count(), 0);
+    QCOMPARE(dtcsSpy.count(), 1);
+    QCOMPARE(dtcsSpy.takeFirst().at(0).value<ushort>(), ushort(245));
 }
 
 void RadioRouterTest::routesProtocolPayloadTypes()

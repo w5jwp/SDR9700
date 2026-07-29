@@ -17,6 +17,26 @@
 
 using namespace sdr9700::ui::main_window;
 
+namespace
+{
+QString normalizedToastMessage(QString message)
+{
+    message = message.trimmed();
+    while (!message.isEmpty())
+    {
+        const QChar last = message.back();
+        if (last == QLatin1Char('.') || last == QLatin1Char('!') || last == QLatin1Char('?') ||
+            last == QLatin1Char(';') || last == QLatin1Char(':') || last == QChar(0x2026))
+        {
+            message.chop(1);
+            message = message.trimmed();
+            continue;
+        }
+        break;
+    }
+    return message;
+}
+} // namespace
 
 StatusBarController::StatusBarController(MainWindow* window) : QObject(window), m_window(window) {}
 
@@ -482,13 +502,14 @@ void StatusBarController::showToast(const QString& msg, int durationMs, MainWind
         return;
     }
 
+    const QString message = normalizedToastMessage(msg);
     if (durationMs <= 0)
     {
-        m_persistentMessage = msg;
+        m_persistentMessage = message;
         m_persistentKind = kind;
     }
 
-    applyToast(msg, kind);
+    applyToast(message, kind);
     m_window->m_toastTimer->stop();
     if (durationMs > 0)
     {
@@ -498,7 +519,7 @@ void StatusBarController::showToast(const QString& msg, int durationMs, MainWind
 
 void StatusBarController::clearPersistentToast(const QString& expectedMessage)
 {
-    if (m_persistentMessage != expectedMessage)
+    if (m_persistentMessage != normalizedToastMessage(expectedMessage))
     {
         return;
     }

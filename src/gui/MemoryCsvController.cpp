@@ -15,7 +15,7 @@ using namespace sdr9700::memory;
 
 namespace
 {
-const QString kImportSyncToast = QStringLiteral("Syncing radio memories before import...");
+const QString kImportSyncToast = QStringLiteral("Syncing memories before import");
 }
 
 MemoryCsvController::MemoryCsvController(MemoryController* owner) : QObject(owner), m_owner(owner) {}
@@ -114,16 +114,15 @@ void MemoryCsvController::importRadioMemories()
         uploads.append(radioMemoryFromRecord(record, record.group, record.channel));
     }
 
-    m_owner->m_window->showToast(kImportSyncToast, 0);
+    m_owner->m_window->showToast(kImportSyncToast, 4000);
     m_owner->m_memorySyncController->requestRadioMemoryRefreshForOperation(
         [this, uploads](bool synced)
         {
             m_owner->m_window->clearPersistentToast(kImportSyncToast);
             if (!synced)
             {
-                m_owner->m_window->showToast(
-                    QStringLiteral("Memory import canceled because the radio memory sync did not complete."), 8000,
-                    MainWindow::ToastKind::Error);
+                m_owner->m_window->showToast(QStringLiteral("Import canceled; memory sync incomplete"), 8000,
+                                             MainWindow::ToastKind::Error);
                 return;
             }
 
@@ -135,29 +134,28 @@ void MemoryCsvController::importRadioMemories()
             }
             const QVector<MemoryType> deletes = deletedStoredRadioMemories(backup);
 
-            m_owner->queueRadioMemoryWrites(
-                deletes, 0, QStringLiteral("Clearing existing memories"),
-                [this, uploads, backup](bool cleared)
-                {
-                    if (!cleared)
-                    {
-                        restoreRadioMemoriesAfterFailedImport(backup);
-                        return;
-                    }
-                    m_owner->queueRadioMemoryWrites(
-                        uploads, 0, QStringLiteral("Uploading memories"),
-                        [this, backup, importedCount = uploads.size()](bool uploaded)
-                        {
-                            if (!uploaded)
-                            {
-                                restoreRadioMemoriesAfterFailedImport(backup);
-                                return;
-                            }
-                            m_owner->m_window->showToast(
-                                QStringLiteral("Imported %1 memories successfully.").arg(importedCount));
-                            m_owner->requestRadioMemoryRefresh();
-                        });
-                });
+            m_owner->queueRadioMemoryWrites(deletes, 0, QStringLiteral("Clearing existing memories"),
+                                            [this, uploads, backup](bool cleared)
+                                            {
+                                                if (!cleared)
+                                                {
+                                                    restoreRadioMemoriesAfterFailedImport(backup);
+                                                    return;
+                                                }
+                                                m_owner->queueRadioMemoryWrites(
+                                                    uploads, 0, QStringLiteral("Uploading memories"),
+                                                    [this, backup, importedCount = uploads.size()](bool uploaded)
+                                                    {
+                                                        if (!uploaded)
+                                                        {
+                                                            restoreRadioMemoriesAfterFailedImport(backup);
+                                                            return;
+                                                        }
+                                                        m_owner->m_window->showToast(
+                                                            QStringLiteral("Imported %1 memories").arg(importedCount));
+                                                        m_owner->requestRadioMemoryRefresh();
+                                                    });
+                                            });
         });
 }
 
@@ -165,24 +163,23 @@ void MemoryCsvController::restoreRadioMemoriesAfterFailedImport(const QVector<Me
 {
     if (!m_owner->m_window->m_model || !m_owner->m_window->m_model->isConnected())
     {
-        m_owner->m_window->showToast(QStringLiteral("Memory import failed. Reconnect and restore the previous export."),
-                                     8000, MainWindow::ToastKind::Error);
+        m_owner->m_window->showToast(QStringLiteral("Import failed; reconnect and restore the previous export"), 8000,
+                                     MainWindow::ToastKind::Error);
         return;
     }
 
     // Determine exactly which imported records reached the radio before
     // clearing anything during rollback. This preserves the pre-import
     // snapshot while avoiding delete commands for empty channels.
-    m_owner->m_window->showToast(QStringLiteral("Memory import failed. Preparing rollback..."), 0,
+    m_owner->m_window->showToast(QStringLiteral("Import failed; preparing rollback"), 0,
                                  MainWindow::ToastKind::Warning);
     m_owner->m_memorySyncController->requestRadioMemoryRefreshForOperation(
         [this, backup](bool synced)
         {
             if (!synced)
             {
-                m_owner->m_window->showToast(
-                    QStringLiteral("Memory import rollback could not start because radio memory sync failed."), 8000,
-                    MainWindow::ToastKind::Error);
+                m_owner->m_window->showToast(QStringLiteral("Rollback could not start; memory sync failed"), 8000,
+                                             MainWindow::ToastKind::Error);
                 return;
             }
 
@@ -200,9 +197,8 @@ void MemoryCsvController::restoreRadioMemoriesAfterFailedImport(const QVector<Me
                 {
                     if (!cleared)
                     {
-                        m_owner->m_window->showToast(
-                            QStringLiteral("Memory import rollback failed while clearing partial import records."),
-                            8000, MainWindow::ToastKind::Error);
+                        m_owner->m_window->showToast(QStringLiteral("Rollback failed while clearing imported memories"),
+                                                     8000, MainWindow::ToastKind::Error);
                         m_owner->requestRadioMemoryRefresh();
                         return;
                     }
@@ -212,8 +208,8 @@ void MemoryCsvController::restoreRadioMemoriesAfterFailedImport(const QVector<Me
                         [this](bool restored)
                         {
                             m_owner->m_window->showToast(
-                                restored ? QStringLiteral("Memory import failed. Previous memories restored.")
-                                         : QStringLiteral("Memory import rollback failed while restoring memories."),
+                                restored ? QStringLiteral("Import failed; previous memories restored")
+                                         : QStringLiteral("Rollback failed while restoring memories"),
                                 8000, restored ? MainWindow::ToastKind::Warning : MainWindow::ToastKind::Error);
                             m_owner->requestRadioMemoryRefresh();
                         });

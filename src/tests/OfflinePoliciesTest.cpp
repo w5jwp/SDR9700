@@ -14,6 +14,7 @@ class OfflinePoliciesTest : public QObject
   private slots:
     void clampsMemoryPollingInterval();
     void tracksMemorySynchronization();
+    void retriesIncompleteOperationSynchronization();
     void advancesMemorySynchronizationSlots();
     void identifiesExpectedMemoryWriteReadback();
     void retriesRecoverableRadioConnectionFailures();
@@ -39,6 +40,16 @@ void OfflinePoliciesTest::tracksMemorySynchronization()
     QVERIFY(sdr9700::memorySyncComplete(expected, {0x00010001, 0x00010002, 0x00020001}));
     QVERIFY(sdr9700::memorySyncComplete(expected, {0x00010001, 0x00010002, 0x00020001, 0x00090009}));
     QVERIFY(!sdr9700::memorySyncComplete({}, {}));
+}
+
+void OfflinePoliciesTest::retriesIncompleteOperationSynchronization()
+{
+    QVERIFY(sdr9700::shouldRetryIncompleteMemoryOperationSync(true, true, false, 1, 3));
+    QVERIFY(sdr9700::shouldRetryIncompleteMemoryOperationSync(true, true, false, 2, 3));
+    QVERIFY(!sdr9700::shouldRetryIncompleteMemoryOperationSync(true, true, false, 3, 3));
+    QVERIFY(!sdr9700::shouldRetryIncompleteMemoryOperationSync(false, true, false, 1, 3));
+    QVERIFY(!sdr9700::shouldRetryIncompleteMemoryOperationSync(true, false, false, 1, 3));
+    QVERIFY(!sdr9700::shouldRetryIncompleteMemoryOperationSync(true, true, true, 1, 3));
 }
 
 void OfflinePoliciesTest::advancesMemorySynchronizationSlots()
@@ -121,19 +132,23 @@ void OfflinePoliciesTest::keepsPttActiveUntilRadioConfirmsUnkey()
     QVERIFY(policy.requestOn());
     QVERIFY(policy.desiredActive());
     QVERIFY(policy.safetyActive());
+    QVERIFY(policy.transmitMetersActive());
 
     policy.requestOff();
     QVERIFY(policy.offPending());
     QVERIFY(policy.safetyActive());
     QVERIFY(!policy.desiredActive());
+    QVERIFY(!policy.transmitMetersActive());
 
     policy.reset();
     QVERIFY(policy.requestOn());
     policy.confirm(true);
+    QVERIFY(policy.transmitMetersActive());
     policy.requestOff();
     QVERIFY(policy.confirmedActive());
     QVERIFY(policy.offPending());
     QVERIFY(policy.safetyActive());
+    QVERIFY(!policy.transmitMetersActive());
     QVERIFY(policy.requestOn());
     QVERIFY(!policy.offPending());
     policy.requestOff();

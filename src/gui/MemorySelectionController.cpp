@@ -84,7 +84,7 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
         }
         else
         {
-            m_owner->m_window->showToast(QStringLiteral("Connect to the radio before selecting a memory"), 4000,
+            m_owner->m_window->showToast(QStringLiteral("Connect to radio before selecting a memory"), 4000,
                                          MainWindow::ToastKind::Warning);
         }
         return;

@@ -61,4 +61,7 @@ class RadioRouter : public QObject
 
   private:
     QString modeInfoToString(const ModeInfo& mi) const;
+    bool toneRegisterIsDisplayed(Funcs command) const;
+
+    rptAccessTxRx_t m_toneAccessMode{ratrNN};
 };

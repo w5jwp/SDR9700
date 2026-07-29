@@ -105,6 +105,12 @@ void RadioCommandController::showAgcMenu()
     {
         return;
     }
+    if (!agcPresetSelectableForMode(m_window->m_vfo->mode()))
+    {
+        m_window->showToast(QStringLiteral("AGC is fixed to FAST in %1 mode").arg(m_window->m_vfo->mode()), 5000,
+                            MainWindow::ToastKind::Info);
+        return;
+    }
     QMenu menu(m_window);
     styleCompactMenu(&menu);
     static const struct
@@ -138,7 +144,16 @@ void RadioCommandController::showPreampMenu()
     for (const auto& item : kItems)
     {
         auto* act = menu.addAction(QString::fromLatin1(item.label));
-        connect(act, &QAction::triggered, this, [this, item]() { m_window->m_vfo->setPreampLevel(item.level); });
+        connect(act, &QAction::triggered, this,
+                [this, item]()
+                {
+                    if (item.level >= 2)
+                    {
+                        m_window->showToast(QStringLiteral("External preamp must be enabled for this band"), 6000,
+                                            MainWindow::ToastKind::Info);
+                    }
+                    m_window->m_vfo->setPreampLevel(item.level);
+                });
     }
     menu.exec(m_window->m_preBtn->mapToGlobal(QPoint(0, m_window->m_preBtn->height())));
 }
@@ -167,7 +182,6 @@ void RadioCommandController::showNotchMenu()
     const auto* offAction = menu.addAction(QStringLiteral("OFF"));
     const auto* autoAction = menu.addAction(QStringLiteral("AUTO"));
     const auto* manualAction = menu.addAction(QStringLiteral("MANUAL"));
-    const auto* bothAction = menu.addAction(QStringLiteral("AUTO+MANUAL"));
 
     const QAction* selected = menu.exec(m_window->m_notchBtn->mapToGlobal(QPoint(0, m_window->m_notchBtn->height())));
     if (!selected)
@@ -188,11 +202,6 @@ void RadioCommandController::showNotchMenu()
     else if (selected == manualAction)
     {
         m_window->m_vfo->setAutoNotch(false);
-        m_window->m_vfo->setManualNotch(true);
-    }
-    else if (selected == bothAction)
-    {
-        m_window->m_vfo->setAutoNotch(true);
         m_window->m_vfo->setManualNotch(true);
     }
 }

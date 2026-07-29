@@ -150,8 +150,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
     connect(m_vfo, &VfoModel::compressorChanged, this, [this](bool on) { setCommandButtonActive(m_compBtn, on); });
     connect(m_vfo, &VfoModel::xfcChanged, this, [this](bool on) { setCommandButtonActive(m_xfcBtn, on); });
     connect(m_vfo, &VfoModel::ritChanged, this, [this](bool, short) { updateRitButton(); });
-    connect(m_vfo, &VfoModel::agcModeChanged, this,
-            [this](const QString& mode) { setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), mode.toUpper()); });
+    connect(m_vfo, &VfoModel::agcModeChanged, this, [this](const QString&) { updateAgcButton(); });
     connect(m_vfo, &VfoModel::rfGainChanged, this, &MainWindow::onRfGainChanged);
     connect(m_vfo, &VfoModel::squelchChanged, this,
             [this](bool, int level)
@@ -599,7 +598,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     m_preBtn = makeSelectorButton("PRE", QStringLiteral("OFF"), "Preamp", "Select receiver preamp.");
     m_ritBtn = makeSelectorButton("RIT", QStringLiteral("OFF"), "RIT", "Set receiver incremental tuning offset.");
     m_rfGainBtn = makeSelectorButton("RF GAIN", QStringLiteral("OFF"), "RF gain", "Set receiver RF gain.");
-    m_rfGainBtn->setProperty("levelControl", true);
+    m_rfGainBtn->setObjectName(QStringLiteral("rfGainButton"));
     m_agcBtn->setToolTip(QStringLiteral("Automatic Gain Control (AGC)\n"
                                         "Controls receiver gain to produce a constant audio output level."));
     m_attBtn->setToolTip(QStringLiteral("Attenuator (ATT)\n"
@@ -956,7 +955,7 @@ void MainWindow::onConnectToProfile(const RadioProfile& profile)
     // The backend validates the profile synchronously. Publish Connecting before
     // entering it so an invalid host/port cannot leave the previous UI state on
     // screen while an error toast is shown.
-    onConnectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1...").arg(profile.host));
+    onConnectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1").arg(profile.host));
     m_model->connectToRadio(profile.host, profile.port, profile.username, profile.password);
 }
 
@@ -1470,7 +1469,7 @@ void MainWindow::onConnectionChanged(bool connected)
         {
             if (!RadioProfileStore::instance().setLastProfileId(m_pendingProfileId))
             {
-                showToast("Could not save last selected radio profile", 8000, ToastKind::Warning);
+                showToast("Could not save selected radio profile", 8000, ToastKind::Warning);
             }
         }
     }
@@ -1549,6 +1548,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
     const bool notifyReady = uiReady && !m_radioUiReadyNotified;
     m_radioUiReadyNotified = uiReady;
     setRadioControlsEnabled(uiReady);
+    updateAgcButton();
     if (m_vfoPanel)
     {
         m_vfoPanel->setMeterEnabled(uiReady);
@@ -1580,10 +1580,12 @@ void MainWindow::onRadioReadyChanged(bool ready)
             // still be blank; if this policy causes confusion, the backout is
             // to remove m_spectrumScopeStillSyncingAfterReady and restore the
             // single "Radio control and memories ready" message.
+            clearPersistentToast(m_connectionToastMessage);
+            m_connectionToastMessage.clear();
             showToast(m_spectrumScopeStillSyncingAfterReady
-                          ? QStringLiteral("Radio ready. Spectrum Scope is still syncing.")
-                          : QStringLiteral("Radio ready."),
-                      0);
+                          ? QStringLiteral("Radio ready; spectrum scope still syncing")
+                          : QStringLiteral("Radio ready"),
+                      5000);
         }
     }
     else
@@ -1657,6 +1659,7 @@ void MainWindow::onModeChanged(const QString& mode)
     {
         m_vfoPanel->setModeText(mode);
     }
+    updateAgcButton();
 }
 
 void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
@@ -1797,7 +1800,8 @@ void MainWindow::onConnectionStageChanged(ConnectionStage stage, const QString& 
         const ToastKind kind = stage == ConnectionStage::Failed         ? ToastKind::Error
                                : stage == ConnectionStage::Reconnecting ? ToastKind::Warning
                                                                         : ToastKind::Info;
-        showToast(message, 0, kind);
+        m_connectionToastMessage = message;
+        showToast(m_connectionToastMessage, 0, kind);
     }
 }
 
@@ -2164,6 +2168,19 @@ void MainWindow::commitFrequencyEdit(VfoPanel* panel)
 void MainWindow::showAgcMenu()
 {
     m_radioCommandController->showAgcMenu();
+}
+
+void MainWindow::updateAgcButton()
+{
+    if (!m_agcBtn || !m_vfo)
+    {
+        return;
+    }
+
+    setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), agcDisplayMode(m_vfo->mode(), m_vfo->agcMode()));
+    // The IC-9700 has no AGC-off state. Some modes expose a selectable time
+    // constant, while FM-family modes keep AGC fixed at FAST.
+    setCommandButtonActive(m_agcBtn, radioUiReady());
 }
 
 void MainWindow::showPreampMenu()

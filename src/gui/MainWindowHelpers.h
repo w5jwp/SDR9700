@@ -193,6 +193,8 @@ QString bandLabelForHz(quint64 hz);
 int vfoBandIndexForHz(quint64 hz);
 int radioTuningStepForHz(int hz);
 QString preampLevelLabel(int level);
+bool agcPresetSelectableForMode(const QString& mode);
+QString agcDisplayMode(const QString& radioMode, const QString& reportedAgcMode);
 QString toneFrequencyLabel(ushort tone);
 QString dtcsCodeLabel(ushort code);
 QString toneOptionLabel(rptAccessTxRx_t mode);

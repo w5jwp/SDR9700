@@ -32,8 +32,7 @@ void TwoLineButton::paintEvent(QPaintEvent* event)
     }
     else if (active)
     {
-        background =
-            property("levelControl").toBool() ? QColor(UiTheme::Color::Field) : QColor(UiTheme::Color::AccentDark);
+        background = QColor(UiTheme::Color::AccentDark);
         border = hovered ? QColor(UiTheme::Color::AccentBright) : QColor(UiTheme::Color::Accent);
         textColor = QColor(UiTheme::Color::TextBright);
     }
@@ -224,6 +223,17 @@ QString preampLevelLabel(int level)
     default:
         return QStringLiteral("OFF");
     }
+}
+
+bool agcPresetSelectableForMode(const QString& mode)
+{
+    const QString normalized = mode.trimmed().toUpper();
+    return normalized != QLatin1String("FM") && normalized != QLatin1String("DV") && normalized != QLatin1String("DD");
+}
+
+QString agcDisplayMode(const QString& radioMode, const QString& reportedAgcMode)
+{
+    return agcPresetSelectableForMode(radioMode) ? reportedAgcMode.trimmed().toUpper() : QStringLiteral("FAST");
 }
 
 QString toneFrequencyLabel(ushort tone)

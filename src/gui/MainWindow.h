@@ -118,6 +118,7 @@ class MainWindow : public QMainWindow
     void restoreWindowLayout();
     void saveWindowLayout() const;
     void showAgcMenu();
+    void updateAgcButton();
     void showPreampMenu();
     void updatePreampButton();
     void showNotchMenu();
@@ -286,6 +287,7 @@ class MainWindow : public QMainWindow
     bool m_allowChooserOnDisconnect{false};
     bool m_radioUiReadyNotified{false};
     bool m_spectrumScopeStillSyncingAfterReady{false};
+    QString m_connectionToastMessage;
 
     QTimer* m_txDurationTimer{nullptr};
     QElapsedTimer m_txElapsed;

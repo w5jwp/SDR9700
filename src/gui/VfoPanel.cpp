@@ -12,7 +12,6 @@
 #include <QSlider>
 #include <QVBoxLayout>
 #include <algorithm>
-#include <array>
 
 namespace
 {
@@ -112,29 +111,16 @@ class SMeter : public QProgressBar
             return;
         }
         m_meterMode = mode;
-        resetBallistics();
+        resetMeter();
         update();
     }
 
-    void resetBallistics()
-    {
-        m_samples.fill(0);
-        m_sampleCount = 0;
-        m_samplePosition = 0;
-        m_peakValue = 0;
-        setValue(0);
-    }
+    void resetMeter() { setValue(0); }
 
     void setMeterValue(int newValue)
     {
         const int bounded = qBound(minimum(), newValue, maximum());
         setValue(bounded);
-
-        m_samples[m_samplePosition] = bounded;
-        m_samplePosition = (m_samplePosition + 1) % static_cast<int>(m_samples.size());
-        m_sampleCount = qMin(m_sampleCount + 1, static_cast<int>(m_samples.size()));
-
-        m_peakValue = *std::max_element(m_samples.cbegin(), m_samples.cbegin() + m_sampleCount);
         update();
     }
 
@@ -187,26 +173,10 @@ class SMeter : public QProgressBar
             painter.setBrush(gradient);
         }
         painter.drawRoundedRect(QRect(fillRect.left(), fillRect.top(), fillWidth, fillRect.height()), 2, 2);
-
-        if (m_sampleCount > 0)
-        {
-            const int peakX =
-                fillRect.left() + static_cast<int>((fillRect.width() - 1) * (m_peakValue / double(maximum())) + 0.5);
-            painter.save();
-            painter.setRenderHint(QPainter::Antialiasing, false);
-            painter.setPen(QPen(UiTheme::Color::MeterCyan, 1));
-            painter.drawLine(peakX, fillRect.top() + 1, peakX, fillRect.bottom() - 1);
-            painter.restore();
-        }
     }
 
   private:
-    static constexpr int kBallisticSamples = 30;
     SignalMeterMode m_meterMode{SignalMeterMode::Signal};
-    std::array<int, kBallisticSamples> m_samples{};
-    int m_sampleCount{0};
-    int m_samplePosition{0};
-    int m_peakValue{0};
 };
 
 class SMeterScaleCanvas : public QWidget
@@ -501,7 +471,7 @@ void VfoPanel::setMeterEnabled(bool enabled)
         {
             if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
             {
-                meter->resetBallistics();
+                meter->resetMeter();
             }
             else
             {
@@ -524,7 +494,7 @@ void VfoPanel::setSMeterValue(int value)
         {
             if (auto* meter = dynamic_cast<SMeter*>(m_signalMeter))
             {
-                meter->resetBallistics();
+                meter->resetMeter();
             }
             else
             {

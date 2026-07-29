@@ -88,6 +88,7 @@ class SpectrumScopeCanvas : public QWidget
     QVector<int> m_displayBins;
     QPixmap m_staticLayer;
     QSize m_staticLayerSize;
+    qreal m_staticLayerDevicePixelRatio{0.0};
     QSize m_displayBinMapSize;
     int m_displayBinMapBinCount{0};
     double m_displayBinMapStartMhz{0.0};

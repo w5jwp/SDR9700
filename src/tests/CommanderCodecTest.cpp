@@ -230,6 +230,12 @@ void CommanderCodecTest::serializesOutboundCommandValues()
     QVERIFY(m_commander.appendSetCommandValue(funcNoiseBlanker, QVariant::fromValue(true), 0, boolCommand, payload));
     QCOMPARE(payload, QByteArray(1, '\x01'));
 
+    payload.clear();
+    const FuncType agcCommand = m_commander.radioCaps.commands.value(funcAGCTimeConstant);
+    QVERIFY(
+        m_commander.appendSetCommandValue(funcAGCTimeConstant, QVariant::fromValue<uchar>(3), 0, agcCommand, payload));
+    QCOMPARE(payload, QByteArray(1, '\x03'));
+
     Frequency frequency;
     frequency.Hz = 145825000;
     payload.clear();

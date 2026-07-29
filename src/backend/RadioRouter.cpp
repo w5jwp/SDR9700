@@ -57,6 +57,17 @@ QString RadioRouter::modeInfoToString(const ModeInfo& mi) const
     }
 }
 
+bool RadioRouter::toneRegisterIsDisplayed(Funcs command) const
+{
+    if (isDtcsToneMode(m_toneAccessMode) || m_toneAccessMode == ratrNN)
+    {
+        return false;
+    }
+
+    const bool displayRxTone = m_toneAccessMode == ratrNT || m_toneAccessMode == ratrDT;
+    return displayRxTone ? command == funcTSQLFreq : command == funcToneFreq;
+}
+
 void RadioRouter::route(const CacheItem& item)
 {
     switch (item.command)
@@ -109,11 +120,15 @@ void RadioRouter::route(const CacheItem& item)
         break;
     case funcToneSquelchType:
         emit radioValueUpdated(item.command, item.value, item.receiver);
-        emit toneAccessModeChanged(item.value.value<RptrAccessData>().accessMode);
+        m_toneAccessMode = item.value.value<RptrAccessData>().accessMode;
+        emit toneAccessModeChanged(m_toneAccessMode);
         break;
     case funcToneFreq:
     case funcTSQLFreq:
-        emit toneFrequencyChanged(item.value.value<ToneInfo>().tone);
+        if (toneRegisterIsDisplayed(item.command))
+        {
+            emit toneFrequencyChanged(item.value.value<ToneInfo>().tone);
+        }
         break;
     case funcDTCSCode:
         emit dtcsCodeChanged(item.value.value<ToneInfo>().tone);

@@ -90,6 +90,9 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
         }
     }
     QVERIFY(selectorCount > 0);
+    auto* rfGainButton = window.findChild<QPushButton*>(QStringLiteral("rfGainButton"));
+    QVERIFY(rfGainButton != nullptr);
+    QVERIFY(!rfGainButton->property("levelControl").toBool());
 }
 
 void MemoryManagerSmokeTest::utilityWindowIsDestroyedWithHost()
@@ -147,13 +150,33 @@ void MemoryManagerSmokeTest::persistentToastCanBeClearedByOwner()
 
     const QString importMessage = QStringLiteral("Syncing radio memories before import...");
     statusBarController->showToast(importMessage, 0);
-    QCOMPARE(toastLabel->text(), importMessage);
+    QCOMPARE(toastLabel->text(), QStringLiteral("Syncing radio memories before import"));
 
     statusBarController->clearPersistentToast(QStringLiteral("A different operation"));
-    QCOMPARE(toastLabel->text(), importMessage);
+    QCOMPARE(toastLabel->text(), QStringLiteral("Syncing radio memories before import"));
 
     statusBarController->clearPersistentToast(importMessage);
     QVERIFY(toastLabel->text().isEmpty());
+
+    const QStringList punctuatedMessages = {
+        QStringLiteral("Complete."),         QStringLiteral("Wait..."),   QStringLiteral("Warning!"),
+        QStringLiteral("Continue?"),         QStringLiteral("Finished;"), QStringLiteral("Status:"),
+        QStringLiteral("Unicode ellipsis…"),
+    };
+    for (const QString& message : punctuatedMessages)
+    {
+        statusBarController->showToast(message, 1000);
+        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char('.')), qPrintable(toastLabel->text()));
+        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char('!')), qPrintable(toastLabel->text()));
+        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char('?')), qPrintable(toastLabel->text()));
+        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char(';')), qPrintable(toastLabel->text()));
+        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char(':')), qPrintable(toastLabel->text()));
+        QVERIFY2(!toastLabel->text().endsWith(QChar(0x2026)), qPrintable(toastLabel->text()));
+    }
+
+    statusBarController->showToast(QStringLiteral("Radio ready."), 1);
+    QCOMPARE(toastLabel->text(), QStringLiteral("Radio ready"));
+    QTRY_VERIFY_WITH_TIMEOUT(toastLabel->text().isEmpty(), 100);
 }
 
 QTEST_MAIN(MemoryManagerSmokeTest)

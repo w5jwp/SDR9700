@@ -6,6 +6,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QSizeF>
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
@@ -203,13 +204,17 @@ void SpectrumScopeCanvas::ensureStaticLayer()
         return;
     }
 
-    if (!m_staticLayerDirty && !m_staticLayer.isNull() && m_staticLayerSize == currentSize)
+    const qreal devicePixelRatio = devicePixelRatioF();
+    if (!m_staticLayerDirty && !m_staticLayer.isNull() && m_staticLayerSize == currentSize &&
+        qFuzzyCompare(m_staticLayerDevicePixelRatio, devicePixelRatio))
     {
         return;
     }
 
-    m_staticLayer = QPixmap(currentSize);
+    m_staticLayer = QPixmap((QSizeF(currentSize) * devicePixelRatio).toSize());
+    m_staticLayer.setDevicePixelRatio(devicePixelRatio);
     m_staticLayerSize = currentSize;
+    m_staticLayerDevicePixelRatio = devicePixelRatio;
     m_staticLayer.fill(Qt::transparent);
 
     QPainter painter(&m_staticLayer);

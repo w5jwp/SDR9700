@@ -32,6 +32,7 @@ class MemorySyncController : public QObject
     quint16 currentChannel() const;
 
   private:
+    void startScheduledRadioMemoryRefresh();
     void requestNextRadioMemory();
     void finishRadioMemoryRefresh(bool timedOut = false);
     bool allExpectedRadioMemoriesReceived() const;
@@ -49,5 +50,7 @@ class MemorySyncController : public QObject
     quint16 m_currentChannel{0};
     bool m_refreshInProgress{false};
     bool m_initialSyncComplete{false};
+    bool m_scheduledRefreshInProgress{false};
+    int m_operationSyncAttempt{0};
     Completion m_operationCompletion;
 };

@@ -18,6 +18,7 @@ class MainWindowHelpersTest : public QObject
     void mapsTuningSteps_data();
     void mapsTuningSteps();
     void providesBandSpecificOffsets();
+    void identifiesModesWithSelectableAgcPresets();
 };
 
 void MainWindowHelpersTest::parsesFrequencyText_data()
@@ -109,6 +110,21 @@ void MainWindowHelpersTest::providesBandSpecificOffsets()
     QCOMPARE(seventyCentimeter.constFirst().hz, quint64(5000000));
 
     QVERIFY(offsetPresetsForHz(50000000).isEmpty());
+}
+
+void MainWindowHelpersTest::identifiesModesWithSelectableAgcPresets()
+{
+    for (const QString& mode : {QStringLiteral("USB"), QStringLiteral("LSB"), QStringLiteral("CW"),
+                                QStringLiteral("RTTY"), QStringLiteral("AM")})
+    {
+        QVERIFY2(agcPresetSelectableForMode(mode), qPrintable(mode));
+    }
+    for (const QString& mode : {QStringLiteral("FM"), QStringLiteral("DV"), QStringLiteral("DD")})
+    {
+        QVERIFY2(!agcPresetSelectableForMode(mode), qPrintable(mode));
+        QCOMPARE(agcDisplayMode(mode, QStringLiteral("slow")), QStringLiteral("FAST"));
+    }
+    QCOMPARE(agcDisplayMode(QStringLiteral("USB"), QStringLiteral("slow")), QStringLiteral("SLOW"));
 }
 
 QTEST_GUILESS_MAIN(MainWindowHelpersTest)

@@ -183,7 +183,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 if (m_scopeSyncDegraded)
                 {
                     setScopeSyncDegraded(false);
-                    emit statusMessage(QStringLiteral("Spectrum Scope sync complete."), MessageSeverity::Info);
+                    emit statusMessage(QStringLiteral("Spectrum scope sync complete"), MessageSeverity::Info);
                 }
                 m_scopeDataReceived = true;
                 updateReadyState();
@@ -354,7 +354,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 {
                     return;
                 }
-                emit statusMessage(QStringLiteral("Refreshing radio band state..."), MessageSeverity::Info);
+                emit statusMessage(QStringLiteral("Refreshing radio band state"), MessageSeverity::Info);
                 requestInitialRadioState();
             });
 
@@ -422,7 +422,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
         // that could start MainWindow's automatic reconnect timer.
         shutdownConnection(false, false);
     }
-    emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1...").arg(host));
+    emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1").arg(host));
 
     QHostAddress radioAddress;
     if (radioAddress.setAddress(host) && radioAddress.protocol() != QAbstractSocket::IPv4Protocol)
@@ -431,14 +431,14 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     }
     if (radioAddress.isNull())
     {
-        const QString message = QStringLiteral("The radio address is not a valid IPv4 address.");
+        const QString message = QStringLiteral("Invalid radio IPv4 address");
         emit connectionStageChanged(ConnectionStage::Failed, message);
         emit errorOccurred(ErrorCode::ConnectionFailed, message);
         return;
     }
     if (port == 0 || port > kIcomLanControlPortMax)
     {
-        const QString message = QStringLiteral("The LAN control port is invalid.");
+        const QString message = QStringLiteral("Invalid LAN control port");
         emit connectionStageChanged(ConnectionStage::Failed, message);
         emit errorOccurred(ErrorCode::ConnectionFailed, message);
         return;
@@ -635,7 +635,7 @@ void RadioBackend::disconnectFromRadio()
     {
         m_syncWatchdogTimer->stop();
     }
-    emit connectionStageChanged(ConnectionStage::Disconnecting, QStringLiteral("Disconnecting from radio..."));
+    emit connectionStageChanged(ConnectionStage::Disconnecting, QStringLiteral("Disconnecting from radio"));
     shutdownConnection();
     m_connectionHost.clear();
     m_connectionPort = 0;
@@ -747,7 +747,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     }
     if (emitDisconnectedStage)
     {
-        emit connectionStageChanged(ConnectionStage::Disconnected, QStringLiteral("Radio disconnected."));
+        emit connectionStageChanged(ConnectionStage::Disconnected, QStringLiteral("Radio disconnected"));
     }
 }
 
@@ -899,7 +899,7 @@ void RadioBackend::setAgcMode(const QString& mode)
     {
         return;
     }
-    int agc = 2; // MID
+    uchar agc = 2; // MID
     if (mode == "fast")
     {
         agc = 1;
@@ -912,8 +912,9 @@ void RadioBackend::setAgcMode(const QString& mode)
     {
         agc = 3;
     }
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcAGCTimeConstant, QVariant(agc), 0); });
+    invokeOnCurrentCommander(
+        [agc](Commander* commandSession)
+        { commandSession->receiveCommand(funcAGCTimeConstant, QVariant::fromValue<uchar>(agc), 0); });
 }
 
 void RadioBackend::setAutoNotch(bool on)
@@ -1549,11 +1550,10 @@ void RadioBackend::updateReadyState()
                                    requestPostReadyRadioState();
                                }
                            });
-        emit connectionStageChanged(
-            ConnectionStage::SyncingRadioState,
-            m_scopeSyncDegraded
-                ? QStringLiteral("Radio state synced. Syncing memories; Spectrum Scope is still syncing...")
-                : QStringLiteral("Radio state synced. Syncing radio memories..."));
+        emit connectionStageChanged(ConnectionStage::SyncingRadioState,
+                                    m_scopeSyncDegraded
+                                        ? QStringLiteral("Radio state synced; syncing memories and spectrum scope")
+                                        : QStringLiteral("Radio state synced; syncing memories"));
         invokeOnCurrentCommander([](Commander* c) { c->enableAudio(); });
     }
 }
@@ -1608,7 +1608,7 @@ void RadioBackend::restartAfterSyncTimeout()
         // hammers the IC-9700 LAN server and leaves the GUI stuck in Syncing,
         // so stop cleanly and let the operator choose when to retry or reboot.
         qWarning(logRadio()) << "Radio sync retry limit reached; stopping automatic reconnect loop";
-        const QString message = QStringLiteral("Radio state sync timed out. Reconnect manually or restart the radio.");
+        const QString message = QStringLiteral("Radio sync timed out; reconnect or restart the radio");
         shutdownConnection(true, false);
         emit connectionStageChanged(ConnectionStage::Failed, message);
         return;
@@ -1619,8 +1619,7 @@ void RadioBackend::restartAfterSyncTimeout()
     // cleanup before the reconnect attempt. Publish Reconnecting after cleanup
     // so an internal Disconnected transition cannot overwrite the useful state.
     shutdownConnection(true, false);
-    emit connectionStageChanged(ConnectionStage::Reconnecting,
-                                QStringLiteral("Radio state sync timed out. Reconnecting..."));
+    emit connectionStageChanged(ConnectionStage::Reconnecting, QStringLiteral("Radio sync timed out; reconnecting"));
 
     m_syncReconnectPending = true;
     QTimer::singleShot(kSyncReconnectDelayMs, this,
@@ -1788,8 +1787,7 @@ void RadioBackend::onLanReady()
                        });
 
     emit connected();
-    emit connectionStageChanged(ConnectionStage::SyncingRadioState,
-                                QStringLiteral("Connected. Syncing radio state..."));
+    emit connectionStageChanged(ConnectionStage::SyncingRadioState, QStringLiteral("Connected; syncing radio state"));
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->start();
@@ -1873,6 +1871,7 @@ void RadioBackend::onLanReady()
     }
     m_smeterPollTimer = new QTimer(this);
     m_smeterPollTimer->setInterval(100);
+    m_smeterPollTimer->setTimerType(Qt::PreciseTimer);
     connect(m_smeterPollTimer, &QTimer::timeout, this,
             [this, session, commandSession]()
             {
@@ -1880,7 +1879,7 @@ void RadioBackend::onLanReady()
                 {
                     return;
                 }
-                if (m_pttState.safetyActive())
+                if (m_pttState.transmitMetersActive())
                 {
                     const int pollTick = m_txMeterPollTick++;
                     invokeOnCurrentCommander(
@@ -1915,23 +1914,23 @@ void RadioBackend::onPortError(errorType err)
     switch (err.code)
     {
     case ErrorCode::AuthFailure:
-        message = QStringLiteral("Login denied. Check the radio username and password.");
+        message = QStringLiteral("Login denied; check the radio username and password");
         break;
     case ErrorCode::ConnectionFailed:
         message = err.message.trimmed();
         if (message.isEmpty())
         {
-            message = QStringLiteral("Unable to connect to the radio.");
+            message = QStringLiteral("Radio connection failed");
         }
         break;
     case ErrorCode::Disconnected:
-        message = QStringLiteral("The radio disconnected.");
+        message = QStringLiteral("Radio disconnected");
         break;
     default:
         message = err.message.trimmed();
         if (message.isEmpty())
         {
-            message = QStringLiteral("Unable to connect to the radio.");
+            message = QStringLiteral("Radio connection failed");
         }
         break;
     }
