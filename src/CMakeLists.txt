@@ -335,6 +335,11 @@ if(BUILD_TESTING)
     target_compile_options(SettingsProfileTest PRIVATE -Wall -Wextra)
     add_test(NAME SettingsProfileTest COMMAND SettingsProfileTest)
 
+    add_executable(SettingsProcessTest tests/SettingsProcessTest.cpp)
+    target_link_libraries(SettingsProcessTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(SettingsProcessTest PRIVATE -Wall -Wextra)
+    add_test(NAME SettingsProcessTest COMMAND SettingsProcessTest)
+
     add_executable(CachingQueueTest tests/CachingQueueTest.cpp)
     target_link_libraries(CachingQueueTest PRIVATE SDR9700_core Qt6::Test)
     target_compile_options(CachingQueueTest PRIVATE -Wall -Wextra)
@@ -367,6 +372,16 @@ if(BUILD_TESTING)
     target_compile_options(RadioRouterTest PRIVATE -Wall -Wextra)
     add_test(NAME RadioRouterTest COMMAND RadioRouterTest)
 
+    add_executable(CommanderCodecTest tests/CommanderCodecTest.cpp)
+    target_link_libraries(CommanderCodecTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(CommanderCodecTest PRIVATE -Wall -Wextra)
+    add_test(NAME CommanderCodecTest COMMAND CommanderCodecTest)
+
+    add_executable(PacketLayoutTest tests/PacketLayoutTest.cpp)
+    target_link_libraries(PacketLayoutTest PRIVATE SDR9700_core Qt6::Test)
+    target_compile_options(PacketLayoutTest PRIVATE -Wall -Wextra)
+    add_test(NAME PacketLayoutTest COMMAND PacketLayoutTest)
+
     add_executable(OfflinePoliciesTest tests/OfflinePoliciesTest.cpp)
     target_include_directories(OfflinePoliciesTest PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/backend
@@ -390,6 +405,30 @@ if(BUILD_TESTING)
     target_compile_options(DtmfDialogTest PRIVATE -Wall -Wextra)
     add_test(NAME DtmfDialogTest COMMAND DtmfDialogTest)
     set_tests_properties(DtmfDialogTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(SpectrumCanvasTest
+        tests/SpectrumCanvasTest.cpp
+        gui/SpectrumScopeCanvas.cpp
+    )
+    target_include_directories(SpectrumCanvasTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
+    target_link_libraries(SpectrumCanvasTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
+    target_compile_options(SpectrumCanvasTest PRIVATE -Wall -Wextra)
+    add_test(NAME SpectrumCanvasTest COMMAND SpectrumCanvasTest)
+    set_tests_properties(SpectrumCanvasTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(PanelAccessibilityTest
+        tests/PanelAccessibilityTest.cpp
+        gui/DtmfDialog.cpp
+        gui/MutePanel.cpp
+        gui/PttPanel.cpp
+        gui/ReceivePanel.cpp
+        gui/TransmitPanel.cpp
+    )
+    target_include_directories(PanelAccessibilityTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
+    target_link_libraries(PanelAccessibilityTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
+    target_compile_options(PanelAccessibilityTest PRIVATE -Wall -Wextra)
+    add_test(NAME PanelAccessibilityTest COMMAND PanelAccessibilityTest)
+    set_tests_properties(PanelAccessibilityTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(VfoBackendTest
         tests/VfoBackendTest.cpp

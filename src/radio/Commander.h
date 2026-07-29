@@ -9,6 +9,7 @@
 class Commander : public RadioCommander
 {
     Q_OBJECT
+    friend class CommanderCodecTest;
 
   public:
     explicit Commander(RadioCommander* parent = nullptr);

@@ -15,6 +15,7 @@ class MemoryStoreTest : public QObject
     void frequencyOutsideSelectedBandIsRejected();
     void overlongNameIsRejected();
     void duplicateBandChannelIsRejected();
+    void arbitraryCsvInputNeverCrashes();
 };
 
 namespace
@@ -118,6 +119,24 @@ void MemoryStoreTest::duplicateBandChannelIsRejected()
 
     QVERIFY(imported.size() < 2);
     QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("duplicate band/channel")));
+}
+
+void MemoryStoreTest::arbitraryCsvInputNeverCrashes()
+{
+    quint32 state = 0x5d9700;
+    for (int iteration = 0; iteration < 500; ++iteration)
+    {
+        state = state * 1103515245U + 12345U;
+        QByteArray input(int(state % 512U), Qt::Uninitialized);
+        for (int i = 0; i < input.size(); ++i)
+        {
+            state = state * 1103515245U + 12345U;
+            input[i] = char(state >> 24);
+        }
+        QStringList errors;
+        const QVector<MemoryRecord> records = memoriesFromCsv(input, &errors);
+        QVERIFY(records.size() <= input.count('\n') + 1);
+    }
 }
 
 QTEST_GUILESS_MAIN(MemoryStoreTest)

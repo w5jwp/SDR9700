@@ -12,6 +12,7 @@ class OfflinePoliciesTest : public QObject
   private slots:
     void clampsMemoryPollingInterval();
     void tracksMemorySynchronization();
+    void identifiesExpectedMemoryWriteReadback();
     void roundsTuningFrequency();
     void clampsFrequencyAndScopeCenterToBand();
     void requiresConsecutiveHighSwrReadings();
@@ -33,6 +34,14 @@ void OfflinePoliciesTest::tracksMemorySynchronization()
     QVERIFY(sdr9700::memorySyncComplete(expected, {0x00010001, 0x00010002, 0x00020001}));
     QVERIFY(sdr9700::memorySyncComplete(expected, {0x00010001, 0x00010002, 0x00020001, 0x00090009}));
     QVERIFY(!sdr9700::memorySyncComplete({}, {}));
+}
+
+void OfflinePoliciesTest::identifiesExpectedMemoryWriteReadback()
+{
+    QVERIFY(sdr9700::memoryReadbackExpected(true, 0x00010002, 0x00010002));
+    QVERIFY(!sdr9700::memoryReadbackExpected(false, 0x00010002, 0x00010002));
+    QVERIFY(!sdr9700::memoryReadbackExpected(true, 0x00010002, 0x00010003));
+    QVERIFY(!sdr9700::memoryReadbackExpected(true, 0, 0));
 }
 
 void OfflinePoliciesTest::roundsTuningFrequency()

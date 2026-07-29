@@ -17,6 +17,16 @@ class TestUdpBase : public UdpBase
     }
 
     bool accepts(const QNetworkDatagram& datagram) const { return acceptDatagramFrom(datagram); }
+    void setSendSequence(quint16 sequence) { sendSeq = sequence; }
+    void sendTrackedControl()
+    {
+        control_packet packet{};
+        packet.len = CONTROL_SIZE;
+        sendTrackedPacket(QByteArray(packet.packet, CONTROL_SIZE));
+    }
+    QList<quint16> transmittedSequences() const { return txSeqBuf.keys(); }
+    QList<quint16> receivedSequences() const { return rxSeqBuf.keys(); }
+    QList<quint16> missingSequences() const { return rxMissing.keys(); }
 };
 
 class UdpBaseTest : public QObject
@@ -29,6 +39,9 @@ class UdpBaseTest : public QObject
     void validatesDatagramEndpoint();
     void encodesLoginTextDeterministically();
     void parsesNullTerminatedPacketText();
+    void tracksMissingAndDuplicatePackets();
+    void clearsTransmitWindowAtSequenceRollover();
+    void rejectsTruncatedPackets();
 };
 
 void UdpBaseTest::bindsEphemeralLoopbackSocket()
@@ -87,6 +100,53 @@ void UdpBaseTest::parsesNullTerminatedPacketText()
     QCOMPARE(parseNullTerminatedString(QByteArray("prefix\0suffix", 13), 0), QByteArrayLiteral("prefix"));
     QCOMPARE(parseNullTerminatedString(QByteArrayLiteral("prefix"), 3), QByteArrayLiteral("fix"));
     QCOMPARE(parseNullTerminatedString(QByteArrayLiteral("short"), 20), QByteArray());
+}
+
+void UdpBaseTest::tracksMissingAndDuplicatePackets()
+{
+    TestUdpBase stream;
+    auto packetForSequence = [](quint16 sequence)
+    {
+        control_packet packet{};
+        packet.len = CONTROL_SIZE;
+        packet.type = 0;
+        packet.seq = sequence;
+        return QByteArray(packet.packet, CONTROL_SIZE);
+    };
+
+    stream.dataReceived(packetForSequence(1));
+    stream.dataReceived(packetForSequence(3));
+    QCOMPARE(stream.receivedSequences(), QList<quint16>({1, 2, 3}));
+    QCOMPARE(stream.missingSequences(), QList<quint16>({2}));
+    stream.dataReceived(packetForSequence(2));
+    QVERIFY(stream.missingSequences().isEmpty());
+    stream.dataReceived(packetForSequence(2));
+    QVERIFY(stream.missingSequences().isEmpty());
+}
+
+void UdpBaseTest::clearsTransmitWindowAtSequenceRollover()
+{
+    TestUdpBase stream;
+    QVERIFY(stream.init(0));
+    stream.setExpectedPeer(QHostAddress::LocalHost, 9);
+    stream.setSendSequence(0xffff);
+    stream.sendTrackedControl();
+    QCOMPARE(stream.transmittedSequences(), QList<quint16>({0xffff}));
+    stream.sendTrackedControl();
+    QCOMPARE(stream.transmittedSequences(), QList<quint16>({0}));
+    stream.sendTrackedControl();
+    QCOMPARE(stream.transmittedSequences(), QList<quint16>({0, 1}));
+}
+
+void UdpBaseTest::rejectsTruncatedPackets()
+{
+    TestUdpBase stream;
+    for (int length = 0; length < CONTROL_SIZE; ++length)
+    {
+        stream.dataReceived(QByteArray(length, '\xff'));
+    }
+    QVERIFY(stream.receivedSequences().isEmpty());
+    QVERIFY(stream.missingSequences().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(UdpBaseTest)

@@ -18,6 +18,7 @@ inline constexpr quint8 compCivAddr = 0xE1;
 class RadioCommander : public QObject
 {
     Q_OBJECT
+    friend class CommanderCodecTest;
 
   public:
     explicit RadioCommander(QObject* parent = nullptr);

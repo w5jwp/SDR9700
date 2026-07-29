@@ -1903,7 +1903,7 @@ unsigned int Commander::bcdHexToUInt(quint8 hundreds, quint8 tensunits)
 
 unsigned int Commander::bcdHexToUInt(quint8 tenthou, quint8 hundreds, quint8 tensunits)
 {
-    // Packed BCD: 0x41 0x23 -> 4123.
+    // Packed BCD: 0x65 0x43 0x21 -> 654321.
     quint8 thousands = ((hundreds & 0xf0) >> 4);
     unsigned int rtnVal;
     rtnVal = (hundreds & 0x0f) * 100;
@@ -1911,6 +1911,7 @@ unsigned int Commander::bcdHexToUInt(quint8 tenthou, quint8 hundreds, quint8 ten
     rtnVal += (tensunits & 0x0f);
     rtnVal += thousands * 1000;
     rtnVal += (tenthou & 0x0f) * 10000;
+    rtnVal += ((tenthou & 0xf0) >> 4) * 100000;
     return rtnVal;
 }
 quint8 Commander::bcdHexToUChar(quint8 hundreds, quint8 tensunits)

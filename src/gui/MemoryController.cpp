@@ -1331,7 +1331,8 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
         qInfo(logGui()) << "Radio memory sync received" << memoryBandLabelForGroup(memory.group) << "channel"
                         << memory.channel;
     }
-    const bool expectedQueuedWriteReply = m_waitingForRadioMemoryWriteReadback && key == m_expectedRadioMemoryWriteKey;
+    const bool expectedQueuedWriteReply =
+        sdr9700::memoryReadbackExpected(m_waitingForRadioMemoryWriteReadback, m_expectedRadioMemoryWriteKey, key);
     const bool completedQueuedWrite =
         expectedQueuedWriteReply && m_queuedRadioMemoryWriteIndex < m_queuedRadioMemoryWrites.size() &&
         radioMemoryReadbackMatches(m_queuedRadioMemoryWrites.at(m_queuedRadioMemoryWriteIndex), memory);

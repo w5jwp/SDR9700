@@ -13,6 +13,8 @@ class RadioRouterTest : public QObject
     void clampsMeterAndLevelValues();
     void mapsAgcAndPreampValues();
     void routesProtocolPayloadTypes();
+    void routesAllSimpleControlBranches();
+    void routesBatchInOrder();
     void ignoresUnknownCommands();
 };
 
@@ -98,6 +100,50 @@ void RadioRouterTest::routesProtocolPayloadTypes()
     QCOMPARE(offsetSpy.takeFirst().at(0).toULongLong(), quint64(600000));
     QCOMPARE(pttSpy.takeFirst().at(0).toBool(), true);
     QCOMPARE(scopeSpy.takeFirst().at(0).value<ScopeData>().data, scope.data);
+}
+
+void RadioRouterTest::routesAllSimpleControlBranches()
+{
+    RadioRouter router;
+    QSignalSpy nrSpy(&router, &RadioRouter::nrChanged);
+    QSignalSpy nbSpy(&router, &RadioRouter::nbChanged);
+    QSignalSpy attenuatorSpy(&router, &RadioRouter::attenuatorChanged);
+    QSignalSpy autoNotchSpy(&router, &RadioRouter::autoNotchChanged);
+    QSignalSpy manualNotchSpy(&router, &RadioRouter::manualNotchChanged);
+    QSignalSpy compressorSpy(&router, &RadioRouter::compressorChanged);
+    QSignalSpy xfcSpy(&router, &RadioRouter::xfcChanged);
+    QSignalSpy ritSpy(&router, &RadioRouter::ritEnabledChanged);
+    QSignalSpy duplexSpy(&router, &RadioRouter::duplexModeChanged);
+
+    router.routeBatch({
+        CacheItem(funcNoiseReduction, true),
+        CacheItem(funcNoiseBlanker, true),
+        CacheItem(funcAttenuator, 1),
+        CacheItem(funcAutoNotch, true),
+        CacheItem(funcManualNotch, true),
+        CacheItem(funcCompressor, true),
+        CacheItem(funcXFCStatus, true),
+        CacheItem(funcRitStatus, true),
+        CacheItem(funcSplitStatus, QVariant::fromValue(dmDupPlus)),
+    });
+    QCOMPARE(nrSpy.count(), 1);
+    QCOMPARE(nbSpy.count(), 1);
+    QCOMPARE(attenuatorSpy.count(), 1);
+    QCOMPARE(autoNotchSpy.count(), 1);
+    QCOMPARE(manualNotchSpy.count(), 1);
+    QCOMPARE(compressorSpy.count(), 1);
+    QCOMPARE(xfcSpy.count(), 1);
+    QCOMPARE(ritSpy.count(), 1);
+    QCOMPARE(duplexSpy.takeFirst().at(0).value<duplexMode_t>(), dmDupPlus);
+}
+
+void RadioRouterTest::routesBatchInOrder()
+{
+    RadioRouter router;
+    QVector<int> values;
+    connect(&router, &RadioRouter::rfGainChanged, this, [&values](int value) { values.append(value); });
+    router.routeBatch({CacheItem(funcRfGain, 1), CacheItem(funcRfGain, 2), CacheItem(funcRfGain, 3)});
+    QCOMPARE(values, QVector<int>({1, 2, 3}));
 }
 
 void RadioRouterTest::ignoresUnknownCommands()
