@@ -3,11 +3,14 @@
 #include "MainWindow.h"
 #include "LogCategories.h"
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
 #include "MemorySyncPolicy.h"
 #include "models/RadioModel.h"
 
 #include <QTimer>
+
+using namespace sdr9700::memory;
 
 namespace
 {

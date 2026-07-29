@@ -1,7 +1,9 @@
 #include "MemoryEditorForm.h"
 
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
+#include "MemoryEditorPolicy.h"
 #include "MainWindow.h"
 #include "UtilityWindow.h"
 #include "VfoPanel.h"
@@ -27,6 +29,8 @@
 #include <QWidgetAction>
 
 #include <initializer_list>
+
+using namespace sdr9700::memory;
 
 
 MemoryEditorForm::MemoryEditorForm(MemoryController* owner) : QObject(owner), m_owner(owner) {}

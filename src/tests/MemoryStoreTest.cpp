@@ -1,6 +1,10 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MemoryStore.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryEditorPolicy.h"
+#include "MemoryRecordHelpers.h"
+
+using namespace sdr9700::memory;
 
 #include <QTemporaryDir>
 #include <QtTest>
@@ -18,6 +22,7 @@ class MemoryStoreTest : public QObject
     void overlongNameIsRejected();
     void duplicateBandChannelIsRejected();
     void radioMemoryConversionRoundTrips();
+    void editorPolicyNormalizesOffsets();
     void csvFileRoundTrips();
     void csvFileIoFailuresAreReported();
     void arbitraryCsvInputNeverCrashes();
@@ -157,6 +162,16 @@ void MemoryStoreTest::radioMemoryConversionRoundTrips()
     QCOMPARE(converted.toneMode, memory.toneMode);
     QCOMPARE(converted.tone, memory.tone);
     QCOMPARE(converted.tsql, memory.tsql);
+}
+
+void MemoryStoreTest::editorPolicyNormalizesOffsets()
+{
+    QCOMPARE(normalizedOffsetForModeAndHz(dmSimplex, 600000, 145000000), quint64(0));
+    QCOMPARE(normalizedOffsetForModeAndHz(dmDupPlus, 0, 145000000), quint64(600000));
+    QCOMPARE(normalizedOffsetForModeAndHz(dmDupMinus, 123000, 145000000), quint64(123000));
+    QVERIFY(modeSupportsMemoryOffset(modeFM));
+    QVERIFY(modeSupportsMemoryOffset(modeDV));
+    QVERIFY(!modeSupportsMemoryOffset(modeUSB));
 }
 
 void MemoryStoreTest::csvFileRoundTrips()

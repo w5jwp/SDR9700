@@ -59,6 +59,9 @@ class MemoryController : public QObject
     void initialMemorySyncChanged(bool complete);
 
   private:
+    // These QObject children collaborate over the controller-owned memory map
+    // and editor widgets. Keeping that state private to the subsystem avoids a
+    // public accessor surface that would let unrelated GUI code mutate it.
     friend class MemoryCsvController;
     friend class MemorySyncController;
     friend class MemorySelectionController;

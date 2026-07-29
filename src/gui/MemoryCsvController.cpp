@@ -2,11 +2,14 @@
 
 #include "MainWindow.h"
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
 #include "models/RadioModel.h"
 
 #include <QFileDialog>
 #include <QMessageBox>
+
+using namespace sdr9700::memory;
 
 MemoryCsvController::MemoryCsvController(MemoryController* owner) : QObject(owner), m_owner(owner) {}
 

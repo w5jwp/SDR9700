@@ -12,6 +12,7 @@ unusedFunction:src/tests/IcomRC28ManagerTest.cpp
 unusedFunction:src/tests/MainWindowHelpersTest.cpp
 unusedFunction:src/tests/MeterControllerTest.cpp
 unusedFunction:src/tests/MemoryStoreTest.cpp
+unusedFunction:src/tests/MemoryManagerSmokeTest.cpp
 unusedFunction:src/tests/RadioCapabilitiesTest.cpp
 unusedFunction:src/tests/RadioRouterTest.cpp
 unusedFunction:src/tests/PacketLayoutTest.cpp

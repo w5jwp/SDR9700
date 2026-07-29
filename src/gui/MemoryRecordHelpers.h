@@ -1,127 +1,15 @@
 #pragma once
 
+#include "MemoryConstants.h"
 #include "MainWindowHelpers.h"
 #include "MemoryStore.h"
 #include "RadioCapabilities.h"
-#include "Types.h"
-#include "UiTheme.h"
-
-#include <QApplication>
-#include <QPainter>
-#include <QStyledItemDelegate>
-#include <QStyle>
 
 #include <cstring>
 
+namespace sdr9700::memory
+{
 using namespace sdr9700::ui::main_window;
-
-namespace
-{
-constexpr quint16 kRadioMemoryFirstGroup = 1;
-constexpr quint16 kRadioMemoryLastGroup = 3;
-constexpr quint16 kRadioMemoryFirstChannel = 1;
-constexpr quint16 kRadioMemoryLastChannel = 99;
-constexpr int kRadioMemorySyncTotal =
-    (kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1);
-constexpr int kRadioMemoryRefreshIntervalMs = 25;
-constexpr int kRadioMemorySyncReplyGraceMs = 1000;
-constexpr int kRadioMemorySyncSafetyMarginMs = 5000;
-constexpr int kRadioMemoryInitialSyncRetryDelayMs = 2000;
-constexpr int kRadioMemoryWriteIntervalMs = 100;
-constexpr int kRadioMemoryWriteReadbackTimeoutMs = 3000;
-constexpr int kRadioMemoryNameMaxChars = 16;
-constexpr int kMemoryEditorPaneWidth = 420;
-constexpr int kMemoryEditorFieldHeight = 30;
-constexpr int kMemoryEditorGutter = 10;
-constexpr int kMemoryEditorLabelFieldSpacing = 6;
-constexpr int kMemoryFooterTopPadding = 8;
-constexpr int kMemoryFooterBottomPadding = 10;
-constexpr int kMemoryFooterTextLeftPadding = 6;
-constexpr int kMemoryToneCellTextPadding = 8;
-constexpr int kMemoryToneTypeSectionWidth = 62;
-constexpr int kMemoryToneTypeRole = Qt::UserRole + 1;
-constexpr int kMemoryToneRxRole = Qt::UserRole + 2;
-constexpr int kMemoryToneTxRole = Qt::UserRole + 3;
-constexpr auto kMemoryFileFilter = "SDR9700 Memories (*.csv);;CSV Files (*.csv);;All Files (*)";
-
-enum MemoryToneFamily
-{
-    MemoryToneOff = 0,
-    MemoryToneTone,
-    MemoryToneDtcs
-};
-
-class ToneCellDelegate : public QStyledItemDelegate
-{
-  public:
-    explicit ToneCellDelegate(QObject* parent = nullptr) : QStyledItemDelegate(parent) {}
-
-    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
-    {
-        const QString type = index.data(kMemoryToneTypeRole).toString();
-        if (type.isEmpty() || type == QLatin1String("OFF"))
-        {
-            QStyledItemDelegate::paint(painter, option, index);
-            return;
-        }
-
-        QStyleOptionViewItem itemOption(option);
-        initStyleOption(&itemOption, index);
-        itemOption.text.clear();
-        const QWidget* widget = itemOption.widget;
-        QStyle* style = widget ? widget->style() : QApplication::style();
-        style->drawControl(QStyle::CE_ItemViewItem, &itemOption, painter, widget);
-
-        const QString rx = index.data(kMemoryToneRxRole).toString();
-        const QString tx = index.data(kMemoryToneTxRole).toString();
-        const bool selected = option.state.testFlag(QStyle::State_Selected);
-        const QColor textColor =
-            selected ? option.palette.color(QPalette::HighlightedText) : option.palette.color(QPalette::Text);
-        QRect rect = option.rect.adjusted(5, 0, -5, 0);
-        if (rect.width() < 24 || rect.height() < 8)
-        {
-            return;
-        }
-
-        const int typeWidth = qMin(kMemoryToneTypeSectionWidth, rect.width() / 3);
-        const int valueWidth = (rect.width() - typeWidth) / 2;
-        const QRect typeRect(rect.left(), rect.top(), typeWidth, rect.height());
-        const QRect txRect(typeRect.right() + 1, rect.top(), valueWidth, rect.height());
-        const QRect rxRect(txRect.right() + 1, rect.top(), rect.right() - txRect.right(), rect.height());
-
-        painter->save();
-        painter->setRenderHint(QPainter::Antialiasing, false);
-        painter->setPen(textColor);
-        painter->drawText(typeRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
-                          type);
-        painter->drawText(txRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
-                          QStringLiteral("TX: %1").arg(tx.isEmpty() ? QStringLiteral("OFF") : tx));
-        painter->drawText(rxRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
-                          QStringLiteral("RX: %1").arg(rx.isEmpty() ? QStringLiteral("OFF") : rx));
-        painter->restore();
-    }
-};
-
-inline QSize memoryManagerWindowSize()
-{
-    return QSize(kMemoryWindowSize.width() + kMemoryEditorPaneWidth + kMemoryEditorGutter + (kMemoryPanelSpacing * 2) +
-                     1,
-                 kMemoryWindowSize.height());
-}
-
-inline MemoryToneFamily memoryToneFamilyForMode(rptAccessTxRx_t mode)
-{
-    if (isDtcsToneMode(mode))
-    {
-        return MemoryToneDtcs;
-    }
-    if (mode == ratrTN || mode == ratrNT || mode == ratrTT || mode == ratrTD)
-    {
-        return MemoryToneTone;
-    }
-    return MemoryToneOff;
-}
-
 inline quint32 radioMemoryKey(quint16 group, quint16 channel)
 {
     return (static_cast<quint32>(group) << 16) | static_cast<quint32>(channel);
@@ -183,7 +71,7 @@ inline int recordDuplexModeFromRadio(quint8 duplex)
     }
 }
 
-quint64 defaultOffsetForModeAndHz(duplexMode_t mode, quint64 hz)
+inline quint64 defaultOffsetForModeAndHz(duplexMode_t mode, quint64 hz)
 {
     const QVector<OffsetPreset> presets = offsetPresetsForHz(hz);
     const auto preset = std::find_if(presets.cbegin(), presets.cend(),
@@ -195,7 +83,7 @@ quint64 defaultOffsetForModeAndHz(duplexMode_t mode, quint64 hz)
     return 0;
 }
 
-quint64 normalizedOffsetForModeAndHz(duplexMode_t mode, quint64 rawOffsetHz, quint64 receiveHz)
+inline quint64 normalizedOffsetForModeAndHz(duplexMode_t mode, quint64 rawOffsetHz, quint64 receiveHz)
 {
     if (mode != dmDupMinus && mode != dmDupPlus)
     {
@@ -220,7 +108,7 @@ quint64 normalizedOffsetForModeAndHz(duplexMode_t mode, quint64 rawOffsetHz, qui
     return rawOffsetHz;
 }
 
-quint8 radioDuplexFromRecord(int duplexMode)
+inline quint8 radioDuplexFromRecord(int duplexMode)
 {
     switch (static_cast<duplexMode_t>(duplexMode))
     {
@@ -453,76 +341,5 @@ inline bool radioMemoryReadbackMatches(const MemoryType& expected, const MemoryT
     return true;
 }
 
-inline QString dtcsMemoryValue(ushort code, int polarity)
-{
-    return QStringLiteral("%1%2").arg(dtcsCodeLabel(code), polarity == 3 ? QStringLiteral("R") : QStringLiteral("N"));
-}
 
-inline QString memoryToneTypeLabel(const MemoryRecord& memory)
-{
-    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
-    if (toneMode == ratrNN)
-    {
-        return QStringLiteral("OFF");
-    }
-    return isDtcsToneMode(toneMode) ? QStringLiteral("DTCS") : QStringLiteral("TONE");
-}
-
-inline QString memoryToneRxLabel(const MemoryRecord& memory)
-{
-    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
-    if (toneMode == ratrNN || toneMode == ratrTN || toneMode == ratrDN)
-    {
-        return QStringLiteral("OFF");
-    }
-    if (isDtcsToneMode(toneMode))
-    {
-        return dtcsMemoryValue(memory.dtcsB, memory.dtcsPolarityB);
-    }
-    return memory.tsql.isEmpty() ? memory.tone : memory.tsql;
-}
-
-inline QString memoryToneTxLabel(const MemoryRecord& memory)
-{
-    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
-    if (toneMode == ratrNN || toneMode == ratrNT)
-    {
-        return QStringLiteral("OFF");
-    }
-    if (isDtcsToneMode(toneMode))
-    {
-        return dtcsMemoryValue(memory.dtcs, memory.dtcsPolarity);
-    }
-    return memory.tone.isEmpty() ? memory.tsql : memory.tone;
-}
-
-inline QString memoryToneTableLabel(const MemoryRecord& memory)
-{
-    const QString type = memoryToneTypeLabel(memory);
-    if (type == QLatin1String("OFF"))
-    {
-        return QStringLiteral("OFF");
-    }
-    return QStringLiteral("%1: %2/%3").arg(type, memoryToneTxLabel(memory), memoryToneRxLabel(memory));
-}
-
-inline QString memoryFilterLabel(int filter)
-{
-    if (filter >= 1 && filter <= 3)
-    {
-        return QStringLiteral("FIL%1").arg(filter);
-    }
-    return QString::number(filter);
-}
-
-inline bool modeSupportsMemoryOffset(int mode)
-{
-    return mode == modeFM || mode == modeDV || mode == modeDD;
-}
-
-constexpr int radioMemorySyncTimeoutMs()
-{
-    return (kRadioMemorySyncTotal * kRadioMemoryRefreshIntervalMs) + kRadioMemorySyncReplyGraceMs +
-           kRadioMemorySyncSafetyMarginMs;
-}
-} // namespace
+} // namespace sdr9700::memory

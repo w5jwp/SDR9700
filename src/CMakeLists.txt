@@ -151,7 +151,10 @@ set(SDR9700_SOURCES
     gui/MemoryEditorController.cpp
     gui/MemoryEditorForm.h
     gui/MemoryEditorForm.cpp
-    gui/MemoryControllerHelpers.h
+    gui/MemoryConstants.h
+    gui/MemoryRecordHelpers.h
+    gui/MemoryEditorPolicy.h
+    gui/MemoryViewHelpers.h
     gui/MemoryController.h
     gui/MemoryController.cpp
     gui/MemorySyncController.h
@@ -473,6 +476,30 @@ if(BUILD_TESTING)
     )
     add_test(NAME GuiSmokeTest COMMAND GuiSmokeTest)
     set_tests_properties(GuiSmokeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    set(MEMORY_MANAGER_SMOKE_SOURCES ${SDR9700_SOURCES})
+    list(REMOVE_ITEM MEMORY_MANAGER_SMOKE_SOURCES
+        main.cpp
+        ../resources/qt/resources.qrc
+        ${SDR9700_MACOS_ICON}
+    )
+    add_executable(MemoryManagerSmokeTest
+        tests/MemoryManagerSmokeTest.cpp
+        ${MEMORY_MANAGER_SMOKE_SOURCES}
+    )
+    target_include_directories(MemoryManagerSmokeTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(MemoryManagerSmokeTest PRIVATE
+        SDR9700_core
+        Qt6::Test
+        Qt6::Widgets
+        Qt6::Multimedia
+        Qt6::Network
+    )
+    add_test(NAME MemoryManagerSmokeTest COMMAND MemoryManagerSmokeTest)
+    set_tests_properties(MemoryManagerSmokeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(SystemStatsTest tests/SystemStatsTest.cpp)
     target_link_libraries(SystemStatsTest PRIVATE SDR9700_core Qt6::Test)

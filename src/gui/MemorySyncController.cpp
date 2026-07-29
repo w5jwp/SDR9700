@@ -5,7 +5,9 @@
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
+#include "MemoryEditorPolicy.h"
 #include "MemorySyncPolicy.h"
 #include "MemoryViewController.h"
 #include "models/RadioModel.h"
@@ -15,6 +17,7 @@
 #include <QTimer>
 
 using namespace sdr9700::ui::main_window;
+using namespace sdr9700::memory;
 
 MemorySyncController::MemorySyncController(MemoryController* owner) : QObject(owner), m_owner(owner)
 {

@@ -55,6 +55,9 @@ class MainWindow : public QMainWindow
     friend class SpectrumScopeController;
     friend class ControlPanelController;
     friend class IcomRC28Controller;
+    // MemoryController and its Qt-owned collaborators form one UI subsystem.
+    // Friendship is intentionally confined to these classes so they can update
+    // the existing MainWindow widgets without exposing radio UI state publicly.
     friend class MemoryController;
     friend class MemoryCsvController;
     friend class MemoryEditorController;

@@ -2,7 +2,9 @@
 
 #include "MainWindow.h"
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
+#include "MemoryViewHelpers.h"
 #include "MemoryPanel.h"
 #include "MemorySyncController.h"
 #include "UtilityWindow.h"
@@ -18,6 +20,8 @@
 #include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
+
+using namespace sdr9700::memory;
 
 MemoryViewController::MemoryViewController(MemoryController* owner) : QObject(owner), m_owner(owner)
 {

@@ -2,7 +2,6 @@
 #include "MemoryEditorForm.h"
 
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
 #include "MainWindow.h"
 #include "UtilityWindow.h"
 #include "VfoPanel.h"

@@ -1,0 +1,129 @@
+#pragma once
+
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
+#include "UiTheme.h"
+
+#include <QApplication>
+#include <QPainter>
+#include <QStyledItemDelegate>
+#include <QStyle>
+
+namespace sdr9700::memory
+{
+class ToneCellDelegate : public QStyledItemDelegate
+{
+  public:
+    explicit ToneCellDelegate(QObject* parent = nullptr) : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        const QString type = index.data(kMemoryToneTypeRole).toString();
+        if (type.isEmpty() || type == QLatin1String("OFF"))
+        {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QStyleOptionViewItem itemOption(option);
+        initStyleOption(&itemOption, index);
+        itemOption.text.clear();
+        const QWidget* widget = itemOption.widget;
+        QStyle* style = widget ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &itemOption, painter, widget);
+
+        const QString rx = index.data(kMemoryToneRxRole).toString();
+        const QString tx = index.data(kMemoryToneTxRole).toString();
+        const bool selected = option.state.testFlag(QStyle::State_Selected);
+        const QColor textColor =
+            selected ? option.palette.color(QPalette::HighlightedText) : option.palette.color(QPalette::Text);
+        QRect rect = option.rect.adjusted(5, 0, -5, 0);
+        if (rect.width() < 24 || rect.height() < 8)
+        {
+            return;
+        }
+
+        const int typeWidth = qMin(kMemoryToneTypeSectionWidth, rect.width() / 3);
+        const int valueWidth = (rect.width() - typeWidth) / 2;
+        const QRect typeRect(rect.left(), rect.top(), typeWidth, rect.height());
+        const QRect txRect(typeRect.right() + 1, rect.top(), valueWidth, rect.height());
+        const QRect rxRect(txRect.right() + 1, rect.top(), rect.right() - txRect.right(), rect.height());
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, false);
+        painter->setPen(textColor);
+        painter->drawText(typeRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                          type);
+        painter->drawText(txRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                          QStringLiteral("TX: %1").arg(tx.isEmpty() ? QStringLiteral("OFF") : tx));
+        painter->drawText(rxRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                          QStringLiteral("RX: %1").arg(rx.isEmpty() ? QStringLiteral("OFF") : rx));
+        painter->restore();
+    }
+};
+
+
+inline QString dtcsMemoryValue(ushort code, int polarity)
+{
+    return QStringLiteral("%1%2").arg(dtcsCodeLabel(code), polarity == 3 ? QStringLiteral("R") : QStringLiteral("N"));
+}
+
+inline QString memoryToneTypeLabel(const MemoryRecord& memory)
+{
+    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
+    if (toneMode == ratrNN)
+    {
+        return QStringLiteral("OFF");
+    }
+    return isDtcsToneMode(toneMode) ? QStringLiteral("DTCS") : QStringLiteral("TONE");
+}
+
+inline QString memoryToneRxLabel(const MemoryRecord& memory)
+{
+    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
+    if (toneMode == ratrNN || toneMode == ratrTN || toneMode == ratrDN)
+    {
+        return QStringLiteral("OFF");
+    }
+    if (isDtcsToneMode(toneMode))
+    {
+        return dtcsMemoryValue(memory.dtcsB, memory.dtcsPolarityB);
+    }
+    return memory.tsql.isEmpty() ? memory.tone : memory.tsql;
+}
+
+inline QString memoryToneTxLabel(const MemoryRecord& memory)
+{
+    const auto toneMode = static_cast<rptAccessTxRx_t>(memory.toneMode);
+    if (toneMode == ratrNN || toneMode == ratrNT)
+    {
+        return QStringLiteral("OFF");
+    }
+    if (isDtcsToneMode(toneMode))
+    {
+        return dtcsMemoryValue(memory.dtcs, memory.dtcsPolarity);
+    }
+    return memory.tone.isEmpty() ? memory.tsql : memory.tone;
+}
+
+inline QString memoryToneTableLabel(const MemoryRecord& memory)
+{
+    const QString type = memoryToneTypeLabel(memory);
+    if (type == QLatin1String("OFF"))
+    {
+        return QStringLiteral("OFF");
+    }
+    return QStringLiteral("%1: %2/%3").arg(type, memoryToneTxLabel(memory), memoryToneRxLabel(memory));
+}
+
+inline QString memoryFilterLabel(int filter)
+{
+    if (filter >= 1 && filter <= 3)
+    {
+        return QStringLiteral("FIL%1").arg(filter);
+    }
+    return QString::number(filter);
+}
+
+
+} // namespace sdr9700::memory

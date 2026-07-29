@@ -1,7 +1,9 @@
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
 
 #include "MainWindow.h"
+#include "MainWindowHelpers.h"
 #include "LogCategories.h"
 #include "MemoryCsvController.h"
 #include "MemoryEditorController.h"
@@ -17,6 +19,7 @@
 #include <algorithm>
 
 using namespace sdr9700::ui::main_window;
+using namespace sdr9700::memory;
 
 
 MemoryController::MemoryController(MainWindow* window) : QObject(window), m_window(window)

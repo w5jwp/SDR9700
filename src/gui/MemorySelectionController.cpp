@@ -2,7 +2,8 @@
 
 #include "MainWindow.h"
 #include "MemoryController.h"
-#include "MemoryControllerHelpers.h"
+#include "MemoryConstants.h"
+#include "MemoryRecordHelpers.h"
 #include "VfoPanel.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
@@ -11,6 +12,8 @@
 #include <QMessageBox>
 #include <QTableWidget>
 #include <QTimer>
+
+using namespace sdr9700::memory;
 
 MemorySelectionController::MemorySelectionController(MemoryController* owner) : QObject(owner), m_owner(owner) {}
 
