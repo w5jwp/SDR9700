@@ -59,6 +59,8 @@ class MainWindow : public QMainWindow
     friend class MemoryCsvController;
     friend class MemoryEditorController;
     friend class MemorySyncController;
+    friend class MemorySelectionController;
+    friend class MemoryViewController;
     friend class MemoryWriteController;
     friend class RadioCommandController;
     friend class StatusBarController;

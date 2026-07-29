@@ -46,7 +46,7 @@ void MemoryCsvController::importRadioMemories()
                                  QStringLiteral("Wait for the current radio memory sync to finish before importing."));
         return;
     }
-    if (!m_owner->m_memoryProgressLabel.isEmpty())
+    if (m_owner->memoryOperationInProgress())
     {
         QMessageBox::information(m_owner->popupParent(), QStringLiteral("Import Memories"),
                                  QStringLiteral("Wait for the current memory operation to finish before importing."));

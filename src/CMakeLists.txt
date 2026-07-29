@@ -154,6 +154,10 @@ set(SDR9700_SOURCES
     gui/MemoryController.cpp
     gui/MemorySyncController.h
     gui/MemorySyncController.cpp
+    gui/MemorySelectionController.h
+    gui/MemorySelectionController.cpp
+    gui/MemoryViewController.h
+    gui/MemoryViewController.cpp
     gui/MemoryWriteController.h
     gui/MemoryWriteController.cpp
     gui/RadioCommandController.h

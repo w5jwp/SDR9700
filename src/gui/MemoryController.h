@@ -13,9 +13,10 @@ class MainWindow;
 class MemoryCsvController;
 class MemoryEditorController;
 class MemorySyncController;
+class MemorySelectionController;
+class MemoryViewController;
 class MemoryWriteController;
 class QPushButton;
-class QTimer;
 class QWidget;
 
 class MemoryController : public QObject
@@ -59,6 +60,8 @@ class MemoryController : public QObject
   private:
     friend class MemoryCsvController;
     friend class MemorySyncController;
+    friend class MemorySelectionController;
+    friend class MemoryViewController;
     friend class MemoryWriteController;
 
     // The editor controller owns the extracted editor workflow and operates on
@@ -70,7 +73,6 @@ class MemoryController : public QObject
     void requestRadioMemoryRefresh();
     void handleRadioMemoryReceived(MemoryType memory);
     void scheduleMemoryViewsRebuild();
-    void updateMemoryTableInteraction();
     void rebuildMemoryViews();
     QVector<MemoryRecord> currentMemories() const;
     MemoryRecord memoryForId(const QString& id, bool* found = nullptr) const;
@@ -91,14 +93,12 @@ class MemoryController : public QObject
     MemoryCsvController* m_memoryCsvController{nullptr};
     MemoryEditorController* m_memoryEditorController{nullptr};
     MemorySyncController* m_memorySyncController{nullptr};
+    MemorySelectionController* m_memorySelectionController{nullptr};
+    MemoryViewController* m_memoryViewController{nullptr};
     MemoryWriteController* m_memoryWriteController{nullptr};
-    QTimer* m_memoryViewRefreshTimer{nullptr};
     QHash<quint32, MemoryType> m_radioMemoriesByKey;
     QString m_openMemoryEditorId;
     QPushButton* m_memoryEditButton{nullptr};
     QWidget* m_memoryEditorPane{nullptr};
     QWidget* m_memoryEditorSeparator{nullptr};
-    QString m_memoryProgressLabel;
-    int m_memoryProgressValue{0};
-    int m_memoryProgressMaximum{0};
 };

@@ -7,8 +7,10 @@
 #include "MainWindowHelpers.h"
 #include "MemoryCsvController.h"
 #include "MemoryEditorController.h"
+#include "MemorySelectionController.h"
 #include "MemoryPanel.h"
 #include "MemorySyncController.h"
+#include "MemoryViewController.h"
 #include "MemoryWriteController.h"
 #include "RadioCapabilities.h"
 #include "VfoPanel.h"
@@ -52,13 +54,10 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
 {
     m_memoryCsvController = new MemoryCsvController(this);
     m_memoryEditorController = new MemoryEditorController(this);
+    m_memorySelectionController = new MemorySelectionController(this);
     m_memorySyncController = new MemorySyncController(this);
+    m_memoryViewController = new MemoryViewController(this);
     m_memoryWriteController = new MemoryWriteController(this);
-
-    m_memoryViewRefreshTimer = new QTimer(this);
-    m_memoryViewRefreshTimer->setInterval(250);
-    m_memoryViewRefreshTimer->setSingleShot(true);
-    connect(m_memoryViewRefreshTimer, &QTimer::timeout, this, &MemoryController::rebuildMemoryViews);
 
     connect(m_window->m_model, &RadioModel::radioMemoryReceived, this, &MemoryController::handleRadioMemoryReceived,
             Qt::QueuedConnection);
@@ -88,251 +87,47 @@ bool MemoryController::memoryRefreshInProgress() const
 
 void MemoryController::buildMemoryWindow()
 {
-    m_window->m_memoryWindow = new sdr9700::ui::UtilityWindow(QStringLiteral("Memory Manager"), m_window);
-    m_window->m_memoryWindow->setStyleSheet(
-        QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
-            .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-    m_window->m_memoryWindow->setObjectName("memoryWindow");
-    m_window->m_memoryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
-    m_window->m_memoryWindow->resize(kMemoryWindowSize);
-    m_window->m_memoryWindow->setFixedSize(kMemoryWindowSize);
-
-    auto* panel = new QWidget(m_window->m_memoryWindow);
-    auto* root = new QHBoxLayout(panel);
-    root->setContentsMargins(kMemoryPanelMargins);
-    root->setSpacing(kMemoryPanelSpacing);
-
-    auto* leftPane = new QWidget(panel);
-    leftPane->setFixedWidth(kMemoryWindowSize.width() - kMemoryPanelMargins.left() - kMemoryPanelMargins.right());
-    auto* leftRoot = new QVBoxLayout(leftPane);
-    leftRoot->setContentsMargins(0, 0, kMemoryEditorGutter, 0);
-    leftRoot->setSpacing(kMemoryPanelSpacing);
-
-    auto* toolbar = new QHBoxLayout;
-    toolbar->setContentsMargins(kNoMargins);
-    toolbar->setSpacing(kMemoryToolbarSpacing);
-
-    auto* filterGroup = new QGroupBox(panel);
-    auto* filterLayout = new QHBoxLayout(filterGroup);
-    filterLayout->setContentsMargins(kMemoryToolbarGroupMargins);
-    filterLayout->setSpacing(kMemoryToolbarGroupSpacing);
-    m_window->m_memoryBandFilter = new QComboBox(panel);
-    m_window->m_memoryBandFilter->addItem(QStringLiteral("All"), QString());
-    for (const availableBands band : sdr9700::kRadioUiBandOrder)
-    {
-        const QString label = sdr9700::radioBandShortLabel(band);
-        m_window->m_memoryBandFilter->addItem(label, label);
-    }
-    filterLayout->addWidget(m_window->m_memoryBandFilter);
-    toolbar->addWidget(filterGroup);
-    toolbar->addStretch(1);
-
-    auto* syncGroup = new QGroupBox(panel);
-    auto* syncLayout = new QHBoxLayout(syncGroup);
-    syncLayout->setContentsMargins(kMemoryToolbarGroupMargins);
-    syncLayout->setSpacing(kMemoryToolbarGroupSpacing);
-    auto* syncButton = new QPushButton("Sync", panel);
-    syncButton->setToolTip("Immediately read radio memories into SDR9700.");
-    m_window->m_memoryBandFilter->setFixedHeight(syncButton->sizeHint().height());
-    syncLayout->addWidget(syncButton);
-    toolbar->addWidget(syncGroup);
-    toolbar->addStretch(1);
-
-    auto* reorderGroup = new QGroupBox(panel);
-    auto* reorderLayout = new QHBoxLayout(reorderGroup);
-    reorderLayout->setContentsMargins(kMemoryToolbarGroupMargins);
-    reorderLayout->setSpacing(kMemoryToolbarGroupSpacing);
-    auto* upButton = new QPushButton("Up", panel);
-    auto* downButton = new QPushButton("Down", panel);
-    reorderLayout->addWidget(upButton);
-    reorderLayout->addWidget(downButton);
-    toolbar->addWidget(reorderGroup);
-    toolbar->addStretch(1);
-
-    auto* memoryGroup = new QGroupBox(panel);
-    auto* memoryLayout = new QHBoxLayout(memoryGroup);
-    memoryLayout->setContentsMargins(kMemoryToolbarGroupMargins);
-    memoryLayout->setSpacing(kMemoryToolbarGroupSpacing);
-    auto* addButton = new QPushButton("Add", panel);
-    auto* editButton = new QPushButton("Edit", panel);
-    editButton->setCheckable(true);
-    editButton->setStyleSheet(QStringLiteral("QPushButton:checked { background: %1; border: 1px solid %2; "
-                                             "border-radius: 3px; color: %3; }")
-                                  .arg(UiTheme::Color::AccentDark, UiTheme::Color::Accent, UiTheme::Color::TextBright));
-    m_memoryEditButton = editButton;
-    auto* copyButton = new QPushButton("Copy", panel);
-    auto* removeButton = new QPushButton("Remove", panel);
-    memoryLayout->addWidget(addButton);
-    memoryLayout->addWidget(editButton);
-    memoryLayout->addWidget(copyButton);
-    memoryLayout->addWidget(removeButton);
-    toolbar->addWidget(memoryGroup);
-    toolbar->addStretch(1);
-
-    auto* transferGroup = new QGroupBox(panel);
-    auto* transferLayout = new QHBoxLayout(transferGroup);
-    transferLayout->setContentsMargins(kMemoryToolbarGroupMargins);
-    transferLayout->setSpacing(kMemoryToolbarGroupSpacing);
-    auto* importButton = new QPushButton("Import", panel);
-    auto* exportButton = new QPushButton("Export", panel);
-    transferLayout->addWidget(importButton);
-    transferLayout->addWidget(exportButton);
-    toolbar->addWidget(transferGroup);
-    leftRoot->addLayout(toolbar);
-
-    m_window->m_memoryTable = new QTableWidget(panel);
-    m_window->m_memoryTable->setObjectName(QStringLiteral("memoryManagerTable"));
-    m_window->m_memoryTable->setColumnCount(kMemoryTableColumnCount);
-    m_window->m_memoryTable->setHorizontalHeaderLabels(
-        {QStringLiteral("Band"), QStringLiteral("Channel"), QStringLiteral("Name"), QStringLiteral("Frequency"),
-         QStringLiteral("Offset"), QStringLiteral("Mode"), QStringLiteral("Tone (TX/RX)"), QStringLiteral("Filter"),
-         QStringLiteral("ID")});
-    m_window->m_memoryTable->setColumnHidden(kMemoryIdColumn, true);
-    m_window->m_memoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_window->m_memoryTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_window->m_memoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_window->m_memoryTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_window->m_memoryTable->setSortingEnabled(false);
-    m_window->m_memoryTable->setDragDropMode(QAbstractItemView::NoDragDrop);
-    m_window->m_memoryTable->setShowGrid(true);
-    m_window->m_memoryTable->setGridStyle(Qt::SolidLine);
-    m_window->m_memoryTable->setStyleSheet(QStringLiteral("QTableWidget#memoryManagerTable { gridline-color: %1; }"
-                                                          "QTableWidget#memoryManagerTable::item { padding: 0 10px; "
-                                                          "border: none; }")
-                                               .arg(UiTheme::Color::Border));
-    m_window->m_memoryTable->verticalHeader()->setVisible(false);
-    m_window->m_memoryTable->horizontalHeader()->setStretchLastSection(false);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryBandColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNumberColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNameColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFrequencyColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryDuplexColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryModeColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryToneColumn, QHeaderView::Interactive);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFilterColumn, QHeaderView::Stretch);
-    m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryIdColumn, QHeaderView::Fixed);
-    m_window->m_memoryTable->setColumnWidth(kMemoryBandColumn, kMemoryBandColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryNumberColumn, kMemoryNumberColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryNameColumn, kMemoryNameColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryFrequencyColumn, kMemoryFrequencyColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryDuplexColumn, kMemoryDuplexColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryModeColumn, kMemoryModeColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryToneColumn, kMemoryToneColumnWidth);
-    m_window->m_memoryTable->setColumnWidth(kMemoryFilterColumn, kMemorySmallColumnWidth);
-    m_window->m_memoryTable->setItemDelegateForColumn(kMemoryToneColumn, new ToneCellDelegate(m_window->m_memoryTable));
-    leftRoot->addWidget(m_window->m_memoryTable, 1);
-
-    m_memoryEditorSeparator = new QWidget(panel);
-    m_memoryEditorSeparator->setFixedWidth(1);
-    m_memoryEditorSeparator->setStyleSheet(
-        QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    m_memoryEditorSeparator->hide();
-
-    m_memoryEditorPane = new QWidget(panel);
-    m_memoryEditorPane->setObjectName(QStringLiteral("memoryEditorPane"));
-    m_memoryEditorPane->setFixedWidth(kMemoryEditorPaneWidth);
-    m_memoryEditorPane->hide();
-
-    auto* footerRow = new QWidget(panel);
-    auto* footer = new QHBoxLayout(footerRow);
-    footer->setContentsMargins(0, kMemoryFooterTopPadding, 0, kMemoryFooterBottomPadding);
-    m_window->m_memoryCountLabel = new QLabel(panel);
-    m_window->m_memoryCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_window->m_memoryCountLabel->setContentsMargins(kMemoryFooterTextLeftPadding, 0, 0, 0);
-    m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
-    m_window->m_memoryProgressBar = new QProgressBar(panel);
-    m_window->m_memoryProgressBar->setFixedWidth(220);
-    m_window->m_memoryProgressBar->setTextVisible(false);
-    m_window->m_memoryProgressBar->setVisible(false);
-    m_window->m_memoryProgressBar->setStyleSheet(
-        QStringLiteral("QProgressBar { background: %1; border: 1px solid %2; border-radius: 3px; height: 8px; }"
-                       "QProgressBar::chunk { background: %3; border-radius: 2px; }")
-            .arg(UiTheme::Color::Field, UiTheme::Color::BorderMedium, UiTheme::Color::Accent));
-    auto* closeButton = new QPushButton("Close", panel);
-    footer->addWidget(m_window->m_memoryCountLabel, 1);
-    footer->addWidget(m_window->m_memoryProgressBar);
-    footer->addWidget(closeButton);
-    leftRoot->addSpacing(kMemoryEditorGutter);
-    auto* leftFooterSeparator = new QWidget(panel);
-    leftFooterSeparator->setFixedHeight(1);
-    leftFooterSeparator->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    leftFooterSeparator->setStyleSheet(
-        QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    leftRoot->addWidget(leftFooterSeparator);
-    leftRoot->addWidget(footerRow);
-
-    root->addWidget(leftPane, 1);
-    root->addWidget(m_memoryEditorSeparator);
-    root->addWidget(m_memoryEditorPane);
-
-    connect(closeButton, &QPushButton::clicked, m_window->m_memoryWindow, &QWidget::hide);
-
-    auto* windowLayout = new QVBoxLayout(m_window->m_memoryWindow);
-    windowLayout->setContentsMargins(kNoMargins);
-    windowLayout->setSpacing(0);
-    windowLayout->addWidget(panel, 1);
-
-    connect(m_window->m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            &MemoryController::reloadMemoryTable);
-    connect(syncButton, &QPushButton::clicked, this, &MemoryController::forceRadioMemorySync);
-    connect(m_window->m_memoryTable, &QTableWidget::cellDoubleClicked, this,
-            [this](int row, int column)
-            {
-                Q_UNUSED(column)
-                if (m_memorySyncController->refreshInProgress())
-                {
-                    return;
-                }
-                const auto* idItem = m_window->m_memoryTable->item(row, kMemoryIdColumn);
-                const QString memoryId = idItem ? idItem->text() : QString();
-                if (!memoryId.isEmpty())
-                {
-                    selectMemoryById(memoryId, true);
-                }
-            });
-    connect(m_window->m_memoryTable, &QTableWidget::cellClicked, this,
-            [this](int row, int column)
-            {
-                Q_UNUSED(column)
-                if (!m_memoryEditorPane || !m_memoryEditorPane->isVisible())
-                {
-                    return;
-                }
-
-                const auto* idItem = m_window->m_memoryTable->item(row, kMemoryIdColumn);
-                const QString memoryId = idItem ? idItem->text() : QString();
-                if (memoryId != m_openMemoryEditorId)
-                {
-                    closeMemoryEditorPane();
-                }
-            });
-    connect(upButton, &QPushButton::clicked, this, &MemoryController::moveSelectedMemoryUp);
-    connect(downButton, &QPushButton::clicked, this, &MemoryController::moveSelectedMemoryDown);
-    connect(addButton, &QPushButton::clicked, this, &MemoryController::storeCurrentMemory);
-    connect(editButton, &QPushButton::clicked, this, &MemoryController::editSelectedMemory);
-    connect(copyButton, &QPushButton::clicked, this, &MemoryController::copySelectedMemory);
-    connect(removeButton, &QPushButton::clicked, this, &MemoryController::removeSelectedMemory);
-    connect(importButton, &QPushButton::clicked, this, &MemoryController::importRadioMemories);
-    connect(exportButton, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (exportRadioMemories())
-                {
-                    m_window->showToast(QStringLiteral("Memories exported"));
-                }
-            });
-
-    reloadMemoryTable();
+    m_memoryViewController->buildMemoryWindow();
 }
 
 void MemoryController::showMemoryWindow()
 {
-    if (!m_window->m_memoryWindow)
-    {
-        return;
-    }
-    reloadMemoryTable();
-    static_cast<sdr9700::ui::UtilityWindow*>(m_window->m_memoryWindow)->showCentered();
+    m_memoryViewController->showMemoryWindow();
+}
+
+QString MemoryController::selectedMemoryId() const
+{
+    return m_memorySelectionController->selectedMemoryId();
+}
+
+void MemoryController::selectCheckedMemory()
+{
+    m_memorySelectionController->selectCheckedMemory();
+}
+
+void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFailure)
+{
+    m_memorySelectionController->selectMemoryById(id, showDialogOnFailure);
+}
+
+void MemoryController::copySelectedMemory()
+{
+    m_memorySelectionController->copySelectedMemory();
+}
+
+void MemoryController::removeSelectedMemory()
+{
+    m_memorySelectionController->removeSelectedMemory();
+}
+
+void MemoryController::moveSelectedMemory(int direction)
+{
+    m_memorySelectionController->moveSelectedMemory(direction);
+}
+
+void MemoryController::applyMemoryToVfo(const MemoryRecord& memory)
+{
+    m_memorySelectionController->applyMemoryToVfo(memory);
 }
 
 QWidget* MemoryController::popupParent() const
@@ -344,48 +139,6 @@ QWidget* MemoryController::popupParent() const
     return m_window;
 }
 
-void MemoryController::closeMemoryEditorPane(bool resizeWindow)
-{
-    if (!m_memoryEditorPane || !m_window || !m_window->m_memoryWindow)
-    {
-        return;
-    }
-
-    if (QLayout* layout = m_memoryEditorPane->layout())
-    {
-        while (QLayoutItem* item = layout->takeAt(0))
-        {
-            if (QWidget* widget = item->widget())
-            {
-                delete widget;
-            }
-            delete item;
-        }
-        delete layout;
-    }
-
-    m_memoryEditorPane->hide();
-    if (m_memoryEditorSeparator)
-    {
-        m_memoryEditorSeparator->hide();
-    }
-    m_openMemoryEditorId.clear();
-    if (m_memoryEditButton)
-    {
-        m_memoryEditButton->setChecked(false);
-    }
-    if (!resizeWindow)
-    {
-        return;
-    }
-
-    m_window->m_memoryWindow->setFixedSize(kMemoryWindowSize);
-    if (m_window->m_memoryWindow->isVisible())
-    {
-        static_cast<sdr9700::ui::UtilityWindow*>(m_window->m_memoryWindow)->centerOnHost();
-    }
-}
-
 void MemoryController::requestRadioMemoryRefresh()
 {
     m_memorySyncController->requestRadioMemoryRefresh();
@@ -393,7 +146,7 @@ void MemoryController::requestRadioMemoryRefresh()
 
 bool MemoryController::memoryOperationInProgress() const
 {
-    return !m_memoryProgressLabel.isEmpty();
+    return m_memoryViewController->operationInProgress();
 }
 
 bool MemoryController::memoryEditorVisible() const
@@ -411,44 +164,12 @@ void MemoryController::clearMemoryEditButtonChecked()
 
 void MemoryController::closeMemoryEditorFromController()
 {
-    closeMemoryEditorPane();
+    m_memoryViewController->closeEditorPane();
 }
 
 void MemoryController::showMemoryToast(const QString& message)
 {
     m_window->showToast(message);
-}
-
-void MemoryController::scheduleMemoryViewsRebuild()
-{
-    if (!m_memorySyncController->refreshInProgress())
-    {
-        rebuildMemoryViews();
-        return;
-    }
-
-    if (!m_memoryViewRefreshTimer->isActive())
-    {
-        m_memoryViewRefreshTimer->start();
-    }
-}
-
-void MemoryController::updateMemoryTableInteraction()
-{
-    if (!m_window->m_memoryTable)
-    {
-        return;
-    }
-
-    const bool locked = m_memorySyncController->refreshInProgress() || !m_memoryProgressLabel.isEmpty();
-    m_window->m_memoryTable->setSelectionMode(locked ? QAbstractItemView::NoSelection
-                                                     : QAbstractItemView::SingleSelection);
-    m_window->m_memoryTable->setFocusPolicy(locked ? Qt::NoFocus : Qt::StrongFocus);
-    m_window->m_memoryTable->setAttribute(Qt::WA_TransparentForMouseEvents, locked);
-    if (QWidget* viewport = m_window->m_memoryTable->viewport())
-    {
-        viewport->setAttribute(Qt::WA_TransparentForMouseEvents, locked);
-    }
 }
 
 void MemoryController::handleRadioMemoryReceived(MemoryType memory)
@@ -592,28 +313,6 @@ bool MemoryController::parseRadioMemoryId(const QString& id, quint16* group, qui
     return true;
 }
 
-void MemoryController::applyMemoryToVfo(const MemoryRecord& memory)
-{
-    if (!m_window->m_vfo)
-    {
-        return;
-    }
-
-    m_window->m_vfo->applyFrequency(memory.receiveHz);
-    m_window->m_vfo->applyMode(memoryModeLabel(memory.mode));
-    m_window->m_vfo->applyRepeaterOffsetHz(memory.offsetHz);
-    m_window->m_vfo->applyDuplexMode(static_cast<duplexMode_t>(memory.duplexMode));
-    if (isDtcsToneMode(static_cast<rptAccessTxRx_t>(memory.toneMode)))
-    {
-        m_window->m_vfo->applyDtcsCode(memory.toneValue);
-    }
-    else if (memory.toneMode != ratrNN)
-    {
-        m_window->m_vfo->applyToneFrequency(memory.toneValue);
-    }
-    m_window->m_vfo->applyToneAccessMode(static_cast<rptAccessTxRx_t>(memory.toneMode));
-}
-
 void MemoryController::writeMemoryRecord(const MemoryRecord& memory, quint16 group, quint16 channel,
                                          MemoryWriteCompletion completion)
 {
@@ -675,40 +374,6 @@ bool MemoryController::firstOpenChannelForGroup(quint16 group, quint16* channel)
     return false;
 }
 
-void MemoryController::setMemoryProgress(const QString& label, int value, int maximum)
-{
-    m_memoryProgressLabel = label;
-    m_memoryProgressValue = qBound(0, value, maximum);
-    m_memoryProgressMaximum = qMax(0, maximum);
-    if (m_window->m_memoryCountLabel)
-    {
-        m_window->m_memoryCountLabel->setText(QStringLiteral("%1 (%2/%3)")
-                                                  .arg(m_memoryProgressLabel)
-                                                  .arg(m_memoryProgressValue)
-                                                  .arg(m_memoryProgressMaximum));
-    }
-    if (m_window->m_memoryProgressBar)
-    {
-        m_window->m_memoryProgressBar->setRange(0, m_memoryProgressMaximum);
-        m_window->m_memoryProgressBar->setValue(m_memoryProgressValue);
-        m_window->m_memoryProgressBar->setVisible(m_memoryProgressMaximum > 0);
-    }
-    updateMemoryTableInteraction();
-}
-
-void MemoryController::clearMemoryProgress()
-{
-    m_memoryProgressLabel.clear();
-    m_memoryProgressValue = 0;
-    m_memoryProgressMaximum = 0;
-    if (m_window->m_memoryProgressBar)
-    {
-        m_window->m_memoryProgressBar->setVisible(false);
-        m_window->m_memoryProgressBar->setValue(0);
-    }
-    updateMemoryTableInteraction();
-}
-
 bool MemoryController::exportRadioMemories()
 {
     return m_memoryCsvController->exportRadioMemories();
@@ -719,286 +384,9 @@ void MemoryController::importRadioMemories()
     m_memoryCsvController->importRadioMemories();
 }
 
-void MemoryController::rebuildMemoryViews()
-{
-    const QVector<MemoryRecord> memories = currentMemories();
-    if (m_window->m_memoryPanel)
-    {
-        m_window->m_memoryPanel->setSyncInProgress(m_memorySyncController->refreshInProgress(),
-                                                   QStringLiteral("Syncing radio memories..."));
-        m_window->m_memoryPanel->setMemories(memories, m_window->m_activeMemoryId);
-    }
-
-    if (!m_window->m_memoryTable)
-    {
-        return;
-    }
-    updateMemoryTableInteraction();
-
-    const QString bandFilter =
-        m_window->m_memoryBandFilter ? m_window->m_memoryBandFilter->currentData().toString() : QString();
-    m_window->m_memoryTable->setSortingEnabled(false);
-    m_window->m_memoryTable->setRowCount(0);
-    int visibleCount = 0;
-    for (const MemoryRecord& memory : memories)
-    {
-        if (!bandFilter.isEmpty() && memory.band != bandFilter)
-        {
-            continue;
-        }
-
-        const int row = m_window->m_memoryTable->rowCount();
-        m_window->m_memoryTable->insertRow(row);
-
-        auto setItem = [this, row](int column, const QString& text)
-        {
-            auto* item = new QTableWidgetItem(text);
-            m_window->m_memoryTable->setItem(row, column, item);
-            return item;
-        };
-
-        auto* bandItem = setItem(kMemoryBandColumn, memoryBandLabelForGroup(memory.group));
-        bandItem->setTextAlignment(Qt::AlignCenter);
-        auto* numberItem =
-            setItem(kMemoryNumberColumn, QString::number(memory.channel).rightJustified(3, QLatin1Char('0')));
-        numberItem->setData(Qt::UserRole, memory.channel);
-        numberItem->setTextAlignment(Qt::AlignCenter);
-        setItem(kMemoryNameColumn, memory.name);
-        auto* frequencyItem = setItem(kMemoryFrequencyColumn, memoryFrequencyLabel(memory.receiveHz));
-        frequencyItem->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(memory.receiveHz));
-        frequencyItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        setItem(kMemoryDuplexColumn, memory.shift)->setTextAlignment(Qt::AlignCenter);
-        setItem(kMemoryModeColumn, memoryModeLabel(memory.mode))->setTextAlignment(Qt::AlignCenter);
-        auto* toneItem = setItem(kMemoryToneColumn, memoryToneTableLabel(memory));
-        toneItem->setData(kMemoryToneTypeRole, memoryToneTypeLabel(memory));
-        toneItem->setData(kMemoryToneRxRole, memoryToneRxLabel(memory));
-        toneItem->setData(kMemoryToneTxRole, memoryToneTxLabel(memory));
-        toneItem->setToolTip(toneItem->text());
-        toneItem->setTextAlignment(Qt::AlignCenter);
-        setItem(kMemoryFilterColumn, memoryFilterLabel(memory.filter))->setTextAlignment(Qt::AlignCenter);
-        setItem(kMemoryIdColumn, memory.id);
-        ++visibleCount;
-    }
-
-    if (m_window->m_memoryCountLabel)
-    {
-        const int totalCount = memories.size();
-        const quint16 syncGroup = m_memorySyncController->currentGroup();
-        const quint16 syncChannel = m_memorySyncController->currentChannel();
-        if (m_memorySyncController->refreshInProgress() && syncGroup >= kRadioMemoryFirstGroup &&
-            syncChannel >= kRadioMemoryFirstChannel)
-        {
-            const int syncIndex =
-                (syncGroup - kRadioMemoryFirstGroup) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1) +
-                (syncChannel - kRadioMemoryFirstChannel + 1);
-            setMemoryProgress(QStringLiteral("Syncing %1 channel %2")
-                                  .arg(memoryBandLabelForGroup(syncGroup))
-                                  .arg(syncChannel, 3, 10, QLatin1Char('0')),
-                              syncIndex, kRadioMemorySyncTotal);
-            return;
-        }
-        if (m_memorySyncController->refreshInProgress())
-        {
-            setMemoryProgress(QStringLiteral("Syncing memories"), 0, kRadioMemorySyncTotal);
-            return;
-        }
-        if (!m_memoryProgressLabel.isEmpty())
-        {
-            setMemoryProgress(m_memoryProgressLabel, m_memoryProgressValue, m_memoryProgressMaximum);
-            return;
-        }
-        clearMemoryProgress();
-        if (bandFilter.isEmpty())
-        {
-            m_window->m_memoryCountLabel->setText(
-                QStringLiteral("%1 %2 total")
-                    .arg(totalCount)
-                    .arg(totalCount == 1 ? QStringLiteral("memory") : QStringLiteral("memories")));
-        }
-        else
-        {
-            m_window->m_memoryCountLabel->setText(
-                QStringLiteral("%1 filtered / %2 total").arg(visibleCount).arg(totalCount));
-        }
-    }
-}
-
-QString MemoryController::selectedMemoryId() const
-{
-    if (!m_window->m_memoryTable)
-    {
-        return QString();
-    }
-
-    const int row = m_window->m_memoryTable->currentRow();
-    if (row < 0)
-    {
-        return QString();
-    }
-
-    const auto* idItem = m_window->m_memoryTable->item(row, kMemoryIdColumn);
-    return idItem ? idItem->text() : QString();
-}
-
-void MemoryController::selectCheckedMemory()
-{
-    const QString id = selectedMemoryId();
-    if (id.isEmpty())
-    {
-        QMessageBox::information(popupParent(), "Select Memory", "Choose one memory first.");
-        return;
-    }
-
-    selectMemoryById(id, true);
-}
-
-void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFailure)
-{
-    if (id.isEmpty())
-    {
-        return;
-    }
-    if (m_window->m_controlsLocked)
-    {
-        if (showDialogOnFailure)
-        {
-            QMessageBox::information(popupParent(), "Select Memory", "Unlock controls before selecting a memory.");
-        }
-        else
-        {
-            m_window->showToast(QStringLiteral("Controls are locked"), 4000, MainWindow::ToastKind::Warning);
-        }
-        return;
-    }
-
-    bool found = false;
-    const MemoryRecord memory = memoryForId(id, &found);
-    if (!found)
-    {
-        return;
-    }
-    if (!m_window->m_model->isReady() || !m_window->m_vfo)
-    {
-        if (showDialogOnFailure)
-        {
-            QMessageBox::information(popupParent(), "Select Memory",
-                                     "Connect to the radio and wait for sync before selecting a memory.");
-        }
-        else
-        {
-            m_window->showToast(QStringLiteral("Connect to the radio before selecting a memory"), 4000,
-                                MainWindow::ToastKind::Warning);
-        }
-        return;
-    }
-
-    quint16 group = 0;
-    quint16 channel = 0;
-    if (!parseRadioMemoryId(memory.id, &group, &channel))
-    {
-        return;
-    }
-
-    m_window->m_applyingMemorySelection = true;
-    m_window->m_activeMemorySelectionReleaseScheduled = false;
-    const int generation = ++m_window->m_memorySelectionGeneration;
-    m_window->setActiveMemory(memory.id, memory.name, memory.receiveHz, memory.duplexMode, memory.offsetHz,
-                              memory.toneMode, memory.toneValue);
-    m_window->m_model->selectRadioMemory(group, channel);
-    m_window->checkIfMemorySelectionComplete();
-    // Timeout guard: release the memory-selection protection after 3 s in case
-    // the radio never confirms the selected channel.
-    QTimer::singleShot(3000, this,
-                       [this, generation]()
-                       {
-                           if (m_window->m_memorySelectionGeneration != generation)
-                           {
-                               return;
-                           }
-                           m_window->m_applyingMemorySelection = false;
-                           m_window->m_activeMemorySelectionReleaseScheduled = false;
-                       });
-    m_window->showToast(QStringLiteral("Selected memory: %1").arg(memory.name));
-}
-
 void MemoryController::editSelectedMemory()
 {
     m_memoryEditorController->editSelectedMemory();
-}
-
-void MemoryController::copySelectedMemory()
-{
-    const QString id = selectedMemoryId();
-    if (id.isEmpty())
-    {
-        QMessageBox::information(popupParent(), "Copy Memory", "Choose one memory first.");
-        return;
-    }
-
-    bool found = false;
-    MemoryRecord copy = memoryForId(id, &found);
-    if (!found)
-    {
-        return;
-    }
-
-    copy.name = (copy.name.isEmpty() ? QStringLiteral("Copy") : QStringLiteral("%1 Copy").arg(copy.name))
-                    .left(kRadioMemoryNameMaxChars);
-
-    quint16 group = kRadioMemoryFirstGroup;
-    quint16 channel = 0;
-    if (!parseRadioMemoryId(id, &group, nullptr) || !firstOpenChannelForGroup(group, &channel))
-    {
-        QMessageBox::warning(popupParent(), "Copy Memory", "No empty user memory channel is available on this band.");
-        return;
-    }
-
-    writeMemoryRecord(copy, group, channel,
-                      [this, name = copy.name](bool success)
-                      {
-                          if (success)
-                          {
-                              m_window->showToast(QStringLiteral("Copied memory: %1").arg(name));
-                          }
-                      });
-}
-
-void MemoryController::removeSelectedMemory()
-{
-    const QString id = selectedMemoryId();
-    if (id.isEmpty())
-    {
-        QMessageBox::information(popupParent(), "Remove Memory", "Choose one memory first.");
-        return;
-    }
-
-    bool found = false;
-    const MemoryRecord memory = memoryForId(id, &found);
-    if (!found)
-    {
-        return;
-    }
-
-    quint16 group = 0;
-    quint16 channel = 0;
-    if (!parseRadioMemoryId(id, &group, &channel))
-    {
-        return;
-    }
-    if (QMessageBox::question(popupParent(), "Remove Memory",
-                              QStringLiteral("Remove memory \"%1\"?").arg(memory.name)) != QMessageBox::Yes)
-    {
-        return;
-    }
-
-    deleteRadioMemory(group, channel,
-                      [this](bool success)
-                      {
-                          if (success)
-                          {
-                              m_window->showToast(QStringLiteral("Memory removed"));
-                          }
-                      });
 }
 
 void MemoryController::moveSelectedMemoryUp()
@@ -1009,69 +397,6 @@ void MemoryController::moveSelectedMemoryUp()
 void MemoryController::moveSelectedMemoryDown()
 {
     moveSelectedMemory(1);
-}
-
-void MemoryController::moveSelectedMemory(int direction)
-{
-    const QString id = selectedMemoryId();
-    if (id.isEmpty())
-    {
-        QMessageBox::information(popupParent(), "Move Memory", "Choose one memory first.");
-        return;
-    }
-
-    QVector<MemoryRecord> memories = currentMemories();
-    const QString bandFilter =
-        m_window->m_memoryBandFilter ? m_window->m_memoryBandFilter->currentData().toString() : QString();
-    if (!bandFilter.isEmpty())
-    {
-        QMessageBox::information(popupParent(), "Move Memory", "Switch to All memories before reordering.");
-        return;
-    }
-
-    QVector<int> visibleIndexes;
-    for (int i = 0; i < memories.size(); ++i)
-    {
-        visibleIndexes.append(i);
-    }
-
-    int visiblePosition = -1;
-    for (int i = 0; i < visibleIndexes.size(); ++i)
-    {
-        if (memories.at(visibleIndexes.at(i)).id == id)
-        {
-            visiblePosition = i;
-            break;
-        }
-    }
-
-    const int targetPosition = visiblePosition + direction;
-    if (visiblePosition < 0 || targetPosition < 0 || targetPosition >= visibleIndexes.size())
-    {
-        return;
-    }
-
-    const MemoryRecord source = memories.at(visibleIndexes.at(visiblePosition));
-    const MemoryRecord target = memories.at(visibleIndexes.at(targetPosition));
-    quint16 sourceGroup = 0;
-    quint16 sourceChannel = 0;
-    quint16 targetGroup = 0;
-    quint16 targetChannel = 0;
-    if (!parseRadioMemoryId(source.id, &sourceGroup, &sourceChannel) ||
-        !parseRadioMemoryId(target.id, &targetGroup, &targetChannel))
-    {
-        return;
-    }
-    queueRadioMemoryWrites({radioMemoryFromRecord(source, targetGroup, targetChannel),
-                            radioMemoryFromRecord(target, sourceGroup, sourceChannel)},
-                           0, QStringLiteral("Reordering memories"),
-                           [this](bool success)
-                           {
-                               if (success)
-                               {
-                                   m_window->showToast(QStringLiteral("Memories reordered"));
-                               }
-                           });
 }
 
 void MemoryController::storeCurrentMemory()
@@ -1086,5 +411,30 @@ void MemoryController::showMemoryEditor(const QString& memoryId)
 
 void MemoryController::reloadMemoryTable()
 {
-    rebuildMemoryViews();
+    m_memoryViewController->rebuild();
+}
+
+void MemoryController::scheduleMemoryViewsRebuild()
+{
+    m_memoryViewController->scheduleRebuild();
+}
+
+void MemoryController::setMemoryProgress(const QString& label, int value, int maximum)
+{
+    m_memoryViewController->setProgress(label, value, maximum);
+}
+
+void MemoryController::clearMemoryProgress()
+{
+    m_memoryViewController->clearProgress();
+}
+
+void MemoryController::rebuildMemoryViews()
+{
+    m_memoryViewController->rebuild();
+}
+
+void MemoryController::closeMemoryEditorPane(bool resizeWindow)
+{
+    m_memoryViewController->closeEditorPane(resizeWindow);
 }

@@ -7,6 +7,7 @@
 #include "MemoryController.h"
 #include "MemoryControllerHelpers.h"
 #include "MemorySyncPolicy.h"
+#include "MemoryViewController.h"
 #include "models/RadioModel.h"
 
 #include <QMessageBox>
@@ -86,7 +87,7 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
 
     m_refreshTimer->stop();
     m_periodicRefreshTimer->stop();
-    m_owner->m_memoryViewRefreshTimer->stop();
+    m_owner->m_memoryViewController->stopScheduledRefresh();
     finishRadioMemoryRefresh(false);
     if (m_initialSyncComplete)
     {
@@ -224,7 +225,7 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     m_refreshTimer->stop();
     m_syncTimeoutTimer->stop();
     m_replyGraceTimer->stop();
-    m_owner->m_memoryViewRefreshTimer->stop();
+    m_owner->m_memoryViewController->stopScheduledRefresh();
     const bool wasInProgress = m_refreshInProgress;
     const bool completedPollPass = wasInProgress && !timedOut && m_owner->m_window->m_model &&
                                    m_owner->m_window->m_model->isConnected() && m_refreshGroup > kRadioMemoryLastGroup;
