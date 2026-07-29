@@ -79,7 +79,10 @@ void UdpAudio::stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThrea
     {
         qDebug(logUdp()) << "[SHUTDOWN]" << name << "handler dispose ...";
         handler->dispose();
-        handler->deleteLater();
+        if (!workerThread)
+        {
+            handler->deleteLater();
+        }
         handler = nullptr;
     }
 

@@ -8,6 +8,7 @@ namespace sdr9700
 class TransmitSafetyPolicy
 {
   public:
+    // Require three consecutive readings at or above 3:1 SWR to reject a transient spike while protecting the radio.
     explicit TransmitSafetyPolicy(double cutoff = 3.0, int consecutiveReadings = 3)
         : m_cutoff(cutoff), m_requiredReadings(qMax(1, consecutiveReadings))
     {

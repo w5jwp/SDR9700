@@ -2,7 +2,9 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QUuid>
+#include <QHash>
 #include <QList>
 #include <QObject>
 
@@ -31,6 +33,8 @@ class RadioProfileStore : public QObject
 
     const QList<RadioProfile>& profiles() const { return m_profiles; }
     const RadioProfile* profileById(const QUuid& id) const;
+    bool hasUnreadablePassword(const QUuid& id) const { return m_unreadablePasswords.contains(id); }
+    QStringList unreadablePasswordProfileNames() const;
 
     bool addProfile(const RadioProfile& p);
     bool updateProfile(const RadioProfile& p);
@@ -47,5 +51,6 @@ class RadioProfileStore : public QObject
     static QString decryptPassword(const QString& stored);
 
     QList<RadioProfile> m_profiles;
+    QHash<QUuid, QString> m_unreadablePasswords;
     QUuid m_lastProfileId;
 };

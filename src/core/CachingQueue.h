@@ -72,7 +72,7 @@ struct QueueItem
     QVariant param;
     uchar receiver;
     bool recurring;
-    qint64 id = QDateTime::currentMSecsSinceEpoch();
+    qint64 id;
 
     bool operator==(const QueueItem& rhs) const
     {
@@ -134,8 +134,6 @@ class CachingQueue : public QThread
     bool stopThread();
     void setCache(Funcs func, QVariant val, uchar receiver = 0);
     QueuePriority isRecurring(Funcs func, uchar receiver = 0);
-    bool compare(const QVariant& a, const QVariant& b);
-
     std::atomic_bool aborted{false};
     // Command queue pacing for queued readbacks and cache refreshes. This used
     // to be initialized to -1, which disables CachingQueue::add(); keep this
@@ -162,6 +160,7 @@ class CachingQueue : public QThread
 
     static CachingQueue* getInstance();
     static void shutdownInstance();
+    static bool cacheValuesDiffer(const QVariant& a, const QVariant& b);
     void message(QString msg);
     void add(QueuePriority prio, Funcs func, bool recurring = false, uchar receiver = 0);
     void add(QueuePriority prio, QueueItem item, bool unique = false);

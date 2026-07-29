@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QtGlobal>
 
 #include <optional>
@@ -22,6 +23,7 @@ class SystemStatsProvider
     SystemStats sample();
 
     static std::optional<double> calculateCpuPercent(const CpuTicks& previous, const CpuTicks& current);
+    static std::optional<CpuTicks> parseLinuxCpuTicks(const QByteArray& cpuLine);
 
   private:
     std::optional<CpuTicks> readCpuTicks() const;

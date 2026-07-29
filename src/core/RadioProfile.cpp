@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 
 namespace
 {
@@ -51,6 +52,7 @@ QByteArray derivePasswordKey(const QByteArray& material, const QByteArray& salt)
                           reinterpret_cast<const unsigned char*>(salt.constData()), salt.size(), kPasswordKdfIterations,
                           EVP_sha256(), key.size(), reinterpret_cast<unsigned char*>(key.data())) != 1)
     {
+        OPENSSL_cleanse(key.data(), static_cast<size_t>(key.size()));
         return {};
     }
     return key;
@@ -80,15 +82,18 @@ QByteArray readOrCreateProfileKey()
     QFile keyFile(path);
     if (keyFile.open(QIODevice::ReadOnly))
     {
-        const QByteArray key = keyFile.readAll();
+        QByteArray key = keyFile.readAll();
         if (key.size() >= kPasswordKeyBytes)
         {
             if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner))
             {
                 qWarning(logSystem()) << "Could not tighten profile key permissions for" << path;
             }
-            return key.left(kPasswordKeyBytes);
+            const QByteArray result = key.left(kPasswordKeyBytes);
+            secureZero(key);
+            return result;
         }
+        secureZero(key);
     }
 
     const QByteArray key = randomBytes(kPasswordKeyBytes);
@@ -135,7 +140,9 @@ QByteArray RadioProfileStore::passwordKeyMaterial()
         return {};
     }
     material += "|SDR9700-radio-profiles-aes-gcm";
-    return QCryptographicHash::hash(material, QCryptographicHash::Sha256);
+    const QByteArray hash = QCryptographicHash::hash(material, QCryptographicHash::Sha256);
+    secureZero(material);
+    return hash;
 }
 
 QString RadioProfileStore::encryptPassword(const QString& plain)
@@ -147,44 +154,55 @@ QString RadioProfileStore::encryptPassword(const QString& plain)
 
     const QByteArray salt = randomBytes(kPasswordSaltBytes);
     const QByteArray nonce = randomBytes(kPasswordNonceBytes);
-    const QByteArray key = derivePasswordKey(passwordKeyMaterial(), salt);
+    QByteArray keyMaterial = passwordKeyMaterial();
+    QByteArray key = derivePasswordKey(keyMaterial, salt);
+    secureZero(keyMaterial);
     if (salt.isEmpty() || nonce.isEmpty() || key.isEmpty())
     {
+        secureZero(key);
         return {};
     }
 
-    const QByteArray plaintext = plain.toUtf8();
+    QByteArray plaintext = plain.toUtf8();
     QByteArray ciphertext(plaintext.size(), Qt::Uninitialized);
     std::array<unsigned char, kPasswordTagBytes> tag{};
 
-    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    const std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx(EVP_CIPHER_CTX_new(),
+                                                                              &EVP_CIPHER_CTX_free);
     if (!ctx)
     {
+        secureZero(key);
+        secureZero(plaintext);
         return {};
     }
 
     int len = 0;
     int ciphertextLen = 0;
-    bool ok = EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1;
-    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nonce.size(), nullptr) == 1;
-    ok = ok && EVP_EncryptInit_ex(ctx, nullptr, nullptr, reinterpret_cast<const unsigned char*>(key.constData()),
+    bool ok = EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1;
+    ok = ok && EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, nonce.size(), nullptr) == 1;
+    ok = ok && EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, reinterpret_cast<const unsigned char*>(key.constData()),
                                   reinterpret_cast<const unsigned char*>(nonce.constData())) == 1;
-    ok = ok && EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char*>(ciphertext.data()), &len,
+    ok = ok && EVP_EncryptUpdate(ctx.get(), reinterpret_cast<unsigned char*>(ciphertext.data()), &len,
                                  reinterpret_cast<const unsigned char*>(plaintext.constData()), plaintext.size()) == 1;
     ciphertextLen = len;
-    ok = ok && EVP_EncryptFinal_ex(ctx, reinterpret_cast<unsigned char*>(ciphertext.data()) + ciphertextLen, &len) == 1;
+    ok = ok &&
+         EVP_EncryptFinal_ex(ctx.get(), reinterpret_cast<unsigned char*>(ciphertext.data()) + ciphertextLen, &len) == 1;
     ciphertextLen += len;
-    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, tag.size(), tag.data()) == 1;
-    EVP_CIPHER_CTX_free(ctx);
+    ok = ok && EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, tag.size(), tag.data()) == 1;
 
     if (!ok)
     {
+        secureZero(key);
+        secureZero(plaintext);
+        secureZero(ciphertext);
         return {};
     }
 
     ciphertext.resize(ciphertextLen);
     const QByteArray payload =
         salt + nonce + QByteArray(reinterpret_cast<const char*>(tag.data()), tag.size()) + ciphertext;
+    secureZero(key);
+    secureZero(plaintext);
     return QString::fromLatin1(kEncryptedPasswordPrefix) + QString::fromLatin1(payload.toBase64());
 }
 
@@ -192,25 +210,27 @@ static bool tryDecryptAesGcm(const QByteArray& key, const QByteArray& nonce, con
                              const QByteArray& ciphertext, QByteArray& plaintext)
 {
     plaintext.resize(ciphertext.size());
-    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    const std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx(EVP_CIPHER_CTX_new(),
+                                                                              &EVP_CIPHER_CTX_free);
     if (!ctx)
     {
         return false;
     }
     int len = 0;
     int plaintextLen = 0;
-    bool ok = EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1;
-    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nonce.size(), nullptr) == 1;
-    ok = ok && EVP_DecryptInit_ex(ctx, nullptr, nullptr, reinterpret_cast<const unsigned char*>(key.constData()),
+    bool ok = EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) == 1;
+    ok = ok && EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, nonce.size(), nullptr) == 1;
+    ok = ok && EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, reinterpret_cast<const unsigned char*>(key.constData()),
                                   reinterpret_cast<const unsigned char*>(nonce.constData())) == 1;
     ok =
-        ok && EVP_DecryptUpdate(ctx, reinterpret_cast<unsigned char*>(plaintext.data()), &len,
+        ok && EVP_DecryptUpdate(ctx.get(), reinterpret_cast<unsigned char*>(plaintext.data()), &len,
                                 reinterpret_cast<const unsigned char*>(ciphertext.constData()), ciphertext.size()) == 1;
     plaintextLen = len;
-    ok = ok && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tag.size(), const_cast<char*>(tag.constData())) == 1;
-    ok = ok && EVP_DecryptFinal_ex(ctx, reinterpret_cast<unsigned char*>(plaintext.data()) + plaintextLen, &len) == 1;
+    ok =
+        ok && EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, tag.size(), const_cast<char*>(tag.constData())) == 1;
+    ok = ok &&
+         EVP_DecryptFinal_ex(ctx.get(), reinterpret_cast<unsigned char*>(plaintext.data()) + plaintextLen, &len) == 1;
     plaintextLen += len;
-    EVP_CIPHER_CTX_free(ctx);
     if (ok)
     {
         plaintext.resize(plaintextLen);
@@ -241,7 +261,9 @@ QString RadioProfileStore::decryptPassword(const QString& stored)
     const QByteArray nonce = payload.mid(kPasswordSaltBytes, kPasswordNonceBytes);
     const QByteArray tag = payload.mid(kPasswordSaltBytes + kPasswordNonceBytes, kPasswordTagBytes);
     const QByteArray ciphertext = payload.mid(headerBytes);
-    QByteArray key = derivePasswordKey(passwordKeyMaterial(), salt);
+    QByteArray keyMaterial = passwordKeyMaterial();
+    QByteArray key = derivePasswordKey(keyMaterial, salt);
+    secureZero(keyMaterial);
     if (key.isEmpty())
     {
         secureZero(key);
@@ -265,6 +287,7 @@ QString RadioProfileStore::decryptPassword(const QString& stored)
 void RadioProfileStore::load()
 {
     m_profiles.clear();
+    m_unreadablePasswords.clear();
     AppSettings& settings = AppSettings::instance();
     const QString stored = settings.value("radioProfiles", "{}").toString();
     const QJsonDocument doc = QJsonDocument::fromJson(stored.toUtf8());
@@ -292,8 +315,8 @@ void RadioProfileStore::load()
         p.password = decryptPassword(storedPassword);
         if (!storedPassword.isEmpty() && p.password.isEmpty())
         {
-            qWarning(logSystem()) << "Skipping radio profile with unreadable encrypted password:" << p.name;
-            continue;
+            qWarning(logSystem()) << "Loading radio profile with unreadable encrypted password:" << p.name;
+            m_unreadablePasswords.insert(p.id, storedPassword);
         }
         if (!p.id.isNull() && !p.host.isEmpty())
         {
@@ -316,7 +339,8 @@ bool RadioProfileStore::save() const
         obj.insert("host", p.host);
         obj.insert("port", static_cast<int>(p.port));
         obj.insert("username", p.username);
-        const QString encryptedPassword = encryptPassword(p.password);
+        const QString encryptedPassword =
+            p.password.isEmpty() ? m_unreadablePasswords.value(p.id) : encryptPassword(p.password);
         if (!p.password.isEmpty() && encryptedPassword.isEmpty())
         {
             qWarning(logSystem()) << "Radio profile password encryption failed; refusing to overwrite saved profiles";
@@ -336,6 +360,19 @@ const RadioProfile* RadioProfileStore::profileById(const QUuid& id) const
     const auto it = std::find_if(m_profiles.cbegin(), m_profiles.cend(),
                                  [&id](const RadioProfile& profile) { return profile.id == id; });
     return it != m_profiles.cend() ? &(*it) : nullptr;
+}
+
+QStringList RadioProfileStore::unreadablePasswordProfileNames() const
+{
+    QStringList names;
+    for (const RadioProfile& profile : m_profiles)
+    {
+        if (m_unreadablePasswords.contains(profile.id))
+        {
+            names.append(profile.name);
+        }
+    }
+    return names;
 }
 
 bool RadioProfileStore::addProfile(const RadioProfile& p)
@@ -364,10 +401,19 @@ bool RadioProfileStore::updateProfile(const RadioProfile& p)
         if (existing.id == p.id)
         {
             const RadioProfile previous = existing;
+            const QString previousUnreadablePassword = m_unreadablePasswords.value(p.id);
             existing = p;
+            if (!p.password.isEmpty())
+            {
+                m_unreadablePasswords.remove(p.id);
+            }
             if (!save())
             {
                 existing = previous;
+                if (!previousUnreadablePassword.isEmpty())
+                {
+                    m_unreadablePasswords.insert(p.id, previousUnreadablePassword);
+                }
                 return false;
             }
             return true;
@@ -379,8 +425,10 @@ bool RadioProfileStore::updateProfile(const RadioProfile& p)
 bool RadioProfileStore::removeProfile(const QUuid& id)
 {
     const QList<RadioProfile> previousProfiles = m_profiles;
+    const QHash<QUuid, QString> previousUnreadablePasswords = m_unreadablePasswords;
     const QUuid previousLastProfileId = m_lastProfileId;
     m_profiles.removeIf([&](const RadioProfile& p) { return p.id == id; });
+    m_unreadablePasswords.remove(id);
     if (m_lastProfileId == id)
     {
         m_lastProfileId = QUuid();
@@ -388,6 +436,7 @@ bool RadioProfileStore::removeProfile(const QUuid& id)
     if (!save())
     {
         m_profiles = previousProfiles;
+        m_unreadablePasswords = previousUnreadablePasswords;
         m_lastProfileId = previousLastProfileId;
         return false;
     }

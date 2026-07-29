@@ -328,13 +328,13 @@ void AudioHandlerBase::stateChanged(QAudio::State state)
     {
     case QAudio::IdleState:
         isUnderrun.store(true, std::memory_order_relaxed);
-        if (underTimer->isActive())
+        if (underTimer && underTimer->isActive())
         {
             underTimer->stop();
         }
         break;
     case QAudio::ActiveState:
-        if (!underTimer->isActive())
+        if (underTimer && !underTimer->isActive())
         {
             underTimer->start(500);
         }

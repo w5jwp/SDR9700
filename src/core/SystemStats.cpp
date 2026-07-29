@@ -1,10 +1,10 @@
 #include "SystemStats.h"
 
+#include <QList>
 #include <QtGlobal>
 
 #if defined(Q_OS_LINUX)
 #include <QFile>
-#include <QList>
 #elif defined(Q_OS_MAC)
 #include <mach/mach.h>
 #include <mach/mach_host.h>
@@ -13,7 +13,6 @@
 #endif
 
 #include <algorithm>
-#include <numeric>
 
 SystemStats SystemStatsProvider::sample()
 {
@@ -58,23 +57,7 @@ std::optional<CpuTicks> SystemStatsProvider::readCpuTicks() const
         return std::nullopt;
     }
 
-    const QList<QByteArray> parts = file.readLine().split(' ');
-    QList<quint64> values;
-    for (const QByteArray& part : parts)
-    {
-        if (!part.isEmpty() && part != "cpu")
-        {
-            values.append(part.trimmed().toULongLong());
-        }
-    }
-    if (values.size() < 4)
-    {
-        return std::nullopt;
-    }
-
-    const quint64 idle = values[3] + (values.size() > 4 ? values[4] : 0);
-    const quint64 total = std::accumulate(values.cbegin(), values.cend(), quint64{0});
-    return CpuTicks{total - idle, idle};
+    return parseLinuxCpuTicks(file.readLine());
 #elif defined(Q_OS_MAC)
     natural_t cpuCount = 0;
     natural_t infoCount = 0;
@@ -102,6 +85,45 @@ std::optional<CpuTicks> SystemStatsProvider::readCpuTicks() const
 #else
     return std::nullopt;
 #endif
+}
+
+std::optional<CpuTicks> SystemStatsProvider::parseLinuxCpuTicks(const QByteArray& cpuLine)
+{
+    const QList<QByteArray> parts = cpuLine.simplified().split(' ');
+    if (parts.isEmpty() || parts.first() != "cpu")
+    {
+        return std::nullopt;
+    }
+
+    QList<quint64> values;
+    values.reserve(parts.size() - 1);
+    for (qsizetype index = 1; index < parts.size(); ++index)
+    {
+        bool valid = false;
+        const quint64 value = parts[index].toULongLong(&valid);
+        if (!valid)
+        {
+            return std::nullopt;
+        }
+        values.append(value);
+    }
+    if (values.size() < 4)
+    {
+        return std::nullopt;
+    }
+
+    const quint64 idle = values[3] + (values.size() > 4 ? values[4] : 0);
+    quint64 total = 0;
+    for (qsizetype index = 0; index < values.size(); ++index)
+    {
+        // Linux reports guest and guest_nice time within user and nice as well
+        // as in fields 8 and 9, so exclude those duplicate fields.
+        if (index != 8 && index != 9)
+        {
+            total += values[index];
+        }
+    }
+    return CpuTicks{total - idle, idle};
 }
 
 std::optional<quint64> SystemStatsProvider::readProcessResidentBytes() const

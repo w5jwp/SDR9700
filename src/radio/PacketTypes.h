@@ -387,7 +387,8 @@ typedef union radio_cap_packet
     char packet[RADIO_CAP_SIZE];
 }* radio_cap_packet_t;
 
-// 0xA8 length capabilities packet
+// The capabilities header is 0x42 bytes. A normal one-radio response is
+// 0xA8 bytes total: this header followed by one 0x66-byte radio_cap_packet.
 typedef union capabilities_packet
 {
     struct

@@ -963,6 +963,16 @@ void MainWindow::tryAutoConnect()
     store.load();
     m_allowChooserOnDisconnect = false;
 
+    const QStringList unreadableProfiles = store.unreadablePasswordProfileNames();
+    if (!unreadableProfiles.isEmpty())
+    {
+        QMessageBox::warning(
+            this, QStringLiteral("Radio Profile Password"),
+            QStringLiteral("The saved password for the following radio profile(s) could not be decrypted:\n\n%1\n\n"
+                           "The profiles were retained, but their passwords must be entered again before connecting.")
+                .arg(unreadableProfiles.join(QLatin1Char('\n'))));
+    }
+
     const bool autoConnect = AppSettings::instance().value("autoConnect", "True").toBool();
     if (autoConnect)
     {
@@ -970,7 +980,7 @@ void MainWindow::tryAutoConnect()
         if (!lastId.isNull())
         {
             const RadioProfile* p = store.profileById(lastId);
-            if (p)
+            if (p && !store.hasUnreadablePassword(p->id))
             {
                 onConnectToProfile(*p);
                 return;

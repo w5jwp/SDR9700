@@ -12,6 +12,7 @@ class AudioConverterTest : public QObject
 
   private slots:
     void rejectsInvalidFormat();
+    void negotiatesStereoOpusFormat();
     void rejectsConversionBeforeInitialization();
     void rejectsMalformedSampleData_data();
     void rejectsMalformedSampleData();
@@ -45,6 +46,14 @@ void AudioConverterTest::rejectsInvalidFormat()
     QVERIFY(!converter.init(QAudioFormat(), LPCM, audioFormat(1, QAudioFormat::Int16), LPCM, 7, 4));
     QCOMPARE(failedSpy.count(), 1);
     QCOMPARE(failedSpy.constFirst().constFirst().toString(), QStringLiteral("Invalid audio converter format"));
+}
+
+void AudioConverterTest::negotiatesStereoOpusFormat()
+{
+    const QAudioFormat format = toQAudioFormat(0x41, 48000);
+    QCOMPARE(format.channelCount(), 2);
+    QCOMPARE(format.sampleRate(), 48000);
+    QCOMPARE(format.sampleFormat(), QAudioFormat::Float);
 }
 
 void AudioConverterTest::rejectsConversionBeforeInitialization()

@@ -2,6 +2,8 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Multimedia)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 find_package(PkgConfig REQUIRED)
 
+add_compile_options(-Wall -Wextra)
+
 pkg_check_modules(OPUS REQUIRED IMPORTED_TARGET opus)
 pkg_check_modules(SPEEXDSP REQUIRED IMPORTED_TARGET speexdsp)
 if(APPLE)
@@ -100,7 +102,6 @@ if(HIDAPI_FOUND)
     target_compile_definitions(SDR9700_core PUBLIC HAVE_HIDAPI)
 endif()
 
-target_compile_options(SDR9700_core PRIVATE -Wall -Wextra)
 
 # SDR9700 executable
 set(SDR9700_SOURCES
@@ -232,7 +233,6 @@ if(HIDAPI_FOUND)
     target_compile_definitions(SDR9700 PRIVATE HAVE_HIDAPI)
 endif()
 
-target_compile_options(SDR9700 PRIVATE -Wall -Wextra)
 
 set_target_properties(SDR9700 PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
@@ -251,49 +251,57 @@ if(APPLE)
 endif()
 
 if(BUILD_TESTING)
+    add_library(SDR9700_memory_test_support STATIC
+        gui/MemoryStore.cpp
+        gui/MainWindowHelpers.cpp
+    )
+    target_include_directories(SDR9700_memory_test_support PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(SDR9700_memory_test_support PUBLIC
+        SDR9700_core
+        Qt6::Widgets
+    )
+
+    add_library(SDR9700_dtmf_dialog_test_support STATIC gui/DtmfDialog.cpp)
+    target_include_directories(SDR9700_dtmf_dialog_test_support PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gui)
+    target_link_libraries(SDR9700_dtmf_dialog_test_support PUBLIC SDR9700_core Qt6::Widgets)
+
     if(HIDAPI_FOUND)
         add_executable(IcomRC28ManagerTest tests/IcomRC28ManagerTest.cpp)
         target_link_libraries(IcomRC28ManagerTest PRIVATE SDR9700_core Qt6::Test)
-        target_compile_options(IcomRC28ManagerTest PRIVATE -Wall -Wextra)
         add_test(NAME IcomRC28ManagerTest COMMAND IcomRC28ManagerTest)
     endif()
 
     add_executable(AudioConverterTest tests/AudioConverterTest.cpp)
     target_link_libraries(AudioConverterTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(AudioConverterTest PRIVATE -Wall -Wextra)
     add_test(NAME AudioConverterTest COMMAND AudioConverterTest)
 
     add_executable(MemoryStoreTest
         tests/MemoryStoreTest.cpp
-        gui/MemoryStore.cpp
-        gui/MainWindowHelpers.cpp
     )
     target_include_directories(MemoryStoreTest PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/gui
     )
     target_link_libraries(MemoryStoreTest PRIVATE
-        SDR9700_core
+        SDR9700_memory_test_support
         Qt6::Test
-        Qt6::Widgets
     )
-    target_compile_options(MemoryStoreTest PRIVATE -Wall -Wextra)
     add_test(NAME MemoryStoreTest COMMAND MemoryStoreTest)
 
     add_executable(MainWindowHelpersTest
         tests/MainWindowHelpersTest.cpp
-        gui/MainWindowHelpers.cpp
     )
     target_include_directories(MainWindowHelpersTest PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/gui
     )
     target_link_libraries(MainWindowHelpersTest PRIVATE
-        SDR9700_core
+        SDR9700_memory_test_support
         Qt6::Test
-        Qt6::Widgets
     )
-    target_compile_options(MainWindowHelpersTest PRIVATE -Wall -Wextra)
     add_test(NAME MainWindowHelpersTest COMMAND MainWindowHelpersTest)
 
     add_executable(VfoModelTest
@@ -305,7 +313,6 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/models
     )
     target_link_libraries(VfoModelTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(VfoModelTest PRIVATE -Wall -Wextra)
     add_test(NAME VfoModelTest COMMAND VfoModelTest)
 
     add_executable(SpectrumScopeModelTest
@@ -317,12 +324,10 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/models
     )
     target_link_libraries(SpectrumScopeModelTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(SpectrumScopeModelTest PRIVATE -Wall -Wextra)
     add_test(NAME SpectrumScopeModelTest COMMAND SpectrumScopeModelTest)
 
     add_executable(RadioCapabilitiesTest tests/RadioCapabilitiesTest.cpp)
     target_link_libraries(RadioCapabilitiesTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(RadioCapabilitiesTest PRIVATE -Wall -Wextra)
     add_test(NAME RadioCapabilitiesTest COMMAND RadioCapabilitiesTest)
 
     add_executable(MeterControllerTest
@@ -334,27 +339,22 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/models
     )
     target_link_libraries(MeterControllerTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(MeterControllerTest PRIVATE -Wall -Wextra)
     add_test(NAME MeterControllerTest COMMAND MeterControllerTest)
 
     add_executable(SettingsProfileTest tests/SettingsProfileTest.cpp)
     target_link_libraries(SettingsProfileTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(SettingsProfileTest PRIVATE -Wall -Wextra)
     add_test(NAME SettingsProfileTest COMMAND SettingsProfileTest)
 
     add_executable(SettingsProcessTest tests/SettingsProcessTest.cpp)
     target_link_libraries(SettingsProcessTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(SettingsProcessTest PRIVATE -Wall -Wextra)
     add_test(NAME SettingsProcessTest COMMAND SettingsProcessTest)
 
     add_executable(CachingQueueTest tests/CachingQueueTest.cpp)
     target_link_libraries(CachingQueueTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(CachingQueueTest PRIVATE -Wall -Wextra)
     add_test(NAME CachingQueueTest COMMAND CachingQueueTest)
 
     add_executable(UdpBaseTest tests/UdpBaseTest.cpp)
     target_link_libraries(UdpBaseTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(UdpBaseTest PRIVATE -Wall -Wextra)
     add_test(NAME UdpBaseTest COMMAND UdpBaseTest)
 
     add_executable(WaterfallScopeTest
@@ -367,7 +367,6 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/gui
     )
     target_link_libraries(WaterfallScopeTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(WaterfallScopeTest PRIVATE -Wall -Wextra)
     add_test(NAME WaterfallScopeTest COMMAND WaterfallScopeTest)
 
     add_executable(RadioRouterTest
@@ -376,17 +375,14 @@ if(BUILD_TESTING)
     )
     target_include_directories(RadioRouterTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/backend)
     target_link_libraries(RadioRouterTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(RadioRouterTest PRIVATE -Wall -Wextra)
     add_test(NAME RadioRouterTest COMMAND RadioRouterTest)
 
     add_executable(CommanderCodecTest tests/CommanderCodecTest.cpp)
     target_link_libraries(CommanderCodecTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(CommanderCodecTest PRIVATE -Wall -Wextra)
     add_test(NAME CommanderCodecTest COMMAND CommanderCodecTest)
 
     add_executable(PacketLayoutTest tests/PacketLayoutTest.cpp)
     target_link_libraries(PacketLayoutTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(PacketLayoutTest PRIVATE -Wall -Wextra)
     add_test(NAME PacketLayoutTest COMMAND PacketLayoutTest)
 
     add_executable(OfflinePoliciesTest tests/OfflinePoliciesTest.cpp)
@@ -395,21 +391,17 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/gui
     )
     target_link_libraries(OfflinePoliciesTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(OfflinePoliciesTest PRIVATE -Wall -Wextra)
     add_test(NAME OfflinePoliciesTest COMMAND OfflinePoliciesTest)
 
     add_executable(DtmfGeneratorTest tests/DtmfGeneratorTest.cpp)
     target_link_libraries(DtmfGeneratorTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(DtmfGeneratorTest PRIVATE -Wall -Wextra)
     add_test(NAME DtmfGeneratorTest COMMAND DtmfGeneratorTest)
 
     add_executable(DtmfDialogTest
         tests/DtmfDialogTest.cpp
-        gui/DtmfDialog.cpp
     )
     target_include_directories(DtmfDialogTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
-    target_link_libraries(DtmfDialogTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
-    target_compile_options(DtmfDialogTest PRIVATE -Wall -Wextra)
+    target_link_libraries(DtmfDialogTest PRIVATE SDR9700_dtmf_dialog_test_support Qt6::Test)
     add_test(NAME DtmfDialogTest COMMAND DtmfDialogTest)
     set_tests_properties(DtmfDialogTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
@@ -419,21 +411,18 @@ if(BUILD_TESTING)
     )
     target_include_directories(SpectrumCanvasTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
     target_link_libraries(SpectrumCanvasTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
-    target_compile_options(SpectrumCanvasTest PRIVATE -Wall -Wextra)
     add_test(NAME SpectrumCanvasTest COMMAND SpectrumCanvasTest)
     set_tests_properties(SpectrumCanvasTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(PanelAccessibilityTest
         tests/PanelAccessibilityTest.cpp
-        gui/DtmfDialog.cpp
         gui/MutePanel.cpp
         gui/PttPanel.cpp
         gui/ReceivePanel.cpp
         gui/TransmitPanel.cpp
     )
     target_include_directories(PanelAccessibilityTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
-    target_link_libraries(PanelAccessibilityTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
-    target_compile_options(PanelAccessibilityTest PRIVATE -Wall -Wextra)
+    target_link_libraries(PanelAccessibilityTest PRIVATE SDR9700_dtmf_dialog_test_support Qt6::Test)
     add_test(NAME PanelAccessibilityTest COMMAND PanelAccessibilityTest)
     set_tests_properties(PanelAccessibilityTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
@@ -448,7 +437,6 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/models
     )
     target_link_libraries(VfoBackendTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(VfoBackendTest PRIVATE -Wall -Wextra)
     add_test(NAME VfoBackendTest COMMAND VfoBackendTest)
 
     set(GUI_SMOKE_TEST_SOURCES
@@ -459,7 +447,6 @@ if(BUILD_TESTING)
         gui/SpectrumScopeSettingsPanel.cpp
         gui/MemoryManagerSettingsPanel.cpp
         gui/ConfigurationManager.cpp
-        gui/MainWindowHelpers.cpp
     )
     if(HIDAPI_FOUND)
         list(APPEND GUI_SMOKE_TEST_SOURCES gui/IcomRC28SettingsPanel.cpp)
@@ -470,16 +457,13 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/gui
     )
     target_link_libraries(GuiSmokeTest PRIVATE
-        SDR9700_core
+        SDR9700_memory_test_support
         Qt6::Test
-        Qt6::Widgets
     )
-    target_compile_options(GuiSmokeTest PRIVATE -Wall -Wextra)
     add_test(NAME GuiSmokeTest COMMAND GuiSmokeTest)
     set_tests_properties(GuiSmokeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(SystemStatsTest tests/SystemStatsTest.cpp)
     target_link_libraries(SystemStatsTest PRIVATE SDR9700_core Qt6::Test)
-    target_compile_options(SystemStatsTest PRIVATE -Wall -Wextra)
     add_test(NAME SystemStatsTest COMMAND SystemStatsTest)
 endif()

@@ -4,6 +4,7 @@ project(SDR9700 VERSION 26.07.01 LANGUAGES C CXX)
 include(CTest)
 
 set(SDR9700_DISPLAY_VERSION "26.07.01")
+option(SDR9700_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer instrumentation" OFF)
 
 if(APPLE)
     if(NOT CMAKE_OSX_ARCHITECTURES)
@@ -19,6 +20,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+if(SDR9700_SANITIZE)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
+        message(FATAL_ERROR "SDR9700_SANITIZE requires GCC or Clang.")
+    endif()
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)

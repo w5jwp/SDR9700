@@ -76,7 +76,6 @@ enum connectionType_t
     connectionLAN
 };
 
-// Keep meterString synchronized with meter_t values used by radio capabilities.
 enum meter_t
 {
     meterNone = 0,
@@ -100,7 +99,7 @@ enum meter_t
     meterUnknown
 };
 
-extern const QString meterString[19];
+extern const QString meterString[meterUnknown + 1];
 enum radioMode_t
 {
     modeLSB = 0, // 0

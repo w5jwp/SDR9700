@@ -1,8 +1,8 @@
 #include "Types.h"
 
-const QString meterString[19]{"None",    "S-Meter", "Center", "SWR",    "Power",    "ALC",   "Comp",
-                              "Voltage", "Current", "RX dB",  "TX Mod", "RX Audio", "Audio", "Latency",
-                              "dBu",     "dBu EMF", "dBm",    "Sub S",  ""};
+const QString meterString[meterUnknown + 1]{"None",    "S-Meter", "Center", "SWR",    "Power",    "ALC",   "Comp",
+                                            "Voltage", "Current", "RX dB",  "TX Mod", "RX Audio", "Audio", "Latency",
+                                            "dBu",     "dBu EMF", "dBm",    "Sub S",  ""};
 
 // Any changes to these strings WILL break compiled radio capability definitions; add new entries at the end.
 // Missing commas concatenate adjacent strings.

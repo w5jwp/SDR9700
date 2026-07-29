@@ -544,11 +544,6 @@ void Commander::parseData(const QByteArray& dataInput)
             continue;
         }
 
-        if ((quint8)data[02] == civAddr)
-        {
-            // Echoed local command; normal reply handling happens on controller-addressed frames.
-        }
-
         incomingCIVAddr = data[03] & 0xff; // track the CIV of the sender.
 
         switch (data[02])

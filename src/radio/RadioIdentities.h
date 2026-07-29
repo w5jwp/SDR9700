@@ -236,32 +236,14 @@ struct radioCapabilities
     quint8 numReceiver{0};
     quint8 numVFO{0};
 
-    bool hasNB{false};
     QByteArray nbCommand;
 
     bool hasDD{false};
     bool hasDV{false};
-    bool hasATU{false};
-
-    bool hasCTCSS{false};
-    bool hasDTCS{false};
-    bool hasRepeaterModes{false};
 
     bool hasTransmit{false};
-    bool hasPTTCommand{false};
-    bool hasAttenuator{false};
-    bool hasPreamp{false};
-    bool hasAntennaSel{false};
-    bool hasIFShift{false};
-    bool hasTBPF{false};
-
-    bool hasRXAntenna{false};
-
-    bool hasSpecifyMainSubCmd{false};
-    bool hasVFOMS{false};
     bool hasVFOAB{true};
 
-    bool hasAdvancedRptrToneCmds{false};
     bool hasQuickSplitCommand{false};
 
     bool hasCommand29{false};

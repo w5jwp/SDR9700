@@ -14,6 +14,10 @@
 namespace
 {
 constexpr auto kICOMRC28ButtonMappingKey = "ICOMRC28ButtonMapping";
+// RC-28 HID report byte 5 values observed for the three physical buttons.
+constexpr uint8_t kIcomRC28ButtonF1 = 0x05;
+constexpr uint8_t kIcomRC28ButtonF2 = 0x03;
+constexpr uint8_t kIcomRC28ButtonPtt = 0x06;
 
 QString readIcomRC28SettingsJson()
 {
@@ -89,19 +93,19 @@ bool IcomRC28Manager::parseIcomRC28Report(const uint8_t* buf, size_t len, int* s
 
         if (btns == kIcomRC28ButtonsIdle)
         {
-            if (prev == 0x05)
+            if (prev == kIcomRC28ButtonF1)
             {
                 *button = 1;
                 *action = 1;
                 return true;
             }
-            if (prev == 0x03)
+            if (prev == kIcomRC28ButtonF2)
             {
                 *button = 2;
                 *action = 1;
                 return true;
             }
-            if (prev == 0x06)
+            if (prev == kIcomRC28ButtonPtt)
             {
                 *button = 3;
                 *action = 1;
@@ -110,19 +114,19 @@ bool IcomRC28Manager::parseIcomRC28Report(const uint8_t* buf, size_t len, int* s
         }
         else
         {
-            if (btns == 0x05)
+            if (btns == kIcomRC28ButtonF1)
             {
                 *button = 1;
                 *action = 0;
                 return true;
             }
-            if (btns == 0x03)
+            if (btns == kIcomRC28ButtonF2)
             {
                 *button = 2;
                 *action = 0;
                 return true;
             }
-            if (btns == 0x06)
+            if (btns == kIcomRC28ButtonPtt)
             {
                 *button = 3;
                 *action = 0;

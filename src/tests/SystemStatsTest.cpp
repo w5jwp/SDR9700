@@ -9,6 +9,8 @@ class SystemStatsTest : public QObject
   private slots:
     void calculatesCpuPercentage();
     void rejectsInvalidSamples();
+    void parsesLinuxCpuTicksWithoutDoubleCountingGuests();
+    void rejectsMalformedLinuxCpuTicks();
     void samplesCurrentProcess();
 };
 
@@ -23,6 +25,21 @@ void SystemStatsTest::rejectsInvalidSamples()
 {
     QVERIFY(!SystemStatsProvider::calculateCpuPercent(CpuTicks{100, 100}, CpuTicks{100, 100}).has_value());
     QVERIFY(!SystemStatsProvider::calculateCpuPercent(CpuTicks{100, 100}, CpuTicks{99, 110}).has_value());
+}
+
+void SystemStatsTest::parsesLinuxCpuTicksWithoutDoubleCountingGuests()
+{
+    const auto ticks = SystemStatsProvider::parseLinuxCpuTicks("cpu  100 20 30 400 10 5 6 7 8 9\n");
+    QVERIFY(ticks.has_value());
+    QCOMPARE(ticks->idle, quint64{410});
+    QCOMPARE(ticks->active, quint64{168});
+}
+
+void SystemStatsTest::rejectsMalformedLinuxCpuTicks()
+{
+    QVERIFY(!SystemStatsProvider::parseLinuxCpuTicks("cpu 1 2 3").has_value());
+    QVERIFY(!SystemStatsProvider::parseLinuxCpuTicks("cpu 1 2 invalid 4").has_value());
+    QVERIFY(!SystemStatsProvider::parseLinuxCpuTicks("cpu0 1 2 3 4").has_value());
 }
 
 void SystemStatsTest::samplesCurrentProcess()

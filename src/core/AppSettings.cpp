@@ -15,84 +15,54 @@
 #include <QSaveFile>
 #include <QStringList>
 #include <algorithm>
+#include <array>
+#include <utility>
 
 namespace
 {
-bool audioSetting(const QString& key)
+struct SettingDefinition
 {
-    static const QStringList kAudioSettings = {
-        QStringLiteral("audioInputDeviceID"),
-        QStringLiteral("audioOutputChannels"),
-        QStringLiteral("audioOutputDeviceID"),
-    };
-    return kAudioSettings.contains(key);
-}
+    const char* appKey;
+    const char* group;
+    const char* storedKey;
+    bool storesJson{false};
+};
 
-bool spectrumScopeSetting(const QString& key)
-{
-    static const QStringList kSpectrumScopeSettings = {
-        QStringLiteral("spectrumScopeBackgroundColor"),  QStringLiteral("spectrumScopeCenterLineColor"),
-        QStringLiteral("spectrumScopeGridDensity"),      QStringLiteral("spectrumScopeGridLineColor"),
-        QStringLiteral("spectrumScopeInvertMouseWheel"), QStringLiteral("spectrumScopeSpanHZ"),
-        QStringLiteral("spectrumScopeSpectrumHeight"),
-    };
-    return kSpectrumScopeSettings.contains(key);
-}
+constexpr std::array kSettingDefinitions{
+    SettingDefinition{"audioInputDeviceID", "audio", "inputDeviceID"},
+    SettingDefinition{"audioOutputChannels", "audio", "outputChannels"},
+    SettingDefinition{"audioOutputDeviceID", "audio", "outputDeviceID"},
+    SettingDefinition{"spectrumScopeBackgroundColor", "spectrumScope", "backgroundColor"},
+    SettingDefinition{"spectrumScopeCenterLineColor", "spectrumScope", "centerLineColor"},
+    SettingDefinition{"spectrumScopeGridDensity", "spectrumScope", "gridDensity"},
+    SettingDefinition{"spectrumScopeGridLineColor", "spectrumScope", "gridLineColor"},
+    SettingDefinition{"spectrumScopeInvertMouseWheel", "spectrumScope", "invertMouseWheel"},
+    SettingDefinition{"spectrumScopeSpanHZ", "spectrumScope", "spanHZ"},
+    SettingDefinition{"spectrumScopeSpectrumHeight", "spectrumScope", "spectrumHeight"},
+    SettingDefinition{"mainWindowPositionX", "mainWindow", "positionX"},
+    SettingDefinition{"mainWindowPositionY", "mainWindow", "positionY"},
+    SettingDefinition{"statusClockUTC", "mainWindow", "statusClockUTC"},
+    SettingDefinition{"memoryPollIntervalSeconds", "memoryManager", "pollIntervalSeconds"},
+    SettingDefinition{"LANModLevel", "radio", "LANModLevel"},
+    SettingDefinition{"tuningStepHZ", "radio", "tuningStepHZ"},
+    SettingDefinition{"volumeLevel", "radio", "volumeLevel"},
+    SettingDefinition{"autoConnect", "radioChooser", "autoConnect"},
+    SettingDefinition{"radioProfiles", "radioChooser", "radioProfiles", true},
+    SettingDefinition{"ICOMRC28ButtonMapping", "accessories", "ICOMRC28ButtonMapping", true},
+};
 
-bool mainWindowSetting(const QString& key)
+const SettingDefinition* settingDefinition(const QString& appKey)
 {
-    static const QStringList kMainWindowSettings = {
-        QStringLiteral("mainWindowPositionX"),
-        QStringLiteral("mainWindowPositionY"),
-        QStringLiteral("statusClockUTC"),
-    };
-    return kMainWindowSettings.contains(key);
-}
-
-bool memoryManagerSetting(const QString& key)
-{
-    static const QStringList kMemoryManagerSettings = {
-        QStringLiteral("memoryPollIntervalSeconds"),
-    };
-    return kMemoryManagerSettings.contains(key);
-}
-
-bool radioSetting(const QString& key)
-{
-    static const QStringList kRadioSettings = {
-        QStringLiteral("LANModLevel"),
-        QStringLiteral("tuningStepHZ"),
-        QStringLiteral("volumeLevel"),
-    };
-    return kRadioSettings.contains(key);
-}
-
-bool radioChooserSetting(const QString& key)
-{
-    static const QStringList kRadioChooserSettings = {
-        QStringLiteral("autoConnect"),
-        QStringLiteral("radioProfiles"),
-    };
-    return kRadioChooserSettings.contains(key);
-}
-
-bool accessoriesSetting(const QString& key)
-{
-    static const QStringList kAccessoriesSettings = {
-        QStringLiteral("ICOMRC28ButtonMapping"),
-    };
-    return kAccessoriesSettings.contains(key);
-}
-
-bool settingStoresJson(const QString& key)
-{
-    static const QStringList kJsonSettings = {QStringLiteral("radioProfiles"), QStringLiteral("ICOMRC28ButtonMapping")};
-    return kJsonSettings.contains(key);
+    const auto definition = std::find_if(kSettingDefinitions.cbegin(), kSettingDefinitions.cend(),
+                                         [&appKey](const SettingDefinition& candidate)
+                                         { return appKey == QLatin1String(candidate.appKey); });
+    return definition == kSettingDefinitions.cend() ? nullptr : &*definition;
 }
 
 void insertStoredSetting(QJsonObject* target, const QString& key, const QString& storedValue)
 {
-    if (settingStoresJson(key))
+    const SettingDefinition* definition = settingDefinition(key);
+    if (definition && definition->storesJson)
     {
         QJsonParseError error;
         const QJsonDocument nested = QJsonDocument::fromJson(storedValue.toUtf8(), &error);
@@ -109,82 +79,6 @@ void insertStoredSetting(QJsonObject* target, const QString& key, const QString&
     }
 
     target->insert(key, storedValue);
-}
-
-QString audioStoredKey(const QString& key)
-{
-    if (key == QStringLiteral("audioInputDeviceID"))
-    {
-        return QStringLiteral("inputDeviceID");
-    }
-    if (key == QStringLiteral("audioOutputDeviceID"))
-    {
-        return QStringLiteral("outputDeviceID");
-    }
-    if (key == QStringLiteral("audioOutputChannels"))
-    {
-        return QStringLiteral("outputChannels");
-    }
-    return {};
-}
-
-QString spectrumScopeStoredKey(const QString& key)
-{
-    if (key == QStringLiteral("spectrumScopeBackgroundColor"))
-    {
-        return QStringLiteral("backgroundColor");
-    }
-    if (key == QStringLiteral("spectrumScopeCenterLineColor"))
-    {
-        return QStringLiteral("centerLineColor");
-    }
-    if (key == QStringLiteral("spectrumScopeGridDensity"))
-    {
-        return QStringLiteral("gridDensity");
-    }
-    if (key == QStringLiteral("spectrumScopeGridLineColor"))
-    {
-        return QStringLiteral("gridLineColor");
-    }
-    if (key == QStringLiteral("spectrumScopeInvertMouseWheel"))
-    {
-        return QStringLiteral("invertMouseWheel");
-    }
-    if (key == QStringLiteral("spectrumScopeSpanHZ"))
-    {
-        return QStringLiteral("spanHZ");
-    }
-    if (key == QStringLiteral("spectrumScopeSpectrumHeight"))
-    {
-        return QStringLiteral("spectrumHeight");
-    }
-    return {};
-}
-
-QString mainWindowStoredKey(const QString& key)
-{
-    if (key == QStringLiteral("mainWindowPositionX"))
-    {
-        return QStringLiteral("positionX");
-    }
-    if (key == QStringLiteral("mainWindowPositionY"))
-    {
-        return QStringLiteral("positionY");
-    }
-    if (key == QStringLiteral("statusClockUTC"))
-    {
-        return key;
-    }
-    return {};
-}
-
-QString memoryManagerStoredKey(const QString& key)
-{
-    if (key == QStringLiteral("memoryPollIntervalSeconds"))
-    {
-        return QStringLiteral("pollIntervalSeconds");
-    }
-    return {};
 }
 
 void loadStoredSetting(QHash<QString, QString>* values, const QString& key, const QJsonValue& value)
@@ -250,6 +144,12 @@ QVariant AppSettings::value(const QString& key, const QVariant& defaultValue) co
 
 bool AppSettings::setValue(const QString& key, const QVariant& settingValue)
 {
+    if (!settingDefinition(key))
+    {
+        qWarning(logSystem()) << "Refusing to save unknown application setting:" << key;
+        return false;
+    }
+
     const QString encodedValue = encodeValue(settingValue);
     if (m_values.value(key) == encodedValue && m_values.contains(key))
     {
@@ -276,6 +176,12 @@ bool AppSettings::setValue(const QString& key, const QVariant& settingValue)
 
 void AppSettings::setValueDeferred(const QString& key, const QVariant& settingValue)
 {
+    if (!settingDefinition(key))
+    {
+        qWarning(logSystem()) << "Refusing to defer unknown application setting:" << key;
+        return;
+    }
+
     const QString encodedValue = encodeValue(settingValue);
     if (m_values.value(key) == encodedValue && m_values.contains(key))
     {
@@ -335,80 +241,35 @@ bool AppSettings::writeFile() const
     }
 
     QJsonObject settings;
-    QJsonObject audioSettings;
-    QJsonObject spectrumScopeSettings;
-    QJsonObject mainWindowSettings;
-    QJsonObject memoryManagerSettings;
-    QJsonObject radioSettings;
-    QJsonObject radioChooserSettings;
-    QJsonObject accessoriesSettings;
+    QHash<QString, QJsonObject> groups;
     QList<QString> keys = m_values.keys();
     std::sort(keys.begin(), keys.end());
     for (const QString& key : keys)
     {
+        const SettingDefinition* definition = settingDefinition(key);
+        if (!definition)
+        {
+            qWarning(logSystem()) << "Ignoring unknown in-memory application setting:" << key;
+            continue;
+        }
+
         const QString storedValue = m_values.value(key);
-        if (audioSetting(key))
+        const QString groupName = QString::fromLatin1(definition->group);
+        QJsonObject group = groups.value(groupName);
+        insertStoredSetting(&group, key, storedValue);
+        if (QString::fromLatin1(definition->storedKey) != key)
         {
-            insertStoredSetting(&audioSettings, audioStoredKey(key), storedValue);
-            continue;
+            const QJsonValue value = group.take(key);
+            group.insert(QString::fromLatin1(definition->storedKey), value);
         }
-        if (spectrumScopeSetting(key))
-        {
-            insertStoredSetting(&spectrumScopeSettings, spectrumScopeStoredKey(key), storedValue);
-            continue;
-        }
-        if (mainWindowSetting(key))
-        {
-            insertStoredSetting(&mainWindowSettings, mainWindowStoredKey(key), storedValue);
-            continue;
-        }
-        if (memoryManagerSetting(key))
-        {
-            insertStoredSetting(&memoryManagerSettings, memoryManagerStoredKey(key), storedValue);
-            continue;
-        }
-        if (radioSetting(key))
-        {
-            insertStoredSetting(&radioSettings, key, storedValue);
-            continue;
-        }
-        if (radioChooserSetting(key))
-        {
-            insertStoredSetting(&radioChooserSettings, key, storedValue);
-            continue;
-        }
-        if (accessoriesSetting(key))
-        {
-            insertStoredSetting(&accessoriesSettings, key, storedValue);
-        }
+        groups.insert(groupName, group);
     }
-    if (!accessoriesSettings.isEmpty())
+
+    QList<QString> groupNames = groups.keys();
+    std::sort(groupNames.begin(), groupNames.end());
+    for (const QString& groupName : std::as_const(groupNames))
     {
-        settings.insert(QStringLiteral("accessories"), accessoriesSettings);
-    }
-    if (!audioSettings.isEmpty())
-    {
-        settings.insert(QStringLiteral("audio"), audioSettings);
-    }
-    if (!spectrumScopeSettings.isEmpty())
-    {
-        settings.insert(QStringLiteral("spectrumScope"), spectrumScopeSettings);
-    }
-    if (!mainWindowSettings.isEmpty())
-    {
-        settings.insert(QStringLiteral("mainWindow"), mainWindowSettings);
-    }
-    if (!memoryManagerSettings.isEmpty())
-    {
-        settings.insert(QStringLiteral("memoryManager"), memoryManagerSettings);
-    }
-    if (!radioSettings.isEmpty())
-    {
-        settings.insert(QStringLiteral("radio"), radioSettings);
-    }
-    if (!radioChooserSettings.isEmpty())
-    {
-        settings.insert(QStringLiteral("radioChooser"), radioChooserSettings);
+        settings.insert(groupName, groups.value(groupName));
     }
 
     const QByteArray data = QJsonDocument(settings).toJson(QJsonDocument::Indented);
@@ -449,89 +310,11 @@ bool AppSettings::loadJson(const QString& path)
     }
 
     const QJsonObject settings = doc.object();
-    for (auto it = settings.constBegin(); it != settings.constEnd(); ++it)
+    for (const SettingDefinition& definition : kSettingDefinitions)
     {
-        if (it.key() == QStringLiteral("audio") && it.value().isObject())
-        {
-            const QJsonObject audio = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("audioInputDeviceID"),
-                              audio.value(QStringLiteral("inputDeviceID")));
-            loadStoredSetting(&m_values, QStringLiteral("audioOutputChannels"),
-                              audio.value(QStringLiteral("outputChannels")));
-            loadStoredSetting(&m_values, QStringLiteral("audioOutputDeviceID"),
-                              audio.value(QStringLiteral("outputDeviceID")));
-            continue;
-        }
-
-        if (it.key() == QStringLiteral("spectrumScope") && it.value().isObject())
-        {
-            const QJsonObject spectrumScope = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeBackgroundColor"),
-                              spectrumScope.value(QStringLiteral("backgroundColor")));
-            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeCenterLineColor"),
-                              spectrumScope.value(QStringLiteral("centerLineColor")));
-            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeGridDensity"),
-                              spectrumScope.value(QStringLiteral("gridDensity")));
-            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeGridLineColor"),
-                              spectrumScope.value(QStringLiteral("gridLineColor")));
-            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeInvertMouseWheel"),
-                              spectrumScope.value(QStringLiteral("invertMouseWheel")));
-            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeSpanHZ"),
-                              spectrumScope.value(QStringLiteral("spanHZ")));
-            loadStoredSetting(&m_values, QStringLiteral("spectrumScopeSpectrumHeight"),
-                              spectrumScope.value(QStringLiteral("spectrumHeight")));
-            continue;
-        }
-
-        if (it.key() == QStringLiteral("mainWindow") && it.value().isObject())
-        {
-            const QJsonObject mainWindow = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("mainWindowPositionX"),
-                              mainWindow.value(QStringLiteral("positionX")));
-            loadStoredSetting(&m_values, QStringLiteral("mainWindowPositionY"),
-                              mainWindow.value(QStringLiteral("positionY")));
-            loadStoredSetting(&m_values, QStringLiteral("statusClockUTC"),
-                              mainWindow.value(QStringLiteral("statusClockUTC")));
-            continue;
-        }
-
-        if (it.key() == QStringLiteral("memoryManager") && it.value().isObject())
-        {
-            const QJsonObject memoryManager = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("memoryPollIntervalSeconds"),
-                              memoryManager.value(QStringLiteral("pollIntervalSeconds")));
-            continue;
-        }
-
-        if (it.key() == QStringLiteral("radio") && it.value().isObject())
-        {
-            const QJsonObject radio = it.value().toObject();
-            for (auto radioIt = radio.constBegin(); radioIt != radio.constEnd(); ++radioIt)
-            {
-                if (radioSetting(radioIt.key()))
-                {
-                    loadStoredSetting(&m_values, radioIt.key(), radioIt.value());
-                }
-            }
-            continue;
-        }
-
-        if (it.key() == QStringLiteral("radioChooser") && it.value().isObject())
-        {
-            const QJsonObject radioChooser = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("autoConnect"),
-                              radioChooser.value(QStringLiteral("autoConnect")));
-            loadStoredSetting(&m_values, QStringLiteral("radioProfiles"),
-                              radioChooser.value(QStringLiteral("radioProfiles")));
-            continue;
-        }
-
-        if (it.key() == QStringLiteral("accessories") && it.value().isObject())
-        {
-            const QJsonObject accessories = it.value().toObject();
-            loadStoredSetting(&m_values, QStringLiteral("ICOMRC28ButtonMapping"),
-                              accessories.value(QStringLiteral("ICOMRC28ButtonMapping")));
-        }
+        const QJsonObject group = settings.value(QString::fromLatin1(definition.group)).toObject();
+        loadStoredSetting(&m_values, QString::fromLatin1(definition.appKey),
+                          group.value(QString::fromLatin1(definition.storedKey)));
     }
 
     return true;

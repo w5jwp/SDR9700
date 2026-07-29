@@ -21,8 +21,9 @@ class SettingsProfileTest : public QObject
     void storesSettingsInCurrentSchema();
     void storesAllSettingsGroupsAndValueTypes();
     void removesSettings();
+    void rejectsUnknownSettings();
     void profilePasswordIsEncryptedAndRoundTrips();
-    void corruptedProfilePasswordIsRejected();
+    void corruptedProfilePasswordIsPreserved();
     void managesProfileLifecycleAndLastSelection();
     void ignoresMalformedAndIncompleteProfiles();
     void rejectsInvalidProfilePorts();
@@ -117,6 +118,14 @@ void SettingsProfileTest::removesSettings()
     QVERIFY(settings.remove(QStringLiteral("statusClockUTC")));
 }
 
+void SettingsProfileTest::rejectsUnknownSettings()
+{
+    AppSettings& settings = AppSettings::instance();
+    QTest::ignoreMessage(QtWarningMsg, "Refusing to save unknown application setting: \"unknownSetting\"");
+    QVERIFY(!settings.setValue(QStringLiteral("unknownSetting"), 42));
+    QVERIFY(!settings.contains(QStringLiteral("unknownSetting")));
+}
+
 void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()
 {
     RadioProfileStore& store = RadioProfileStore::instance();
@@ -146,7 +155,7 @@ void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()
     QCOMPARE(loaded->password, profile.password);
 }
 
-void SettingsProfileTest::corruptedProfilePasswordIsRejected()
+void SettingsProfileTest::corruptedProfilePasswordIsPreserved()
 {
     AppSettings& settings = AppSettings::instance();
     QJsonObject profiles = settingsDocument()
@@ -164,9 +173,34 @@ void SettingsProfileTest::corruptedProfilePasswordIsRejected()
     QVERIFY(settings.setValue(QStringLiteral("radioProfiles"),
                               QString::fromUtf8(QJsonDocument(profiles).toJson(QJsonDocument::Compact))));
 
-    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Skipping radio profile.*")));
-    RadioProfileStore::instance().load();
-    QVERIFY(RadioProfileStore::instance().profiles().isEmpty());
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Loading radio profile.*")));
+    RadioProfileStore& store = RadioProfileStore::instance();
+    store.load();
+    QCOMPARE(store.profiles().size(), 1);
+    QCOMPARE(store.profiles().constFirst().password, QString());
+    QCOMPARE(store.unreadablePasswordProfileNames(), QStringList{profile.value(QStringLiteral("name")).toString()});
+
+    QVERIFY(store.setLastProfileId(store.profiles().constFirst().id));
+    const QJsonObject savedProfile = settingsDocument()
+                                         .value(QStringLiteral("radioChooser"))
+                                         .toObject()
+                                         .value(QStringLiteral("radioProfiles"))
+                                         .toObject()
+                                         .value(QStringLiteral("profiles"))
+                                         .toArray()
+                                         .at(0)
+                                         .toObject();
+    QCOMPARE(savedProfile.value(QStringLiteral("password")).toString(), encrypted);
+
+    RadioProfile recoveredProfile = store.profiles().constFirst();
+    recoveredProfile.password = QStringLiteral("replacement-password");
+    QVERIFY(store.updateProfile(recoveredProfile));
+    QVERIFY(!store.hasUnreadablePassword(recoveredProfile.id));
+    store.load();
+    const RadioProfile* reloadedProfile = store.profileById(recoveredProfile.id);
+    QVERIFY(reloadedProfile != nullptr);
+    QCOMPARE(reloadedProfile->password, recoveredProfile.password);
+    QVERIFY(store.removeProfile(recoveredProfile.id));
 }
 
 void SettingsProfileTest::managesProfileLifecycleAndLastSelection()

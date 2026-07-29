@@ -15,6 +15,7 @@ class CachingQueueTest : public QObject
     void queueItemsHaveStableIdentity();
     void dispatchesImmediateCommandsInOrder();
     void receivesAndCachesAuthoritativeValues();
+    void deliversUnsupportedPayloadTypesConservatively();
     void resetClearsSessionState();
 };
 
@@ -83,6 +84,13 @@ void CachingQueueTest::receivesAndCachesAuthoritativeValues()
     QCOMPARE(cached.command, funcRfGain);
     QCOMPARE(cached.value.toInt(), 123);
     QVERIFY(cached.reply.isValid());
+}
+
+void CachingQueueTest::deliversUnsupportedPayloadTypesConservatively()
+{
+    const QByteArray payload("new-cache-payload");
+    QTest::ignoreMessage(QtInfoMsg, QRegularExpression(QStringLiteral("Unsupported cache value.*")));
+    QVERIFY(CachingQueue::cacheValuesDiffer(payload, payload));
 }
 
 void CachingQueueTest::resetClearsSessionState()

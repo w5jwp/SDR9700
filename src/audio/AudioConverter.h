@@ -138,7 +138,7 @@ static inline QAudioFormat toQAudioFormat(quint8 codec, quint32 sampleRate)
     {
         format.setSampleFormat(QAudioFormat::UInt8);
     }
-    if (codec == 0x08 || codec == 0x10 || codec == 0x20)
+    if (codec == 0x08 || codec == 0x10 || codec == 0x20 || codec == 0x41)
     {
         format.setChannelCount(2);
     }

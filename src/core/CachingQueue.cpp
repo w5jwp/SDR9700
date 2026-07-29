@@ -545,7 +545,7 @@ void CachingQueue::updateCache(bool reply, QueueItem item)
             {
                 cv->req = QDateTime::currentDateTime();
             }
-            if (compare(item.param, cv.value().value))
+            if (cacheValuesDiffer(item.param, cv.value().value))
             {
                 cv->value.clear();
                 cv->value.setValue(item.param);
@@ -620,7 +620,7 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
     return ret;
 }
 
-bool CachingQueue::compare(const QVariant& a, const QVariant& b)
+bool CachingQueue::cacheValuesDiffer(const QVariant& a, const QVariant& b)
 {
     bool changed = false;
 
@@ -791,6 +791,10 @@ bool CachingQueue::compare(const QVariant& a, const QVariant& b)
         else
         {
             qInfo(logRadio()) << "Unsupported cache value:" << a.typeName();
+            // Unknown payloads must be treated as changed so newly introduced
+            // response types still reach models until an intentional
+            // comparison policy is added above.
+            changed = true;
         }
     }
     else if (a.isValid())

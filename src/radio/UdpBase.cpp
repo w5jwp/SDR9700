@@ -4,6 +4,8 @@
 #include <QMutexLocker>
 #include <QTime>
 
+#include <utility>
+
 namespace
 {
 int congestionPercent(quint32 packetsSent, quint32 packetsLost)
@@ -91,28 +93,35 @@ void UdpBase::dataReceived(const QByteArray& r)
         {
             packetsLost++;
             congestion = congestionPercent(packetsSent, packetsLost);
-            txBufferMutex.lock();
-            auto match = txSeqBuf.find(in.seq);
-            if (match != txSeqBuf.end())
             {
-                // Retransmits are untracked because the original packet is already in the send buffer.
-                qDebug(logUdp()) << this->metaObject()->className() << ": Sending (single packet) retransmit of "
-                                 << QString("0x%1").arg(match->seqNum, 0, 16);
-                match->retransmitCount++;
-                udpMutex.lock();
-                udp->writeDatagram(match->data, radioIP, port);
-                udpMutex.unlock();
+                QByteArray retransmitData;
+                QMutexLocker txLocker(&txBufferMutex);
+                auto match = txSeqBuf.find(in.seq);
+                if (match != txSeqBuf.end())
+                {
+                    // Copy under the buffer lock, then send after releasing it
+                    // to avoid nesting txBufferMutex and udpMutex.
+                    qDebug(logUdp()) << this->metaObject()->className() << ": Sending (single packet) retransmit of "
+                                     << QString("0x%1").arg(match->seqNum, 0, 16);
+                    match->retransmitCount++;
+                    retransmitData = match->data;
+                }
+                else
+                {
+                    const QString availableRange = txSeqBuf.isEmpty() ? QStringLiteral("empty retransmit buffer")
+                                                                      : QStringLiteral("have 0x%1 to 0x%2")
+                                                                            .arg(txSeqBuf.firstKey(), 0, 16)
+                                                                            .arg(txSeqBuf.lastKey(), 0, 16);
+                    qDebug(logUdp()) << this->metaObject()->className() << ": Remote requested packet"
+                                     << QString("0x%1").arg(in.seq, 0, 16) << "not found," << availableRange;
+                }
+                txLocker.unlock();
+                if (!retransmitData.isEmpty())
+                {
+                    QMutexLocker udpLocker(&udpMutex);
+                    udp->writeDatagram(retransmitData, radioIP, port);
+                }
             }
-            else
-            {
-                const QString availableRange = txSeqBuf.isEmpty() ? QStringLiteral("empty retransmit buffer")
-                                                                  : QStringLiteral("have 0x%1 to 0x%2")
-                                                                        .arg(txSeqBuf.firstKey(), 0, 16)
-                                                                        .arg(txSeqBuf.lastKey(), 0, 16);
-                qDebug(logUdp()) << this->metaObject()->className() << ": Remote requested packet"
-                                 << QString("0x%1").arg(in.seq, 0, 16) << "not found," << availableRange;
-            }
-            txBufferMutex.unlock();
         }
         if (in.type == 0x04)
         {
@@ -241,35 +250,49 @@ void UdpBase::dataReceived(const QByteArray& r)
 
     if (in.type == 0x01 && in.len != 0x10)
     {
-
-        txBufferMutex.lock();
-        for (qsizetype i = 0x10; i + 1 < r.length(); i = i + 2)
         {
-            quint16 seq = (quint8)r[i] | (quint8)r[i + 1] << 8;
-            auto match = txSeqBuf.find(seq);
-            if (match == txSeqBuf.end())
+            QList<QByteArray> retransmitData;
+            QList<quint16> unavailableSequences;
+            QMutexLocker txLocker(&txBufferMutex);
+            for (qsizetype i = 0x10; i + 1 < r.length(); i = i + 2)
             {
-                const QString availableRange = txSeqBuf.isEmpty() ? QStringLiteral("empty retransmit buffer")
-                                                                  : QStringLiteral("have 0x%1 to 0x%2")
-                                                                        .arg(txSeqBuf.firstKey(), 0, 16)
-                                                                        .arg(txSeqBuf.lastKey(), 0, 16);
-                qDebug(logUdp()) << this->metaObject()->className() << ": Remote requested packet"
-                                 << QString("0x%1").arg(seq, 0, 16) << "not found," << availableRange;
-                sendControl(false, 0, seq);
+                quint16 seq = (quint8)r[i] | (quint8)r[i + 1] << 8;
+                auto match = txSeqBuf.find(seq);
+                if (match == txSeqBuf.end())
+                {
+                    const QString availableRange = txSeqBuf.isEmpty() ? QStringLiteral("empty retransmit buffer")
+                                                                      : QStringLiteral("have 0x%1 to 0x%2")
+                                                                            .arg(txSeqBuf.firstKey(), 0, 16)
+                                                                            .arg(txSeqBuf.lastKey(), 0, 16);
+                    qDebug(logUdp()) << this->metaObject()->className() << ": Remote requested packet"
+                                     << QString("0x%1").arg(seq, 0, 16) << "not found," << availableRange;
+                    unavailableSequences.append(seq);
+                }
+                else
+                {
+                    qDebug(logUdp()) << this->metaObject()->className() << ": Sending (multiple packet) retransmit of "
+                                     << QString("0x%1").arg(match->seqNum, 0, 16);
+                    match->retransmitCount++;
+                    retransmitData.append(match->data);
+                    packetsLost++;
+                    congestion = congestionPercent(packetsSent, packetsLost);
+                }
             }
-            else
+            txLocker.unlock();
+
+            if (!retransmitData.isEmpty())
             {
-                qDebug(logUdp()) << this->metaObject()->className() << ": Sending (multiple packet) retransmit of "
-                                 << QString("0x%1").arg(match->seqNum, 0, 16);
-                match->retransmitCount++;
-                udpMutex.lock();
-                udp->writeDatagram(match->data, radioIP, port);
-                udpMutex.unlock();
-                packetsLost++;
-                congestion = congestionPercent(packetsSent, packetsLost);
+                QMutexLocker udpLocker(&udpMutex);
+                for (const QByteArray& packet : std::as_const(retransmitData))
+                {
+                    udp->writeDatagram(packet, radioIP, port);
+                }
+            }
+            for (quint16 sequence : std::as_const(unavailableSequences))
+            {
+                sendControl(false, 0, sequence);
             }
         }
-        txBufferMutex.unlock();
         if ((r.length() - 0x10) % 2 != 0)
         {
             qWarning(logUdp()) << this->metaObject()->className()
@@ -507,16 +530,17 @@ void UdpBase::sendTrackedPacket(QByteArray d)
         return;
     }
 
-    // IC-9700 LAN can request retransmission, so keep recent sent packets.
-    d[6] = sendSeq & 0xff;
-    d[7] = (sendSeq >> 8) & 0xff;
-    SEQBUFENTRY s;
-    s.seqNum = sendSeq;
-    s.timeSentMs = elapsedMs();
-    s.retransmitCount = 0;
-    s.data = d;
-    if (txBufferMutex.tryLock(5))
     {
+        // IC-9700 LAN can request retransmission, so a tracked packet must be
+        // buffered before it is transmitted or its sequence is advanced.
+        QMutexLocker locker(&txBufferMutex);
+        d[6] = sendSeq & 0xff;
+        d[7] = (sendSeq >> 8) & 0xff;
+        SEQBUFENTRY s;
+        s.seqNum = sendSeq;
+        s.timeSentMs = elapsedMs();
+        s.retransmitCount = 0;
+        s.data = d;
 
         if (sendSeq == 0)
         {
@@ -529,15 +553,10 @@ void UdpBase::sendTrackedPacket(QByteArray d)
             txSeqBuf.erase(txSeqBuf.begin());
         }
         txSeqBuf.insert(sendSeq, s);
+        sendSeq++;
+    }
 
-        txBufferMutex.unlock();
-    }
-    else
-    {
-        qInfo(logUdp()) << this->metaObject()->className() << ": txBuffer mutex is locked";
-    }
     purgeOldEntries();
-    sendSeq++;
 
     udpMutex.lock();
     qint64 ret = udp->writeDatagram(d, radioIP, port);
