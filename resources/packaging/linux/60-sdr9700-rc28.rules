@@ -1,0 +1,2 @@
+# Grant the active desktop session read/write access to the Icom RC-28 HID interface.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0c26", ATTRS{idProduct}=="001e", MODE="0660", TAG+="uaccess"

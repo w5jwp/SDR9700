@@ -269,7 +269,7 @@ if(APPLE)
         MACOSX_BUNDLE_COPYRIGHT "Copyright SDR9700 contributors"
         MACOSX_BUNDLE_GUI_IDENTIFIER "org.w5jwp.sdr9700"
         MACOSX_BUNDLE_ICON_FILE "sdr9700_app_icon.png"
-        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/resources/macos/Info.plist.in"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/resources/packaging/macos/Info.plist.in"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${SDR9700_DISPLAY_VERSION}"
     )
 endif()

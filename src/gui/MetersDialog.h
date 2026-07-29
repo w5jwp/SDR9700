@@ -31,11 +31,12 @@ class MetersDialog : public sdr9700::ui::UtilityWindow
     {
         QProgressBar* bar{nullptr};
         QLabel* valueLabel{nullptr};
+        QString fillColor;
     };
 
     MeterRow addMeterRow(QGridLayout* layout, int row, const QString& label, const QString& description);
     void setMeterRow(const MeterRow& row, int value, const QString& text);
-    void setMeterFillColor(const MeterRow& row, const char* color);
+    void setMeterFillColor(MeterRow& row, const char* color);
 
     MeterRow m_sMeter;
     MeterRow m_powerMeter;

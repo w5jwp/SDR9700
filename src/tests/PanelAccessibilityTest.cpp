@@ -6,6 +6,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QTest>
+#include <memory>
 
 class PanelAccessibilityTest : public QObject
 {
@@ -17,6 +18,7 @@ class PanelAccessibilityTest : public QObject
     void optionalPanelButtonsAreNullSafe();
     void dtmfControlsHaveUsableInitialState();
     void utilityDialogsAreFixedAndFrameless();
+    void metersSurviveRepeatedUpdatesAndDestruction();
 };
 
 void PanelAccessibilityTest::panelsExposeAccessibleNames()
@@ -73,6 +75,22 @@ void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
         QCOMPARE(dialog->minimumSize(), dialog->maximumSize());
         auto* closeButton = dialog->findChild<QPushButton*>(QString(), Qt::FindChildrenRecursively);
         QVERIFY(closeButton != nullptr);
+    }
+}
+
+void PanelAccessibilityTest::metersSurviveRepeatedUpdatesAndDestruction()
+{
+    for (int iteration = 0; iteration < 20; ++iteration)
+    {
+        auto meters = std::make_unique<MetersDialog>();
+        for (int level = 0; level < 100; ++level)
+        {
+            // Exercise both repeated values, which must not rebuild the style
+            // sheet, and threshold transitions that legitimately change it.
+            const int audioLevel = level < 25 ? 0 : (level < 50 ? 64 : (level < 75 ? 220 : 250));
+            meters->setTransmitAudioLevel(audioLevel, audioLevel);
+            meters->setTransmitAudioLevel(audioLevel, audioLevel);
+        }
     }
 }
 

@@ -126,7 +126,8 @@ MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, c
     bar->setTextVisible(false);
     bar->setFixedHeight(12);
     bar->setToolTip(description);
-    bar->setStyleSheet(meterStyle(standardMeterFill()));
+    const QString initialFill = standardMeterFill();
+    bar->setStyleSheet(meterStyle(initialFill));
 
     auto* valueLabel = new QLabel(QStringLiteral("--"), this);
     valueLabel->setFixedWidth(76);
@@ -139,7 +140,7 @@ MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, c
     layout->addWidget(bar, row, 1);
     layout->addWidget(valueLabel, row, 2);
 
-    return MeterRow{bar, valueLabel};
+    return MeterRow{bar, valueLabel, initialFill};
 }
 
 void MetersDialog::setMeterRow(const MeterRow& row, int value, const QString& text)
@@ -154,13 +155,21 @@ void MetersDialog::setMeterRow(const MeterRow& row, int value, const QString& te
     }
 }
 
-void MetersDialog::setMeterFillColor(const MeterRow& row, const char* color)
+void MetersDialog::setMeterFillColor(MeterRow& row, const char* color)
 {
     if (!row.bar)
     {
         return;
     }
-    row.bar->setStyleSheet(meterStyle(QString::fromLatin1(color)));
+
+    const QString fillColor = QString::fromLatin1(color);
+    if (row.fillColor == fillColor)
+    {
+        return;
+    }
+
+    row.fillColor = fillColor;
+    row.bar->setStyleSheet(meterStyle(fillColor));
 }
 
 void MetersDialog::resetMeters()

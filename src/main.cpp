@@ -389,20 +389,21 @@ int main(int argc, char* argv[])
                                      "QComboBox QAbstractItemView::item { padding: 4px 10px; }"));
 
     auto model = std::make_unique<RadioModel>();
-    MainWindow win(model.get());
+    auto window = std::make_unique<MainWindow>(model.get());
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [&model]()
+                     [&window, &model]()
                      {
-                         // Destroy the radio/backend hierarchy while Qt can still
-                         // deliver DeferredDelete events, then stop the shared
-                         // cache after every Commander has released its pointer.
+                         // Destroy widgets while QApplication, its style, and the
+                         // event dispatcher are still alive. The window keeps
+                         // pointers to the model, so the UI must go first.
+                         window.reset();
                          model.reset();
                          CachingQueue::shutdownInstance();
                      });
 
     if (signalPipe[0] != -1)
     {
-        auto* signalNotifier = new QSocketNotifier(signalPipe[0], QSocketNotifier::Read, &win);
+        auto* signalNotifier = new QSocketNotifier(signalPipe[0], QSocketNotifier::Read, window.get());
         // Route Unix signals through Qt so closeEvent() fires and the radio
         // disconnect path gets one bounded chance to clean up. The POSIX signal
         // handler also arms SIGALRM and exits immediately on a second signal;
@@ -410,26 +411,30 @@ int main(int argc, char* argv[])
         // wedged before this notifier can run.
         QObject::connect(
             signalNotifier, &QSocketNotifier::activated, &app,
-            [&app, signalNotifier, &win](int fd)
+            [&app, signalNotifier, &window](int fd)
             {
                 signalNotifier->setEnabled(false);
                 char bytes[16];
                 while (read(fd, bytes, sizeof(bytes)) > 0)
                 {
                 }
-                win.close();
+                if (window)
+                {
+                    window->close();
+                }
                 QApplication::closeAllWindows();
                 QTimer::singleShot(
                     kSignalForcedExitSeconds * 1000, &app,
                     []() { QCoreApplication::exit(128 + int(shutdownSignalNumber ? shutdownSignalNumber : SIGTERM)); });
             });
     }
-    win.show();
+    window->show();
 
     const int exitCode = app.exec();
 
     // aboutToQuit performs the normal ordered teardown. These calls also cover
     // an early event-loop exit that bypasses that signal.
+    window.reset();
     model.reset();
     CachingQueue::shutdownInstance();
 

@@ -80,6 +80,17 @@ sudo apt install build-essential cmake ninja-build pkg-config \
   libxkbcommon-dev libeigen3-dev libhidapi-dev
 ```
 
+To let the signed-in desktop user access an Icom RC-28 without running
+SDR9700 as root, install the included udev rule, reload the rules, and reconnect
+the controller:
+
+```bash
+sudo install -m 0644 resources/packaging/linux/60-sdr9700-rc28.rules \
+  /etc/udev/rules.d/60-sdr9700-rc28.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=hidraw
+```
+
 On macOS (Apple Silicon), Homebrew may be used to install build dependencies:
 
 ```bash
@@ -109,8 +120,8 @@ make debug
 - `src/radio/`: IC-9700 LAN and CI-V radio protocol code.
 - `src/audio/`: Qt Multimedia audio handlers and conversion utilities.
 - `src/core/`: settings, profile storage, queues, and shared types.
-- `resources/`: shared images and platform-specific Linux, macOS, and Qt
-  application resources.
+- `resources/`: shared images, Qt resources, and platform-specific packaging
+  assets under `resources/packaging/`.
 
 ## Root Documentation
 

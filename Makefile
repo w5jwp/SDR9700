@@ -35,23 +35,23 @@ bundle:
 	    echo "The bundle target is only available on macOS."; \
 	    exit 1; \
 	fi
-	./resources/macos/scripts/deploy-macos.sh $(BUILD_DIR)/bin/SDR9700.app
+	./resources/packaging/macos/scripts/deploy-macos.sh $(BUILD_DIR)/bin/SDR9700.app
 
 sign:
-	./resources/macos/scripts/sign-macos.sh $(BUILD_DIR)/bin/SDR9700.app
+	./resources/packaging/macos/scripts/sign-macos.sh $(BUILD_DIR)/bin/SDR9700.app
 
 dmg: bundle
-	./resources/macos/scripts/package-macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
+	./resources/packaging/macos/scripts/package-macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
 
 release-dmg: bundle sign
-	./resources/macos/scripts/package-macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
+	./resources/packaging/macos/scripts/package-macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
 
 notarize:
 	@if [ -z "$(DMG)" ]; then \
 	    echo "Usage: make notarize DMG=src/build/package/SDR9700-<version>-macOS-apple-silicon.dmg"; \
 	    exit 1; \
 	fi
-	./resources/macos/scripts/notarize-macos.sh "$(DMG)"
+	./resources/packaging/macos/scripts/notarize-macos.sh "$(DMG)"
 
 install:
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
@@ -61,7 +61,7 @@ install:
 	    mkdir -p ~/.local/share/applications; \
 	    mkdir -p ~/.local/share/icons/hicolor/256x256/apps; \
 	    mkdir -p ~/.local/share/icons/hicolor/512x512/apps; \
-	    sed 's|^Exec=.*|Exec=$(abspath $(BUILD_DIR)/bin/SDR9700)|' resources/linux/sdr9700.desktop \
+	    sed 's|^Exec=.*|Exec=$(abspath $(BUILD_DIR)/bin/SDR9700)|' resources/packaging/linux/sdr9700.desktop \
 	        > ~/.local/share/applications/sdr9700.desktop; \
 	    chmod 644 ~/.local/share/applications/sdr9700.desktop; \
 	    install -m 644 resources/images/icons/sdr9700_app_icon_256x256.png \

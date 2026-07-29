@@ -9,7 +9,7 @@ fi
 
 app_path="${1:-src/build/bin/SDR9700.app}"
 sign_identity="${SDR9700_SIGN_IDENTITY:-}"
-entitlements_path="resources/macos/SDR9700.entitlements"
+entitlements_path="resources/packaging/macos/SDR9700.entitlements"
 
 if [ -z "${sign_identity}" ]; then
     echo "Set SDR9700_SIGN_IDENTITY to a Developer ID Application identity." >&2
