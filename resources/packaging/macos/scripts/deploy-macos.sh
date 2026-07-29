@@ -22,50 +22,107 @@ if [ -z "${deployqt_path}" ]; then
     exit 1
 fi
 
-# Let Qt's deployment tool select plugins for this Qt build. Plugin filenames
-# and backend composition change between Qt releases; maintaining a local list
-# made routine Homebrew Qt upgrades unnecessarily brittle.
-rm -rf "${plugins_path}"
-"${deployqt_path}" "${app_path}" \
-    -verbose=1 \
+# Let Qt's deployment tool select plugins for this Qt build. Keep an existing
+# plugin directory when redeploying an already-rewritten bundle: macdeployqt
+# cannot rediscover every plugin after the executable no longer references the
+# original Qt installation. Clean release builds begin without this directory.
+deploy_log="$(mktemp /tmp/sdr9700-macdeployqt.XXXXXX)"
+if ! "${deployqt_path}" "${app_path}" \
+    -verbose=0 \
     -always-overwrite \
-    -no-codesign
+    -no-codesign >"${deploy_log}" 2>&1; then
+    cat "${deploy_log}" >&2
+    rm -f "${deploy_log}"
+    exit 1
+fi
+rm -f "${deploy_log}"
 
-# Homebrew libraries may retain an absolute LC_ID_DYLIB even after their
-# consumers have been rewritten. The ID is not used to locate that same file,
-# but normalize it so no bundle load metadata refers to the build machine.
 frameworks_path="${contents_path}/Frameworks"
+
+# Homebrew's Qt plugin tree can contain plugins for separately packaged Qt
+# modules. macdeployqt copies those plugins even when their framework is not
+# installed, leaving unusable code in the bundle and printing unresolved-rpath
+# diagnostics. SDR9700 does not use these optional plugin families.
+if [ ! -e "${frameworks_path}/QtVirtualKeyboard.framework" ]; then
+    rm -f "${plugins_path}/platforminputcontexts/libqtvirtualkeyboardplugin.dylib"
+fi
+if [ ! -e "${frameworks_path}/QtSvg.framework" ]; then
+    rm -f "${plugins_path}/iconengines/libqsvgicon.dylib"
+fi
+if [ ! -e "${frameworks_path}/QtPdf.framework" ]; then
+    rm -f "${plugins_path}/imageformats/libqpdf.dylib"
+fi
+
+# Copied Homebrew binaries arrive with signatures and build-machine rpaths.
+# Remove the old signatures before changing Mach-O metadata so install_name_tool
+# does not emit signature-invalidation warnings. Release signing happens only
+# after every load command is final.
 while IFS= read -r binary_path; do
     if file "${binary_path}" | grep -q "Mach-O"; then
         install_id="$(otool -D "${binary_path}" 2>/dev/null | tail -n +2 | head -n 1)"
-        if [ -n "${install_id}" ] && echo "${install_id}" | grep -q '^/opt/homebrew'; then
+        absolute_rpaths="$(otool -l "${binary_path}" | awk '
+            $1 == "cmd" && $2 == "LC_RPATH" { reading_rpath = 1; next }
+            reading_rpath && $1 == "path" {
+                if ($2 ~ /^\//) {
+                    print $2
+                }
+                reading_rpath = 0
+            }
+        ')"
+
+        needs_update=false
+        if [ -n "${install_id}" ] && echo "${install_id}" | grep -q '^/'; then
+            needs_update=true
+        fi
+        if [ -n "${absolute_rpaths}" ]; then
+            needs_update=true
+        fi
+        if [ "${needs_update}" = true ]; then
+            codesign --remove-signature "${binary_path}" 2>/dev/null || true
+        fi
+
+        if [ -n "${install_id}" ] && echo "${install_id}" | grep -q '^/'; then
             relative_path="${binary_path#"${frameworks_path}/"}"
             install_name_tool -id "@rpath/${relative_path}" "${binary_path}"
+        fi
+
+        if [ -n "${absolute_rpaths}" ]; then
+            echo "${absolute_rpaths}" | while IFS= read -r rpath; do
+                if [ -n "${rpath}" ]; then
+                    install_name_tool -delete_rpath "${rpath}" "${binary_path}"
+                fi
+            done
         fi
     fi
 done <<EOF
 $(find "${frameworks_path}" -type f)
 EOF
 
-homebrew_references=""
-while IFS= read -r binary_path; do
-    if file "${binary_path}" | grep -q "Mach-O"; then
-        references="$(otool -L "${binary_path}" | awk 'NR > 1 { print $1 }' | grep '^/opt/homebrew' || true)"
-        if [ -n "${references}" ]; then
-            homebrew_references="${homebrew_references}
-${binary_path}
-${references}"
+# The main executable can also inherit Homebrew link directories from
+# pkg-config dependencies. It has no install ID, but its absolute rpaths must
+# be removed just like those in copied libraries.
+main_executable="${contents_path}/MacOS/SDR9700"
+main_absolute_rpaths="$(otool -l "${main_executable}" | awk '
+    $1 == "cmd" && $2 == "LC_RPATH" { reading_rpath = 1; next }
+    reading_rpath && $1 == "path" {
+        if ($2 ~ /^\//) {
+            print $2
+        }
+        reading_rpath = 0
+    }
+')"
+if [ -n "${main_absolute_rpaths}" ]; then
+    codesign --remove-signature "${main_executable}" 2>/dev/null || true
+    echo "${main_absolute_rpaths}" | while IFS= read -r rpath; do
+        if [ -n "${rpath}" ]; then
+            install_name_tool -delete_rpath "${rpath}" "${main_executable}"
         fi
-    fi
-done <<EOF
-$(find "${contents_path}" -type f)
-EOF
-
-if [ -n "${homebrew_references}" ]; then
-    echo "Bundle still contains Homebrew library references:" >&2
-    echo "${homebrew_references}" >&2
-    exit 1
+    done
 fi
+
+# Reject missing bundled dependencies and every non-system absolute load path,
+# install ID, or rpath before any signature can hide a packaging error.
+"$(dirname "$0")/verify-macos-bundle.sh" "${app_path}"
 
 # Sign only after all bundle contents and load commands are final. This ad-hoc
 # signature is for local testing; release signing is a separate packaging step.

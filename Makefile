@@ -1,4 +1,4 @@
-.PHONY: all release debug clean run bundle sign dmg release-dmg notarize install
+.PHONY: all release debug clean run bundle verify-bundle sign dmg release-dmg notarize install
 
 BUILD_DIR := src/build
 GENERATOR := Ninja
@@ -36,6 +36,9 @@ bundle:
 	    exit 1; \
 	fi
 	./resources/packaging/macos/scripts/deploy-macos.sh $(BUILD_DIR)/bin/SDR9700.app
+
+verify-bundle:
+	./resources/packaging/macos/scripts/verify-macos-bundle.sh $(BUILD_DIR)/bin/SDR9700.app
 
 sign:
 	./resources/packaging/macos/scripts/sign-macos.sh $(BUILD_DIR)/bin/SDR9700.app

@@ -1,0 +1,131 @@
+name: Release macOS DMG
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to package
+        required: true
+        default: main
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Apple Silicon macOS
+    runs-on: macos-15
+
+    steps:
+      - name: Select source ref
+        id: source
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.source.outputs.ref }}
+
+      - name: Verify runner and release version
+        shell: bash
+        run: |
+          test "$(uname -m)" = "arm64"
+          version="$(sed -n 's/^project(SDR9700 VERSION \\([^ ]*\\).*/\\1/p' CMakeLists.txt)"
+          test -n "$version"
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            expected_tag="v${version}"
+            if [[ "${{ github.event.release.tag_name }}" != "$expected_tag" ]]; then
+              echo "::error::Release tag must be ${expected_tag}"
+              exit 1
+            fi
+          fi
+
+      - name: Install build dependencies
+        run: |
+          brew install cmake ninja pkg-config qt openssl@3 opus speexdsp eigen hidapi
+          echo "$(brew --prefix qt)/bin" >> "$GITHUB_PATH"
+
+      - name: Build and test
+        run: |
+          make release
+          ctest --test-dir src/build --output-on-failure
+
+      - name: Import Developer ID certificate
+        shell: bash
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          keychain_path="$RUNNER_TEMP/sdr9700-build.keychain-db"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+          security default-keychain -d user -s "$keychain_path"
+
+          echo "$APPLE_CERT_BASE64" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security import "$RUNNER_TEMP/developer-id.p12" \
+            -k "$keychain_path" \
+            -P "$APPLE_CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/developer-id.p12"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+
+      - name: Bundle, audit, sign, and create DMG
+        env:
+          SDR9700_SIGN_IDENTITY: Developer ID Application
+        run: |
+          make release-dmg
+          make verify-bundle
+          codesign --verify --deep --strict --verbose=2 src/build/bin/SDR9700.app
+
+          dmg_path="$(find src/build/package -maxdepth 1 -name 'SDR9700-*-macOS-apple-silicon.dmg' -print -quit)"
+          test -n "$dmg_path"
+          echo "SDR9700_DMG=$dmg_path" >> "$GITHUB_ENV"
+
+      - name: Store notarization credentials
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool store-credentials "sdr9700-ci" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID"
+
+      - name: Notarize and staple DMG
+        env:
+          SDR9700_NOTARY_PROFILE: sdr9700-ci
+        run: |
+          make notarize DMG="$SDR9700_DMG"
+          xcrun stapler validate "$SDR9700_DMG"
+          spctl --assess --type open \
+            --context context:primary-signature \
+            --verbose=4 \
+            "$SDR9700_DMG"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: SDR9700-macOS-apple-silicon
+          path: ${{ env.SDR9700_DMG }}
+          if-no-files-found: error
+
+      - name: Attach DMG to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "$SDR9700_DMG" --clobber
