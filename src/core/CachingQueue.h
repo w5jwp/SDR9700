@@ -46,19 +46,33 @@ struct QueueItem
 {
     QueueItem() : command(funcNone), param(), receiver(0), recurring(false), id(nextQueueItemId()) {}
     QueueItem(QueueItem const& q)
-        : command(q.command), param(q.param), receiver(q.receiver), recurring(q.recurring), id(q.id) {};
+        : command(q.command), param(q.param), receiver(q.receiver), recurring(q.recurring), id(q.id)
+    {
+    }
     QueueItem(Funcs command, QVariant param, bool recurring, uchar receiver)
-        : command(command), param(param), receiver(receiver), recurring(recurring), id(nextQueueItemId()) {};
+        : command(command), param(param), receiver(receiver), recurring(recurring), id(nextQueueItemId())
+    {
+    }
     QueueItem(Funcs command, QVariant param, bool recurring)
-        : command(command), param(param), receiver(0), recurring(recurring), id(nextQueueItemId()) {};
+        : command(command), param(param), receiver(0), recurring(recurring), id(nextQueueItemId())
+    {
+    }
     QueueItem(Funcs command, QVariant param)
-        : command(command), param(param), receiver(0), recurring(false), id(nextQueueItemId()) {};
+        : command(command), param(param), receiver(0), recurring(false), id(nextQueueItemId())
+    {
+    }
     QueueItem(Funcs command, bool recurring, uchar receiver)
-        : command(command), param(QVariant()), receiver(receiver), recurring(recurring), id(nextQueueItemId()) {};
+        : command(command), param(QVariant()), receiver(receiver), recurring(recurring), id(nextQueueItemId())
+    {
+    }
     QueueItem(Funcs command, bool recurring)
-        : command(command), param(QVariant()), receiver(0), recurring(recurring), id(nextQueueItemId()) {};
+        : command(command), param(QVariant()), receiver(0), recurring(recurring), id(nextQueueItemId())
+    {
+    }
     explicit QueueItem(Funcs command)
-        : command(command), param(QVariant()), receiver(0), recurring(false), id(nextQueueItemId()) {};
+        : command(command), param(QVariant()), receiver(0), recurring(false), id(nextQueueItemId())
+    {
+    }
     QueueItem& operator=(QueueItem const& q)
     {
         command = q.command;
@@ -82,11 +96,14 @@ struct QueueItem
 
 struct CacheItem
 {
-    CacheItem() : command(funcNone), req(), reply(), value(), receiver(0) {};
-    CacheItem(CacheItem const& c)
-        : command(c.command), req(c.req), reply(c.reply), value(c.value), receiver(c.receiver) {};
+    CacheItem() : command(funcNone), req(), reply(), value(), receiver(0) {}
+    CacheItem(CacheItem const& c) : command(c.command), req(c.req), reply(c.reply), value(c.value), receiver(c.receiver)
+    {
+    }
     CacheItem(Funcs command, QVariant value, uchar receiver = 0)
-        : command(command), req(QDateTime()), reply(QDateTime()), value(value), receiver(receiver) {};
+        : command(command), req(QDateTime()), reply(QDateTime()), value(value), receiver(receiver)
+    {
+    }
 
     Funcs command;
     QDateTime req;
@@ -151,7 +168,7 @@ class CachingQueue : public QThread
     RadioStateType radioState;
 
   protected:
-    explicit CachingQueue(QObject* parent = nullptr) : QThread(parent) {};
+    explicit CachingQueue(QObject* parent = nullptr) : QThread(parent) {}
     ~CachingQueue();
 
   public:

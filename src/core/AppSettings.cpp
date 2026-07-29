@@ -22,10 +22,15 @@ namespace
 {
 struct SettingDefinition
 {
+    constexpr SettingDefinition(const char* appKey, const char* group, const char* storedKey, bool storesJson = false)
+        : appKey(appKey), group(group), storedKey(storedKey), storesJson(storesJson)
+    {
+    }
+
     const char* appKey;
     const char* group;
     const char* storedKey;
-    bool storesJson{false};
+    bool storesJson;
 };
 
 constexpr std::array kSettingDefinitions{
@@ -259,8 +264,8 @@ bool AppSettings::writeFile() const
         insertStoredSetting(&group, key, storedValue);
         if (QString::fromLatin1(definition->storedKey) != key)
         {
-            const QJsonValue value = group.take(key);
-            group.insert(QString::fromLatin1(definition->storedKey), value);
+            const QJsonValue storedJsonValue = group.take(key);
+            group.insert(QString::fromLatin1(definition->storedKey), storedJsonValue);
         }
         groups.insert(groupName, group);
     }

@@ -126,7 +126,9 @@ struct bandType
           power(b.power),
           color(b.color),
           name(b.name),
-          offset(b.offset) {};
+          offset(b.offset)
+    {
+    }
     bandType(QString region, availableBands band, quint64 lowFreq, quint64 highFreq, double range, int memGroup,
              qint8 bytes, bool ants, float power, QColor color, QString name, int offset)
         : region(region),

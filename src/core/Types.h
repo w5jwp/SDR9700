@@ -195,8 +195,8 @@ enum manufacturersType_t
 
 struct LpfHpf
 {
-    LpfHpf() : lpf(0), hpf(0) {};
-    LpfHpf(ushort lpf, ushort hpf) : lpf(lpf), hpf(hpf) {};
+    LpfHpf() : lpf(0), hpf(0) {}
+    LpfHpf(ushort lpf, ushort hpf) : lpf(lpf), hpf(hpf) {}
     ushort lpf = 0;
     ushort hpf = 0;
 };
@@ -214,11 +214,13 @@ struct RptrAccessData
 struct ModeInfo
 {
     ModeInfo()
-        : mk(modeUnknown), reg(0xff), filter(0xff), VFO(activeVFO), data(0xff), name(""), bwMin(0), bwMax(0), pass(0) {
-          };
+        : mk(modeUnknown), reg(0xff), filter(0xff), VFO(activeVFO), data(0xff), name(""), bwMin(0), bwMax(0), pass(0)
+    {
+    }
     ModeInfo(radioMode_t mk, quint8 reg, QString name, int bwMin, int bwMax)
-        : mk(mk), reg(reg), filter(0xff), VFO(activeVFO), data(0xff), name(name), bwMin(bwMin), bwMax(bwMax), pass(0) {
-          };
+        : mk(mk), reg(reg), filter(0xff), VFO(activeVFO), data(0xff), name(name), bwMin(bwMin), bwMax(bwMax), pass(0)
+    {
+    }
     radioMode_t mk;
     quint8 reg;
     quint8 filter;
@@ -250,11 +252,13 @@ struct ScopeData
 
 struct ToneInfo
 {
-    ToneInfo() : tone(670), name("67.0"), tinv(false), rinv(false), useSecondaryVFO(false) {};
-    explicit ToneInfo(short tone) : tone(tone), name(""), tinv(false), rinv(false), useSecondaryVFO(false) {};
-    ToneInfo(short tone, QString name) : tone(tone), name(name), tinv(false), rinv(false), useSecondaryVFO(false) {};
+    ToneInfo() : tone(670), name("67.0"), tinv(false), rinv(false), useSecondaryVFO(false) {}
+    explicit ToneInfo(short tone) : tone(tone), name(""), tinv(false), rinv(false), useSecondaryVFO(false) {}
+    ToneInfo(short tone, QString name) : tone(tone), name(name), tinv(false), rinv(false), useSecondaryVFO(false) {}
     ToneInfo(short tone, QString name, bool tinv, bool rinv, bool useSecondaryVFO)
-        : tone(tone), name(name), tinv(tinv), rinv(rinv), useSecondaryVFO(useSecondaryVFO) {};
+        : tone(tone), name(name), tinv(tinv), rinv(rinv), useSecondaryVFO(useSecondaryVFO)
+    {
+    }
     ushort tone;
     QString name;
     bool tinv;
@@ -271,8 +275,8 @@ enum breakIn_t
 
 struct Frequency
 {
-    Frequency() : Hz(0), MHzDouble(0.0), VFO(activeVFO) {};
-    Frequency(quint64 Hz, double MHzDouble, selVFO_t VFO) : Hz(Hz), MHzDouble(MHzDouble), VFO(VFO) {};
+    Frequency() : Hz(0), MHzDouble(0.0), VFO(activeVFO) {}
+    Frequency(quint64 Hz, double MHzDouble, selVFO_t VFO) : Hz(Hz), MHzDouble(MHzDouble), VFO(VFO) {}
     quint64 Hz;
     double MHzDouble;
     selVFO_t VFO;
@@ -749,8 +753,8 @@ struct FuncType
 
 struct StepType
 {
-    StepType() : num(0), name(), hz(0) {};
-    StepType(quint8 num, QString name, quint64 hz) : num(num), name(name), hz(hz) {};
+    StepType() : num(0), name(), hz(0) {}
+    StepType(quint8 num, QString name, quint64 hz) : num(num), name(name), hz(hz) {}
     quint8 num;
     QString name;
     quint64 hz;
@@ -758,8 +762,8 @@ struct StepType
 
 struct SpectrumBounds
 {
-    SpectrumBounds() : start(0.0), end(0.0), edge(0) {};
-    SpectrumBounds(double start, double end, uchar edge) : start(start), end(end), edge(edge) {};
+    SpectrumBounds() : start(0.0), end(0.0), edge(0) {}
+    SpectrumBounds(double start, double end, uchar edge) : start(start), end(end), edge(edge) {}
     double start;
     double end;
     uchar edge;
@@ -777,9 +781,11 @@ enum class ErrorCode
 
 struct errorType
 {
-    errorType() : alert(false) {};
+    errorType() : alert(false) {}
     errorType(bool alert, const QString& device, const QString& message, ErrorCode code)
-        : alert(alert), code(code), device(device), message(message) {};
+        : alert(alert), code(code), device(device), message(message)
+    {
+    }
 
     bool alert;
     ErrorCode code{ErrorCode::Unknown};
@@ -850,7 +856,7 @@ struct MemoryType
 
 struct MemParserFormat
 {
-    MemParserFormat(char spec, int pos, int len) : spec(spec), pos(pos), len(len) {};
+    MemParserFormat(char spec, int pos, int len) : spec(spec), pos(pos), len(len) {}
     char spec;
     int pos;
     int len;
@@ -859,16 +865,14 @@ struct MemParserFormat
 struct CommandErrorType
 {
     CommandErrorType()
-        : func(funcNone), data(QByteArray()), value(QVariant()), receiver(0), minValue(0), maxValue(0), bytes(0) {};
+        : func(funcNone), data(QByteArray()), value(QVariant()), receiver(0), minValue(0), maxValue(0), bytes(0)
+    {
+    }
     CommandErrorType(Funcs func, QByteArray data, QVariant value, uchar receiver, int minValue, int maxValue,
                      char bytes)
-        : func(func),
-          data(data),
-          value(value),
-          receiver(receiver),
-          minValue(minValue),
-          maxValue(maxValue),
-          bytes(bytes) {};
+        : func(func), data(data), value(value), receiver(receiver), minValue(minValue), maxValue(maxValue), bytes(bytes)
+    {
+    }
 
     Funcs func;
     QByteArray data;
@@ -901,11 +905,15 @@ enum passbandActions
 
 struct PeriodicType
 {
-    PeriodicType() : func(funcNone), priority(), prioVal(0), receiver(0) {};
+    PeriodicType() : func(funcNone), priority(), prioVal(0), receiver(0) {}
     PeriodicType(Funcs func, QString priority, char receiver)
-        : func(func), priority(priority), prioVal(0), receiver(receiver) {};
+        : func(func), priority(priority), prioVal(0), receiver(receiver)
+    {
+    }
     PeriodicType(Funcs func, QString priority, int prioVal, char receiver)
-        : func(func), priority(priority), prioVal(prioVal), receiver(receiver) {};
+        : func(func), priority(priority), prioVal(prioVal), receiver(receiver)
+    {
+    }
     Funcs func;
     QString priority;
     int prioVal;
@@ -914,9 +922,11 @@ struct PeriodicType
 
 struct VfoCommandType
 {
-    VfoCommandType() : freqFunc(funcNone), modeFunc(funcNone), vfo(vfoUnknown), receiver(0) {};
+    VfoCommandType() : freqFunc(funcNone), modeFunc(funcNone), vfo(vfoUnknown), receiver(0) {}
     VfoCommandType(Funcs freqFunc, Funcs modeFunc, vfo_t vfo, uchar receiver)
-        : freqFunc(freqFunc), modeFunc(modeFunc), vfo(vfo), receiver(receiver) {};
+        : freqFunc(freqFunc), modeFunc(modeFunc), vfo(vfo), receiver(receiver)
+    {
+    }
     Funcs freqFunc;
     Funcs modeFunc;
     vfo_t vfo;
@@ -925,7 +935,7 @@ struct VfoCommandType
 
 struct RadioStateType
 {
-    RadioStateType() : vfoMode(vfoModeType_t::vfoModeVfo), vfo(vfoUnknown), receiver(0) {};
+    RadioStateType() : vfoMode(vfoModeType_t::vfoModeVfo), vfo(vfoUnknown), receiver(0) {}
     vfoModeType_t vfoMode;
     vfo_t vfo;
     uchar receiver;
