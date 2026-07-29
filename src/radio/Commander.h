@@ -36,11 +36,26 @@ class Commander : public RadioCommander
     void enableAudio();
 
   private:
+    enum class ReplyParseResult
+    {
+        NotHandled,
+        Parsed,
+        Malformed
+    };
+
     void commonSetup();
     void shutdownComm();
 
     void parseData(const QByteArray& dataInput);
     void parseCommand();
+    ReplyParseResult parseFrequencyReply(Funcs& func, QVariant& value, uchar& receiver);
+    ReplyParseResult parseModeReply(Funcs& func, QVariant& value, uchar& receiver);
+    ReplyParseResult parseLevelMeterReply(Funcs func, QVariant& value);
+    ReplyParseResult parseFeatureReply(Funcs func, QVariant& value, uchar receiver);
+    ReplyParseResult parseScopeReply(Funcs func, QVariant& value, uchar& receiver);
+    bool replyPayloadTooShort(Funcs func, int requiredBytes) const;
+    bool appendSetCommandValue(Funcs func, const QVariant& value, uchar receiver, const FuncType& command,
+                               QByteArray& payload);
     static quint8 bcdHexToUChar(quint8 in);
     quint8 bcdHexToUChar(quint8 hundreds, quint8 tensunits);
     static unsigned int bcdHexToUInt(quint8 hundreds, quint8 tensunits);
@@ -57,6 +72,8 @@ class Commander : public RadioCommander
     quint64 parseFreqDataToInt(QByteArray data);
     Frequency parseFrequencyRptOffset(QByteArray data);
     bool parseMemory(QVector<MemParserFormat>* memParser, MemoryType* mem);
+    void initializeMemoryForParsing(MemoryType& memory) const;
+    void parseMemoryField(const MemParserFormat& format, const QByteArray& data, MemoryType& memory);
     QByteArray makeFreqPayloadRptOffset(Frequency freq);
     QByteArray makeFreqPayload(double frequency);
     QByteArray makeFreqPayload(Frequency freq, uchar numchars = 5);
@@ -70,6 +87,7 @@ class Commander : public RadioCommander
 
     ModeInfo parseMode(uchar mode, uchar data, uchar filter, uchar receiver = 0, uchar vfo = 0);
     bool parseSpectrum(ScopeData& d, uchar receiver);
+    bool decodeSpectrumSequence(quint8& sequence, quint8& sequenceMax) const;
     FuncType getCommand(Funcs func, QByteArray& payload, int value = INT_MIN, uchar receiver = 0);
     void rememberPendingReply(Funcs func, uchar receiver);
     bool takePendingReplyReceiver(Funcs func, uchar* receiver);

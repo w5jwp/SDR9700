@@ -594,9 +594,792 @@ void Commander::parseData(const QByteArray& dataInput)
     }
 }
 
+Commander::ReplyParseResult Commander::parseFrequencyReply(Funcs& func, QVariant& value, uchar& receiver)
+{
+    uchar vfo = 0;
+    if (func == funcFreq)
+    {
+        if (payloadIn.isEmpty())
+        {
+            qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[func] << "required" << 1 << "got"
+                                 << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            return ReplyParseResult::Malformed;
+        }
+        receiver = static_cast<uchar>(payloadIn.at(0));
+        payloadIn.remove(0, 1);
+    }
+
+    if (func == funcFreqTR || func == funcFreqGet)
+    {
+        if (radioCaps.commands.contains(funcFreq))
+        {
+            func = funcFreq;
+        }
+        else if (radioCaps.commands.contains(funcSelectedFreq))
+        {
+            func = funcSelectedFreq;
+        }
+        else
+        {
+            func = funcFreqGet;
+        }
+    }
+    else if (func == funcUnselectedFreq)
+    {
+        vfo = 1;
+    }
+
+    value.setValue(parseFreqData(payloadIn, vfo));
+    return ReplyParseResult::Parsed;
+}
+
+Commander::ReplyParseResult Commander::parseModeReply(Funcs& func, QVariant& value, uchar& receiver)
+{
+    uchar vfo = 0;
+    if (func == funcMode)
+    {
+        if (payloadIn.isEmpty())
+        {
+            qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[func] << "required" << 1 << "got"
+                                 << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            return ReplyParseResult::Malformed;
+        }
+        receiver = static_cast<uchar>(payloadIn.at(0));
+        payloadIn.remove(0, 1);
+    }
+
+    const Funcs originalFunc = func;
+    // Normalize alternate mode reply commands to the command SDR9700 caches.
+    if (func == funcModeTR || func == funcModeGet || func == funcDataModeWithFilter)
+    {
+        if (radioCaps.commands.contains(funcMode))
+        {
+            func = funcMode;
+        }
+        else if (radioCaps.commands.contains(funcSelectedMode))
+        {
+            func = funcSelectedMode;
+        }
+        else
+        {
+            func = funcModeGet;
+        }
+    }
+    else if (func == funcUnselectedMode)
+    {
+        vfo = 1;
+    }
+
+    ModeInfo mode;
+    const CacheItem cachedMode = queue->getCache(func, receiver);
+    if (cachedMode.value.isValid())
+    {
+        mode = cachedMode.value.value<ModeInfo>();
+    }
+
+    if (originalFunc == funcDataModeWithFilter)
+    {
+        if (payloadIn.size() < 2)
+        {
+            qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[originalFunc] << "required" << 2
+                                 << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            return ReplyParseResult::Malformed;
+        }
+        mode.filter = bcdHexToUChar(payloadIn.at(1));
+        mode.data = bcdHexToUChar(payloadIn.at(0));
+    }
+    else
+    {
+        if (!payloadIn.isEmpty())
+        {
+            mode.reg = bcdHexToUChar(payloadIn.at(0));
+        }
+        if (payloadIn.size() == 2)
+        {
+            mode.filter = payloadIn.at(1);
+        }
+        if (payloadIn.size() == 3)
+        {
+            mode.data = payloadIn.at(1);
+            mode.filter = payloadIn.at(2);
+        }
+    }
+
+    mode = parseMode(mode.reg, mode.data, mode.filter, receiver, vfo);
+    mode.VFO = selVFO_t(receiver);
+    value.setValue(mode);
+    return ReplyParseResult::Parsed;
+}
+
+bool Commander::replyPayloadTooShort(Funcs func, int requiredBytes) const
+{
+    if (payloadIn.size() >= requiredBytes)
+    {
+        return false;
+    }
+    qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[func] << "required" << requiredBytes
+                         << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+    return true;
+}
+
+Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant& value)
+{
+    switch (func)
+    {
+    case funcAfGain:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(bcdHexToUChar(payloadIn.at(0), payloadIn.at(1)));
+        return ReplyParseResult::Parsed;
+    // Two-byte CI-V levels with SDR9700-specific unit mappings.
+    case funcKeySpeed:
+    {
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        uchar level = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+        value.setValue<ushort>(round((level / 6.071) + 6));
+        return ReplyParseResult::Parsed;
+    }
+    case funcCwPitch:
+    {
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        uchar level = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+        value.setValue<ushort>(round((((600.0 / 255.0) * level) + 300) / 5.0) * 5.0);
+        return ReplyParseResult::Parsed;
+    }
+    // CI-V group 15: meter readings.
+    case funcSMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        {
+            const quint8 rawS = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+            const double sMeter = getMeterCal(meterS, rawS);
+            qDebug(logRadioTraffic()).nospace() << "S meter raw=" << static_cast<int>(rawS) << " calibrated=" << sMeter;
+            value.setValue(sMeter);
+            return ReplyParseResult::Parsed;
+        }
+    case funcCenterMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(getMeterCal(meterCenter, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
+        return ReplyParseResult::Parsed;
+    case funcPowerMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(getMeterCal(meterPower, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
+        return ReplyParseResult::Parsed;
+    case funcSWRMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        {
+            const quint8 rawSwr = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+            const double swr = getMeterCal(meterSWR, rawSwr);
+            qDebug(logRadioTraffic()).nospace()
+                << "SWR meter raw=" << static_cast<int>(rawSwr) << " calibrated=" << swr;
+            value.setValue(swr);
+            return ReplyParseResult::Parsed;
+        }
+    case funcALCMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        {
+            const quint8 rawAlc = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
+            const double alc = getMeterCal(meterALC, rawAlc);
+            qDebug(logRadioTraffic()).nospace()
+                << "ALC meter raw=" << static_cast<int>(rawAlc) << " calibrated=" << alc;
+            value.setValue(alc);
+            return ReplyParseResult::Parsed;
+        }
+    case funcCompMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(getMeterCal(meterComp, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
+        return ReplyParseResult::Parsed;
+    case funcVdMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(getMeterCal(meterVoltage, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
+        return ReplyParseResult::Parsed;
+    case funcIdMeter:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(getMeterCal(meterCurrent, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
+        return ReplyParseResult::Parsed;
+
+    case funcRfGain:
+    case funcSquelch:
+    case funcAPFLevel:
+    case funcNRLevel:
+    case funcPBTInner:
+    case funcPBTOuter:
+    case funcIFShift:
+    case funcRFPower:
+    case funcNotchFilter:
+    case funcCompressorLevel:
+    case funcBreakInDelay:
+    case funcNBLevel:
+    case funcDigiSelShift:
+    case funcDriveGain:
+    case funcMonitorGain:
+    case funcVoxGain:
+    case funcAntiVoxGain:
+    case funcBackLightLevel:
+
+    case funcBeepLevel:
+    case funcBeepMain:
+    case funcBeepSub:
+
+    case funcRFSQLControl:
+    case funcTXDelayHF:
+    case funcTXDelay50m:
+    case funcTimeOutCIV:
+
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(bcdHexToUChar(payloadIn.at(0), payloadIn.at(1)));
+        return ReplyParseResult::Parsed;
+    case funcAGC:
+    case funcAGCTimeConstant:
+    case funcBreakIn:
+    case funcPreamp:
+    case funcManualNotchWidth:
+    case funcSSBTXBandwidth:
+    case funcRoofingFilter:
+    case funcFilterShape:
+    // Tone-control registers under CI-V 1A05.
+    case funcSSBRXBass:
+    case funcSSBRXTreble:
+    case funcAMRXBass:
+    case funcAMRXTreble:
+    case funcFMRXBass:
+    case funcFMRXTreble:
+    case funcSSBTXBass:
+    case funcSSBTXTreble:
+    case funcAMTXBass:
+    case funcAMTXTreble:
+    case funcFMTXBass:
+    case funcFMTXTreble:
+    case funcTimeOutTimer:
+    case funcBandEdgeBeep:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(bcdHexToUChar(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+
+    // RX audio passband limits.
+    case funcSSBRXHPFLPF:
+    case funcAMRXHPFLPF:
+    case funcFMRXHPFLPF:
+    case funcCWRXHPFLPF:
+    case funcRTTYRXHPFLPF:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(LpfHpf(ushort(payloadIn.at(0)) * 100, ushort(payloadIn.at(1)) * 100));
+        return ReplyParseResult::Parsed;
+    case funcAbsoluteMeter:
+    {
+        if (replyPayloadTooShort(func, 4))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        MeterKind m;
+        m.value = double(bcdHexToUInt(payloadIn.at(0), payloadIn.at(1))) / 10.0;
+        if (payloadIn.at(2) != '\0')
+        {
+            m.value = -m.value;
+        }
+        if (payloadIn.at(3) == 0)
+        {
+            m.type = meterdBu;
+        }
+        else if (payloadIn.at(3) == 1)
+        {
+            m.type = meterdBuEMF;
+        }
+        else if (payloadIn.at(3) == 2)
+        {
+            m.type = meterdBm;
+        }
+        else
+        {
+            qWarning(logRadio()) << "Unknown meter type received!";
+            m.type = meterNone;
+        }
+        value.setValue(m);
+        return ReplyParseResult::Parsed;
+    }
+    case funcMeterType:
+    {
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        meter_t m;
+        if (payloadIn.at(0) == 0)
+        {
+            m = meterS;
+        }
+        else if (payloadIn.at(0) == 1)
+        {
+            m = meterdBu;
+        }
+        else if (payloadIn.at(0) == 2)
+        {
+            m = meterdBuEMF;
+        }
+        else if (payloadIn.at(0) == 3)
+        {
+            m = meterdBm;
+        }
+        else
+        {
+            qWarning(logRadio()) << "Unknown meterType received!";
+            m = meterNone;
+        }
+        value.setValue(m);
+        return ReplyParseResult::Parsed;
+    }
+    default:
+        return ReplyParseResult::NotHandled;
+    }
+}
+
+Commander::ReplyParseResult Commander::parseFeatureReply(Funcs func, QVariant& value, uchar receiver)
+{
+    constexpr uchar vfo = 0;
+    switch (func)
+    {
+    // Single-byte CI-V boolean flags.
+    case funcMainSubTracking:
+    case funcSatelliteMode:
+    case funcNoiseBlanker:
+    case funcAudioPeakFilter:
+    case funcNoiseReduction:
+    case funcAutoNotch:
+    case funcRepeaterTone:
+    case funcRepeaterTSQL:
+    case funcRepeaterDTCS:
+    case funcRepeaterCSQL:
+    case funcCompressor:
+    case funcMonitor:
+    case funcVox:
+    case funcManualNotch:
+    case funcDigiSel:
+    case funcTwinPeakFilter:
+    case funcDialLock:
+    case funcOverflowStatus:
+    case funcSMeterSqlStatus:
+    case funcVariousSql:
+    case funcRXAntenna:
+    case funcIPPlus:
+    case funcBeepLevelLimit:
+    case funcBeepConfirmation:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(static_cast<bool>(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+    case funcToneSquelchType:
+    {
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        RptrAccessData r;
+        r.accessMode = static_cast<rptAccessTxRx_t>(bcdHexToUChar(payloadIn.at(0)));
+        r.useSecondaryVFO = static_cast<bool>(vfo);
+        value.setValue(r);
+        return ReplyParseResult::Parsed;
+    }
+    case funcTransceiverId:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        if (!radioCaps.modelID)
+        {
+            radioCaps.modelID = static_cast<quint16>(payloadIn.at(0)) & 0xff;
+            if (radioCaps.modelID == kRadioModelId)
+            {
+                this->model = kRadioModelId;
+            }
+            qInfo(logRadio()) << QString("Have new radio ID: 0x%1").arg(radioCaps.modelID, 2, 16);
+            determineRadioCaps();
+        }
+        value.setValue(radioCaps.modelID);
+        return ReplyParseResult::Parsed;
+    case funcFilterWidth:
+    {
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        quint16 calc;
+        quint8 pass = bcdHexToUChar((quint8)payloadIn.at(0));
+        VfoCommandType t = queue->getVfoCommand(vfoA, receiver, false);
+        ModeInfo m = queue->getCache(t.modeFunc, t.receiver).value.value<ModeInfo>();
+
+        if (m.mk == modeAM)
+        {
+            calc = 200 + (pass * 200);
+        }
+        else if (pass <= 10)
+        {
+            calc = 50 + (pass * 50);
+        }
+        else
+        {
+            calc = 600 + ((pass - 10) * 100);
+        }
+        value.setValue(calc);
+        return ReplyParseResult::Parsed;
+    }
+    case funcAFMute:
+        qWarning(logRadio()) << "AF mute response parsing is not implemented";
+        return ReplyParseResult::Parsed;
+    // CI-V 1A05 two-byte level registers.
+    case funcREFAdjust:
+    case funcREFAdjustFine:
+    case funcACCAModLevel:
+    case funcACCBModLevel:
+    case funcUSBModLevel:
+    case funcLANModLevel:
+    case funcSPDIFModLevel:
+    case funcNBWidth:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(bcdHexToUChar(payloadIn.at(0), payloadIn.at(1)));
+        return ReplyParseResult::Parsed;
+    // Single byte returned as uchar (0-99).
+    case funcDATAOffMod:
+    case funcDATA1Mod:
+    case funcDATA2Mod:
+    case funcDATA3Mod:
+    {
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        const auto inputIt =
+            std::find_if(radioCaps.inputs.cbegin(), radioCaps.inputs.cend(),
+                         [this](const radioInput& input) { return input.reg == bcdHexToUChar(payloadIn.at(0)); });
+        if (inputIt != radioCaps.inputs.cend())
+        {
+            value.setValue(*inputIt);
+        }
+        return ReplyParseResult::Parsed;
+    }
+    case funcDashRatio:
+    case funcNBDepth:
+    case funcVOXDelay:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(bcdHexToUChar(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+    case funcUTCOffset:
+    case funcDate:
+    case funcTime:
+        return ReplyParseResult::Parsed;
+    // Fixed-frequency scope edge payloads.
+    case funcScopeEdge1a:
+    case funcScopeEdge2a:
+    case funcScopeEdge3a:
+    case funcScopeEdge4a:
+    case funcScopeEdge1b:
+    case funcScopeEdge2b:
+    case funcScopeEdge3b:
+    case funcScopeEdge4b:
+    case funcScopeEdge1c:
+    case funcScopeEdge2c:
+    case funcScopeEdge3c:
+    case funcScopeEdge4c:
+    case funcScopeEdge1d:
+    case funcScopeEdge2d:
+    case funcScopeEdge3d:
+    case funcScopeEdge4d:
+    case funcScopeEdge1e:
+    case funcScopeEdge2e:
+    case funcScopeEdge3e:
+    case funcScopeEdge4e:
+    case funcScopeEdge1f:
+    case funcScopeEdge2f:
+    case funcScopeEdge3f:
+    case funcScopeEdge4f:
+    case funcScopeEdge1g:
+    case funcScopeEdge2g:
+    case funcScopeEdge3g:
+    case funcScopeEdge4g:
+    case funcScopeEdge1h:
+    case funcScopeEdge2h:
+    case funcScopeEdge3h:
+    case funcScopeEdge4h:
+    case funcScopeEdge1i:
+    case funcScopeEdge2i:
+    case funcScopeEdge3i:
+    case funcScopeEdge4i:
+    case funcScopeEdge1j:
+    case funcScopeEdge2j:
+    case funcScopeEdge3j:
+    case funcScopeEdge4j:
+    case funcScopeEdge1k:
+    case funcScopeEdge2k:
+    case funcScopeEdge3k:
+    case funcScopeEdge4k:
+    case funcScopeEdge1l:
+    case funcScopeEdge2l:
+    case funcScopeEdge3l:
+    case funcScopeEdge4l:
+    case funcScopeEdge1m:
+    case funcScopeEdge2m:
+    case funcScopeEdge3m:
+    case funcScopeEdge4m:
+    case funcScopeEdge1n:
+    case funcScopeEdge2n:
+    case funcScopeEdge3n:
+    case funcScopeEdge4n:
+    case funcScopeEdge1o:
+    case funcScopeEdge2o:
+    case funcScopeEdge3o:
+    case funcScopeEdge4o:
+    case funcScopeEdge1p:
+    case funcScopeEdge2p:
+    case funcScopeEdge3p:
+    case funcScopeEdge4p:
+    case funcScopeEdge1q:
+    case funcScopeEdge2q:
+    case funcScopeEdge3q:
+    case funcScopeEdge4q:
+    case funcScopeEdge1r:
+    case funcScopeEdge2r:
+    case funcScopeEdge3r:
+    case funcScopeEdge4r:
+    case funcScopeEdge1s:
+    case funcScopeEdge2s:
+    case funcScopeEdge3s:
+    case funcScopeEdge4s:
+        return ReplyParseResult::Parsed;
+    // CI-V 1B: tone and squelch code registers.
+    case funcToneFreq:
+    case funcTSQLFreq:
+    case funcDTCSCode:
+    case funcCSQLCode:
+        value.setValue(decodeTone(payloadIn));
+        return ReplyParseResult::Parsed;
+    // CI-V 1C: boolean status registers.
+    case funcRitStatus:
+    case funcTransceiverStatus:
+    case funcXFCStatus:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(static_cast<bool>(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+    case funcTunerStatus:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(bcdHexToUChar(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+    // CI-V 21: RIT offset register.
+    // IC-9700 format: 2 BCD bytes (offset Hz) + 1 sign byte (0=+, 1=-).
+    case funcRitFreq:
+    {
+        if (replyPayloadTooShort(func, 3))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        Frequency f;
+        QByteArray longfreq = payloadIn.mid(0, 2);
+        longfreq.append(QByteArray(3, '\x00'));
+        f = parseFrequency(longfreq, 3);
+        const short ritHz = static_cast<short>(f.Hz) * ((payloadIn.at(2) == '\x01') ? -1 : 1);
+        value.setValue(ritHz);
+        return ReplyParseResult::Parsed;
+    }
+    case funcRitTXStatus:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(static_cast<bool>(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+    case funcTXFreqMon:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(static_cast<bool>(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+    default:
+        return ReplyParseResult::NotHandled;
+    }
+}
+
+Commander::ReplyParseResult Commander::parseScopeReply(Funcs func, QVariant& value, uchar& receiver)
+{
+    switch (func)
+    {
+    case funcScopeWaveData:
+    {
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        payloadIn.remove(0, 1);
+        ScopeData d;
+        if (parseSpectrum(d, receiver))
+        {
+            value.setValue(d);
+        }
+        return ReplyParseResult::Parsed;
+    }
+    case funcScopeOnOff:
+    case funcScopeDataOutput:
+    case funcScopeMainSub:
+    case funcScopeSingleDual:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        value.setValue(static_cast<bool>(payloadIn.at(0)));
+        return ReplyParseResult::Parsed;
+    case funcScopeMode:
+        // Scope mode: 0x00=center, 0x01=fixed, 0x02=scroll-C, 0x03=scroll-F.
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        value.setValue(static_cast<uchar>(payloadIn.at(1)));
+        return ReplyParseResult::Parsed;
+    case funcScopeSpan:
+    {
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        payloadIn.remove(0, 1);
+        Frequency f = parseFrequency(payloadIn, 3);
+        for (auto& s : radioCaps.scopeCenterSpans)
+        {
+            if (s.freq == f.Hz)
+            {
+                value.setValue(s);
+            }
+        }
+        return ReplyParseResult::Parsed;
+    }
+    case funcScopeEdge:
+        // Fixed edge selection: 0x01, 0x02, or 0x03.
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        value.setValue(bcdHexToUChar(payloadIn.at(1)));
+        return ReplyParseResult::Parsed;
+    case funcBandEdgeFreq:
+        // Band-edge payload is currently not surfaced by SDR9700.
+        return ReplyParseResult::Parsed;
+    case funcScopeHold:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        value.setValue(static_cast<bool>(payloadIn.at(1)));
+        return ReplyParseResult::Parsed;
+    case funcScopeRef:
+    {
+        if (replyPayloadTooShort(func, 4))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        // Scope reference level: BCD dB value plus sign byte.
+        quint8 negative = payloadIn.at(3);
+        short ref = bcdHexToUInt(payloadIn.at(1), payloadIn.at(2));
+        ref = ref / 10;
+        if (negative)
+        {
+            ref = -ref;
+        }
+        value.setValue(ref);
+        return ReplyParseResult::Parsed;
+    }
+    case funcScopeSpeed:
+        if (replyPayloadTooShort(func, 2))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        value.setValue(static_cast<uchar>(payloadIn.at(1)));
+        return ReplyParseResult::Parsed;
+    case funcScopeVBW:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        return ReplyParseResult::Parsed;
+    case funcScopeRBW:
+        if (replyPayloadTooShort(func, 1))
+        {
+            return ReplyParseResult::Malformed;
+        }
+        receiver = payloadIn.at(0);
+        return ReplyParseResult::Parsed;
+    case funcScopeFixedEdgeFreq:
+    case funcScopeDuringTX:
+    case funcScopeCenterType:
+        return ReplyParseResult::Parsed;
+    case funcVoiceTX:
+        return ReplyParseResult::Parsed;
+    default:
+        return ReplyParseResult::NotHandled;
+    }
+}
+
 void Commander::parseCommand()
 {
-
 #ifdef DEBUG_PARSE
     QElapsedTimer performanceTimer;
     performanceTimer.start();
@@ -604,8 +1387,6 @@ void Commander::parseCommand()
 
     Funcs func = funcNone;
     uchar receiver = 0;
-    uchar vfo = 0;
-
     if (payloadIn.endsWith((char)0xfd))
     {
         payloadIn.chop(1);
@@ -659,7 +1440,6 @@ void Commander::parseCommand()
         receiver = takePendingReplyReceiver(func, &pendingReceiver) ? pendingReceiver : queue->getState().receiver;
     }
 
-    Frequency test;
     QVector<MemParserFormat> memParser;
     QVariant value;
     auto payloadTooShort = [&](int requiredBytes) -> bool
@@ -684,119 +1464,27 @@ void Commander::parseCommand()
         value.setValue(static_cast<bool>(bool(payloadIn.at(0))));
         break;
     case funcFreq:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        payloadIn.remove(0, 1);
-        [[fallthrough]];
     case funcSelectedFreq:
     case funcUnselectedFreq:
     case funcFreqGet:
     case funcFreqTR:
     case funcTXFreq:
-    {
-        if (func == funcFreqTR || func == funcFreqGet)
-        {
-            if (radioCaps.commands.contains(funcFreq))
-            {
-                func = funcFreq;
-            }
-            else if (radioCaps.commands.contains(funcSelectedFreq))
-            {
-                func = funcSelectedFreq;
-            }
-            else
-            {
-                func = funcFreqGet;
-            }
-        }
-        else if (func == funcUnselectedFreq)
-        {
-            vfo = 1;
-        }
-
-        value.setValue(parseFreqData(payloadIn, vfo));
-        break;
-    }
-    case funcMode:
-        if (payloadTooShort(1))
+        if (parseFrequencyReply(func, value, receiver) == ReplyParseResult::Malformed)
         {
             return;
         }
-        receiver = payloadIn.at(0);
-        payloadIn.remove(0, 1);
-        [[fallthrough]];
+        break;
+    case funcMode:
     case funcModeGet:
     case funcModeTR:
     case funcSelectedMode:
     case funcUnselectedMode:
     case funcDataModeWithFilter:
-    {
-        Funcs origFunc = func;
-        // Normalize alternate mode reply commands to the command SDR9700 caches.
-        if (func == funcModeTR || func == funcModeGet || func == funcDataModeWithFilter)
+        if (parseModeReply(func, value, receiver) == ReplyParseResult::Malformed)
         {
-            if (radioCaps.commands.contains(funcMode))
-            {
-                func = funcMode;
-            }
-            else if (radioCaps.commands.contains(funcSelectedMode))
-            {
-                func = funcSelectedMode;
-            }
-            else
-            {
-                func = funcModeGet;
-            }
+            return;
         }
-        else if (func == funcUnselectedMode)
-        {
-            vfo = 1;
-        }
-
-        ModeInfo mi;
-
-        // Preserve cached mode fields not present in this reply.
-        CacheItem ci = queue->getCache(func, receiver);
-        if (ci.value.isValid())
-        {
-            mi = queue->getCache(func, receiver).value.value<ModeInfo>();
-        }
-
-        if (origFunc == funcDataModeWithFilter)
-        {
-            if (payloadTooShort(2))
-            {
-                return;
-            }
-            // Data-mode replies use the two-byte CI-V payload shape.
-            mi.filter = bcdHexToUChar(payloadIn.at(1));
-            mi.data = bcdHexToUChar(payloadIn.at(0));
-        }
-        else
-        {
-            if (payloadIn.size())
-            {
-                mi.reg = bcdHexToUChar(payloadIn.at(0));
-            }
-            if (payloadIn.size() == 2)
-            {
-                mi.filter = payloadIn.at(1);
-            }
-            if (payloadIn.size() == 3)
-            {
-                mi.data = payloadIn.at(1);
-                mi.filter = payloadIn.at(2);
-            }
-        }
-
-        mi = parseMode(mi.reg, mi.data, mi.filter, receiver, vfo);
-        mi.VFO = selVFO_t(receiver);
-        value.setValue(mi);
         break;
-    }
 
     case funcVFOBandMS:
         if (payloadTooShort(1))
@@ -879,108 +1567,16 @@ void Commander::parseCommand()
         break;
     }
     case funcAfGain:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(bcdHexToUChar(payloadIn.at(0), payloadIn.at(1)));
-        break;
-    // Two-byte CI-V levels with SDR9700-specific unit mappings.
     case funcKeySpeed:
-    {
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        uchar level = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
-        value.setValue<ushort>(round((level / 6.071) + 6));
-        break;
-    }
     case funcCwPitch:
-    {
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        uchar level = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
-        value.setValue<ushort>(round((((600.0 / 255.0) * level) + 300) / 5.0) * 5.0);
-        break;
-    }
-    // CI-V group 15: meter readings.
     case funcSMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        {
-            const quint8 rawS = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
-            const double sMeter = getMeterCal(meterS, rawS);
-            qDebug(logRadioTraffic()).nospace() << "S meter raw=" << static_cast<int>(rawS) << " calibrated=" << sMeter;
-            value.setValue(sMeter);
-            break;
-        }
     case funcCenterMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(getMeterCal(meterCenter, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
     case funcPowerMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(getMeterCal(meterPower, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
     case funcSWRMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        {
-            const quint8 rawSwr = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
-            const double swr = getMeterCal(meterSWR, rawSwr);
-            qDebug(logRadioTraffic()).nospace()
-                << "SWR meter raw=" << static_cast<int>(rawSwr) << " calibrated=" << swr;
-            value.setValue(swr);
-            break;
-        }
     case funcALCMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        {
-            const quint8 rawAlc = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
-            const double alc = getMeterCal(meterALC, rawAlc);
-            qDebug(logRadioTraffic()).nospace()
-                << "ALC meter raw=" << static_cast<int>(rawAlc) << " calibrated=" << alc;
-            value.setValue(alc);
-            break;
-        }
     case funcCompMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(getMeterCal(meterComp, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
     case funcVdMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(getMeterCal(meterVoltage, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
     case funcIdMeter:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(getMeterCal(meterCurrent, bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
-        break;
-
     case funcRfGain:
     case funcSquelch:
     case funcAPFLevel:
@@ -999,22 +1595,13 @@ void Commander::parseCommand()
     case funcVoxGain:
     case funcAntiVoxGain:
     case funcBackLightLevel:
-
     case funcBeepLevel:
     case funcBeepMain:
     case funcBeepSub:
-
     case funcRFSQLControl:
     case funcTXDelayHF:
     case funcTXDelay50m:
     case funcTimeOutCIV:
-
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(bcdHexToUChar(payloadIn.at(0), payloadIn.at(1)));
-        break;
     case funcAGC:
     case funcAGCTimeConstant:
     case funcBreakIn:
@@ -1023,7 +1610,6 @@ void Commander::parseCommand()
     case funcSSBTXBandwidth:
     case funcRoofingFilter:
     case funcFilterShape:
-    // Tone-control registers under CI-V 1A05.
     case funcSSBRXBass:
     case funcSSBRXTreble:
     case funcAMRXBass:
@@ -1038,89 +1624,18 @@ void Commander::parseCommand()
     case funcFMTXTreble:
     case funcTimeOutTimer:
     case funcBandEdgeBeep:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        value.setValue(bcdHexToUChar(payloadIn.at(0)));
-        break;
-
-    // RX audio passband limits.
     case funcSSBRXHPFLPF:
     case funcAMRXHPFLPF:
     case funcFMRXHPFLPF:
     case funcCWRXHPFLPF:
     case funcRTTYRXHPFLPF:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(LpfHpf(ushort(payloadIn.at(0)) * 100, ushort(payloadIn.at(1)) * 100));
-        break;
     case funcAbsoluteMeter:
-    {
-        if (payloadTooShort(4))
-        {
-            return;
-        }
-        MeterKind m;
-        m.value = double(bcdHexToUInt(payloadIn.at(0), payloadIn.at(1))) / 10.0;
-        if (payloadIn.at(2) != '\0')
-        {
-            m.value = -m.value;
-        }
-        if (payloadIn.at(3) == 0)
-        {
-            m.type = meterdBu;
-        }
-        else if (payloadIn.at(3) == 1)
-        {
-            m.type = meterdBuEMF;
-        }
-        else if (payloadIn.at(3) == 2)
-        {
-            m.type = meterdBm;
-        }
-        else
-        {
-            qWarning(logRadio()) << "Unknown meter type received!";
-            m.type = meterNone;
-        }
-        value.setValue(m);
-        break;
-    }
     case funcMeterType:
-    {
-        if (payloadTooShort(1))
+        if (parseLevelMeterReply(func, value) == ReplyParseResult::Malformed)
         {
             return;
         }
-        meter_t m;
-        if (payloadIn.at(0) == 0)
-        {
-            m = meterS;
-        }
-        else if (payloadIn.at(0) == 1)
-        {
-            m = meterdBu;
-        }
-        else if (payloadIn.at(0) == 2)
-        {
-            m = meterdBuEMF;
-        }
-        else if (payloadIn.at(0) == 3)
-        {
-            m = meterdBm;
-        }
-        else
-        {
-            qWarning(logRadio()) << "Unknown meterType received!";
-            m = meterNone;
-        }
-        value.setValue(m);
         break;
-    }
-    // Single-byte CI-V boolean flags.
     case funcMainSubTracking:
     case funcSatelliteMode:
     case funcNoiseBlanker:
@@ -1145,71 +1660,10 @@ void Commander::parseCommand()
     case funcIPPlus:
     case funcBeepLevelLimit:
     case funcBeepConfirmation:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        value.setValue(static_cast<bool>(payloadIn.at(0)));
-        break;
     case funcToneSquelchType:
-    {
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        RptrAccessData r;
-        r.accessMode = static_cast<rptAccessTxRx_t>(bcdHexToUChar(payloadIn.at(0)));
-        r.useSecondaryVFO = static_cast<bool>(vfo);
-        value.setValue(r);
-        break;
-    }
     case funcTransceiverId:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        if (!radioCaps.modelID)
-        {
-            radioCaps.modelID = static_cast<quint16>(payloadIn.at(0)) & 0xff;
-            if (radioCaps.modelID == kRadioModelId)
-            {
-                this->model = kRadioModelId;
-            }
-            qInfo(logRadio()) << QString("Have new radio ID: 0x%1").arg(radioCaps.modelID, 2, 16);
-            determineRadioCaps();
-        }
-        value.setValue(radioCaps.modelID);
-        break;
     case funcFilterWidth:
-    {
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        quint16 calc;
-        quint8 pass = bcdHexToUChar((quint8)payloadIn.at(0));
-        VfoCommandType t = queue->getVfoCommand(vfoA, receiver, false);
-        ModeInfo m = queue->getCache(t.modeFunc, t.receiver).value.value<ModeInfo>();
-
-        if (m.mk == modeAM)
-        {
-            calc = 200 + (pass * 200);
-        }
-        else if (pass <= 10)
-        {
-            calc = 50 + (pass * 50);
-        }
-        else
-        {
-            calc = 600 + ((pass - 10) * 100);
-        }
-        value.setValue(calc);
-        break;
-    }
     case funcAFMute:
-        qWarning(logRadio()) << "AF mute response parsing is not implemented";
-        break;
-    // CI-V 1A05 two-byte level registers.
     case funcREFAdjust:
     case funcREFAdjustFine:
     case funcACCAModLevel:
@@ -1218,45 +1672,16 @@ void Commander::parseCommand()
     case funcLANModLevel:
     case funcSPDIFModLevel:
     case funcNBWidth:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        value.setValue(bcdHexToUChar(payloadIn.at(0), payloadIn.at(1)));
-        break;
-    // Single byte returned as uchar (0-99).
     case funcDATAOffMod:
     case funcDATA1Mod:
     case funcDATA2Mod:
     case funcDATA3Mod:
-    {
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        const auto inputIt =
-            std::find_if(radioCaps.inputs.cbegin(), radioCaps.inputs.cend(),
-                         [this](const radioInput& input) { return input.reg == bcdHexToUChar(payloadIn.at(0)); });
-        if (inputIt != radioCaps.inputs.cend())
-        {
-            value.setValue(*inputIt);
-        }
-        break;
-    }
     case funcDashRatio:
     case funcNBDepth:
     case funcVOXDelay:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        value.setValue(bcdHexToUChar(payloadIn.at(0)));
-        break;
     case funcUTCOffset:
     case funcDate:
     case funcTime:
-        break;
-    // Fixed-frequency scope edge payloads.
     case funcScopeEdge1a:
     case funcScopeEdge2a:
     case funcScopeEdge3a:
@@ -1333,178 +1758,44 @@ void Commander::parseCommand()
     case funcScopeEdge2s:
     case funcScopeEdge3s:
     case funcScopeEdge4s:
-        break;
-    // CI-V 1B: tone and squelch code registers.
     case funcToneFreq:
     case funcTSQLFreq:
     case funcDTCSCode:
     case funcCSQLCode:
-        value.setValue(decodeTone(payloadIn));
-        break;
-    // CI-V 1C: boolean status registers.
     case funcRitStatus:
     case funcTransceiverStatus:
     case funcXFCStatus:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        value.setValue(static_cast<bool>(payloadIn.at(0)));
-        break;
     case funcTunerStatus:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        value.setValue(bcdHexToUChar(payloadIn.at(0)));
-        break;
-    // CI-V 21: RIT offset register.
-    // IC-9700 format: 2 BCD bytes (offset Hz) + 1 sign byte (0=+, 1=-).
     case funcRitFreq:
-    {
-        if (payloadTooShort(3))
-        {
-            return;
-        }
-        Frequency f;
-        QByteArray longfreq = payloadIn.mid(0, 2);
-        longfreq.append(QByteArray(3, '\x00'));
-        f = parseFrequency(longfreq, 3);
-        const short ritHz = static_cast<short>(f.Hz) * ((payloadIn.at(2) == '\x01') ? -1 : 1);
-        value.setValue(ritHz);
-        break;
-    }
     case funcRitTXStatus:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        value.setValue(static_cast<bool>(payloadIn.at(0)));
-        break;
     case funcTXFreqMon:
-        if (payloadTooShort(1))
+        if (parseFeatureReply(func, value, receiver) == ReplyParseResult::Malformed)
         {
             return;
         }
-        value.setValue(static_cast<bool>(payloadIn.at(0)));
         break;
     case funcScopeWaveData:
-    {
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        payloadIn.remove(0, 1);
-        ScopeData d;
-        if (parseSpectrum(d, receiver))
-        {
-            value.setValue(d);
-        }
-        break;
-    }
     case funcScopeOnOff:
     case funcScopeDataOutput:
     case funcScopeMainSub:
     case funcScopeSingleDual:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        value.setValue(static_cast<bool>(payloadIn.at(0)));
-        break;
     case funcScopeMode:
-        // Scope mode: 0x00=center, 0x01=fixed, 0x02=scroll-C, 0x03=scroll-F.
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        value.setValue(static_cast<uchar>(payloadIn.at(1)));
-        break;
     case funcScopeSpan:
-    {
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        payloadIn.remove(0, 1);
-        Frequency f = parseFrequency(payloadIn, 3);
-        for (auto& s : radioCaps.scopeCenterSpans)
-        {
-            if (s.freq == f.Hz)
-            {
-                value.setValue(s);
-            }
-        }
-        break;
-    }
     case funcScopeEdge:
-        // Fixed edge selection: 0x01, 0x02, or 0x03.
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        value.setValue(bcdHexToUChar(payloadIn.at(1)));
-        break;
     case funcBandEdgeFreq:
-        // Band-edge payload is currently not surfaced by SDR9700.
-        break;
     case funcScopeHold:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        value.setValue(static_cast<bool>(payloadIn.at(1)));
-        break;
     case funcScopeRef:
-    {
-        if (payloadTooShort(4))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        // Scope reference level: BCD dB value plus sign byte.
-        quint8 negative = payloadIn.at(3);
-        short ref = bcdHexToUInt(payloadIn.at(1), payloadIn.at(2));
-        ref = ref / 10;
-        if (negative)
-        {
-            ref = -ref;
-        }
-        value.setValue(ref);
-        break;
-    }
     case funcScopeSpeed:
-        if (payloadTooShort(2))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        value.setValue(static_cast<uchar>(payloadIn.at(1)));
-        break;
     case funcScopeVBW:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        break;
     case funcScopeRBW:
-        if (payloadTooShort(1))
-        {
-            return;
-        }
-        receiver = payloadIn.at(0);
-        break;
     case funcScopeFixedEdgeFreq:
     case funcScopeDuringTX:
     case funcScopeCenterType:
-        break;
     case funcVoiceTX:
+        if (parseScopeReply(func, value, receiver) == ReplyParseResult::Malformed)
+        {
+            return;
+        }
         break;
     // CI-V command 29h prefixes receiver-scoped commands.
     case funcMainSubPrefix:
@@ -1685,6 +1976,18 @@ void Commander::determineRadioCaps()
     }
 }
 
+bool Commander::decodeSpectrumSequence(quint8& sequence, quint8& sequenceMax) const
+{
+    if (payloadIn.size() < 2)
+    {
+        qWarning(logSpectrumScope()) << "Ignoring short scope payload:" << payloadIn.toHex(' ');
+        return false;
+    }
+    sequence = bcdHexToUChar(payloadIn.at(0));
+    sequenceMax = bcdHexToUChar(payloadIn.at(1));
+    return true;
+}
+
 bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
 {
     bool ret = false;
@@ -1716,14 +2019,12 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     Frequency fEnd;
 
     d.receiver = receiver;
-    if (payloadIn.size() < 2)
+    quint8 sequence = 0;
+    quint8 sequenceMax = 0;
+    if (!decodeSpectrumSequence(sequence, sequenceMax))
     {
-        qWarning(logSpectrumScope()) << "Ignoring short scope payload:" << payloadIn.toHex(' ');
         return false;
     }
-
-    quint8 sequence = bcdHexToUChar(payloadIn.at(0));
-    quint8 sequenceMax = bcdHexToUChar(payloadIn.at(1));
 
     constexpr int freqLen = 5;
     constexpr int sequenceHeaderBytes = 2;
@@ -2269,23 +2570,270 @@ ModeInfo Commander::parseMode(uchar mode, uchar data, uchar filter, uchar receiv
     return mi;
 }
 
-bool Commander::parseMemory(QVector<MemParserFormat>* memParser, MemoryType* mem)
+void Commander::parseMemoryField(const MemParserFormat& format, const QByteArray& data, MemoryType& memory)
+{
+    switch (format.spec)
+    {
+    case 'a':
+        if (format.len == 1)
+        {
+            memory.group = bcdHexToUChar(data[0]);
+        }
+        else
+        {
+            memory.group = bcdHexToUChar(data[0], data[1]);
+        }
+        break;
+    case 'b':
+        memory.channel = bcdHexToUChar(data[0], data[1]);
+        break;
+    case 'c':
+        memory.scan = data[0];
+        break;
+    case 'C':
+        memory.skip = data[0] >> 4 & 0xf;
+        memory.scan = data[0] & 0xf;
+        break;
+    case 'd': // combined split and scan
+        memory.split = quint8(data[0] >> 4 & 0x0f);
+        memory.scan = quint8(data[0] & 0x0f);
+        break;
+    case 'D': // duplex only
+        memory.duplex = quint8(data[0] & 0x0f);
+        break;
+    case 'e':
+        memory.vfo = data[0];
+        break;
+    case 'E':
+        memory.vfoB = data[0];
+        break;
+    case 'f':
+        memory.frequency.Hz = parseFreqDataToInt(data);
+        break;
+    case 'F':
+        memory.frequencyB.Hz = parseFreqDataToInt(data);
+        break;
+    case 'g':
+        memory.mode = bcdHexToUChar(data[0]);
+        break;
+    case 'G':
+        memory.modeB = bcdHexToUChar(data[0]);
+        break;
+    case 'h':
+        memory.filter = bcdHexToUChar(data[0]);
+        break;
+    case 'H':
+        memory.filterB = bcdHexToUChar(data[0]);
+        break;
+    case 'i': // single datamode
+        memory.datamode = bcdHexToUChar(data[0]);
+        break;
+    case 'I': // single datamode
+        memory.datamodeB = bcdHexToUChar(data[0]);
+        break;
+    case 'j': // combined duplex and tonemode
+        memory.duplex = duplexMode_t(quint8(data[0] >> 4 & 0x0f));
+        memory.tonemode = quint8(quint8(data[0] & 0x0f));
+        break;
+    case 'J': // combined duplex and tonemodeB
+        memory.duplexB = duplexMode_t((data[0] >> 4 & 0x0f));
+        memory.tonemodeB = data[0] & 0x0f;
+        break;
+    case 'k': // combined datamode and tonemode
+        memory.datamode = (quint8(data[0] >> 4 & 0x0f));
+        memory.tonemode = data[0] & 0x0f;
+        break;
+    case 'K': // combined datamode and tonemode
+        memory.datamodeB = (quint8(data[0] >> 4 & 0x0f));
+        memory.tonemodeB = data[0] & 0x0f;
+        break;
+    case 'l': // tonemode
+        memory.tonemode = data[0] & 0x0f;
+        break;
+    case 'L': // tonemode
+        memory.tonemodeB = data[0] & 0x0f;
+        break;
+    case 'm':
+        memory.dsql = (quint8(data[0] >> 4 & 0x0f));
+        break;
+    case 'M':
+        memory.dsqlB = (quint8(data[0] >> 4 & 0x0f));
+        break;
+    case 'n':
+        for (const auto& tn : radioCaps.ctcss)
+        {
+            if (tn.tone == bcdHexToUInt(data[1], data[2]))
+            {
+                memory.tone = tn.name;
+            }
+        }
+        break;
+    case 'N':
+        for (const auto& tn : radioCaps.ctcss)
+        {
+            if (tn.tone == bcdHexToUInt(data[1], data[2]))
+            {
+                memory.toneB = tn.name;
+            }
+        }
+        break;
+    case 'o':
+        for (const auto& tn : radioCaps.ctcss)
+        {
+            if (tn.tone == bcdHexToUInt(data[1], data[2]))
+            {
+                memory.tsql = tn.name;
+            }
+        }
+        break;
+    case 'O':
+        for (const auto& tn : radioCaps.ctcss)
+        {
+            if (tn.tone == bcdHexToUInt(data[1], data[2]))
+            {
+                memory.tsqlB = tn.name;
+            }
+        }
+        break;
+    case 'p':
+        memory.dtcsp = (quint8(data[0] >> 3 & 0x02) | quint8(data[0] & 0x01));
+        break;
+    case 'P':
+        memory.dtcspB = (quint8(data[0] >> 3 & 0x10) | quint8(data[0] & 0x01));
+        break;
+    case 'q':
+        memory.dtcs = bcdHexToUInt(data[0], data[1]);
+        break;
+    case 'Q':
+        memory.dtcsB = bcdHexToUInt(data[0], data[1]);
+        break;
+    case 'r':
+        memory.dvsql = bcdHexToUChar(data[0]);
+        break;
+    case 'R':
+        memory.dvsqlB = bcdHexToUChar(data[0]);
+        break;
+    case 's':
+        memory.duplexOffset.Hz = parseFreqDataToInt(data);
+        break;
+    case 'S':
+        memory.duplexOffsetB.Hz = parseFreqDataToInt(data);
+        break;
+    case 't':
+        memcpy(memory.UR, data.data(), qMin(int(sizeof memory.UR), data.size()));
+        break;
+    case 'T':
+        memcpy(memory.URB, data.data(), qMin(int(sizeof memory.URB), data.size()));
+        break;
+    case 'u':
+        memcpy(memory.R1, data.data(), qMin(int(sizeof memory.R1), data.size()));
+        break;
+    case 'U':
+        memcpy(memory.R1B, data.data(), qMin(int(sizeof memory.R1B), data.size()));
+        break;
+    case 'v':
+        memcpy(memory.R2, data.data(), qMin(int(sizeof memory.R2), data.size()));
+        break;
+    case 'V':
+        memcpy(memory.R2B, data.data(), qMin(int(sizeof memory.R2B), data.size()));
+        break;
+    case 'w': // Tuning step
+        if (bool(data[0]))
+        {
+            memory.tuningStep = bcdHexToUChar(data[1]);
+            memory.progTs = bcdHexToUInt(data[2], data[3]);
+        }
+        else
+        {
+            memory.tuningStep = 0;
+            memory.progTs = 5;
+        }
+        break;
+    case 'x': // Attenuator & Preamp
+        memory.atten = bcdHexToUChar(data[0]);
+        memory.preamp = bcdHexToUChar(data[1]);
+        break;
+    case 'y': // Antenna
+        memory.antenna = bcdHexToUChar(data[0]);
+        break;
+    case '+': // IP Plus
+        memory.ipplus = bool(data[0] & 0x0f);
+        break;
+    case 'z':
+        if (memory.scan == 0xfe)
+        {
+            memory.scan = 0;
+        }
+        memcpy(memory.name, data.data(), qMin(int(sizeof memory.name), data.size()));
+        break;
+    case 'Z': // Mode-dependent extension block.
+        for (const auto& m : radioCaps.modes)
+        {
+            if (m.reg == memory.mode)
+            {
+                switch (m.mk)
+                {
+                case modeFM:
+                    if (data.size() < 7)
+                    {
+                        return;
+                    }
+                    memory.tonemode = data[0] & 0x0f;
+                    for (const auto& tn : radioCaps.ctcss)
+                    {
+                        if (tn.tone == bcdHexToUInt(data[2], data[3]))
+                        {
+                            memory.tsql = tn.name;
+                        }
+                    }
+                    memory.dtcsp = quint8(data[4] & 0x0f);
+                    memory.dtcs = bcdHexToUInt(data[5], data[6]);
+                    break;
+                case modeDV:
+                    if (data.size() < 2)
+                    {
+                        return;
+                    }
+                    memory.dsql = (quint8(data[0] & 0x0f));
+                    memory.dvsql = bcdHexToUChar(data[1]);
+                    break;
+                default:
+                    break;
+                }
+                break;
+            }
+        }
+
+        break;
+    default:
+        qInfo(logRadio()) << "Parser didn't match!" << "spec:" << format.spec << "pos:" << format.pos << "len"
+                          << format.len;
+        break;
+    }
+}
+
+void Commander::initializeMemoryForParsing(MemoryType& memory) const
 {
     // Initialize optional fields before applying the parsed memory payload.
-    mem->frequency.Hz = 0;
-    mem->frequency.VFO = activeVFO;
-    mem->frequency.MHzDouble = 0.0;
-    mem->frequencyB = mem->frequency;
-    mem->duplexOffset = mem->frequency;
-    mem->duplexOffsetB = mem->frequency;
-    mem->scan = 0xfe;
-    memset(mem->UR, 0x0, sizeof(mem->UR));
-    memset(mem->URB, 0x0, sizeof(mem->URB));
-    memset(mem->R1, 0x0, sizeof(mem->R1));
-    memset(mem->R1B, 0x0, sizeof(mem->R1B));
-    memset(mem->R2, 0x0, sizeof(mem->R2));
-    memset(mem->R2B, 0x0, sizeof(mem->R2B));
-    memset(mem->name, 0x0, sizeof(mem->name));
+    memory.frequency.Hz = 0;
+    memory.frequency.VFO = activeVFO;
+    memory.frequency.MHzDouble = 0.0;
+    memory.frequencyB = memory.frequency;
+    memory.duplexOffset = memory.frequency;
+    memory.duplexOffsetB = memory.frequency;
+    memory.scan = 0xfe;
+    memset(memory.UR, 0x0, sizeof(memory.UR));
+    memset(memory.URB, 0x0, sizeof(memory.URB));
+    memset(memory.R1, 0x0, sizeof(memory.R1));
+    memset(memory.R1B, 0x0, sizeof(memory.R1B));
+    memset(memory.R2, 0x0, sizeof(memory.R2));
+    memset(memory.R2B, 0x0, sizeof(memory.R2B));
+    memset(memory.name, 0x0, sizeof(memory.name));
+}
+
+bool Commander::parseMemory(QVector<MemParserFormat>* memParser, MemoryType* mem)
+{
+    initializeMemoryForParsing(*mem);
     // Memory parser positions are one-based and include the command prefix.
     payloadIn.insert(0, "**");
     for (auto& parse : *memParser)
@@ -2296,244 +2844,7 @@ bool Commander::parseMemory(QVector<MemParserFormat>* memParser, MemoryType* mem
             return true;
         }
         QByteArray data = payloadIn.mid(parse.pos + 1, parse.len);
-        switch (parse.spec)
-        {
-        case 'a':
-            if (parse.len == 1)
-            {
-                mem->group = bcdHexToUChar(data[0]);
-            }
-            else
-            {
-                mem->group = bcdHexToUChar(data[0], data[1]);
-            }
-            break;
-        case 'b':
-            mem->channel = bcdHexToUChar(data[0], data[1]);
-            break;
-        case 'c':
-            mem->scan = data[0];
-            break;
-        case 'C':
-            mem->skip = data[0] >> 4 & 0xf;
-            mem->scan = data[0] & 0xf;
-            break;
-        case 'd': // combined split and scan
-            mem->split = quint8(data[0] >> 4 & 0x0f);
-            mem->scan = quint8(data[0] & 0x0f);
-            break;
-        case 'D': // duplex only
-            mem->duplex = quint8(data[0] & 0x0f);
-            break;
-        case 'e':
-            mem->vfo = data[0];
-            break;
-        case 'E':
-            mem->vfoB = data[0];
-            break;
-        case 'f':
-            mem->frequency.Hz = parseFreqDataToInt(data);
-            break;
-        case 'F':
-            mem->frequencyB.Hz = parseFreqDataToInt(data);
-            break;
-        case 'g':
-            mem->mode = bcdHexToUChar(data[0]);
-            break;
-        case 'G':
-            mem->modeB = bcdHexToUChar(data[0]);
-            break;
-        case 'h':
-            mem->filter = bcdHexToUChar(data[0]);
-            break;
-        case 'H':
-            mem->filterB = bcdHexToUChar(data[0]);
-            break;
-        case 'i': // single datamode
-            mem->datamode = bcdHexToUChar(data[0]);
-            break;
-        case 'I': // single datamode
-            mem->datamodeB = bcdHexToUChar(data[0]);
-            break;
-        case 'j': // combined duplex and tonemode
-            mem->duplex = duplexMode_t(quint8(data[0] >> 4 & 0x0f));
-            mem->tonemode = quint8(quint8(data[0] & 0x0f));
-            break;
-        case 'J': // combined duplex and tonemodeB
-            mem->duplexB = duplexMode_t((data[0] >> 4 & 0x0f));
-            mem->tonemodeB = data[0] & 0x0f;
-            break;
-        case 'k': // combined datamode and tonemode
-            mem->datamode = (quint8(data[0] >> 4 & 0x0f));
-            mem->tonemode = data[0] & 0x0f;
-            break;
-        case 'K': // combined datamode and tonemode
-            mem->datamodeB = (quint8(data[0] >> 4 & 0x0f));
-            mem->tonemodeB = data[0] & 0x0f;
-            break;
-        case 'l': // tonemode
-            mem->tonemode = data[0] & 0x0f;
-            break;
-        case 'L': // tonemode
-            mem->tonemodeB = data[0] & 0x0f;
-            break;
-        case 'm':
-            mem->dsql = (quint8(data[0] >> 4 & 0x0f));
-            break;
-        case 'M':
-            mem->dsqlB = (quint8(data[0] >> 4 & 0x0f));
-            break;
-        case 'n':
-            for (const auto& tn : radioCaps.ctcss)
-            {
-                if (tn.tone == bcdHexToUInt(data[1], data[2]))
-                {
-                    mem->tone = tn.name;
-                }
-            }
-            break;
-        case 'N':
-            for (const auto& tn : radioCaps.ctcss)
-            {
-                if (tn.tone == bcdHexToUInt(data[1], data[2]))
-                {
-                    mem->toneB = tn.name;
-                }
-            }
-            break;
-        case 'o':
-            for (const auto& tn : radioCaps.ctcss)
-            {
-                if (tn.tone == bcdHexToUInt(data[1], data[2]))
-                {
-                    mem->tsql = tn.name;
-                }
-            }
-            break;
-        case 'O':
-            for (const auto& tn : radioCaps.ctcss)
-            {
-                if (tn.tone == bcdHexToUInt(data[1], data[2]))
-                {
-                    mem->tsqlB = tn.name;
-                }
-            }
-            break;
-        case 'p':
-            mem->dtcsp = (quint8(data[0] >> 3 & 0x02) | quint8(data[0] & 0x01));
-            break;
-        case 'P':
-            mem->dtcspB = (quint8(data[0] >> 3 & 0x10) | quint8(data[0] & 0x01));
-            break;
-        case 'q':
-            mem->dtcs = bcdHexToUInt(data[0], data[1]);
-            break;
-        case 'Q':
-            mem->dtcsB = bcdHexToUInt(data[0], data[1]);
-            break;
-        case 'r':
-            mem->dvsql = bcdHexToUChar(data[0]);
-            break;
-        case 'R':
-            mem->dvsqlB = bcdHexToUChar(data[0]);
-            break;
-        case 's':
-            mem->duplexOffset.Hz = parseFreqDataToInt(data);
-            break;
-        case 'S':
-            mem->duplexOffsetB.Hz = parseFreqDataToInt(data);
-            break;
-        case 't':
-            memcpy(mem->UR, data.data(), qMin(int(sizeof mem->UR), data.size()));
-            break;
-        case 'T':
-            memcpy(mem->URB, data.data(), qMin(int(sizeof mem->URB), data.size()));
-            break;
-        case 'u':
-            memcpy(mem->R1, data.data(), qMin(int(sizeof mem->R1), data.size()));
-            break;
-        case 'U':
-            memcpy(mem->R1B, data.data(), qMin(int(sizeof mem->R1B), data.size()));
-            break;
-        case 'v':
-            memcpy(mem->R2, data.data(), qMin(int(sizeof mem->R2), data.size()));
-            break;
-        case 'V':
-            memcpy(mem->R2B, data.data(), qMin(int(sizeof mem->R2B), data.size()));
-            break;
-        case 'w': // Tuning step
-            if (bool(data[0]))
-            {
-                mem->tuningStep = bcdHexToUChar(data[1]);
-                mem->progTs = bcdHexToUInt(data[2], data[3]);
-            }
-            else
-            {
-                mem->tuningStep = 0;
-                mem->progTs = 5;
-            }
-            break;
-        case 'x': // Attenuator & Preamp
-            mem->atten = bcdHexToUChar(data[0]);
-            mem->preamp = bcdHexToUChar(data[1]);
-            break;
-        case 'y': // Antenna
-            mem->antenna = bcdHexToUChar(data[0]);
-            break;
-        case '+': // IP Plus
-            mem->ipplus = bool(data[0] & 0x0f);
-            break;
-        case 'z':
-            if (mem->scan == 0xfe)
-            {
-                mem->scan = 0;
-            }
-            memcpy(mem->name, data.data(), qMin(int(sizeof mem->name), data.size()));
-            break;
-        case 'Z': // Mode-dependent extension block.
-            for (const auto& m : radioCaps.modes)
-            {
-                if (m.reg == mem->mode)
-                {
-                    switch (m.mk)
-                    {
-                    case modeFM:
-                        if (data.size() < 7)
-                        {
-                            return true;
-                        }
-                        mem->tonemode = data[0] & 0x0f;
-                        for (const auto& tn : radioCaps.ctcss)
-                        {
-                            if (tn.tone == bcdHexToUInt(data[2], data[3]))
-                            {
-                                mem->tsql = tn.name;
-                            }
-                        }
-                        mem->dtcsp = quint8(data[4] & 0x0f);
-                        mem->dtcs = bcdHexToUInt(data[5], data[6]);
-                        break;
-                    case modeDV:
-                        if (data.size() < 2)
-                        {
-                            return true;
-                        }
-                        mem->dsql = (quint8(data[0] & 0x0f));
-                        mem->dvsql = bcdHexToUChar(data[1]);
-                        break;
-                    default:
-                        break;
-                    }
-                    break;
-                }
-            }
-
-            break;
-        default:
-            qInfo(logRadio()) << "Parser didn't match!" << "spec:" << parse.spec << "pos:" << parse.pos << "len"
-                              << parse.len;
-            break;
-        }
+        parseMemoryField(parse, data, *mem);
     }
 
     return true;
@@ -2658,6 +2969,598 @@ void Commander::readCurrentFrequencyAndMode()
     prepDataAndSend(modeCommand);
 }
 
+bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar receiver, const FuncType& command,
+                                      QByteArray& payload)
+{
+    const FuncType& cmd = command;
+
+    if (!cmd.setCmd)
+    {
+        qDebug(logRadio()) << "Removing unsupported set command from queue" << funcString[func] << "VFO" << receiver;
+        queue->del(func, receiver);
+        return false;
+    }
+
+    if (!isRadioAdmin && cmd.admin)
+    {
+        qWarning(logRadio()) << "Admin permission required for set command" << funcString[func] << "access denied";
+        return false;
+    }
+
+    if (m_suppressReadbackForCurrentCommand)
+    {
+        // The caller is building a receiver-scoped command sequence and
+        // will issue any required readback before restoring MAIN/SUB.
+    }
+    else if (func == funcFreqSet)
+    {
+        queue->addUnique(kPriorityImmediate, funcFreqGet, false, receiver);
+    }
+    else if (func == funcModeSet)
+    {
+        queue->addUnique(kPriorityImmediate, funcModeGet, false, receiver);
+    }
+    else if (cmd.getCmd && func != funcScopeFixedEdgeFreq && func != funcSpeech && func != funcMemoryContents &&
+             func != funcSatelliteMemory && func != funcBandStackReg && func != funcSendCW)
+    {
+        // Confirm radio-backed state by querying after the set command.
+        queue->addUnique(kPriorityImmediate, func, false, receiver);
+    }
+
+    const int ValueType = value.userType();
+    const auto valueHolds = [ValueType](int type) { return ValueType == type; };
+
+    if (valueHolds(qMetaTypeId<bool>()))
+    {
+        payload.append(value.value<bool>());
+    }
+    else if (valueHolds(qMetaTypeId<QString>()))
+    {
+        QString text = value.value<QString>();
+        if (func == funcSendCW)
+        {
+            QByteArray textData = text.toLatin1();
+            qDebug(logRadio()) << "CW input:" << textData;
+            for (int c = 0; c < textData.length(); c++)
+            {
+                const quint8 p = textData.at(c);
+                if (((p >= 0x30) && (p <= 0x39)) || ((p >= 0x41) && (p <= 0x5A)) || ((p >= 0x61) && (p <= 0x7A)) ||
+                    (p == 0x2F) || (p == 0x3F) || (p == 0x2E) || (p == 0x2D) || (p == 0x2C) || (p == 0x3A) ||
+                    (p == 0x27) || (p == 0x28) || (p == 0x29) || (p == 0x3D) || (p == 0x2B) || (p == 0x22) ||
+                    (p == 0x40) || (p == 0x20))
+                {
+                    // Allowed CW character.
+                }
+                else
+                {
+                    qWarning(logRadio()) << "Invalid character detected in CW message at position " << c
+                                         << ", the character is " << text.at(c);
+                    textData[c] = 0x3F; // "?"
+                }
+            }
+            if (textData.isEmpty())
+            {
+                emit stopsidetone();
+                payload.append(uchar(0xff));
+            }
+            else
+            {
+                emit sidetone(QString(textData));
+                payload.append(textData);
+                qDebug(logRadio()) << "CW output::" << textData;
+            }
+            qDebug(logRadio()) << "Sending CW: payload:" << payload.toHex(' ');
+        }
+    }
+    else if (valueHolds(qMetaTypeId<uchar>()))
+    {
+        if (func == funcRoofingFilter || func == funcFilterShape)
+        {
+            // The IC-9700 only sets shape for the active filter.
+            payload.append(bcdEncodeChar(value.value<uchar>() % 10));
+        }
+        else
+        {
+            payload.append(bcdEncodeChar(value.value<uchar>()));
+        }
+    }
+    else if (valueHolds(qMetaTypeId<ushort>()))
+    {
+        if (func == funcFilterWidth)
+        {
+            payload.append(makeFilterWidth(value.value<ushort>(), receiver));
+        }
+        else if (func == funcKeySpeed)
+        {
+            ushort wpm = round((value.value<ushort>() - 6) * (6.071));
+            qDebug(logRadio()) << "Sending key speed orig:" << value.value<ushort>() << "sent:" << wpm;
+            payload.append(bcdEncodeInt(wpm));
+        }
+        else if (func == funcCwPitch)
+        {
+            ushort pitch = 0;
+            pitch = ceil((value.value<ushort>() - 300) * (255.0 / 600.0));
+            payload.append(bcdEncodeInt(pitch));
+        }
+        else
+        {
+            payload.append(bcdEncodeInt(value.value<ushort>()));
+        }
+    }
+    else if (valueHolds(qMetaTypeId<short>()) && func == funcRitFreq)
+    {
+        // RIT/XIT offset payload.
+        bool isNegative = false;
+        short ritValue = value.value<short>();
+        qDebug(logRadio()) << "Setting RIT to " << ritValue;
+        if (ritValue < 0)
+        {
+            isNegative = true;
+            ritValue *= -1;
+        }
+        Frequency f;
+        QByteArray freqBytes;
+        f.Hz = ritValue;
+        freqBytes = makeFreqPayload(f);
+        freqBytes.truncate(2);
+        payload.append(freqBytes);
+        payload.append(QByteArray(1, (char)isNegative));
+    }
+    else if (valueHolds(qMetaTypeId<uint>()) && (func == funcMemoryContents || func == funcMemoryMode))
+    {
+        qDebug(logRadio()) << "Get Memory Contents" << (value.value<uint>() & 0xffff);
+        qDebug(logRadio()) << "Get Memory Group (if exists)" << (value.value<uint>() >> 16 & 0xffff);
+        if (func == funcMemoryContents)
+        {
+            const auto groupFormat = std::find_if(radioCaps.memParser.cbegin(), radioCaps.memParser.cend(),
+                                                  [](const MemParserFormat& parse) { return parse.spec == 'a'; });
+            if (groupFormat != radioCaps.memParser.cend())
+            {
+                // Include memory group when the IC-9700 memory format uses it.
+                if (groupFormat->len == 1)
+                {
+                    payload.append(bcdEncodeChar(quint16(value.value<uint>() >> 16 & 0xff)));
+                }
+                else if (groupFormat->len == 2)
+                {
+                    payload.append(bcdEncodeInt(quint16(value.value<uint>() >> 16 & 0xffff)));
+                }
+            }
+        }
+        payload.append(bcdEncodeInt(quint16(value.value<uint>() & 0xffff)));
+    }
+    else if (valueHolds(qMetaTypeId<MemoryType>()))
+    {
+        // Build the memory payload from the compiled IC-9700 memory format.
+        bool finished = false;
+        char nul = 0x0;
+        uchar ffchar = 0xff;
+        QVector<MemParserFormat> parser;
+        MemoryType mem = value.value<MemoryType>();
+        if (mem.sat)
+        {
+            parser = radioCaps.satParser;
+        }
+        else
+        {
+            parser = radioCaps.memParser;
+        }
+        const auto appendToneByName = [this, &payload](const QString& name)
+        {
+            const auto tone = std::find_if(radioCaps.ctcss.cbegin(), radioCaps.ctcss.cend(),
+                                           [&name](const ToneInfo& info) { return info.name == name; });
+            if (tone != radioCaps.ctcss.cend())
+            {
+                payload.append(bcdEncodeInt(tone->tone));
+            }
+        };
+
+        // Memory format legend for the compiled IC-9700 definition:
+        // a/b identify group/channel, f/F carry RX/TX frequency, g/G
+        // carry mode, h/H filter, i/I data mode, j/k/l tone access,
+        // n/o tone frequencies, p/q DTCS polarity/code, s/S repeater
+        // offset, t/u/v D-STAR callsigns, z name, and Z is an
+        // IC-9700 mode-specific extension block. Deletion records are
+        // intentionally short: once a delete marker is written, the
+        // loop stops so the radio receives an empty memory record for
+        // that slot instead of a partially populated one.
+        for (auto& parse : parser)
+        {
+            switch (parse.spec)
+            {
+            case 'a':
+                if (parse.len == 1)
+                {
+                    payload.append(mem.group);
+                }
+                else if (parse.len == 2)
+                {
+                    payload.append(bcdEncodeInt(mem.group));
+                }
+                break;
+            case 'b':
+                payload.append(bcdEncodeInt(mem.channel));
+                break;
+            case 'c':
+                // Empty record marker for memory deletion.
+                if (mem.del)
+                {
+                    payload.append(ffchar);
+                    finished = true;
+                    break;
+                }
+                else
+                {
+                    payload.append(mem.scan);
+                }
+                break;
+            case 'C':
+                // Empty record marker for memory deletion.
+                if (mem.del)
+                {
+                    payload.append(ffchar);
+                    finished = true;
+                    break;
+                }
+                else
+                {
+                    payload.append(mem.scan);
+                }
+                break;
+            case 'd': // combined split and scan
+                if (mem.del)
+                {
+                    payload.append(ffchar);
+                    finished = true;
+                    break;
+                }
+                else
+                {
+                    payload.append(quint8((mem.split << 4 & 0xf0) | (mem.scan & 0x0f)));
+                }
+                break;
+            case 'D': // Duplex only
+                payload.append(mem.duplex);
+                break;
+            case 'e':
+                payload.append(mem.vfo);
+                break;
+            case 'E':
+                payload.append(mem.vfoB);
+                break;
+            case 'f':
+                if (mem.del)
+                {
+                    qDebug(logRadio()) << "Pre deleting f" << payload.toHex(' ');
+                    payload.append(ffchar);
+                    qDebug(logRadio()) << "Deleting f" << payload.toHex(' ');
+                    finished = true;
+                    break;
+                }
+                else
+                {
+                    // Pad to the IC-9700 memory field width.
+                    QByteArray f = makeFreqPayload(mem.frequency);
+                    for (int i = f.size(); i < parse.len; i++)
+                    {
+                        f.append(nul);
+                    }
+                    payload.append(f);
+                }
+                break;
+            case 'F':
+            {
+                QByteArray f = makeFreqPayload(mem.frequencyB);
+                for (int i = f.size(); i < parse.len; i++)
+                {
+                    f.append(nul);
+                }
+                payload.append(f);
+                break;
+            }
+            case 'g':
+                payload.append(bcdEncodeChar(mem.mode));
+                break;
+            case 'G':
+                payload.append(bcdEncodeChar(mem.modeB));
+                break;
+            case 'h':
+                payload.append(bcdEncodeChar(mem.filter));
+                break;
+            case 'H':
+                payload.append(bcdEncodeChar(mem.filterB));
+                break;
+            case 'i': // single datamode
+                payload.append(bcdEncodeChar(mem.datamode));
+                break;
+            case 'I':
+                payload.append(bcdEncodeChar(mem.datamodeB));
+                break;
+            case 'j': // combined duplex and tonemode
+                payload.append((mem.duplex << 4) | mem.tonemode);
+                break;
+            case 'J': // combined duplex and tonemode
+                payload.append((mem.duplexB << 4) | mem.tonemodeB);
+                break;
+            case 'k': // combined datamode and tonemode
+                payload.append((mem.datamode << 4 & 0xf0) | (mem.tonemode & 0x0f));
+                break;
+            case 'K': // combined datamode and tonemode
+                payload.append((mem.datamodeB << 4 & 0xf0) | (mem.tonemodeB & 0x0f));
+                break;
+            case 'l': // tonemode
+                payload.append(mem.tonemode);
+                break;
+            case 'L':
+                payload.append(mem.tonemodeB);
+                break;
+            case 'm':
+                payload.append(mem.dsql << 4);
+                break;
+            case 'M':
+                payload.append(mem.dsqlB << 4);
+                break;
+            case 'n':
+                payload.append(nul);
+                appendToneByName(mem.tone);
+                break;
+            case 'N':
+                payload.append(nul);
+                appendToneByName(mem.toneB);
+                break;
+            case 'o':
+                payload.append(nul);
+                appendToneByName(mem.tsql);
+                break;
+            case 'O':
+                payload.append(nul);
+                appendToneByName(mem.tsqlB);
+                break;
+            case 'p':
+                payload.append((mem.dtcsp << 3 & 0x10) | (mem.dtcsp & 0x01));
+                break;
+            case 'P':
+                payload.append((mem.dtcspB << 3 & 0x10) | (mem.dtcspB & 0x01));
+                break;
+            case 'q':
+                payload.append(bcdEncodeInt(mem.dtcs));
+                break;
+            case 'Q':
+                payload.append(bcdEncodeInt(mem.dtcsB));
+                break;
+            case 'r':
+                payload.append(bcdEncodeChar(mem.dvsql));
+                break;
+            case 'R':
+                payload.append(bcdEncodeChar(mem.dvsqlB));
+                break;
+            case 's':
+                payload.append(makeFreqPayload(mem.duplexOffset).mid(1, parse.len));
+                break;
+            case 'S':
+                payload.append(makeFreqPayload(mem.duplexOffsetB).mid(1, parse.len));
+                break;
+            case 't':
+                payload.append(QByteArray(mem.UR).leftJustified(parse.len, ' ', true));
+                break;
+            case 'T':
+                payload.append(QByteArray(mem.URB).leftJustified(parse.len, ' ', true));
+                break;
+            case 'u':
+                payload.append(QByteArray(mem.R1).leftJustified(parse.len, ' ', true));
+                break;
+            case 'U':
+                payload.append(QByteArray(mem.R1B).leftJustified(parse.len, ' ', true));
+                break;
+            case 'v':
+                payload.append(QByteArray(mem.R2).leftJustified(parse.len, ' ', true));
+                break;
+            case 'V':
+                payload.append(QByteArray(mem.R2B).leftJustified(parse.len, ' ', true));
+                break;
+            case 'w':                                                          // Tuning step
+                payload.append(quint8(mem.tuningStep != 0 ? 1 : 0));
+                payload.append(bcdEncodeChar(qMax(uchar(1), mem.tuningStep))); // 0 is invalid.
+                payload.append(bcdEncodeInt(mem.progTs));
+                break;
+            case 'x': // Attenuator & Preamp
+                payload.append(bcdEncodeChar(mem.atten));
+                payload.append(bcdEncodeChar(mem.preamp));
+                break;
+            case 'y': // Antenna
+                payload.append(bcdEncodeChar(mem.antenna));
+                break;
+            case '+': // IP Plus
+                payload.append(bcdEncodeChar(mem.ipplus));
+                break;
+            case 'z':
+                payload.append(QByteArray(mem.name).leftJustified(parse.len, ' ', true));
+                break;
+            case 'Z': // Mode-dependent extension block.
+            {
+                const auto modeIt = std::find_if(radioCaps.modes.cbegin(), radioCaps.modes.cend(),
+                                                 [&mem](const ModeInfo& mode) { return mode.reg == mem.mode; });
+                if (modeIt != radioCaps.modes.cend())
+                {
+                    switch (modeIt->mk)
+                    {
+                    case modeFM:
+                        if (mem.tonemode)
+                        {
+                            payload.append(bcdEncodeChar(mem.tonemode));
+                            payload.append(nul);
+                            appendToneByName(mem.tsql);
+                            payload.append(bcdEncodeChar(mem.dtcsp));
+                            payload.append(bcdEncodeInt(mem.dtcs));
+                        }
+                        break;
+                    case modeDV:
+                        if (mem.dsql)
+                        {
+                            payload.append(bcdEncodeChar(2)); // IC-9700 expects 2 when enabling DV SQL.
+                            payload.append(bcdEncodeChar(mem.dvsql));
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+            }
+            if (finished)
+            {
+                break;
+            }
+        }
+        qDebug(logRadio()) << "Writing memory location:" << payload.toHex(' ');
+    }
+    else if (valueHolds(qMetaTypeId<int>()) && (func == funcScopeRef))
+    {
+        bool isNegative = false;
+        int level = value.value<int>();
+        if (level < 0)
+        {
+            isNegative = true;
+            level *= -1;
+        }
+        payload.append(bcdEncodeInt(quint16(level * 10)));
+        payload.append(static_cast<quint8>(isNegative));
+    }
+    else if (valueHolds(qMetaTypeId<ModeInfo>()))
+    {
+        {
+            ModeInfo m = value.value<ModeInfo>();
+            if (func == funcDataModeWithFilter)
+            {
+                payload.append(bcdEncodeChar(m.data));
+                if (m.data != 0)
+                {
+                    payload.append(m.filter);
+                }
+            }
+            else
+            {
+                payload.append(bcdEncodeChar(m.reg));
+                if (func == funcMode || func == funcSelectedMode || func == funcUnselectedMode)
+                {
+                    payload.append(m.data);
+                }
+                if (!radioCaps.filters.empty() && m.mk != modeWFM)
+                {
+                    payload.append(m.filter);
+                }
+                qDebug(logRadio()) << "Sending mode command" << funcString[func] << " mode:" << m.name
+                                   << "data:" << m.data << "filter" << m.filter;
+            }
+        }
+    }
+    else if (valueHolds(qMetaTypeId<Frequency>()))
+    {
+        if (func == funcSendFreqOffset)
+        {
+            payload.append(makeFreqPayload(value.value<Frequency>()).mid(1, 3));
+        }
+        else
+        {
+            payload.append(makeFreqPayload(value.value<Frequency>()));
+        }
+    }
+    else if (valueHolds(qMetaTypeId<AntennaInfo>()))
+    {
+        payload.append(bcdEncodeChar(value.value<AntennaInfo>().antenna));
+        if (radioCaps.commands.contains(funcRXAntenna))
+        {
+            payload.append(value.value<AntennaInfo>().rx);
+        }
+    }
+    else if (valueHolds(qMetaTypeId<radioInput>()))
+    {
+        payload.append(bcdEncodeChar(value.value<radioInput>().reg));
+    }
+    else if (valueHolds(qMetaTypeId<SpectrumBounds>()))
+    {
+        SpectrumBounds s = value.value<SpectrumBounds>();
+        uchar range = 1;
+        double lastRange = -1.0;
+        auto band = radioCaps.bands.cend();
+        while (band != radioCaps.bands.cbegin())
+        {
+            band--;
+            if (band->range > s.start)
+            {
+                break;
+            }
+            else if (lastRange != band->range && band->range != 0.0 && band->range <= s.start)
+            {
+                range++;
+                lastRange = band->range;
+            }
+        }
+        payload.append(bcdEncodeChar(range));
+        payload.append(bcdEncodeChar(s.edge));
+        payload.append(makeFreqPayload(s.start));
+        payload.append(makeFreqPayload(s.end));
+    }
+    else if (valueHolds(qMetaTypeId<duplexMode_t>()))
+    {
+        payload.append(static_cast<uchar>(value.value<duplexMode_t>()));
+    }
+    else if (valueHolds(qMetaTypeId<centerSpanData>()))
+    {
+        centerSpanData span = value.value<centerSpanData>();
+        double freq = double(span.freq / 1000000.0);
+        payload.append(makeFreqPayload(freq));
+    }
+    else if (valueHolds(qMetaTypeId<ToneInfo>()))
+    {
+        ToneInfo t = value.value<ToneInfo>();
+        payload.append(encodeTone(t.tone, t.tinv, t.rinv));
+    }
+    else if (valueHolds(qMetaTypeId<DateKind>()))
+    {
+        DateKind d = value.value<DateKind>();
+        qInfo(logRadio()) << QString("Sending new date: (MM-DD-YYYY) %1-%2-%3").arg(d.month).arg(d.day).arg(d.year);
+        payload.append(convertNumberToHex(d.year / 100));                  // 20
+        payload.append(convertNumberToHex(d.year - 100 * (d.year / 100))); // 21
+        payload.append(convertNumberToHex(d.month));
+        payload.append(convertNumberToHex(d.day));
+    }
+    else if (valueHolds(qMetaTypeId<TimeKind>()))
+    {
+        TimeKind t = value.value<TimeKind>();
+        if (cmd.cmd == funcTime)
+        {
+            qInfo(logRadio()) << QString("Sending new time: (HH:MM) %1:%2").arg(t.hours).arg(t.minutes);
+            payload.append(convertNumberToHex(t.hours));
+            payload.append(convertNumberToHex(t.minutes));
+        }
+        else if (cmd.cmd == funcUTCOffset)
+        {
+            qInfo(logRadio())
+                << QString("Sending new UTC offset: %1%2:%3").arg(t.isMinus ? "-" : "+").arg(t.hours).arg(t.minutes);
+            payload.append(convertNumberToHex(t.hours));
+            payload.append(convertNumberToHex(t.minutes));
+            payload.append((uchar)t.isMinus);
+        }
+    }
+    else if (valueHolds(qMetaTypeId<RptrAccessData>()))
+    {
+        RptrAccessData r = value.value<RptrAccessData>();
+        qDebug(logRadio()) << "Sending RptrAccessData Mode" << r.accessMode;
+        payload.append(bcdEncodeChar(static_cast<uchar>(r.accessMode)));
+    }
+    else
+    {
+        qInfo(logRadio()) << funcString[func] << "Got unknown value type" << QString(value.typeName());
+        return false;
+    }
+
+    return true;
+}
+
 void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
 {
     int val = INT_MIN;
@@ -2723,594 +3626,8 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
 
         if (value.isValid())
         {
-
-            if (!cmd.setCmd)
+            if (!appendSetCommandValue(func, value, receiver, cmd, payload))
             {
-                qDebug(logRadio()) << "Removing unsupported set command from queue" << funcString[func] << "VFO"
-                                   << receiver;
-                queue->del(func, receiver);
-                return;
-            }
-
-            if (!isRadioAdmin && cmd.admin)
-            {
-                qWarning(logRadio()) << "Admin permission required for set command" << funcString[func]
-                                     << "access denied";
-                return;
-            }
-
-            if (m_suppressReadbackForCurrentCommand)
-            {
-                // The caller is building a receiver-scoped command sequence and
-                // will issue any required readback before restoring MAIN/SUB.
-            }
-            else if (func == funcFreqSet)
-            {
-                queue->addUnique(kPriorityImmediate, funcFreqGet, false, receiver);
-            }
-            else if (func == funcModeSet)
-            {
-                queue->addUnique(kPriorityImmediate, funcModeGet, false, receiver);
-            }
-            else if (cmd.getCmd && func != funcScopeFixedEdgeFreq && func != funcSpeech && func != funcMemoryContents &&
-                     func != funcSatelliteMemory && func != funcBandStackReg && func != funcSendCW)
-            {
-                // Confirm radio-backed state by querying after the set command.
-                queue->addUnique(kPriorityImmediate, func, false, receiver);
-            }
-
-            const int ValueType = value.userType();
-            const auto valueHolds = [ValueType](int type) { return ValueType == type; };
-
-            if (valueHolds(qMetaTypeId<bool>()))
-            {
-                payload.append(value.value<bool>());
-            }
-            else if (valueHolds(qMetaTypeId<QString>()))
-            {
-                QString text = value.value<QString>();
-                if (func == funcSendCW)
-                {
-                    QByteArray textData = text.toLatin1();
-                    qDebug(logRadio()) << "CW input:" << textData;
-                    for (int c = 0; c < textData.length(); c++)
-                    {
-                        const quint8 p = textData.at(c);
-                        if (((p >= 0x30) && (p <= 0x39)) || ((p >= 0x41) && (p <= 0x5A)) ||
-                            ((p >= 0x61) && (p <= 0x7A)) || (p == 0x2F) || (p == 0x3F) || (p == 0x2E) || (p == 0x2D) ||
-                            (p == 0x2C) || (p == 0x3A) || (p == 0x27) || (p == 0x28) || (p == 0x29) || (p == 0x3D) ||
-                            (p == 0x2B) || (p == 0x22) || (p == 0x40) || (p == 0x20))
-                        {
-                            // Allowed CW character.
-                        }
-                        else
-                        {
-                            qWarning(logRadio()) << "Invalid character detected in CW message at position " << c
-                                                 << ", the character is " << text.at(c);
-                            textData[c] = 0x3F; // "?"
-                        }
-                    }
-                    if (textData.isEmpty())
-                    {
-                        emit stopsidetone();
-                        payload.append(uchar(0xff));
-                    }
-                    else
-                    {
-                        emit sidetone(QString(textData));
-                        payload.append(textData);
-                        qDebug(logRadio()) << "CW output::" << textData;
-                    }
-                    qDebug(logRadio()) << "Sending CW: payload:" << payload.toHex(' ');
-                }
-            }
-            else if (valueHolds(qMetaTypeId<uchar>()))
-            {
-                if (func == funcRoofingFilter || func == funcFilterShape)
-                {
-                    // The IC-9700 only sets shape for the active filter.
-                    payload.append(bcdEncodeChar(value.value<uchar>() % 10));
-                }
-                else
-                {
-                    payload.append(bcdEncodeChar(value.value<uchar>()));
-                }
-            }
-            else if (valueHolds(qMetaTypeId<ushort>()))
-            {
-                if (func == funcFilterWidth)
-                {
-                    payload.append(makeFilterWidth(value.value<ushort>(), receiver));
-                }
-                else if (func == funcKeySpeed)
-                {
-                    ushort wpm = round((value.value<ushort>() - 6) * (6.071));
-                    qDebug(logRadio()) << "Sending key speed orig:" << value.value<ushort>() << "sent:" << wpm;
-                    payload.append(bcdEncodeInt(wpm));
-                }
-                else if (func == funcCwPitch)
-                {
-                    ushort pitch = 0;
-                    pitch = ceil((value.value<ushort>() - 300) * (255.0 / 600.0));
-                    payload.append(bcdEncodeInt(pitch));
-                }
-                else
-                {
-                    payload.append(bcdEncodeInt(value.value<ushort>()));
-                }
-            }
-            else if (valueHolds(qMetaTypeId<short>()) && func == funcRitFreq)
-            {
-                // RIT/XIT offset payload.
-                bool isNegative = false;
-                short ritValue = value.value<short>();
-                qDebug(logRadio()) << "Setting RIT to " << ritValue;
-                if (ritValue < 0)
-                {
-                    isNegative = true;
-                    ritValue *= -1;
-                }
-                Frequency f;
-                QByteArray freqBytes;
-                f.Hz = ritValue;
-                freqBytes = makeFreqPayload(f);
-                freqBytes.truncate(2);
-                payload.append(freqBytes);
-                payload.append(QByteArray(1, (char)isNegative));
-            }
-            else if (valueHolds(qMetaTypeId<uint>()) && (func == funcMemoryContents || func == funcMemoryMode))
-            {
-                qDebug(logRadio()) << "Get Memory Contents" << (value.value<uint>() & 0xffff);
-                qDebug(logRadio()) << "Get Memory Group (if exists)" << (value.value<uint>() >> 16 & 0xffff);
-                if (func == funcMemoryContents)
-                {
-                    const auto groupFormat =
-                        std::find_if(radioCaps.memParser.cbegin(), radioCaps.memParser.cend(),
-                                     [](const MemParserFormat& parse) { return parse.spec == 'a'; });
-                    if (groupFormat != radioCaps.memParser.cend())
-                    {
-                        // Include memory group when the IC-9700 memory format uses it.
-                        if (groupFormat->len == 1)
-                        {
-                            payload.append(bcdEncodeChar(quint16(value.value<uint>() >> 16 & 0xff)));
-                        }
-                        else if (groupFormat->len == 2)
-                        {
-                            payload.append(bcdEncodeInt(quint16(value.value<uint>() >> 16 & 0xffff)));
-                        }
-                    }
-                }
-                payload.append(bcdEncodeInt(quint16(value.value<uint>() & 0xffff)));
-            }
-            else if (valueHolds(qMetaTypeId<MemoryType>()))
-            {
-                // Build the memory payload from the compiled IC-9700 memory format.
-                bool finished = false;
-                char nul = 0x0;
-                uchar ffchar = 0xff;
-                QVector<MemParserFormat> parser;
-                MemoryType mem = value.value<MemoryType>();
-                if (mem.sat)
-                {
-                    parser = radioCaps.satParser;
-                }
-                else
-                {
-                    parser = radioCaps.memParser;
-                }
-                const auto appendToneByName = [this, &payload](const QString& name)
-                {
-                    const auto tone = std::find_if(radioCaps.ctcss.cbegin(), radioCaps.ctcss.cend(),
-                                                   [&name](const ToneInfo& info) { return info.name == name; });
-                    if (tone != radioCaps.ctcss.cend())
-                    {
-                        payload.append(bcdEncodeInt(tone->tone));
-                    }
-                };
-
-                // Memory format legend for the compiled IC-9700 definition:
-                // a/b identify group/channel, f/F carry RX/TX frequency, g/G
-                // carry mode, h/H filter, i/I data mode, j/k/l tone access,
-                // n/o tone frequencies, p/q DTCS polarity/code, s/S repeater
-                // offset, t/u/v D-STAR callsigns, z name, and Z is an
-                // IC-9700 mode-specific extension block. Deletion records are
-                // intentionally short: once a delete marker is written, the
-                // loop stops so the radio receives an empty memory record for
-                // that slot instead of a partially populated one.
-                for (auto& parse : parser)
-                {
-                    switch (parse.spec)
-                    {
-                    case 'a':
-                        if (parse.len == 1)
-                        {
-                            payload.append(mem.group);
-                        }
-                        else if (parse.len == 2)
-                        {
-                            payload.append(bcdEncodeInt(mem.group));
-                        }
-                        break;
-                    case 'b':
-                        payload.append(bcdEncodeInt(mem.channel));
-                        break;
-                    case 'c':
-                        // Empty record marker for memory deletion.
-                        if (mem.del)
-                        {
-                            payload.append(ffchar);
-                            finished = true;
-                            break;
-                        }
-                        else
-                        {
-                            payload.append(mem.scan);
-                        }
-                        break;
-                    case 'C':
-                        // Empty record marker for memory deletion.
-                        if (mem.del)
-                        {
-                            payload.append(ffchar);
-                            finished = true;
-                            break;
-                        }
-                        else
-                        {
-                            payload.append(mem.scan);
-                        }
-                        break;
-                    case 'd': // combined split and scan
-                        if (mem.del)
-                        {
-                            payload.append(ffchar);
-                            finished = true;
-                            break;
-                        }
-                        else
-                        {
-                            payload.append(quint8((mem.split << 4 & 0xf0) | (mem.scan & 0x0f)));
-                        }
-                        break;
-                    case 'D': // Duplex only
-                        payload.append(mem.duplex);
-                        break;
-                    case 'e':
-                        payload.append(mem.vfo);
-                        break;
-                    case 'E':
-                        payload.append(mem.vfoB);
-                        break;
-                    case 'f':
-                        if (mem.del)
-                        {
-                            qDebug(logRadio()) << "Pre deleting f" << payload.toHex(' ');
-                            payload.append(ffchar);
-                            qDebug(logRadio()) << "Deleting f" << payload.toHex(' ');
-                            finished = true;
-                            break;
-                        }
-                        else
-                        {
-                            // Pad to the IC-9700 memory field width.
-                            QByteArray f = makeFreqPayload(mem.frequency);
-                            for (int i = f.size(); i < parse.len; i++)
-                            {
-                                f.append(nul);
-                            }
-                            payload.append(f);
-                        }
-                        break;
-                    case 'F':
-                    {
-                        QByteArray f = makeFreqPayload(mem.frequencyB);
-                        for (int i = f.size(); i < parse.len; i++)
-                        {
-                            f.append(nul);
-                        }
-                        payload.append(f);
-                        break;
-                    }
-                    case 'g':
-                        payload.append(bcdEncodeChar(mem.mode));
-                        break;
-                    case 'G':
-                        payload.append(bcdEncodeChar(mem.modeB));
-                        break;
-                    case 'h':
-                        payload.append(bcdEncodeChar(mem.filter));
-                        break;
-                    case 'H':
-                        payload.append(bcdEncodeChar(mem.filterB));
-                        break;
-                    case 'i': // single datamode
-                        payload.append(bcdEncodeChar(mem.datamode));
-                        break;
-                    case 'I':
-                        payload.append(bcdEncodeChar(mem.datamodeB));
-                        break;
-                    case 'j': // combined duplex and tonemode
-                        payload.append((mem.duplex << 4) | mem.tonemode);
-                        break;
-                    case 'J': // combined duplex and tonemode
-                        payload.append((mem.duplexB << 4) | mem.tonemodeB);
-                        break;
-                    case 'k': // combined datamode and tonemode
-                        payload.append((mem.datamode << 4 & 0xf0) | (mem.tonemode & 0x0f));
-                        break;
-                    case 'K': // combined datamode and tonemode
-                        payload.append((mem.datamodeB << 4 & 0xf0) | (mem.tonemodeB & 0x0f));
-                        break;
-                    case 'l': // tonemode
-                        payload.append(mem.tonemode);
-                        break;
-                    case 'L':
-                        payload.append(mem.tonemodeB);
-                        break;
-                    case 'm':
-                        payload.append(mem.dsql << 4);
-                        break;
-                    case 'M':
-                        payload.append(mem.dsqlB << 4);
-                        break;
-                    case 'n':
-                        payload.append(nul);
-                        appendToneByName(mem.tone);
-                        break;
-                    case 'N':
-                        payload.append(nul);
-                        appendToneByName(mem.toneB);
-                        break;
-                    case 'o':
-                        payload.append(nul);
-                        appendToneByName(mem.tsql);
-                        break;
-                    case 'O':
-                        payload.append(nul);
-                        appendToneByName(mem.tsqlB);
-                        break;
-                    case 'p':
-                        payload.append((mem.dtcsp << 3 & 0x10) | (mem.dtcsp & 0x01));
-                        break;
-                    case 'P':
-                        payload.append((mem.dtcspB << 3 & 0x10) | (mem.dtcspB & 0x01));
-                        break;
-                    case 'q':
-                        payload.append(bcdEncodeInt(mem.dtcs));
-                        break;
-                    case 'Q':
-                        payload.append(bcdEncodeInt(mem.dtcsB));
-                        break;
-                    case 'r':
-                        payload.append(bcdEncodeChar(mem.dvsql));
-                        break;
-                    case 'R':
-                        payload.append(bcdEncodeChar(mem.dvsqlB));
-                        break;
-                    case 's':
-                        payload.append(makeFreqPayload(mem.duplexOffset).mid(1, parse.len));
-                        break;
-                    case 'S':
-                        payload.append(makeFreqPayload(mem.duplexOffsetB).mid(1, parse.len));
-                        break;
-                    case 't':
-                        payload.append(QByteArray(mem.UR).leftJustified(parse.len, ' ', true));
-                        break;
-                    case 'T':
-                        payload.append(QByteArray(mem.URB).leftJustified(parse.len, ' ', true));
-                        break;
-                    case 'u':
-                        payload.append(QByteArray(mem.R1).leftJustified(parse.len, ' ', true));
-                        break;
-                    case 'U':
-                        payload.append(QByteArray(mem.R1B).leftJustified(parse.len, ' ', true));
-                        break;
-                    case 'v':
-                        payload.append(QByteArray(mem.R2).leftJustified(parse.len, ' ', true));
-                        break;
-                    case 'V':
-                        payload.append(QByteArray(mem.R2B).leftJustified(parse.len, ' ', true));
-                        break;
-                    case 'w':                                                          // Tuning step
-                        payload.append(quint8(mem.tuningStep != 0 ? 1 : 0));
-                        payload.append(bcdEncodeChar(qMax(uchar(1), mem.tuningStep))); // 0 is invalid.
-                        payload.append(bcdEncodeInt(mem.progTs));
-                        break;
-                    case 'x': // Attenuator & Preamp
-                        payload.append(bcdEncodeChar(mem.atten));
-                        payload.append(bcdEncodeChar(mem.preamp));
-                        break;
-                    case 'y': // Antenna
-                        payload.append(bcdEncodeChar(mem.antenna));
-                        break;
-                    case '+': // IP Plus
-                        payload.append(bcdEncodeChar(mem.ipplus));
-                        break;
-                    case 'z':
-                        payload.append(QByteArray(mem.name).leftJustified(parse.len, ' ', true));
-                        break;
-                    case 'Z': // Mode-dependent extension block.
-                    {
-                        const auto modeIt = std::find_if(radioCaps.modes.cbegin(), radioCaps.modes.cend(),
-                                                         [&mem](const ModeInfo& mode) { return mode.reg == mem.mode; });
-                        if (modeIt != radioCaps.modes.cend())
-                        {
-                            switch (modeIt->mk)
-                            {
-                            case modeFM:
-                                if (mem.tonemode)
-                                {
-                                    payload.append(bcdEncodeChar(mem.tonemode));
-                                    payload.append(nul);
-                                    appendToneByName(mem.tsql);
-                                    payload.append(bcdEncodeChar(mem.dtcsp));
-                                    payload.append(bcdEncodeInt(mem.dtcs));
-                                }
-                                break;
-                            case modeDV:
-                                if (mem.dsql)
-                                {
-                                    payload.append(bcdEncodeChar(2)); // IC-9700 expects 2 when enabling DV SQL.
-                                    payload.append(bcdEncodeChar(mem.dvsql));
-                                }
-                                break;
-                            default:
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                    default:
-                        break;
-                    }
-                    if (finished)
-                    {
-                        break;
-                    }
-                }
-                qDebug(logRadio()) << "Writing memory location:" << payload.toHex(' ');
-            }
-            else if (valueHolds(qMetaTypeId<int>()) && (func == funcScopeRef))
-            {
-                bool isNegative = false;
-                int level = value.value<int>();
-                if (level < 0)
-                {
-                    isNegative = true;
-                    level *= -1;
-                }
-                payload.append(bcdEncodeInt(quint16(level * 10)));
-                payload.append(static_cast<quint8>(isNegative));
-            }
-            else if (valueHolds(qMetaTypeId<ModeInfo>()))
-            {
-                {
-                    ModeInfo m = value.value<ModeInfo>();
-                    if (func == funcDataModeWithFilter)
-                    {
-                        payload.append(bcdEncodeChar(m.data));
-                        if (m.data != 0)
-                        {
-                            payload.append(m.filter);
-                        }
-                    }
-                    else
-                    {
-                        payload.append(bcdEncodeChar(m.reg));
-                        if (func == funcMode || func == funcSelectedMode || func == funcUnselectedMode)
-                        {
-                            payload.append(m.data);
-                        }
-                        if (!radioCaps.filters.empty() && m.mk != modeWFM)
-                        {
-                            payload.append(m.filter);
-                        }
-                        qDebug(logRadio()) << "Sending mode command" << funcString[func] << " mode:" << m.name
-                                           << "data:" << m.data << "filter" << m.filter;
-                    }
-                }
-            }
-            else if (valueHolds(qMetaTypeId<Frequency>()))
-            {
-                if (func == funcSendFreqOffset)
-                {
-                    payload.append(makeFreqPayload(value.value<Frequency>()).mid(1, 3));
-                }
-                else
-                {
-                    payload.append(makeFreqPayload(value.value<Frequency>()));
-                }
-            }
-            else if (valueHolds(qMetaTypeId<AntennaInfo>()))
-            {
-                payload.append(bcdEncodeChar(value.value<AntennaInfo>().antenna));
-                if (radioCaps.commands.contains(funcRXAntenna))
-                {
-                    payload.append(value.value<AntennaInfo>().rx);
-                }
-            }
-            else if (valueHolds(qMetaTypeId<radioInput>()))
-            {
-                payload.append(bcdEncodeChar(value.value<radioInput>().reg));
-            }
-            else if (valueHolds(qMetaTypeId<SpectrumBounds>()))
-            {
-                SpectrumBounds s = value.value<SpectrumBounds>();
-                uchar range = 1;
-                double lastRange = -1.0;
-                auto band = radioCaps.bands.cend();
-                while (band != radioCaps.bands.cbegin())
-                {
-                    band--;
-                    if (band->range > s.start)
-                    {
-                        break;
-                    }
-                    else if (lastRange != band->range && band->range != 0.0 && band->range <= s.start)
-                    {
-                        range++;
-                        lastRange = band->range;
-                    }
-                }
-                payload.append(bcdEncodeChar(range));
-                payload.append(bcdEncodeChar(s.edge));
-                payload.append(makeFreqPayload(s.start));
-                payload.append(makeFreqPayload(s.end));
-            }
-            else if (valueHolds(qMetaTypeId<duplexMode_t>()))
-            {
-                payload.append(static_cast<uchar>(value.value<duplexMode_t>()));
-            }
-            else if (valueHolds(qMetaTypeId<centerSpanData>()))
-            {
-                centerSpanData span = value.value<centerSpanData>();
-                double freq = double(span.freq / 1000000.0);
-                payload.append(makeFreqPayload(freq));
-            }
-            else if (valueHolds(qMetaTypeId<ToneInfo>()))
-            {
-                ToneInfo t = value.value<ToneInfo>();
-                payload.append(encodeTone(t.tone, t.tinv, t.rinv));
-            }
-            else if (valueHolds(qMetaTypeId<DateKind>()))
-            {
-                DateKind d = value.value<DateKind>();
-                qInfo(logRadio())
-                    << QString("Sending new date: (MM-DD-YYYY) %1-%2-%3").arg(d.month).arg(d.day).arg(d.year);
-                payload.append(convertNumberToHex(d.year / 100));                  // 20
-                payload.append(convertNumberToHex(d.year - 100 * (d.year / 100))); // 21
-                payload.append(convertNumberToHex(d.month));
-                payload.append(convertNumberToHex(d.day));
-            }
-            else if (valueHolds(qMetaTypeId<TimeKind>()))
-            {
-                TimeKind t = value.value<TimeKind>();
-                if (cmd.cmd == funcTime)
-                {
-                    qInfo(logRadio()) << QString("Sending new time: (HH:MM) %1:%2").arg(t.hours).arg(t.minutes);
-                    payload.append(convertNumberToHex(t.hours));
-                    payload.append(convertNumberToHex(t.minutes));
-                }
-                else if (cmd.cmd == funcUTCOffset)
-                {
-                    qInfo(logRadio()) << QString("Sending new UTC offset: %1%2:%3")
-                                             .arg(t.isMinus ? "-" : "+")
-                                             .arg(t.hours)
-                                             .arg(t.minutes);
-                    payload.append(convertNumberToHex(t.hours));
-                    payload.append(convertNumberToHex(t.minutes));
-                    payload.append((uchar)t.isMinus);
-                }
-            }
-            else if (valueHolds(qMetaTypeId<RptrAccessData>()))
-            {
-                RptrAccessData r = value.value<RptrAccessData>();
-                qDebug(logRadio()) << "Sending RptrAccessData Mode" << r.accessMode;
-                payload.append(bcdEncodeChar(static_cast<uchar>(r.accessMode)));
-            }
-            else
-            {
-                qInfo(logRadio()) << funcString[func] << "Got unknown value type" << QString(value.typeName());
                 return;
             }
         }

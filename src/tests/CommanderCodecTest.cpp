@@ -17,6 +17,16 @@ class CommanderCodecTest : public QObject
     void frequencyPayloadRoundTrips();
     void tonePayloadRoundTrips();
     void parsesModesAndUnknownMode();
+    void parsesFrequencyReplyFamily();
+    void parsesModeReplyFamily();
+    void rejectsMalformedFrequencyAndModeReplies();
+    void parsesLevelAndMeterReplyFamily();
+    void rejectsMalformedLevelAndMeterReplies();
+    void parsesFeatureAndScopeReplyFamilies();
+    void rejectsMalformedFeatureAndScopeReplies();
+    void parsesMemoryFields();
+    void serializesOutboundCommandValues();
+    void rejectsUnknownOutboundValueTypes();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
     void parserToleratesDeterministicArbitraryInput();
@@ -80,6 +90,161 @@ void CommanderCodecTest::parsesModesAndUnknownMode()
     QCOMPARE(m_commander.parseMode(17, 1, 1).mk, modeDV);
     const ModeInfo unknown = m_commander.parseMode(0x7f, 0, 1);
     QCOMPARE(unknown.mk, modeUnknown);
+}
+
+void CommanderCodecTest::parsesFrequencyReplyFamily()
+{
+    Frequency expected;
+    expected.Hz = 145825000;
+    m_commander.payloadIn = QByteArray(1, '\x01') + m_commander.makeFreqPayload(expected);
+    Funcs func = funcFreq;
+    QVariant value;
+    uchar receiver = 0;
+
+    QCOMPARE(m_commander.parseFrequencyReply(func, value, receiver), Commander::ReplyParseResult::Parsed);
+    QCOMPARE(func, funcFreq);
+    QCOMPARE(receiver, uchar(1));
+    QCOMPARE(value.value<Frequency>().Hz, expected.Hz);
+}
+
+void CommanderCodecTest::parsesModeReplyFamily()
+{
+    m_commander.payloadIn = QByteArray::fromHex("01050102");
+    Funcs func = funcMode;
+    QVariant value;
+    uchar receiver = 0;
+
+    QCOMPARE(m_commander.parseModeReply(func, value, receiver), Commander::ReplyParseResult::Parsed);
+    QCOMPARE(func, funcMode);
+    QCOMPARE(receiver, uchar(1));
+    const ModeInfo mode = value.value<ModeInfo>();
+    QCOMPARE(mode.mk, modeFM);
+    QCOMPARE(mode.data, uchar(1));
+    QCOMPARE(mode.filter, uchar(2));
+    QCOMPARE(mode.VFO, selVFO_t(1));
+}
+
+void CommanderCodecTest::rejectsMalformedFrequencyAndModeReplies()
+{
+    QVariant value;
+    uchar receiver = 0;
+
+    Funcs frequencyFunc = funcFreq;
+    m_commander.payloadIn.clear();
+    QCOMPARE(m_commander.parseFrequencyReply(frequencyFunc, value, receiver), Commander::ReplyParseResult::Malformed);
+    QVERIFY(!value.isValid());
+
+    Funcs modeFunc = funcMode;
+    m_commander.payloadIn.clear();
+    QCOMPARE(m_commander.parseModeReply(modeFunc, value, receiver), Commander::ReplyParseResult::Malformed);
+    QVERIFY(!value.isValid());
+
+    modeFunc = funcDataModeWithFilter;
+    m_commander.payloadIn = QByteArray(1, '\x01');
+    QCOMPARE(m_commander.parseModeReply(modeFunc, value, receiver), Commander::ReplyParseResult::Malformed);
+    QVERIFY(!value.isValid());
+}
+
+void CommanderCodecTest::parsesLevelAndMeterReplyFamily()
+{
+    QVariant value;
+
+    m_commander.payloadIn = QByteArray::fromHex("0123");
+    QCOMPARE(m_commander.parseLevelMeterReply(funcAfGain, value), Commander::ReplyParseResult::Parsed);
+    QCOMPARE(value.toUInt(), 123U);
+
+    m_commander.payloadIn = QByteArray::fromHex("01230000");
+    QCOMPARE(m_commander.parseLevelMeterReply(funcAbsoluteMeter, value), Commander::ReplyParseResult::Parsed);
+    const MeterKind meter = value.value<MeterKind>();
+    QCOMPARE(meter.value, 12.3);
+    QCOMPARE(meter.type, meterdBu);
+
+    QCOMPARE(m_commander.parseLevelMeterReply(funcToneFreq, value), Commander::ReplyParseResult::NotHandled);
+}
+
+void CommanderCodecTest::rejectsMalformedLevelAndMeterReplies()
+{
+    QVariant value;
+    m_commander.payloadIn = QByteArray(1, '\0');
+    QCOMPARE(m_commander.parseLevelMeterReply(funcAfGain, value), Commander::ReplyParseResult::Malformed);
+    QVERIFY(!value.isValid());
+
+    m_commander.payloadIn = QByteArray(3, '\0');
+    QCOMPARE(m_commander.parseLevelMeterReply(funcAbsoluteMeter, value), Commander::ReplyParseResult::Malformed);
+    QVERIFY(!value.isValid());
+}
+
+void CommanderCodecTest::parsesFeatureAndScopeReplyFamilies()
+{
+    QVariant value;
+
+    m_commander.payloadIn = QByteArray(1, '\x01');
+    QCOMPARE(m_commander.parseFeatureReply(funcNoiseBlanker, value, 0), Commander::ReplyParseResult::Parsed);
+    QVERIFY(value.toBool());
+
+    uchar receiver = 0;
+    m_commander.payloadIn = QByteArray::fromHex("0102");
+    QCOMPARE(m_commander.parseScopeReply(funcScopeMode, value, receiver), Commander::ReplyParseResult::Parsed);
+    QCOMPARE(receiver, uchar(1));
+    QCOMPARE(value.value<uchar>(), uchar(2));
+
+    QCOMPARE(m_commander.parseScopeReply(funcToneFreq, value, receiver), Commander::ReplyParseResult::NotHandled);
+}
+
+void CommanderCodecTest::rejectsMalformedFeatureAndScopeReplies()
+{
+    QVariant value;
+    m_commander.payloadIn.clear();
+    QCOMPARE(m_commander.parseFeatureReply(funcNoiseBlanker, value, 0), Commander::ReplyParseResult::Malformed);
+    QVERIFY(!value.isValid());
+
+    uchar receiver = 0;
+    m_commander.payloadIn = QByteArray(1, '\0');
+    QCOMPARE(m_commander.parseScopeReply(funcScopeMode, value, receiver), Commander::ReplyParseResult::Malformed);
+    QVERIFY(!value.isValid());
+}
+
+void CommanderCodecTest::parsesMemoryFields()
+{
+    MemoryType memory;
+    m_commander.initializeMemoryForParsing(memory);
+
+    m_commander.parseMemoryField(MemParserFormat('a', 0, 1), QByteArray::fromHex("02"), memory);
+    m_commander.parseMemoryField(MemParserFormat('b', 0, 2), QByteArray::fromHex("0042"), memory);
+    Frequency frequency;
+    frequency.Hz = 145825000;
+    m_commander.parseMemoryField(MemParserFormat('f', 0, 5), m_commander.makeFreqPayload(frequency), memory);
+    m_commander.parseMemoryField(MemParserFormat('z', 0, 8), QByteArray("SAT TEST"), memory);
+
+    QCOMPARE(memory.group, quint16(2));
+    QCOMPARE(memory.channel, quint16(42));
+    QCOMPARE(memory.frequency.Hz, quint64(145825000));
+    QCOMPARE(QByteArray(memory.name, 8), QByteArray("SAT TEST"));
+}
+
+void CommanderCodecTest::serializesOutboundCommandValues()
+{
+    QByteArray payload;
+    const FuncType boolCommand = m_commander.radioCaps.commands.value(funcNoiseBlanker);
+    QVERIFY(m_commander.appendSetCommandValue(funcNoiseBlanker, QVariant::fromValue(true), 0, boolCommand, payload));
+    QCOMPARE(payload, QByteArray(1, '\x01'));
+
+    Frequency frequency;
+    frequency.Hz = 145825000;
+    payload.clear();
+    const FuncType frequencyCommand = m_commander.radioCaps.commands.value(funcFreqSet);
+    QVERIFY(
+        m_commander.appendSetCommandValue(funcFreqSet, QVariant::fromValue(frequency), 0, frequencyCommand, payload));
+    QCOMPARE(m_commander.parseFreqDataToInt(payload), frequency.Hz);
+}
+
+void CommanderCodecTest::rejectsUnknownOutboundValueTypes()
+{
+    QByteArray payload;
+    const FuncType command = m_commander.radioCaps.commands.value(funcNoiseBlanker);
+    QVERIFY(!m_commander.appendSetCommandValue(funcNoiseBlanker, QVariant::fromValue(QRect(1, 2, 3, 4)), 0, command,
+                                               payload));
+    QVERIFY(payload.isEmpty());
 }
 
 void CommanderCodecTest::rejectsShortSpectrumFrames()
