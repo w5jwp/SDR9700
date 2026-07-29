@@ -13,17 +13,13 @@ namespace sdr9700::ui
 class UtilityWindow : public QDialog
 {
   public:
-    explicit UtilityWindow(const QString& title, QWidget* parent = nullptr) : QDialog(nullptr), m_centerHost(parent)
+    explicit UtilityWindow(const QString& title, QWidget* parent = nullptr)
+        : QDialog(parent, Qt::Window), m_centerHost(parent)
     {
         setWindowTitle(title);
         setWindowModality(Qt::NonModal);
         setAttribute(Qt::WA_DeleteOnClose, false);
         setAttribute(Qt::WA_QuitOnClose, false);
-        setWindowFlag(Qt::Window, true);
-        if (parent)
-        {
-            connect(parent, &QObject::destroyed, this, [this]() { deleteLater(); });
-        }
     }
 
     void showCentered()

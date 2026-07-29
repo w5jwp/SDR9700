@@ -272,9 +272,12 @@ void MainWindow::buildToolBar()
     fileMenu->setStyleSheet(menuStyle);
     fileMenu->addAction("Connect to Radio", this, [this]() { showRadioChooserDialog(); });
     fileMenu->addSeparator();
-    auto* quitAction = fileMenu->addAction("Quit", this, &QWidget::close);
+    auto* quitAction = fileMenu->addAction("Quit");
+    quitAction->setObjectName(QStringLiteral("quitAction"));
     quitAction->setMenuRole(QAction::QuitRole);
     quitAction->setShortcut(QKeySequence::Quit);
+    connect(quitAction, &QAction::triggered, this,
+            [this]() { QMetaObject::invokeMethod(this, &QWidget::close, Qt::QueuedConnection); });
     m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
 
     m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
