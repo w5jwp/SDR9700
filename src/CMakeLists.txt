@@ -103,11 +103,8 @@ if(HIDAPI_FOUND)
 endif()
 
 
-# SDR9700 executable
-set(SDR9700_SOURCES
-    main.cpp
-    ../resources/qt/resources.qrc
-
+# SDR9700 application implementation shared by the executable and GUI smoke tests.
+set(SDR9700_APP_SOURCES
     backend/IRadioBackend.h
     backend/ScopeController.h
     backend/ScopeController.cpp
@@ -215,20 +212,42 @@ if(APPLE)
     set_source_files_properties(${SDR9700_MACOS_ICON} PROPERTIES
         MACOSX_PACKAGE_LOCATION Resources
     )
-    list(APPEND SDR9700_SOURCES ${SDR9700_MACOS_ICON})
 endif()
 
 if(HIDAPI_FOUND)
-    list(APPEND SDR9700_SOURCES
+    list(APPEND SDR9700_APP_SOURCES
         gui/IcomRC28SettingsPanel.h
         gui/IcomRC28SettingsPanel.cpp
     )
 endif()
 
+add_library(SDR9700_app_support STATIC ${SDR9700_APP_SOURCES})
+target_include_directories(SDR9700_app_support PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(SDR9700_app_support PUBLIC
+    SDR9700_core
+    Qt6::Core
+    Qt6::Widgets
+    Qt6::Network
+    Qt6::Multimedia
+)
+if(HIDAPI_FOUND)
+    target_compile_definitions(SDR9700_app_support PUBLIC HAVE_HIDAPI)
+endif()
+
+set(SDR9700_EXECUTABLE_SOURCES
+    main.cpp
+    ../resources/qt/resources.qrc
+)
 if(APPLE)
-    add_executable(SDR9700 MACOSX_BUNDLE ${SDR9700_SOURCES})
+    list(APPEND SDR9700_EXECUTABLE_SOURCES ${SDR9700_MACOS_ICON})
+endif()
+
+if(APPLE)
+    add_executable(SDR9700 MACOSX_BUNDLE ${SDR9700_EXECUTABLE_SOURCES})
 else()
-    add_executable(SDR9700 ${SDR9700_SOURCES})
+    add_executable(SDR9700 ${SDR9700_EXECUTABLE_SOURCES})
 endif()
 
 target_include_directories(SDR9700 PRIVATE
@@ -236,17 +255,8 @@ target_include_directories(SDR9700 PRIVATE
 )
 
 target_link_libraries(SDR9700 PRIVATE
-    SDR9700_core
-    Qt6::Core
-    Qt6::Widgets
-    Qt6::Network
-    Qt6::Multimedia
+    SDR9700_app_support
 )
-
-if(HIDAPI_FOUND)
-    target_compile_definitions(SDR9700 PRIVATE HAVE_HIDAPI)
-endif()
-
 
 set_target_properties(SDR9700 PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
@@ -477,26 +487,14 @@ if(BUILD_TESTING)
     add_test(NAME GuiSmokeTest COMMAND GuiSmokeTest)
     set_tests_properties(GuiSmokeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-    set(MEMORY_MANAGER_SMOKE_SOURCES ${SDR9700_SOURCES})
-    list(REMOVE_ITEM MEMORY_MANAGER_SMOKE_SOURCES
-        main.cpp
-        ../resources/qt/resources.qrc
-        ${SDR9700_MACOS_ICON}
-    )
-    add_executable(MemoryManagerSmokeTest
-        tests/MemoryManagerSmokeTest.cpp
-        ${MEMORY_MANAGER_SMOKE_SOURCES}
-    )
+    add_executable(MemoryManagerSmokeTest tests/MemoryManagerSmokeTest.cpp)
     target_include_directories(MemoryManagerSmokeTest PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/gui
     )
     target_link_libraries(MemoryManagerSmokeTest PRIVATE
-        SDR9700_core
+        SDR9700_app_support
         Qt6::Test
-        Qt6::Widgets
-        Qt6::Multimedia
-        Qt6::Network
     )
     add_test(NAME MemoryManagerSmokeTest COMMAND MemoryManagerSmokeTest)
     set_tests_properties(MemoryManagerSmokeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
