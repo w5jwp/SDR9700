@@ -149,6 +149,8 @@ set(SDR9700_SOURCES
     gui/MemoryCsvController.cpp
     gui/MemoryEditorController.h
     gui/MemoryEditorController.cpp
+    gui/MemoryEditorForm.h
+    gui/MemoryEditorForm.cpp
     gui/MemoryControllerHelpers.h
     gui/MemoryController.h
     gui/MemoryController.cpp

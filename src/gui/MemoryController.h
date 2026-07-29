@@ -12,6 +12,7 @@
 class MainWindow;
 class MemoryCsvController;
 class MemoryEditorController;
+class MemoryEditorForm;
 class MemorySyncController;
 class MemorySelectionController;
 class MemoryViewController;
@@ -67,6 +68,7 @@ class MemoryController : public QObject
     // The editor controller owns the extracted editor workflow and operates on
     // the memory state whose lifetime remains managed by this controller.
     friend class MemoryEditorController;
+    friend class MemoryEditorForm;
 
     using MemoryWriteCompletion = std::function<void(bool success)>;
 

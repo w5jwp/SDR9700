@@ -4,6 +4,7 @@
 #include <QString>
 
 class MemoryController;
+class MemoryEditorForm;
 
 class MemoryEditorController : public QObject
 {
@@ -18,4 +19,5 @@ class MemoryEditorController : public QObject
 
   private:
     MemoryController* m_owner{nullptr};
+    MemoryEditorForm* m_form{nullptr};
 };

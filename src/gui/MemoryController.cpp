@@ -1,51 +1,20 @@
 #include "MemoryController.h"
 #include "MemoryControllerHelpers.h"
 
-#include "DialogPlacement.h"
-#include "LogCategories.h"
 #include "MainWindow.h"
-#include "MainWindowHelpers.h"
+#include "LogCategories.h"
 #include "MemoryCsvController.h"
 #include "MemoryEditorController.h"
 #include "MemorySelectionController.h"
-#include "MemoryPanel.h"
 #include "MemorySyncController.h"
 #include "MemoryViewController.h"
 #include "MemoryWriteController.h"
-#include "RadioCapabilities.h"
-#include "VfoPanel.h"
-#include "UtilityWindow.h"
 #include "models/RadioModel.h"
-#include "models/VfoModel.h"
 
-#include <QAbstractItemView>
-#include <QApplication>
-#include <QComboBox>
-#include <QDoubleSpinBox>
-#include <QFormLayout>
-#include <QGridLayout>
-#include <QGroupBox>
-#include <QHeaderView>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QLineEdit>
-#include <QMenu>
-#include <QMessageBox>
-#include <QPainter>
-#include <QProgressBar>
 #include <QPushButton>
-#include <QSizePolicy>
-#include <QSpinBox>
+#include <QDialog>
 #include <QStringList>
-#include <QStyle>
-#include <QStyledItemDelegate>
-#include <QTableWidget>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QWidgetAction>
 #include <algorithm>
-#include <cstring>
-#include <initializer_list>
 
 using namespace sdr9700::ui::main_window;
 
