@@ -38,6 +38,17 @@ fi
 rm -f "${deploy_log}"
 
 frameworks_path="${contents_path}/Frameworks"
+install_name_log="$(mktemp /tmp/sdr9700-install-name.XXXXXX)"
+trap 'rm -f "${install_name_log}"' EXIT HUP INT TERM
+
+run_install_name_tool()
+{
+    if ! install_name_tool "$@" 2>"${install_name_log}"; then
+        cat "${install_name_log}" >&2
+        return 1
+    fi
+    : >"${install_name_log}"
+}
 
 # Homebrew's Qt plugin tree can contain plugins for separately packaged Qt
 # modules. macdeployqt copies those plugins even when their framework is not
@@ -53,10 +64,11 @@ if [ ! -e "${frameworks_path}/QtPdf.framework" ]; then
     rm -f "${plugins_path}/imageformats/libqpdf.dylib"
 fi
 
-# Copied Homebrew binaries arrive with signatures and build-machine rpaths.
-# Remove the old signatures before changing Mach-O metadata so install_name_tool
-# does not emit signature-invalidation warnings. Release signing happens only
-# after every load command is final.
+# Copied Homebrew binaries can arrive with signatures and build-machine rpaths.
+# Let install_name_tool invalidate those signatures while changing the load
+# commands. Removing a signature first with the older codesign shipped on some
+# GitHub macOS runners can leave newer Homebrew binaries with an unprocessable
+# __LINKEDIT layout. The complete bundle is signed after all metadata is final.
 while IFS= read -r binary_path; do
     if file "${binary_path}" | grep -q "Mach-O"; then
         install_id="$(otool -D "${binary_path}" 2>/dev/null | tail -n +2 | head -n 1)"
@@ -70,26 +82,15 @@ while IFS= read -r binary_path; do
             }
         ')"
 
-        needs_update=false
-        if [ -n "${install_id}" ] && echo "${install_id}" | grep -q '^/'; then
-            needs_update=true
-        fi
-        if [ -n "${absolute_rpaths}" ]; then
-            needs_update=true
-        fi
-        if [ "${needs_update}" = true ]; then
-            codesign --remove-signature "${binary_path}" 2>/dev/null || true
-        fi
-
         if [ -n "${install_id}" ] && echo "${install_id}" | grep -q '^/'; then
             relative_path="${binary_path#"${frameworks_path}/"}"
-            install_name_tool -id "@rpath/${relative_path}" "${binary_path}"
+            run_install_name_tool -id "@rpath/${relative_path}" "${binary_path}"
         fi
 
         if [ -n "${absolute_rpaths}" ]; then
             echo "${absolute_rpaths}" | while IFS= read -r rpath; do
                 if [ -n "${rpath}" ]; then
-                    install_name_tool -delete_rpath "${rpath}" "${binary_path}"
+                    run_install_name_tool -delete_rpath "${rpath}" "${binary_path}"
                 fi
             done
         fi
@@ -112,10 +113,9 @@ main_absolute_rpaths="$(otool -l "${main_executable}" | awk '
     }
 ')"
 if [ -n "${main_absolute_rpaths}" ]; then
-    codesign --remove-signature "${main_executable}" 2>/dev/null || true
     echo "${main_absolute_rpaths}" | while IFS= read -r rpath; do
         if [ -n "${rpath}" ]; then
-            install_name_tool -delete_rpath "${rpath}" "${main_executable}"
+            run_install_name_tool -delete_rpath "${rpath}" "${main_executable}"
         fi
     done
 fi

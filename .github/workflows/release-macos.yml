@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           test "$(uname -m)" = "arm64"
-          version="$(sed -n 's/^project(SDR9700 VERSION \\([^ ]*\\).*/\\1/p' CMakeLists.txt)"
+          version="$(sed -n 's/^project(SDR9700 VERSION \([^ ]*\).*/\1/p' CMakeLists.txt)"
           test -n "$version"
           if [[ "${{ github.event_name }}" == "release" ]]; then
             expected_tag="v${version}"
