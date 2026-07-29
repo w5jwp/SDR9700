@@ -47,6 +47,8 @@ void RadioRouterTest::clampsMeterAndLevelValues()
     RadioRouter router;
     QSignalSpy smeterSpy(&router, &RadioRouter::smeterChanged);
     QSignalSpy rfSpy(&router, &RadioRouter::rfGainChanged);
+    QSignalSpy nrLevelSpy(&router, &RadioRouter::nrLevelChanged);
+    QSignalSpy nbLevelSpy(&router, &RadioRouter::nbLevelChanged);
     QSignalSpy powerSpy(&router, &RadioRouter::txPowerChanged);
     QSignalSpy squelchSpy(&router, &RadioRouter::squelchChanged);
 
@@ -56,9 +58,13 @@ void RadioRouterTest::clampsMeterAndLevelValues()
     QCOMPARE(smeterSpy.at(1).at(0).toInt(), 255);
 
     router.route(CacheItem(funcRfGain, -1));
+    router.route(CacheItem(funcNRLevel, 999));
+    router.route(CacheItem(funcNBLevel, -1));
     router.route(CacheItem(funcRFPower, 999));
     router.route(CacheItem(funcSquelch, 0));
     QCOMPARE(rfSpy.takeFirst().at(0).toInt(), 0);
+    QCOMPARE(nrLevelSpy.takeFirst().at(0).toInt(), 15);
+    QCOMPARE(nbLevelSpy.takeFirst().at(0).toInt(), 0);
     QCOMPARE(powerSpy.takeFirst().at(0).toInt(), 255);
     QCOMPARE(squelchSpy.at(0).at(0).toBool(), false);
     QCOMPARE(squelchSpy.at(0).at(1).toInt(), 0);

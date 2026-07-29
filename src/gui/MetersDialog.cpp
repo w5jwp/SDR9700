@@ -78,6 +78,9 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
     auto* root = new QVBoxLayout(this);
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
+    auto* titleBar = new sdr9700::ui::UtilityTitleBar(QStringLiteral("Meters"), this);
+    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QWidget::close);
+    root->addWidget(titleBar);
 
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
@@ -106,6 +109,7 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
 
     contentLayout->addLayout(grid);
     resetMeters();
+    setFixedSize(500, sizeHint().height());
 }
 
 MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, const QString& label,

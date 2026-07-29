@@ -27,6 +27,7 @@ class CommanderCodecTest : public QObject
     void parsesMemoryFields();
     void serializesOutboundCommandValues();
     void rejectsUnknownOutboundValueTypes();
+    void pttAcknowledgementDoesNotSynthesizeTransmitState();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
     void parserToleratesDeterministicArbitraryInput();
@@ -245,6 +246,27 @@ void CommanderCodecTest::rejectsUnknownOutboundValueTypes()
     QVERIFY(!m_commander.appendSetCommandValue(funcNoiseBlanker, QVariant::fromValue(QRect(1, 2, 3, 4)), 0, command,
                                                payload));
     QVERIFY(payload.isEmpty());
+}
+
+void CommanderCodecTest::pttAcknowledgementDoesNotSynthesizeTransmitState()
+{
+    m_commander.queue->resetSessionState();
+    m_commander.radioPoweredOn = true;
+    QSignalSpy cacheSpy(m_commander.queue, &CachingQueue::cacheUpdated);
+
+    const FuncType command = m_commander.radioCaps.commands.value(funcTransceiverStatus);
+    m_commander.rememberPendingSetCommand(funcTransceiverStatus, QByteArray::fromHex("1c0001"),
+                                          QVariant::fromValue(true), 0, command);
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a2fbfd"));
+    QCOMPARE(cacheSpy.count(), 0);
+
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a21c0000fd"));
+    cacheSpy.clear();
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a21c0001fd"));
+    QTRY_COMPARE(cacheSpy.count(), 1);
+    const CacheItem update = qvariant_cast<CacheItem>(cacheSpy.takeFirst().at(0));
+    QCOMPARE(update.command, funcTransceiverStatus);
+    QVERIFY(update.value.toBool());
 }
 
 void CommanderCodecTest::rejectsShortSpectrumFrames()

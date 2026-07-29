@@ -24,13 +24,11 @@ void TwoLineButton::paintEvent(QPaintEvent* event)
 
     QFont primaryFont = font();
     primaryFont.setBold(true);
+    primaryFont.setPixelSize(12);
 
     QFont secondaryFont = font();
     secondaryFont.setBold(true);
-    if (secondaryFont.pointSizeF() > 1.0)
-    {
-        secondaryFont.setPointSizeF(qMax(1.0, secondaryFont.pointSizeF() - 1.0));
-    }
+    secondaryFont.setPixelSize(10);
 
     const QFontMetrics primaryMetrics(primaryFont);
     const QFontMetrics secondaryMetrics(secondaryFont);

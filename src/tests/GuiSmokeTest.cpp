@@ -25,6 +25,8 @@ void GuiSmokeTest::initTestCase()
 void GuiSmokeTest::settingsDialogOpensSearchesAndCloses()
 {
     SettingsDialog dialog(SettingsDialog::Page::MemoryManager);
+    QVERIFY(dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
+    QCOMPARE(dialog.minimumSize(), dialog.maximumSize());
     dialog.show();
 
     QTRY_VERIFY(dialog.isVisible());

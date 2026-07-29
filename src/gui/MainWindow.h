@@ -127,12 +127,14 @@ class MainWindow : public QMainWindow
     void toggleMute();
     void cycleMode();
     void toggleRit();
+#ifdef HAVE_HIDAPI
     void handleIcomRC28Button(int button, int action);
     void handleIcomRC28Tune(int steps);
     void dispatchIcomRC28Action(const QString& action);
     void setIcomRC28Ptt(bool on);
     void refreshIcomRC28EncoderSettings();
     void snapIcomRC28FrequencyToKhz();
+#endif
     void showOffsetMenu();
     void showCustomOffsetDialog();
     void applyOffsetSelection(duplexMode_t mode, quint64 offsetHz);
@@ -168,7 +170,9 @@ class MainWindow : public QMainWindow
     MainTitleBar* m_titleBar{nullptr};
     SpectrumScopeController* m_spectrumScopeController{nullptr};
     ControlPanelController* m_controlPanelController{nullptr};
+#ifdef HAVE_HIDAPI
     IcomRC28Controller* m_icomRC28Controller{nullptr};
+#endif
     MemoryController* m_memoryController{nullptr};
     RadioCommandController* m_radioCommandController{nullptr};
     StatusBarController* m_statusBarController{nullptr};
@@ -288,7 +292,6 @@ class MainWindow : public QMainWindow
     QTimer* m_spectrumScopeTuneCommitTimer{nullptr};
     QTimer* m_spectrumScopeTuneReleaseTimer{nullptr};
     quint64 m_pendingSpectrumScopeTuneHz{0};
-    quint64 m_displaySpectrumScopeTuneHz{0};
     quint64 m_spectrumScopeDisplayCenterHz{0};
     quint64 m_spectrumScopeFixedPanStartHz{0};
     quint64 m_spectrumScopeFixedPanEndHz{0};

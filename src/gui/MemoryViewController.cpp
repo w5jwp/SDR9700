@@ -236,6 +236,10 @@ void MemoryViewController::buildMemoryWindow()
     auto* windowLayout = new QVBoxLayout(m_owner->m_window->m_memoryWindow);
     windowLayout->setContentsMargins(kNoMargins);
     windowLayout->setSpacing(0);
+    auto* titleBar =
+        new sdr9700::ui::UtilityTitleBar(QStringLiteral("Memory Manager"), m_owner->m_window->m_memoryWindow);
+    connect(titleBar->closeButton(), &QPushButton::clicked, m_owner->m_window->m_memoryWindow, &QWidget::hide);
+    windowLayout->addWidget(titleBar);
     windowLayout->addWidget(panel, 1);
 
     connect(m_owner->m_window->m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), m_owner,

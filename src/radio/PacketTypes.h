@@ -38,6 +38,7 @@ inline constexpr int LOGIN_SIZE = 0x80;
 inline constexpr int CONNINFO_SIZE = 0x90;
 inline constexpr int CAPABILITIES_SIZE = 0x42;
 inline constexpr int RADIO_CAP_SIZE = 0x66;
+inline constexpr int MAX_CAPABILITY_RADIOS = 255;
 
 // Variable-size packet headers before payload.
 inline constexpr int CIV_SIZE = 0x15;
@@ -457,6 +458,11 @@ static_assert(sizeof(conninfo_packet) == CONNINFO_SIZE);
 static_assert(sizeof(radio_cap_packet) == RADIO_CAP_SIZE);
 static_assert(sizeof(capabilities_packet) == CAPABILITIES_SIZE);
 static_assert(sizeof(rtp_header) == 12);
+
+inline int boundedCapabilityRadioCount(int advertisedRadios, int availableRadios) noexcept
+{
+    return qMin(qMin(qMax(advertisedRadios, 0), qMax(availableRadios, 0)), MAX_CAPABILITY_RADIOS);
+}
 
 template <typename Packet> std::optional<Packet> decodePacket(QByteArrayView bytes)
 {

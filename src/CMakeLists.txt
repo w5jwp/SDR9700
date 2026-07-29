@@ -6,13 +6,17 @@ add_compile_options(-Wall -Wextra)
 
 pkg_check_modules(OPUS REQUIRED IMPORTED_TARGET opus)
 pkg_check_modules(SPEEXDSP REQUIRED IMPORTED_TARGET speexdsp)
-if(APPLE)
-    pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi)
-else()
-    pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi-hidraw)
-    if(NOT HIDAPI_FOUND)
+if(SDR9700_ENABLE_HIDAPI)
+    if(APPLE)
         pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi)
+    else()
+        pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi-hidraw)
+        if(NOT HIDAPI_FOUND)
+            pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi)
+        endif()
     endif()
+else()
+    set(HIDAPI_FOUND FALSE)
 endif()
 find_path(EIGEN3_INCLUDE_DIR
     NAMES Eigen/Dense
@@ -140,8 +144,6 @@ set(SDR9700_APP_SOURCES
     gui/SpectrumScopeController.cpp
     gui/ControlPanelController.h
     gui/ControlPanelController.cpp
-    gui/IcomRC28Controller.h
-    gui/IcomRC28Controller.cpp
     gui/MemoryCsvController.h
     gui/MemoryCsvController.cpp
     gui/MemoryEditorController.h
@@ -191,16 +193,10 @@ set(SDR9700_APP_SOURCES
     gui/MainTitleBar.cpp
     gui/MemoryPanel.h
     gui/MemoryPanel.cpp
-    gui/MutePanel.h
-    gui/MutePanel.cpp
     gui/PttPanel.h
     gui/PttPanel.cpp
     gui/ReceivePanel.h
     gui/ReceivePanel.cpp
-    gui/RepeaterPanel.h
-    gui/RepeaterPanel.cpp
-    gui/TransmitPanel.h
-    gui/TransmitPanel.cpp
     gui/VfoPanel.h
     gui/VfoPanel.cpp
     gui/MainWindow.h
@@ -216,6 +212,8 @@ endif()
 
 if(HIDAPI_FOUND)
     list(APPEND SDR9700_APP_SOURCES
+        gui/IcomRC28Controller.h
+        gui/IcomRC28Controller.cpp
         gui/IcomRC28SettingsPanel.h
         gui/IcomRC28SettingsPanel.cpp
     )
@@ -440,10 +438,9 @@ if(BUILD_TESTING)
 
     add_executable(PanelAccessibilityTest
         tests/PanelAccessibilityTest.cpp
-        gui/MutePanel.cpp
+        gui/MetersDialog.cpp
         gui/PttPanel.cpp
         gui/ReceivePanel.cpp
-        gui/TransmitPanel.cpp
     )
     target_include_directories(PanelAccessibilityTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
     target_link_libraries(PanelAccessibilityTest PRIVATE SDR9700_dtmf_dialog_test_support Qt6::Test)

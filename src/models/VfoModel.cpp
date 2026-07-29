@@ -45,7 +45,7 @@ void VfoModel::setRfGain(int level)
 {
     if (m_backend)
     {
-        m_backend->setRfGain(level);
+        m_backend->setRfGain(qBound(0, level, 255));
     }
 }
 
@@ -63,7 +63,7 @@ void VfoModel::setSquelch(bool on, int level)
 {
     if (m_backend)
     {
-        m_backend->setSquelch(on, level);
+        m_backend->setSquelch(on, qBound(0, level, 255));
     }
 }
 
@@ -77,11 +77,9 @@ void VfoModel::setNrEnabled(bool on)
 
 void VfoModel::setNrLevel(int level)
 {
-    m_nrLevel = level;
-    emit nrChanged(m_nrOn, level);
     if (m_backend)
     {
-        m_backend->setNrLevel(level);
+        m_backend->setNrLevel(qBound(0, level, 15));
     }
 }
 
@@ -95,11 +93,9 @@ void VfoModel::setNbEnabled(bool on)
 
 void VfoModel::setNbLevel(int level)
 {
-    m_nbLevel = level;
-    emit nbChanged(m_nbOn, level);
     if (m_backend)
     {
-        m_backend->setNbLevel(level);
+        m_backend->setNbLevel(qBound(0, level, 10));
     }
 }
 
@@ -124,7 +120,7 @@ void VfoModel::setTxPower(int level)
 {
     if (m_backend)
     {
-        m_backend->setTxPower(level);
+        m_backend->setTxPower(qBound(0, level, 255));
     }
 }
 
@@ -336,6 +332,17 @@ void VfoModel::applyNrEnabled(bool on)
     emit nrChanged(on, m_nrLevel);
 }
 
+void VfoModel::applyNrLevel(int level)
+{
+    level = qBound(0, level, 15);
+    if (m_nrLevel == level)
+    {
+        return;
+    }
+    m_nrLevel = level;
+    emit nrChanged(m_nrOn, level);
+}
+
 void VfoModel::applyNbEnabled(bool on)
 {
     if (m_nbOn == on)
@@ -344,6 +351,17 @@ void VfoModel::applyNbEnabled(bool on)
     }
     m_nbOn = on;
     emit nbChanged(on, m_nbLevel);
+}
+
+void VfoModel::applyNbLevel(int level)
+{
+    level = qBound(0, level, 10);
+    if (m_nbLevel == level)
+    {
+        return;
+    }
+    m_nbLevel = level;
+    emit nbChanged(m_nbOn, level);
 }
 
 void VfoModel::applyPreampEnabled(bool on)

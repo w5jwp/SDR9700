@@ -7,7 +7,6 @@
 #include "DialogPlacement.h"
 #include "DtmfDialog.h"
 #include "SpectrumScopeController.h"
-#include "IcomRC28Controller.h"
 #include "MainTitleBar.h"
 #include "MemoryController.h"
 #include "MemoryPanel.h"
@@ -29,6 +28,7 @@
 #include "RadioCapabilities.h"
 #include "backend/IRadioBackend.h"
 #ifdef HAVE_HIDAPI
+#include "IcomRC28Controller.h"
 #include "core/IcomRC28Manager.h"
 #endif
 #include "models/RadioModel.h"
@@ -95,14 +95,16 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
 {
     m_spectrumScopeController = new SpectrumScopeController(this);
     m_controlPanelController = new ControlPanelController(this);
+#ifdef HAVE_HIDAPI
     m_icomRC28Controller = new IcomRC28Controller(this);
+#endif
     m_memoryController = new MemoryController(this);
     m_radioCommandController = new RadioCommandController(this);
     m_statusBarController = new StatusBarController(this);
 
+    setWindowFlag(Qt::FramelessWindowHint);
     updateWindowTitle();
-    setMinimumSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
-    resize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
+    setFixedSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
 
     auto* central = new QWidget(this);
     auto* vbox = new QVBoxLayout(central);
@@ -248,7 +250,9 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
 
     onConnectionChanged(false);
 
+#ifdef HAVE_HIDAPI
     m_icomRC28Controller->initialize();
+#endif
 
     QTimer::singleShot(0, this, &MainWindow::tryAutoConnect);
 }
@@ -300,6 +304,7 @@ void MainWindow::buildToolBar()
                         });
     m_titleBar->addMenu(QStringLiteral("&Help"), helpMenu);
 
+    connect(m_titleBar, &MainTitleBar::minimizeRequested, this, &QWidget::showMinimized);
     connect(m_titleBar, &MainTitleBar::closeRequested, this, &QWidget::close);
     connect(m_titleBar, &MainTitleBar::muteToggled, this, &MainWindow::toggleMute);
     connect(m_titleBar, &MainTitleBar::lockToggled, this, &MainWindow::toggleControlLock);
@@ -694,11 +699,6 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
                 {
                     m_dtmfDialog->setSendInProgress(false);
                 }
-                // CI-V echo timing can cause the radio's TX-active acknowledgement to
-                // arrive after the unkey command is queued, leaving pttChanged(true)
-                // as the last state RadioModel sees. Reset the UI immediately; the
-                // eventual pttChanged(false) from the radio is a harmless duplicate.
-                onPttChanged(false);
             });
 
     root->addLayout(controlRow);
@@ -997,10 +997,12 @@ void MainWindow::tryAutoConnect()
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     saveWindowLayout();
+#ifdef HAVE_HIDAPI
     if (m_icomRC28Controller)
     {
         m_icomRC28Controller->close();
     }
+#endif
     m_userDisconnected = true;
     m_model->disconnectFromRadio();
     QMainWindow::closeEvent(event);
@@ -1213,6 +1215,10 @@ void MainWindow::handleIcomRC28Button(int button, int action)
     m_icomRC28Controller->handleIcomRC28Button(button, action);
 }
 
+#else
+
+void MainWindow::updateIcomRC28Leds() {}
+
 #endif
 
 void MainWindow::updateControlLockIndicator()
@@ -1299,7 +1305,7 @@ void MainWindow::setActiveMemory(const QString& id, const QString& name, quint64
                                  quint64 offsetHz, int toneMode, ushort toneValue)
 {
     m_activeMemoryId = id;
-    m_activeMemoryName = name.left(kMemoryNameMaxChars);
+    m_activeMemoryName = name.left(sdr9700::memory::kRadioMemoryNameMaxChars);
     m_activeMemoryFrequencyHz = frequencyHz;
     m_activeMemoryDuplexMode = static_cast<duplexMode_t>(duplexMode);
     m_activeMemoryOffsetHz = offsetHz;
@@ -1482,7 +1488,6 @@ void MainWindow::onConnectionChanged(bool connected)
             m_spectrumScopeTuneReleaseTimer->stop();
         }
         m_pendingSpectrumScopeTuneHz = 0;
-        m_displaySpectrumScopeTuneHz = 0;
         m_spectrumScopeDisplayCenterHz = 0;
         m_spectrumScopeFixedPanStartHz = 0;
         m_spectrumScopeFixedPanEndHz = 0;
@@ -1648,15 +1653,9 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         }
     }
 
-    if (m_displaySpectrumScopeTuneHz > 0 && m_spectrumScopeTuneReleaseTimer &&
-        m_spectrumScopeTuneReleaseTimer->isActive())
+    if (m_pendingSpectrumScopeTuneHz > 0 && m_spectrumScopeTuneReleaseTimer &&
+        m_spectrumScopeTuneReleaseTimer->isActive() && hz == m_pendingSpectrumScopeTuneHz)
     {
-        if (hz != m_displaySpectrumScopeTuneHz)
-        {
-            qDebug(logSpectrumScope()) << "Ignoring transient Spectrum Scope tune confirmation"
-                                       << "confirmedHz=" << hz << "displayHz=" << m_displaySpectrumScopeTuneHz;
-            return;
-        }
         m_pendingSpectrumScopeTuneHz = 0;
         // Keep the Spectrum Scope hold active until the release timer expires.
         // The VFO frequency readback can arrive before the radio's scope stream

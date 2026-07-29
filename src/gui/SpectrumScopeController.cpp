@@ -100,7 +100,6 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
             [this]()
             {
                 m_window->m_pendingSpectrumScopeTuneHz = 0;
-                m_window->m_displaySpectrumScopeTuneHz = 0;
                 m_window->m_spectrumScopeDisplayCenterHz = 0;
                 m_window->m_spectrumScopeFixedPanStartHz = 0;
                 m_window->m_spectrumScopeFixedPanEndHz = 0;
@@ -139,9 +138,7 @@ void SpectrumScopeController::updateSpectrumVfoMarker()
     }
 
     const quint64 displayedHz =
-        m_window->m_displaySpectrumScopeTuneHz > 0
-            ? m_window->m_displaySpectrumScopeTuneHz
-            : (m_window->m_vfoFrequencyHz > 0 ? m_window->m_vfoFrequencyHz : m_window->m_vfo->frequencyHz());
+        m_window->m_vfoFrequencyHz > 0 ? m_window->m_vfoFrequencyHz : m_window->m_vfo->frequencyHz();
     m_window->m_spectrumScopeDisplay->setVfoFrequency(displayedHz / 1e6);
 }
 
@@ -292,8 +289,6 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
         clampSpectrumScopeCenterHz(hz, m_window->m_spectrumScope ? m_window->m_spectrumScope->bandwidthMhz() : 0.0);
     m_window->leaveMemoryModeForManualFrequencyChange();
     m_window->m_pendingSpectrumScopeTuneHz = hz;
-    m_window->m_displaySpectrumScopeTuneHz = hz;
-    m_window->m_vfoFrequencyHz = hz;
     updateSpectrumScopeBandLimits(hz);
     if (clearStaleDisplay && m_window->m_spectrumScopeDisplay)
     {
@@ -318,11 +313,6 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
         m_window->m_spectrumScope->holdDisplayCenter(displayCenterHz / 1e6, hz / 1e6);
     }
 
-    if (m_window->m_vfoPanel && !m_window->m_vfoPanel->frequencyHasFocus())
-    {
-        m_window->m_vfoPanel->setFrequencyText(formatFrequency(hz));
-        m_window->m_vfoPanel->setBandText(bandLabelForHz(hz));
-    }
     if (m_window->m_spectrumScope)
     {
         m_window->m_spectrumScope->centerOnFrequency(displayCenterHz / 1e6);
@@ -383,7 +373,7 @@ void SpectrumScopeController::onWheelStepRequested(int steps)
     }
 
     const qint64 currentHz =
-        static_cast<qint64>(m_window->m_displaySpectrumScopeTuneHz > 0 ? m_window->m_displaySpectrumScopeTuneHz
+        static_cast<qint64>(m_window->m_pendingSpectrumScopeTuneHz > 0 ? m_window->m_pendingSpectrumScopeTuneHz
                                                                        : m_window->m_vfo->frequencyHz());
     const qint64 targetHz = currentHz + static_cast<qint64>(steps) * m_window->tuningStepHz();
     scheduleSpectrumScopeTune(

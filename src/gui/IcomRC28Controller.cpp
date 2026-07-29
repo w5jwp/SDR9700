@@ -230,7 +230,7 @@ void IcomRC28Controller::handleIcomRC28Tune(int steps)
 
     const int stepHz = m_window->tuningStepHz();
     const qint64 currentHz =
-        static_cast<qint64>(m_window->m_displaySpectrumScopeTuneHz > 0 ? m_window->m_displaySpectrumScopeTuneHz
+        static_cast<qint64>(m_window->m_pendingSpectrumScopeTuneHz > 0 ? m_window->m_pendingSpectrumScopeTuneHz
                                                                        : m_window->m_vfo->frequencyHz());
     const qint64 targetHz = currentHz + static_cast<qint64>(steps) * stepHz;
     m_window->scheduleSpectrumScopeTune(
@@ -257,7 +257,7 @@ void IcomRC28Controller::snapIcomRC28FrequencyToKhz()
         return;
     }
 
-    const quint64 currentHz = m_window->m_displaySpectrumScopeTuneHz > 0 ? m_window->m_displaySpectrumScopeTuneHz
+    const quint64 currentHz = m_window->m_pendingSpectrumScopeTuneHz > 0 ? m_window->m_pendingSpectrumScopeTuneHz
                                                                          : m_window->m_vfo->frequencyHz();
     const quint64 snappedHz =
         m_window->clampFrequencyHzToActiveBand(static_cast<quint64>(std::llround(currentHz / 1000.0)) * 1000ULL);
@@ -275,7 +275,6 @@ void IcomRC28Controller::snapIcomRC28FrequencyToKhz()
         m_window->m_spectrumScopeTuneReleaseTimer->stop();
     }
     m_window->m_pendingSpectrumScopeTuneHz = 0;
-    m_window->m_displaySpectrumScopeTuneHz = 0;
     m_window->m_spectrumScopeDisplayCenterHz = 0;
     m_window->m_spectrumScopeFixedPanStartHz = 0;
     m_window->m_spectrumScopeFixedPanEndHz = 0;

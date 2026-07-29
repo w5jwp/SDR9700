@@ -11,6 +11,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <limits>
 
 namespace
 {
@@ -295,9 +296,9 @@ void validateMemoryRecord(const MemoryRecord& memory, const QStringList& row, co
     {
         addError(QStringLiteral("receiveHZ is not in the selected radio band"));
     }
-    if (memory.name.size() > kMemoryNameMaxChars)
+    if (memory.name.size() > sdr9700::memory::kRadioMemoryNameMaxChars)
     {
-        addError(QStringLiteral("name is limited to %1 characters").arg(kMemoryNameMaxChars));
+        addError(QStringLiteral("name is limited to %1 characters").arg(sdr9700::memory::kRadioMemoryNameMaxChars));
     }
     if (QString::fromLatin1(memory.name.toLatin1()) != memory.name)
     {
@@ -567,10 +568,29 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
             continue;
         }
 
+        const int channel = csvInt(row, indexes, QStringLiteral("channel"));
+        const int dtcs = csvInt(row, indexes, QStringLiteral("dtcs"));
+        const int dtcsB = csvInt(row, indexes, QStringLiteral("dtcsB"));
+        const auto validateUnsigned16 = [i, importErrors](int value, const QString& field)
+        {
+            if (value < 0 || value > std::numeric_limits<quint16>::max())
+            {
+                importErrors->append(
+                    QStringLiteral("Row %1: %2 is outside the supported unsigned 16-bit range").arg(i + 1).arg(field));
+            }
+        };
+        validateUnsigned16(channel, QStringLiteral("channel"));
+        validateUnsigned16(dtcs, QStringLiteral("dtcs"));
+        validateUnsigned16(dtcsB, QStringLiteral("dtcsB"));
+        if (importErrors->size() != rowErrorCount)
+        {
+            continue;
+        }
+
         MemoryRecord memory;
         memory.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         memory.group = memoryGroupForBandLabel(csvValue(row, indexes, QStringLiteral("band")));
-        memory.channel = static_cast<quint16>(csvInt(row, indexes, QStringLiteral("channel")));
+        memory.channel = static_cast<quint16>(channel);
         memory.name = csvValue(row, indexes, QStringLiteral("name"));
         memory.receiveHz = csvUInt64(row, indexes, QStringLiteral("receiveHZ"));
         memory.mode = csvInt(row, indexes, QStringLiteral("mode"));
@@ -583,9 +603,9 @@ QVector<MemoryRecord> memoriesFromCsv(const QByteArray& data, QStringList* error
         memory.tone = normalizedToneText(csvValue(row, indexes, QStringLiteral("tone")));
         memory.tsql = normalizedToneText(csvValue(row, indexes, QStringLiteral("tsql")));
         memory.dsql = csvInt(row, indexes, QStringLiteral("dsql"));
-        memory.dtcs = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcs")));
+        memory.dtcs = static_cast<ushort>(dtcs);
         memory.dtcsPolarity = csvInt(row, indexes, QStringLiteral("dtcsPolarity"));
-        memory.dtcsB = static_cast<ushort>(csvInt(row, indexes, QStringLiteral("dtcsB")));
+        memory.dtcsB = static_cast<ushort>(dtcsB);
         memory.dtcsPolarityB = csvInt(row, indexes, QStringLiteral("dtcsPolarityB"));
         memory.toneValue = memoryToneValueFromFields(static_cast<rptAccessTxRx_t>(memory.toneMode), memory.tone,
                                                      memory.tsql, memory.dtcs);

@@ -5,9 +5,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include "MemoryConstants.h"
 #include "Types.h"
-
-inline constexpr int kMemoryNameMaxChars = 16;
 
 struct MemoryRecord
 {
@@ -40,7 +39,6 @@ struct MemoryRecord
     QString urCall;
     QString r1Call;
     QString r2Call;
-    QString notes;
 };
 
 int memoryBandKeyForHz(quint64 hz);

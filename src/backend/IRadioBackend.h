@@ -95,7 +95,9 @@ class IRadioBackend : public QObject
     void ritOffsetChanged(short hz);
     void pttChanged(bool on);
     void nrChanged(bool on);
+    void nrLevelChanged(int level);
     void nbChanged(bool on);
+    void nbLevelChanged(int level);
     void preampChanged(bool on);
     void preampLevelChanged(int level);
     void attenuatorChanged(bool on);

@@ -767,7 +767,7 @@ void UdpHandler::dataReceived()
                             << in->computer << "IP" << ip.toString();
 
             // Match the status packet to a previously advertised radio.
-            for (quint8 f = 0; f < radios.size(); f++)
+            for (qsizetype f = 0; f < radios.size(); ++f)
             {
 
                 if ((radios[f].commoncap == 0x8010 && radios[f].macaddress[0] == in->macaddress[0] &&
@@ -784,8 +784,8 @@ void UdpHandler::dataReceived()
                     }
 
                     qDebug(logUdp()) << "Is the user an admin? " << admin;
-                    emit setRadioUsage(f, admin, in->busy, boundedLatin1(in->computer, sizeof(in->computer)),
-                                       ip.toString());
+                    emit setRadioUsage(static_cast<quint8>(f), admin, in->busy,
+                                       boundedLatin1(in->computer, sizeof(in->computer)), ip.toString());
                     qDebug(logUdp()) << "Set radio usage num:" << f << boundedLatin1(in->name, sizeof(in->name))
                                      << "Busy:" << in->busy << "Computer"
                                      << boundedLatin1(in->computer, sizeof(in->computer)) << "IP" << ip.toString();
@@ -891,15 +891,20 @@ void UdpHandler::dataReceived()
 
             const int availableRadios = capabilityBytes / RADIO_CAP_SIZE;
             const int advertisedRadios = qFromBigEndian(in->numradios);
-            const int radioCount = qMin(advertisedRadios, availableRadios);
+            const int radioCount = boundedCapabilityRadioCount(advertisedRadios, availableRadios);
             if (advertisedRadios != availableRadios)
             {
                 qWarning(logUdp()) << "Capabilities radio count mismatch, advertised" << advertisedRadios << "contains"
                                    << availableRadios;
             }
+            if (qMin(advertisedRadios, availableRadios) > MAX_CAPABILITY_RADIOS)
+            {
+                qWarning(logUdp()) << "Capabilities radio list exceeds supported limit; using first"
+                                   << MAX_CAPABILITY_RADIOS << "entries";
+            }
 
             radios.clear();
-            numRadios = static_cast<quint8>(qMin(radioCount, 255));
+            numRadios = static_cast<quint8>(radioCount);
 
             for (int i = 0; i < radioCount; ++i)
             {

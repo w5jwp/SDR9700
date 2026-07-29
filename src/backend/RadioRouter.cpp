@@ -155,8 +155,14 @@ void RadioRouter::route(const CacheItem& item)
     case funcNoiseReduction:
         emit nrChanged(item.value.toBool());
         break;
+    case funcNRLevel:
+        emit nrLevelChanged(qBound(0, item.value.toInt(), 15));
+        break;
     case funcNoiseBlanker:
         emit nbChanged(item.value.toBool());
+        break;
+    case funcNBLevel:
+        emit nbLevelChanged(qBound(0, item.value.toInt(), 10));
         break;
     case funcPreamp:
     {

@@ -2,7 +2,6 @@
 #include "ApplicationConfigurationSettingsPanel.h"
 #include "AudioDevicesSettingsPanel.h"
 #include "SpectrumScopeSettingsPanel.h"
-#include "DialogPlacement.h"
 #include "MemoryManagerSettingsPanel.h"
 #include "UiTheme.h"
 #ifdef HAVE_HIDAPI
@@ -57,21 +56,23 @@ SettingsDialog::SettingsDialog(QWidget* parent) : SettingsDialog(Page::AudioDevi
 
 #ifdef HAVE_HIDAPI
 SettingsDialog::SettingsDialog(Page page, QWidget* parent, IcomRC28Manager* icomRC28Manager)
-    : QDialog(parent), m_icomRC28Manager(icomRC28Manager), m_centerHost(parent)
+    : sdr9700::ui::UtilityWindow(QStringLiteral("Settings"), parent), m_icomRC28Manager(icomRC28Manager)
 #else
-SettingsDialog::SettingsDialog(Page page, QWidget* parent) : QDialog(parent), m_centerHost(parent)
+SettingsDialog::SettingsDialog(Page page, QWidget* parent)
+    : sdr9700::ui::UtilityWindow(QStringLiteral("Settings"), parent)
 #endif
 {
     const QString title = QStringLiteral("Settings");
-    setWindowTitle(title);
-    setMinimumSize(780, 520);
-    setWindowModality(Qt::NonModal);
+    setFixedSize(780, 520);
     setStyleSheet(QStringLiteral("SettingsDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
+    auto* titleBar = new sdr9700::ui::UtilityTitleBar(title, this);
+    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QWidget::close);
+    root->addWidget(titleBar);
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
     contentLayout->setContentsMargins(12, 12, 12, 12);
@@ -286,15 +287,6 @@ void SettingsDialog::addPage(QTreeWidgetItem* parent, Page page, const QString& 
     m_pageIndexes.insert(key, stackIndex);
     m_pageItems.insert(key, item);
     m_deferredBuilders.insert(key, std::move(builder));
-}
-
-void SettingsDialog::showEvent(QShowEvent* event)
-{
-    QDialog::showEvent(event);
-
-    sdr9700::ui::centerWindowOn(this, m_centerHost);
-    QTimer::singleShot(0, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
-    QTimer::singleShot(50, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
 }
 
 void SettingsDialog::buildDeferredPage(Page page)

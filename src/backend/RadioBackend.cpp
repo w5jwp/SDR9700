@@ -31,6 +31,7 @@ constexpr int kSyncReconnectDelayMs = 3000;
 constexpr int kMaxSyncReconnectAttempts = 1;
 constexpr int kMemoryWriteReadbackDelayMs = 250;
 constexpr int kPttReleaseTailMs = 150;
+constexpr int kPttOffConfirmationMs = 1000;
 constexpr int kMaxTransmitDurationMs = 180000;
 constexpr uchar kHardwareTxTimeoutTimer = 1; // 3 minutes, the IC-9700's shortest non-off value.
 constexpr uchar kMainReceiver = 0;
@@ -227,7 +228,9 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_radioRouter, &RadioRouter::dtcsCodeChanged, this, &IRadioBackend::dtcsCodeChanged);
     connect(m_radioRouter, &RadioRouter::smeterChanged, this, &IRadioBackend::smeterChanged);
     connect(m_radioRouter, &RadioRouter::nrChanged, this, &IRadioBackend::nrChanged);
+    connect(m_radioRouter, &RadioRouter::nrLevelChanged, this, &IRadioBackend::nrLevelChanged);
     connect(m_radioRouter, &RadioRouter::nbChanged, this, &IRadioBackend::nbChanged);
+    connect(m_radioRouter, &RadioRouter::nbLevelChanged, this, &IRadioBackend::nbLevelChanged);
     connect(m_radioRouter, &RadioRouter::preampChanged, this, &IRadioBackend::preampChanged);
     connect(m_radioRouter, &RadioRouter::preampLevelChanged, this, &IRadioBackend::preampLevelChanged);
     connect(m_radioRouter, &RadioRouter::attenuatorChanged, this, &IRadioBackend::attenuatorChanged);
@@ -270,18 +273,22 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_radioRouter, &RadioRouter::pttChanged, this,
             [this](bool on)
             {
-                if (on && !m_pttActive && m_pttStaleOnGuardTimer && m_pttStaleOnGuardTimer->isActive())
+                if (on && m_pttState.offPending() && m_pttOffConfirmationTimer && m_pttOffConfirmationTimer->isActive())
                 {
-                    qDebug(logRadio()) << "Ignoring stale PTT-on status after PTT-off request";
+                    // A queued status read can return the pre-unkey state after
+                    // the radio accepted the PTT-off command. Keep the UI
+                    // released during this short confirmation window; safety
+                    // monitoring remains armed through PttConfirmationPolicy.
+                    m_pttState.confirm(true);
                     return;
-                }
-                if (!on && m_pttStaleOnGuardTimer)
-                {
-                    m_pttStaleOnGuardTimer->stop();
                 }
                 if (!on && m_pttReleaseDelayTimer)
                 {
                     m_pttReleaseDelayTimer->stop();
+                }
+                if (!on && m_pttOffConfirmationTimer)
+                {
+                    m_pttOffConfirmationTimer->stop();
                 }
                 if (on)
                 {
@@ -291,18 +298,29 @@ RadioBackend::RadioBackend(QObject* parent)
                 {
                     disarmTransmitSafety();
                 }
-                m_pttActive = on;
+                m_pttState.confirm(on);
                 emit pttChanged(on);
             });
     connect(m_radioRouter, &RadioRouter::scopeDataReady, m_scopeController, &ScopeController::acceptScopeData);
-
-    m_pttStaleOnGuardTimer = new QTimer(this);
-    m_pttStaleOnGuardTimer->setSingleShot(true);
 
     m_pttReleaseDelayTimer = new QTimer(this);
     m_pttReleaseDelayTimer->setSingleShot(true);
     m_pttReleaseDelayTimer->setInterval(kPttReleaseTailMs);
     connect(m_pttReleaseDelayTimer, &QTimer::timeout, this, &RadioBackend::sendPttOffNow);
+
+    m_pttOffConfirmationTimer = new QTimer(this);
+    m_pttOffConfirmationTimer->setSingleShot(true);
+    m_pttOffConfirmationTimer->setInterval(kPttOffConfirmationMs);
+    connect(m_pttOffConfirmationTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (!m_pttState.offPending())
+                {
+                    return;
+                }
+                invokeOnCurrentCommander([](Commander* commandSession)
+                                         { commandSession->receiveCommand(funcTransceiverStatus, QVariant(), 0); });
+            });
 
     m_pttMaxDurationTimer = new QTimer(this);
     m_pttMaxDurationTimer->setSingleShot(true);
@@ -642,20 +660,20 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
         QObject::disconnect(m_queueSendValuesConnection);
         m_queueSendValuesConnection = {};
     }
-    if (m_pttStaleOnGuardTimer)
-    {
-        m_pttStaleOnGuardTimer->stop();
-    }
     if (m_pttReleaseDelayTimer)
     {
         m_pttReleaseDelayTimer->stop();
+    }
+    if (m_pttOffConfirmationTimer)
+    {
+        m_pttOffConfirmationTimer->stop();
     }
     disarmTransmitSafety();
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->stop();
     }
-    m_pttActive = false;
+    m_pttState.reset();
 
     if (m_smeterPollTimer)
     {
@@ -1140,16 +1158,11 @@ void RadioBackend::setPtt(bool on)
         {
             m_pttReleaseDelayTimer->stop();
         }
-        if (m_pttActive)
+        if (!m_pttState.requestOn())
         {
             return;
         }
 
-        if (m_pttStaleOnGuardTimer)
-        {
-            m_pttStaleOnGuardTimer->stop();
-        }
-        m_pttActive = true;
         armTransmitSafety();
         const auto selectedMemory = m_selectedRadioMemory;
         invokeOnCurrentCommander(
@@ -1178,7 +1191,7 @@ void RadioBackend::setPtt(bool on)
             return;
         }
 
-        if (!m_pttActive)
+        if (!m_pttState.confirmedActive() && !m_pttState.desiredActive())
         {
             sendPttOffNow();
             return;
@@ -1211,13 +1224,12 @@ void RadioBackend::sendPttOffNow()
 
     // Always send an unkey request. If local state ever gets stale, suppressing
     // this command can leave the radio transmitting until disconnect.
-    m_pttActive = false;
-    disarmTransmitSafety();
-    if (m_pttStaleOnGuardTimer)
-    {
-        m_pttStaleOnGuardTimer->start(1000);
-    }
+    m_pttState.requestOff();
     emit pttChanged(false);
+    if (m_pttOffConfirmationTimer)
+    {
+        m_pttOffConfirmationTimer->start();
+    }
     invokeOnCurrentCommander(
         [](Commander* commandSession)
         {
@@ -1267,7 +1279,7 @@ void RadioBackend::resetScopeController()
 
 void RadioBackend::forcePttOffForSafety(const QString& message)
 {
-    if (!m_commander || !m_pttActive)
+    if (!m_commander || !m_pttState.safetyActive())
     {
         disarmTransmitSafety();
         return;
@@ -1282,7 +1294,7 @@ void RadioBackend::handleTransmitSwr(double swr)
 {
     emit swrChanged(swr);
 
-    if (!m_pttActive)
+    if (!m_pttState.safetyActive())
     {
         m_transmitSafetyPolicy.observe(false, swr);
         return;
@@ -1868,7 +1880,7 @@ void RadioBackend::onLanReady()
                 {
                     return;
                 }
-                if (m_pttActive)
+                if (m_pttState.safetyActive())
                 {
                     const int pollTick = m_txMeterPollTick++;
                     invokeOnCurrentCommander(

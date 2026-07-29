@@ -1,9 +1,16 @@
 #pragma once
 
 #include "DialogPlacement.h"
+#include "UiTheme.h"
 #include <QDialog>
+#include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QKeySequence>
+#include <QLabel>
+#include <QMouseEvent>
 #include <QPointer>
+#include <QPushButton>
+#include <QShortcut>
 #include <QShowEvent>
 #include <QTimer>
 #include <QWindow>
@@ -14,7 +21,7 @@ class UtilityWindow : public QDialog
 {
   public:
     explicit UtilityWindow(const QString& title, QWidget* parent = nullptr)
-        : QDialog(parent, Qt::Window), m_centerHost(parent)
+        : QDialog(parent, Qt::Window | Qt::FramelessWindowHint), m_centerHost(parent)
     {
         setWindowTitle(title);
         setWindowModality(Qt::NonModal);
@@ -150,5 +157,59 @@ class UtilityWindow : public QDialog
     }
 
     QPointer<QWidget> m_centerHost;
+};
+
+class UtilityTitleBar : public QWidget
+{
+  public:
+    explicit UtilityTitleBar(const QString& title, QWidget* parent = nullptr) : QWidget(parent)
+    {
+        setFixedHeight(28);
+        setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::MenuBar));
+
+        auto* layout = new QHBoxLayout(this);
+        layout->setContentsMargins(10, 0, 0, 0);
+        layout->setSpacing(0);
+
+        auto* titleLabel = new QLabel(title, this);
+        titleLabel->setStyleSheet(
+            QStringLiteral("QLabel { color: %1; font-size: 12px; font-weight: bold; background: transparent; }")
+                .arg(UiTheme::Color::TextMuted));
+        layout->addWidget(titleLabel);
+        layout->addStretch();
+
+        m_closeButton = new QPushButton(QStringLiteral("✕"), this);
+        m_closeButton->setFixedSize(28, 28);
+        m_closeButton->setStyleSheet(
+            QStringLiteral("QPushButton { background: transparent; border: none; color: %1; font-size: 13px; }"
+                           "QPushButton:hover { background: %2; color: %3; }")
+                .arg(QLatin1String(UiTheme::Color::TextMuted), QLatin1String(UiTheme::Color::Danger),
+                     QLatin1String(UiTheme::Color::White)));
+        m_closeButton->setAccessibleName(QStringLiteral("Close window"));
+        layout->addWidget(m_closeButton);
+
+        auto* closeShortcut = new QShortcut(QKeySequence::Close, this);
+        closeShortcut->setContext(Qt::WindowShortcut);
+        connect(closeShortcut, &QShortcut::activated, m_closeButton, &QPushButton::click);
+    }
+
+    QPushButton* closeButton() const { return m_closeButton; }
+
+  protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton)
+        {
+            if (QWindow* windowHandle = window()->windowHandle(); windowHandle && windowHandle->startSystemMove())
+            {
+                event->accept();
+                return;
+            }
+        }
+        QWidget::mousePressEvent(event);
+    }
+
+  private:
+    QPushButton* m_closeButton{nullptr};
 };
 } // namespace sdr9700::ui

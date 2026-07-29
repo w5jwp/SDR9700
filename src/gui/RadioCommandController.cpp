@@ -401,12 +401,6 @@ void RadioCommandController::applyOffsetSelection(duplexMode_t mode, quint64 off
     }
 
     m_window->clearActiveMemory();
-    m_window->m_duplexMode = mode;
-    if (mode != dmSimplex)
-    {
-        m_window->m_repeaterOffsetHz = offsetHz;
-    }
-    updateOffsetButton();
 
     if (mode == dmSimplex)
     {
@@ -542,16 +536,6 @@ void RadioCommandController::applyToneSelection(rptAccessTxRx_t mode, ushort val
 
     const bool dtcs = isDtcsToneMode(mode);
     m_window->clearActiveMemory();
-    m_window->m_toneAccessMode = mode;
-    if (dtcs)
-    {
-        m_window->m_dtcsCode = value;
-    }
-    else if (mode != ratrNN)
-    {
-        m_window->m_toneFrequency = value;
-    }
-    updateToneButton();
 
     if (mode == ratrNN)
     {
@@ -660,14 +644,11 @@ void RadioCommandController::showRfGainMenu()
 
     auto applyRfGain = [this, valueLabel](int v)
     {
-        m_window->m_rfGainValue = qBound(0, v, 255);
-        const QString text =
-            m_window->m_rfGainValue == 0
-                ? QStringLiteral("OFF")
-                : QStringLiteral("%1%").arg(qBound(1, qRound(m_window->m_rfGainValue * 100.0 / 255.0), 100));
+        const int bounded = qBound(0, v, 255);
+        const QString text = bounded == 0 ? QStringLiteral("OFF")
+                                          : QStringLiteral("%1%").arg(qBound(1, qRound(bounded * 100.0 / 255.0), 100));
         valueLabel->setText(text);
-        updateRfGainButton();
-        m_window->m_vfo->setRfGain(m_window->m_rfGainValue);
+        m_window->m_vfo->setRfGain(bounded);
     };
 
     auto* slider = new QSlider(Qt::Horizontal, panel);

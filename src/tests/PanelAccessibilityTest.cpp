@@ -1,8 +1,7 @@
 #include "DtmfDialog.h"
-#include "MutePanel.h"
+#include "MetersDialog.h"
 #include "PttPanel.h"
 #include "ReceivePanel.h"
-#include "TransmitPanel.h"
 
 #include <QLineEdit>
 #include <QPushButton>
@@ -17,16 +16,13 @@ class PanelAccessibilityTest : public QObject
     void panelsAdoptProvidedButtons();
     void optionalPanelButtonsAreNullSafe();
     void dtmfControlsHaveUsableInitialState();
+    void utilityDialogsAreFixedAndFrameless();
 };
 
 void PanelAccessibilityTest::panelsExposeAccessibleNames()
 {
     PttPanel pttPanel(new QPushButton);
-    MutePanel mutePanel(new QPushButton);
-    TransmitPanel transmitPanel({new QPushButton});
     QCOMPARE(pttPanel.accessibleName(), QStringLiteral("Transmit"));
-    QCOMPARE(mutePanel.accessibleName(), QStringLiteral("Mute"));
-    QCOMPARE(transmitPanel.accessibleName(), QStringLiteral("Transmit"));
 }
 
 void PanelAccessibilityTest::panelsAdoptProvidedButtons()
@@ -52,9 +48,7 @@ void PanelAccessibilityTest::panelsAdoptProvidedButtons()
 void PanelAccessibilityTest::optionalPanelButtonsAreNullSafe()
 {
     PttPanel pttPanel(nullptr);
-    MutePanel mutePanel(nullptr);
     QVERIFY(pttPanel.findChildren<QPushButton*>().isEmpty());
-    QVERIFY(mutePanel.findChildren<QPushButton*>().isEmpty());
 }
 
 void PanelAccessibilityTest::dtmfControlsHaveUsableInitialState()
@@ -67,6 +61,19 @@ void PanelAccessibilityTest::dtmfControlsHaveUsableInitialState()
     QVERIFY(display->isEnabled());
     const auto buttons = dialog.findChildren<QPushButton*>();
     QVERIFY(buttons.size() >= 19);
+}
+
+void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
+{
+    DtmfDialog dtmf;
+    MetersDialog meters;
+    for (QDialog* dialog : {static_cast<QDialog*>(&dtmf), static_cast<QDialog*>(&meters)})
+    {
+        QVERIFY(dialog->windowFlags().testFlag(Qt::FramelessWindowHint));
+        QCOMPARE(dialog->minimumSize(), dialog->maximumSize());
+        auto* closeButton = dialog->findChild<QPushButton*>(QString(), Qt::FindChildrenRecursively);
+        QVERIFY(closeButton != nullptr);
+    }
 }
 
 QTEST_MAIN(PanelAccessibilityTest)

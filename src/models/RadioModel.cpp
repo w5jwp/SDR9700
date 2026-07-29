@@ -44,7 +44,9 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::ritEnabledChanged, m_vfo, &VfoModel::applyRitEnabled);
     connect(m_backend, &IRadioBackend::ritOffsetChanged, m_vfo, &VfoModel::applyRitOffset);
     connect(m_backend, &IRadioBackend::nrChanged, m_vfo, &VfoModel::applyNrEnabled);
+    connect(m_backend, &IRadioBackend::nrLevelChanged, m_vfo, &VfoModel::applyNrLevel);
     connect(m_backend, &IRadioBackend::nbChanged, m_vfo, &VfoModel::applyNbEnabled);
+    connect(m_backend, &IRadioBackend::nbLevelChanged, m_vfo, &VfoModel::applyNbLevel);
     connect(m_backend, &IRadioBackend::preampChanged, m_vfo, &VfoModel::applyPreampEnabled);
     connect(m_backend, &IRadioBackend::preampLevelChanged, m_vfo, &VfoModel::applyPreampLevel);
     connect(m_backend, &IRadioBackend::attenuatorChanged, m_vfo, &VfoModel::applyAttenuatorEnabled);

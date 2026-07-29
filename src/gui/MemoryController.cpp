@@ -174,13 +174,10 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
     {
         if (m_window->m_activeMemoryId == radioMemoryId(memory.group, memory.channel))
         {
-            if (m_window->m_applyingMemorySelection)
+            if (!m_window->m_applyingMemorySelection)
             {
-                m_memorySyncController->handleRadioMemoryReceived(key);
-                m_memoryWriteController->handleReadback(key, memory);
-                return;
+                m_window->clearActiveMemory();
             }
-            m_window->clearActiveMemory();
         }
         m_radioMemoriesByKey.remove(key);
     }

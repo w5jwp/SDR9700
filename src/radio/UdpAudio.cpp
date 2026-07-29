@@ -496,6 +496,11 @@ void UdpAudio::startTxAudio()
     emit setupTxAudio(txSetup);
 }
 
+void UdpAudio::stopTxAudio()
+{
+    stopAudioWorker(txaudio, txAudioThread, "txAudioThread");
+}
+
 void UdpAudio::setTxActive(bool active)
 {
     if (active && m_audioReady)
@@ -515,6 +520,11 @@ void UdpAudio::setTxActive(bool active)
         m_dtmfPcm.clear();
         m_dtmfFrame.clear();
         m_dtmfPcmOffset = 0;
+        // QAudioSource teardown has crashed inside CoreAudio when deferred
+        // until the rest of the application is shutting down on macOS. The
+        // input is only needed while keyed, so release it promptly after the
+        // radio leaves transmit and recreate it for the next transmission.
+        stopTxAudio();
     }
     else if (txAudioTimer && !txAudioTimer->isActive())
     {

@@ -1,5 +1,6 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MainWindow.h"
+#include "UiTheme.h"
 #include "UtilityWindow.h"
 #include "models/RadioModel.h"
 
@@ -21,6 +22,7 @@ class MemoryManagerSmokeTest : public QObject
   private slots:
     void initTestCase();
     void constructsMemoryManagerUi();
+    void mainWindowRetainsFixedFramelessDesign();
     void utilityWindowIsDestroyedWithHost();
     void quitActionDefersWindowClose();
 };
@@ -42,12 +44,25 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QDialog* memoryWindow =
         memoryWindowIt != topLevelWidgets.cend() ? qobject_cast<QDialog*>(*memoryWindowIt) : nullptr;
     QVERIFY(memoryWindow != nullptr);
+    QVERIFY(memoryWindow->windowFlags().testFlag(Qt::FramelessWindowHint));
+    QCOMPARE(memoryWindow->minimumSize(), memoryWindow->maximumSize());
     auto* table = memoryWindow->findChild<QTableWidget*>(QStringLiteral("memoryManagerTable"));
     auto* editor = memoryWindow->findChild<QWidget*>(QStringLiteral("memoryEditorPane"));
     QVERIFY(table != nullptr);
     QVERIFY(editor != nullptr);
     QCOMPARE(table->columnCount(), 9);
     QVERIFY(!editor->isVisible());
+}
+
+void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
+{
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+
+    QVERIFY(window.windowFlags().testFlag(Qt::FramelessWindowHint));
+    QCOMPARE(window.minimumSize(), window.maximumSize());
+    QCOMPARE(window.minimumSize(), QSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight));
 }
 
 void MemoryManagerSmokeTest::utilityWindowIsDestroyedWithHost()

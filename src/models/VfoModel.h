@@ -74,7 +74,9 @@ class VfoModel : public QObject
     void applyMode(const QString& modeName);
     void applyPtt(bool on);
     void applyNrEnabled(bool on);
+    void applyNrLevel(int level);
     void applyNbEnabled(bool on);
+    void applyNbLevel(int level);
     void applyPreampEnabled(bool on);
     void applyPreampLevel(int level);
     void applyAttenuatorEnabled(bool on);

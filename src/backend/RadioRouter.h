@@ -30,7 +30,9 @@ class RadioRouter : public QObject
     void dtcsCodeChanged(ushort code);
     void smeterChanged(int value);
     void nrChanged(bool on);
+    void nrLevelChanged(int level);
     void nbChanged(bool on);
+    void nbLevelChanged(int level);
     void preampChanged(bool on);
     void preampLevelChanged(int level);
     void attenuatorChanged(bool on);

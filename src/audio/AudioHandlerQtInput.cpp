@@ -17,7 +17,6 @@ bool AudioHandlerQtInput::openDevice() noexcept
         return false;
     }
 
-    connect(audioInput, &QAudioSource::destroyed, audioDevice, &QObject::deleteLater, Qt::UniqueConnection);
     connect(audioDevice, &QIODevice::readyRead, this, &AudioHandlerQtInput::onReadyRead, Qt::UniqueConnection);
     qInfo(logAudio()) << "Connected to Qt audio input device" << deviceInfo.description();
     return true;

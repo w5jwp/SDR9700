@@ -10,6 +10,7 @@ class QSlider;
 class QPushButton;
 class QLabel;
 class QHBoxLayout;
+class QMouseEvent;
 
 class MainTitleBar : public QWidget
 {
@@ -33,7 +34,11 @@ class MainTitleBar : public QWidget
     void muteToggled();
     void lockToggled();
     void txDurationResetRequested();
+    void minimizeRequested();
     void closeRequested();
+
+  protected:
+    void mousePressEvent(QMouseEvent* event) override;
 
   private:
     QHBoxLayout* m_menuLayout{nullptr};
@@ -43,4 +48,6 @@ class MainTitleBar : public QWidget
     QPushButton* m_lockBtn{nullptr};
     QSlider* m_volumeSlider{nullptr};
     QLabel* m_volumeLabel{nullptr};
+    QPushButton* m_minimizeBtn{nullptr};
+    QPushButton* m_closeBtn{nullptr};
 };

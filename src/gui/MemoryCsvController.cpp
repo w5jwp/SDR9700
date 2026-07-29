@@ -121,7 +121,6 @@ void MemoryCsvController::importRadioMemories()
                 restoreRadioMemoriesAfterFailedImport(backup);
                 return;
             }
-            m_owner->m_radioMemoriesByKey.clear();
             m_owner->queueRadioMemoryWrites(
                 uploads, 0, QStringLiteral("Uploading memories"),
                 [this, backup, importedCount = uploads.size()](bool uploaded)

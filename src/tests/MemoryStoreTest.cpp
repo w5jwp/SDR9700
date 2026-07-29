@@ -21,6 +21,7 @@ class MemoryStoreTest : public QObject
     void frequencyOutsideSelectedBandIsRejected();
     void overlongNameIsRejected();
     void duplicateBandChannelIsRejected();
+    void oversizedUnsignedFieldsAreRejectedBeforeNarrowing();
     void radioMemoryConversionRoundTrips();
     void editorPolicyNormalizesOffsets();
     void csvFileRoundTrips();
@@ -114,7 +115,7 @@ void MemoryStoreTest::frequencyOutsideSelectedBandIsRejected()
 void MemoryStoreTest::overlongNameIsRejected()
 {
     MemoryRecord memory = validMemory();
-    memory.name = QString(kMemoryNameMaxChars + 1, QLatin1Char('X'));
+    memory.name = QString(kRadioMemoryNameMaxChars + 1, QLatin1Char('X'));
 
     QStringList errors;
     QVERIFY(memoriesFromCsv(memoriesExportCsv({memory}), &errors).isEmpty());
@@ -129,6 +130,20 @@ void MemoryStoreTest::duplicateBandChannelIsRejected()
 
     QVERIFY(imported.size() < 2);
     QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("duplicate band/channel")));
+}
+
+void MemoryStoreTest::oversizedUnsignedFieldsAreRejectedBeforeNarrowing()
+{
+    QByteArray oversizedChannel = memoriesExportCsv({validMemory()});
+    oversizedChannel.replace(",5,Test Memory,", ",65635,Test Memory,");
+    QStringList errors;
+    QVERIFY(memoriesFromCsv(oversizedChannel, &errors).isEmpty());
+    QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("channel is outside")));
+
+    QByteArray oversizedDtcs = memoriesExportCsv({validMemory()});
+    oversizedDtcs.replace(",23,0,23,0,", ",65635,0,23,0,");
+    QVERIFY(memoriesFromCsv(oversizedDtcs, &errors).isEmpty());
+    QVERIFY(errors.join(QLatin1Char('\n')).contains(QStringLiteral("dtcs is outside")));
 }
 
 void MemoryStoreTest::radioMemoryConversionRoundTrips()

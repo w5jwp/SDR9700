@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QKeySequence>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
 #include <QShortcut>
@@ -12,6 +13,7 @@
 #include <QSlider>
 #include <QStyleOption>
 #include <QToolButton>
+#include <QWindow>
 #include <memory>
 
 namespace
@@ -51,6 +53,7 @@ QChar mnemonicChar(const QString& label)
 }
 
 constexpr int kTitleBarHeight = 32;
+constexpr int kWindowButtonSize = 32;
 constexpr int kVolumeSliderWidth = 110;
 constexpr int kVolumeLabelWidth = 30;
 constexpr int kTxDurationWidth = 62;
@@ -94,6 +97,13 @@ QString txDurationStyle(bool active)
                                    "QPushButton:hover { background: %3; border-color: %4; }")
                         .arg(UiTheme::Color::BorderLight, UiTheme::Color::TextMuted, UiTheme::Color::ButtonHover,
                              UiTheme::Color::ButtonHoverBorder);
+}
+
+QString windowButtonStyle(const char* hoverBg)
+{
+    return QStringLiteral("QPushButton { background: transparent; border: none; color: %1; font-size: 14px; }"
+                          "QPushButton:hover { background: %2; }")
+        .arg(UiTheme::Color::TextMuted, QString::fromLatin1(hoverBg));
 }
 
 } // namespace
@@ -203,6 +213,26 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     root->addWidget(m_volumeLabel);
     root->addSpacing(kTitleControlSpacing);
 
+    auto* chromeSep = new QWidget(this);
+    chromeSep->setFixedSize(1, 18);
+    chromeSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
+    root->addWidget(chromeSep);
+    root->addSpacing(kTitleControlSpacing);
+
+    m_minimizeBtn = new QPushButton(QStringLiteral("−"), this);
+    m_minimizeBtn->setFixedSize(kWindowButtonSize, kTitleBarHeight);
+    m_minimizeBtn->setStyleSheet(windowButtonStyle(UiTheme::Color::ButtonHover));
+    m_minimizeBtn->setToolTip(QStringLiteral("Minimize"));
+    m_minimizeBtn->setAccessibleName(QStringLiteral("Minimize window"));
+    root->addWidget(m_minimizeBtn);
+
+    m_closeBtn = new QPushButton(QStringLiteral("✕"), this);
+    m_closeBtn->setFixedSize(kWindowButtonSize, kTitleBarHeight);
+    m_closeBtn->setStyleSheet(windowButtonStyle(UiTheme::Color::Danger));
+    m_closeBtn->setToolTip(QStringLiteral("Close"));
+    m_closeBtn->setAccessibleName(QStringLiteral("Close window"));
+    root->addWidget(m_closeBtn);
+
     connect(m_volumeSlider, &QSlider::valueChanged, this,
             [this](int v)
             {
@@ -217,6 +247,8 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     connect(m_muteBtn, &QPushButton::clicked, this, &MainTitleBar::muteToggled);
     connect(m_lockBtn, &QPushButton::clicked, this, &MainTitleBar::lockToggled);
     connect(m_txDurationButton, &QPushButton::clicked, this, &MainTitleBar::txDurationResetRequested);
+    connect(m_minimizeBtn, &QPushButton::clicked, this, &MainTitleBar::minimizeRequested);
+    connect(m_closeBtn, &QPushButton::clicked, this, &MainTitleBar::closeRequested);
     auto* closeShortcut = new QShortcut(QKeySequence::Close, this);
     closeShortcut->setContext(Qt::WindowShortcut);
     connect(closeShortcut, &QShortcut::activated, this, &MainTitleBar::closeRequested);
@@ -348,4 +380,18 @@ void MainTitleBar::setVolumeEnabled(bool enabled)
     {
         m_lockBtn->setEnabled(true); // lock is always available regardless of radio state
     }
+}
+
+void MainTitleBar::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        if (QWindow* win = window()->windowHandle())
+        {
+            win->startSystemMove();
+        }
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
 }

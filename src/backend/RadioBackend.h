@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QVector>
 #include "TransmitSafetyPolicy.h"
+#include "PttConfirmationPolicy.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -128,11 +129,11 @@ class RadioBackend : public IRadioBackend
     std::optional<int> m_originalDataOffMod;
     std::optional<int> m_originalData1Mod;
     QString m_lastUserVisibleNetworkMessage;
-    // True from the moment the user requests PTT until the radio is returned to
-    // RX. This mirrors the local transmit state used for TX-only meter polling.
-    bool m_pttActive{false};
-    QTimer* m_pttStaleOnGuardTimer{nullptr};
+    // Tracks requested and confirmed state separately so the UI can release
+    // immediately while TX safety remains armed until radio confirmation.
+    sdr9700::PttConfirmationPolicy m_pttState;
     QTimer* m_pttReleaseDelayTimer{nullptr};
+    QTimer* m_pttOffConfirmationTimer{nullptr};
     QTimer* m_pttMaxDurationTimer{nullptr};
     QTimer* m_scopeRetryTimer{nullptr};
     QTimer* m_initialStateRetryTimer{nullptr};

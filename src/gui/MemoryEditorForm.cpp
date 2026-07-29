@@ -514,7 +514,7 @@ void MemoryEditorForm::show(const QString& memoryId)
                                 setDtcsPick, populateToneValues, populateOffsetOptions, setOffsetSelection,
                                 updateCustomOffsetVisibility, updateConditionalSections]()
     {
-        if (!m_owner->m_window->m_model->isReady() || !m_owner->m_window->m_vfo)
+        if (!m_owner->m_window->m_model || !m_owner->m_window->m_model->isReady() || !m_owner->m_window->m_vfo)
         {
             QMessageBox::information(editor, "Copy Current Settings",
                                      "Connect to the radio and wait for sync before copying current settings.");

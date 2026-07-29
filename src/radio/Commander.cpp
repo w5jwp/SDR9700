@@ -1817,7 +1817,15 @@ void Commander::parseCommand()
         if (takePendingSetCommand(&acknowledgedCommand) && acknowledgedCommand.value.isValid() && queue != nullptr)
         {
             qDebug(logRadio()) << "Radio (FB) acknowledged set command:" << funcString[acknowledgedCommand.func];
-            queue->receiveValue(acknowledgedCommand.func, acknowledgedCommand.value, acknowledgedCommand.receiver);
+            // FB confirms that the command was accepted, not the resulting
+            // radio state. In particular, a delayed PTT-on acknowledgement can
+            // arrive after a later unkey and must not repaint the UI as TX.
+            // The set path already queues a 1C 00 readback for authoritative
+            // state confirmation.
+            if (acknowledgedCommand.func != funcTransceiverStatus)
+            {
+                queue->receiveValue(acknowledgedCommand.func, acknowledgedCommand.value, acknowledgedCommand.receiver);
+            }
         }
         break;
     }

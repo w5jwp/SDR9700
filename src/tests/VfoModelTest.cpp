@@ -136,6 +136,14 @@ void VfoModelTest::radioRequestsDoNotPublishUnconfirmedState()
     QSignalSpy manualNotchSpy(&model, &VfoModel::manualNotchChanged);
     QSignalSpy compressorSpy(&model, &VfoModel::compressorChanged);
     QSignalSpy ritSpy(&model, &VfoModel::ritChanged);
+    QSignalSpy rfGainSpy(&model, &VfoModel::rfGainChanged);
+    QSignalSpy duplexSpy(&model, &VfoModel::duplexModeChanged);
+    QSignalSpy offsetSpy(&model, &VfoModel::repeaterOffsetChanged);
+    QSignalSpy toneModeSpy(&model, &VfoModel::toneAccessModeChanged);
+    QSignalSpy toneFrequencySpy(&model, &VfoModel::toneFrequencyChanged);
+    QSignalSpy dtcsSpy(&model, &VfoModel::dtcsCodeChanged);
+    QSignalSpy nrSpy(&model, &VfoModel::nrChanged);
+    QSignalSpy nbSpy(&model, &VfoModel::nbChanged);
 
     model.setPreampLevel(2);
     model.setAgcMode(QStringLiteral("slow"));
@@ -144,6 +152,14 @@ void VfoModelTest::radioRequestsDoNotPublishUnconfirmedState()
     model.setCompressor(true);
     model.setRitEnabled(true);
     model.setRitOffset(500);
+    model.setRfGain(200);
+    model.setDuplexMode(dmDupPlus);
+    model.setRepeaterOffsetHz(600000);
+    model.setToneAccessMode(ratrTT);
+    model.setToneFrequency(885);
+    model.setDtcsCode(23);
+    model.setNrLevel(12);
+    model.setNbLevel(8);
 
     QCOMPARE(preampSpy.count(), 0);
     QCOMPARE(agcSpy.count(), 0);
@@ -151,6 +167,14 @@ void VfoModelTest::radioRequestsDoNotPublishUnconfirmedState()
     QCOMPARE(manualNotchSpy.count(), 0);
     QCOMPARE(compressorSpy.count(), 0);
     QCOMPARE(ritSpy.count(), 0);
+    QCOMPARE(rfGainSpy.count(), 0);
+    QCOMPARE(duplexSpy.count(), 0);
+    QCOMPARE(offsetSpy.count(), 0);
+    QCOMPARE(toneModeSpy.count(), 0);
+    QCOMPARE(toneFrequencySpy.count(), 0);
+    QCOMPARE(dtcsSpy.count(), 0);
+    QCOMPARE(nrSpy.count(), 0);
+    QCOMPARE(nbSpy.count(), 0);
     QCOMPARE(model.preampLevel(), 0);
     QVERIFY(!model.ritOn());
     QCOMPARE(model.ritHz(), short(0));

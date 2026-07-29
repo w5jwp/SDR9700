@@ -28,17 +28,6 @@ constexpr int kMemoryModeColumn = 3;
 constexpr int kMemoryFrequencyColumn = 4;
 constexpr int kMemoryColumnCount = 5;
 
-QString memoryFrequencyLabel(quint64 hz)
-{
-    const quint64 mhz = hz / 1000000ULL;
-    const quint64 khz = (hz % 1000000ULL) / 1000ULL;
-    const quint64 hzPart = hz % 1000ULL;
-    return QStringLiteral("%1.%2.%3")
-        .arg(mhz, 3, 10, QLatin1Char('0'))
-        .arg(khz, 3, 10, QLatin1Char('0'))
-        .arg(hzPart, 3, 10, QLatin1Char('0'));
-}
-
 QTableWidgetItem* makeCellItem(const QString& text, Qt::Alignment alignment, const QString& memoryId = QString())
 {
     auto* item = new QTableWidgetItem(text);
@@ -191,11 +180,11 @@ void MemoryPanel::rebuildList()
         auto* nameItem = makeCellItem(name, Qt::AlignLeft | Qt::AlignVCenter, memory.id);
         auto* modeItem =
             makeCellItem(sdr9700::ui::main_window::memoryModeLabel(memory.mode), Qt::AlignCenter, memory.id);
-        auto* frequencyItem =
-            makeCellItem(memoryFrequencyLabel(memory.receiveHz), Qt::AlignRight | Qt::AlignVCenter, memory.id);
+        auto* frequencyItem = makeCellItem(sdr9700::ui::main_window::memoryFrequencyLabel(memory.receiveHz),
+                                           Qt::AlignRight | Qt::AlignVCenter, memory.id);
         numberItem->setToolTip(QStringLiteral("%1\n%2  %3")
                                    .arg(name, sdr9700::ui::main_window::memoryModeLabel(memory.mode),
-                                        memoryFrequencyLabel(memory.receiveHz)));
+                                        sdr9700::ui::main_window::memoryFrequencyLabel(memory.receiveHz)));
         bandItem->setToolTip(numberItem->toolTip());
         nameItem->setToolTip(numberItem->toolTip());
         modeItem->setToolTip(numberItem->toolTip());

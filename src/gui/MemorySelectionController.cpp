@@ -74,7 +74,7 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
     {
         return;
     }
-    if (!m_owner->m_window->m_model->isReady() || !m_owner->m_window->m_vfo)
+    if (!m_owner->m_window->m_model || !m_owner->m_window->m_model->isReady() || !m_owner->m_window->m_vfo)
     {
         if (showDialogOnFailure)
         {
@@ -239,16 +239,10 @@ void MemorySelectionController::moveSelectedMemory(int direction)
         return;
     }
 
-    QVector<int> visibleIndexes;
+    int visiblePosition = -1;
     for (int i = 0; i < memories.size(); ++i)
     {
-        visibleIndexes.append(i);
-    }
-
-    int visiblePosition = -1;
-    for (int i = 0; i < visibleIndexes.size(); ++i)
-    {
-        if (memories.at(visibleIndexes.at(i)).id == id)
+        if (memories.at(i).id == id)
         {
             visiblePosition = i;
             break;
@@ -256,13 +250,13 @@ void MemorySelectionController::moveSelectedMemory(int direction)
     }
 
     const int targetPosition = visiblePosition + direction;
-    if (visiblePosition < 0 || targetPosition < 0 || targetPosition >= visibleIndexes.size())
+    if (visiblePosition < 0 || targetPosition < 0 || targetPosition >= memories.size())
     {
         return;
     }
 
-    const MemoryRecord source = memories.at(visibleIndexes.at(visiblePosition));
-    const MemoryRecord target = memories.at(visibleIndexes.at(targetPosition));
+    const MemoryRecord source = memories.at(visiblePosition);
+    const MemoryRecord target = memories.at(targetPosition);
     quint16 sourceGroup = 0;
     quint16 sourceChannel = 0;
     quint16 targetGroup = 0;

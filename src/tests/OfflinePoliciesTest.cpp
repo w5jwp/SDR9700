@@ -1,4 +1,5 @@
 #include "MemorySyncPolicy.h"
+#include "PttConfirmationPolicy.h"
 #include "SpectrumTuningPolicy.h"
 #include "TransmitSafetyPolicy.h"
 
@@ -18,6 +19,7 @@ class OfflinePoliciesTest : public QObject
     void clampsFrequencyAndScopeCenterToBand();
     void requiresConsecutiveHighSwrReadings();
     void resetsTransmitSafetyWhenNotTransmitting();
+    void keepsPttActiveUntilRadioConfirmsUnkey();
 };
 
 void OfflinePoliciesTest::clampsMemoryPollingInterval()
@@ -99,6 +101,41 @@ void OfflinePoliciesTest::resetsTransmitSafetyWhenNotTransmitting()
     QVERIFY(!policy.observe(false, 5.0));
     QCOMPARE(policy.highReadingCount(), 0);
     QVERIFY(!policy.observe(true, std::numeric_limits<double>::quiet_NaN()));
+}
+
+void OfflinePoliciesTest::keepsPttActiveUntilRadioConfirmsUnkey()
+{
+    sdr9700::PttConfirmationPolicy policy;
+    QVERIFY(policy.requestOn());
+    QVERIFY(policy.desiredActive());
+    QVERIFY(policy.safetyActive());
+
+    policy.requestOff();
+    QVERIFY(policy.offPending());
+    QVERIFY(policy.safetyActive());
+    QVERIFY(!policy.desiredActive());
+
+    policy.reset();
+    QVERIFY(policy.requestOn());
+    policy.confirm(true);
+    policy.requestOff();
+    QVERIFY(policy.confirmedActive());
+    QVERIFY(policy.offPending());
+    QVERIFY(policy.safetyActive());
+    QVERIFY(policy.requestOn());
+    QVERIFY(!policy.offPending());
+    policy.requestOff();
+
+    // A radio report that it is still keyed must remain authoritative.
+    policy.confirm(true);
+    QVERIFY(policy.confirmedActive());
+    QVERIFY(policy.offPending());
+    QVERIFY(policy.safetyActive());
+
+    policy.confirm(false);
+    QVERIFY(!policy.confirmedActive());
+    QVERIFY(!policy.offPending());
+    QVERIFY(!policy.safetyActive());
 }
 
 QTEST_GUILESS_MAIN(OfflinePoliciesTest)

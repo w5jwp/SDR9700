@@ -27,9 +27,9 @@ class FakeRadioBackend : public IRadioBackend
         filterHigh = high;
     }
     void setNrEnabled(bool) override {}
-    void setNrLevel(int) override {}
+    void setNrLevel(int value) override { nrLevel = value; }
     void setNbEnabled(bool) override {}
-    void setNbLevel(int) override {}
+    void setNbLevel(int value) override { nbLevel = value; }
     void setPreampEnabled(bool) override {}
     void setPreampLevel(int value) override { preampLevel = value; }
     void setAttenuatorEnabled(bool) override {}
@@ -70,6 +70,8 @@ class FakeRadioBackend : public IRadioBackend
     int filterLow{0};
     int filterHigh{0};
     int preampLevel{-1};
+    int nrLevel{-1};
+    int nbLevel{-1};
     int afGain{-1};
     int rfGain{-1};
     bool squelchOn{false};
@@ -139,18 +141,22 @@ void VfoBackendTest::boundedRequestsAreClampedBeforeForwarding()
 
     model.setPreampLevel(10);
     model.setRitOffset(1200);
+    model.setNrLevel(300);
+    model.setNbLevel(300);
     model.setRfGain(300);
     model.setSquelch(true, 300);
     model.setTxPower(300);
 
     QCOMPARE(backend.preampLevel, 3);
+    QCOMPARE(backend.nrLevel, 15);
+    QCOMPARE(backend.nbLevel, 10);
     QCOMPARE(model.preampLevel(), 0);
     QCOMPARE(backend.ritOffset, short(999));
     QCOMPARE(model.ritHz(), short(0));
-    QCOMPARE(backend.rfGain, 300);
+    QCOMPARE(backend.rfGain, 255);
     QVERIFY(backend.squelchOn);
-    QCOMPARE(backend.squelchLevel, 300);
-    QCOMPARE(backend.txPower, 300);
+    QCOMPARE(backend.squelchLevel, 255);
+    QCOMPARE(backend.txPower, 255);
 }
 
 QTEST_GUILESS_MAIN(VfoBackendTest)

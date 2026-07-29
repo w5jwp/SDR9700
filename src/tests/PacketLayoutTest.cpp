@@ -16,6 +16,7 @@ class PacketLayoutTest : public QObject
     void rtpBitFieldsOccupyExpectedBytes();
     void packetDecoderRejectsShortInputAndCopiesAlignedData();
     void packetEncoderCopiesWireBytes();
+    void capabilityRadioCountIsBoundedToIndexRange();
 };
 
 void PacketLayoutTest::packetSizesMatchProtocolConstants()
@@ -100,6 +101,15 @@ void PacketLayoutTest::packetEncoderCopiesWireBytes()
     QVERIFY(decoded.has_value());
     QCOMPARE(decoded->type, quint8(0x04));
     QCOMPARE(qFromLittleEndian(decoded->seq), quint16(0x1234));
+}
+
+void PacketLayoutTest::capabilityRadioCountIsBoundedToIndexRange()
+{
+    QCOMPARE(boundedCapabilityRadioCount(1, 1), 1);
+    QCOMPARE(boundedCapabilityRadioCount(500, 300), MAX_CAPABILITY_RADIOS);
+    QCOMPARE(boundedCapabilityRadioCount(2, 300), 2);
+    QCOMPARE(boundedCapabilityRadioCount(300, 2), 2);
+    QCOMPARE(boundedCapabilityRadioCount(-1, 2), 0);
 }
 
 QTEST_GUILESS_MAIN(PacketLayoutTest)

@@ -12,17 +12,11 @@
 
 using namespace sdr9700::memory;
 
-namespace
-{
-constexpr int kWriteIntervalMs = 100;
-constexpr int kWriteReadbackTimeoutMs = 3000;
-} // namespace
-
 MemoryWriteController::MemoryWriteController(MemoryController* owner) : QObject(owner), m_owner(owner)
 {
     m_timeoutTimer = new QTimer(this);
     m_timeoutTimer->setSingleShot(true);
-    m_timeoutTimer->setInterval(kWriteReadbackTimeoutMs);
+    m_timeoutTimer->setInterval(kRadioMemoryWriteReadbackTimeoutMs);
     connect(m_timeoutTimer, &QTimer::timeout, this,
             [this]()
             {
@@ -125,7 +119,7 @@ void MemoryWriteController::handleReadback(quint32 key, const MemoryType& memory
     m_waitingForReadback = false;
     ++m_index;
     m_owner->setMemoryProgress(m_progressLabel, m_index, m_memories.size());
-    QTimer::singleShot(kWriteIntervalMs, this, &MemoryWriteController::writeNext);
+    QTimer::singleShot(kRadioMemoryWriteIntervalMs, this, &MemoryWriteController::writeNext);
 }
 
 bool MemoryWriteController::active() const

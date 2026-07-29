@@ -1,10 +1,10 @@
 // cppcheck-suppress-file unusedStructMember
 #pragma once
 
+#include "UtilityWindow.h"
+
 #include <QColor>
 #include <QHash>
-#include <QDialog>
-#include <QPointer>
 #include <QString>
 
 #include <functional>
@@ -21,7 +21,7 @@ class QTreeWidgetItem;
 class IcomRC28Manager;
 #endif
 
-class SettingsDialog : public QDialog
+class SettingsDialog : public sdr9700::ui::UtilityWindow
 {
     Q_OBJECT
 
@@ -55,9 +55,6 @@ class SettingsDialog : public QDialog
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);
 #endif
 
-  protected:
-    void showEvent(QShowEvent* event) override;
-
   private:
     QTreeWidgetItem* addCategory(const QString& title, const QString& keywords);
     void addPage(QTreeWidgetItem* parent, Page page, const QString& title, const QString& keywords,
@@ -71,7 +68,6 @@ class SettingsDialog : public QDialog
 #ifdef HAVE_HIDAPI
     IcomRC28Manager* m_icomRC28Manager{nullptr};
 #endif
-    QPointer<QWidget> m_centerHost;
     QTreeWidget* m_navigation{nullptr};
     QScrollArea* m_pageScroll{nullptr};
     QVBoxLayout* m_pageLayout{nullptr};

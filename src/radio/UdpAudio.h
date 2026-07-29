@@ -72,6 +72,7 @@ class UdpAudio : public UdpBase
     void watchdog();
     void startAudio();
     void startTxAudio();
+    void stopTxAudio();
     void stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThread, const char* name);
     audioSetup rxSetup;
     audioSetup txSetup;
