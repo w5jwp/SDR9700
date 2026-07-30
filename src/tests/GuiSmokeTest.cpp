@@ -3,6 +3,7 @@
 #include "SettingsDialog.h"
 
 #include <QLineEdit>
+#include <QComboBox>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QShortcut>
@@ -18,6 +19,7 @@ class GuiSmokeTest : public QObject
     void initTestCase();
     void settingsDialogOpensSearchesAndCloses();
     void settingsFindShortcutFocusesSearch();
+    void audioSettingsChangesAreForwarded();
     void confirmationDialogsUseSafeSemanticButtons();
 };
 
@@ -80,6 +82,19 @@ void GuiSmokeTest::settingsFindShortcutFocusesSearch()
     search->setText(QStringLiteral("spectrum"));
     QVERIFY(QMetaObject::invokeMethod(shortcut, "activated", Qt::DirectConnection));
     QCOMPARE(search->selectedText(), QStringLiteral("spectrum"));
+}
+
+void GuiSmokeTest::audioSettingsChangesAreForwarded()
+{
+    SettingsDialog dialog(SettingsDialog::Page::AudioDevices);
+    QSignalSpy changedSpy(&dialog, &SettingsDialog::audioSettingsChanged);
+    dialog.show();
+
+    auto* channels = dialog.findChild<QComboBox*>(QStringLiteral("audioOutputChannels"));
+    QVERIFY(channels != nullptr);
+    QCOMPARE(channels->count(), 2);
+    channels->setCurrentIndex(channels->currentIndex() == 0 ? 1 : 0);
+    QCOMPARE(changedSpy.count(), 1);
 }
 
 void GuiSmokeTest::confirmationDialogsUseSafeSemanticButtons()

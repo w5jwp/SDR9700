@@ -44,6 +44,7 @@ set(SDR9700_CORE_SOURCES
     ${SDR9700_MOC_HEADERS}
 
     # Radio / CI-V protocol
+    radio/UdpStatusMessages.h
     radio/UdpBase.cpp
     radio/UdpHandler.cpp
     radio/UdpCivData.cpp
@@ -464,6 +465,11 @@ if(BUILD_TESTING)
     )
     target_link_libraries(VfoBackendTest PRIVATE SDR9700_core Qt6::Test)
     add_test(NAME VfoBackendTest COMMAND VfoBackendTest)
+
+    add_executable(UdpStatusMessagesTest tests/UdpStatusMessagesTest.cpp)
+    target_include_directories(UdpStatusMessagesTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(UdpStatusMessagesTest PRIVATE Qt6::Test)
+    add_test(NAME UdpStatusMessagesTest COMMAND UdpStatusMessagesTest)
 
     set(GUI_SMOKE_TEST_SOURCES
         tests/GuiSmokeTest.cpp

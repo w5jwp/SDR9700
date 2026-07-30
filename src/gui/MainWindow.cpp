@@ -38,6 +38,7 @@
 
 #include <QToolBar>
 #include <QAction>
+#include <QAudioDevice>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -61,6 +62,7 @@
 #include <QHeaderView>
 #include <QKeySequence>
 #include <QMessageBox>
+#include <QMediaDevices>
 #include <QCloseEvent>
 #include <QEvent>
 #include <QFont>
@@ -415,6 +417,7 @@ void MainWindow::showSettingsDialog()
             &SpectrumScopeDisplay::setGridDensity);
     connect(dlg, &SettingsDialog::memoryPollIntervalSecondsChanged, m_memoryController,
             &MemoryController::setMemoryPollIntervalSeconds);
+    connect(dlg, &SettingsDialog::audioSettingsChanged, this, &MainWindow::scheduleAudioSettingsApply);
 #ifdef HAVE_HIDAPI
     connect(dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,
             [this](const QString&, const QString&)
@@ -1958,6 +1961,64 @@ bool MainWindow::scheduleRadioReconnect()
     }
     m_reconnectTimer->start(5000);
     return true;
+}
+
+void MainWindow::scheduleAudioSettingsApply()
+{
+    if (m_shutdownStarted)
+    {
+        return;
+    }
+
+    if (!m_audioSettingsApplyTimer)
+    {
+        m_audioSettingsApplyTimer = new QTimer(this);
+        m_audioSettingsApplyTimer->setSingleShot(true);
+        connect(m_audioSettingsApplyTimer, &QTimer::timeout, this, &MainWindow::applyAudioSettings);
+    }
+
+    // One operator action can update both a device and its codec. Coalesce
+    // nearby changes so the active radio session is restarted only once.
+    m_audioSettingsApplyTimer->start(400);
+}
+
+void MainWindow::applyAudioSettings()
+{
+    if (!m_model || m_shutdownStarted)
+    {
+        return;
+    }
+
+    const AppSettings& settings = AppSettings::instance();
+    const QByteArray inputID = settings.value("audioInputDeviceID").toByteArray();
+    const QByteArray outputID = settings.value("audioOutputDeviceID").toByteArray();
+    const QList<QAudioDevice> inputs = QMediaDevices::audioInputs();
+    const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
+
+    auto findDevice = [](const QList<QAudioDevice>& devices, const QByteArray& id)
+    {
+        const auto match = std::find_if(devices.cbegin(), devices.cend(),
+                                        [&id](const QAudioDevice& device) { return device.id() == id; });
+        return match == devices.cend() ? QAudioDevice{} : *match;
+    };
+
+    m_model->setTxAudioDevice(findDevice(inputs, inputID));
+    m_model->setRxAudioDevice(findDevice(outputs, outputID));
+
+    if (!m_model->isConnected())
+    {
+        return;
+    }
+
+    const RadioProfile* profile = RadioProfileStore::instance().profileById(m_pendingProfileId);
+    if (!profile)
+    {
+        showToast(QStringLiteral("Reconnect the radio to apply audio settings"), 5000, ToastKind::Warning);
+        return;
+    }
+
+    showToast(QStringLiteral("Applying audio settings"), 0, ToastKind::Info);
+    onConnectToProfile(*profile);
 }
 
 void MainWindow::onAfGainChanged(int value)

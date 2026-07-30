@@ -112,6 +112,8 @@ class MainWindow : public QMainWindow
     void bringDialogToFront(QWidget* dialog) const;
     void updateWindowTitle();
     bool scheduleRadioReconnect();
+    void scheduleAudioSettingsApply();
+    void applyAudioSettings();
     void showSettingsDialog();
     void showRadioChooserDialog();
     void tryAutoConnect();
@@ -285,6 +287,7 @@ class MainWindow : public QMainWindow
     QTimer* m_toastTimer{nullptr};
 
     QTimer* m_reconnectTimer{nullptr};
+    QTimer* m_audioSettingsApplyTimer{nullptr};
     bool m_reconnecting{false};
     bool m_userDisconnected{false};
     bool m_lastErrorWasCredential{false};

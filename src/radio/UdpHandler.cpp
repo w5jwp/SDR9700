@@ -1,4 +1,5 @@
 #include "UdpHandler.h"
+#include "UdpStatusMessages.h"
 #include "AppInfo.h"
 #include "LogCategories.h"
 
@@ -813,7 +814,7 @@ void UdpHandler::dataReceived()
                         if (requestStaleSessionReclaim(inComputer))
                         {
                             networkStatus reclaimStatus = status;
-                            reclaimStatus.message = devName + " has a stale SDR9700 session. Reconnecting...";
+                            reclaimStatus.message = devName + " has a stale SDR9700 session; reconnecting";
                             reclaimStatus.userVisibleMessage = true;
                             reclaimStatus.connectionStage = ConnectionStage::Reconnecting;
                             reclaimStatus.messageSeverity = MessageSeverity::Warning;
@@ -823,7 +824,8 @@ void UdpHandler::dataReceived()
                         {
                             networkStatus busyStatus = status;
                             busyStatus.message =
-                                "Waiting for " + devName + ". The stale SDR9700 session did not clear.";
+                                QStringLiteral("Waiting for %1; previous SDR9700 session is still closing")
+                                    .arg(sdr9700::radioDisplayName(devName));
                             busyStatus.userVisibleMessage = true;
                             busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
                             busyStatus.messageSeverity = MessageSeverity::Warning;
@@ -834,8 +836,7 @@ void UdpHandler::dataReceived()
                     else if (in->ipaddress != 0x00)
                     {
                         networkStatus busyStatus = status;
-                        busyStatus.message =
-                            "Waiting for " + devName + ". In use by " + inComputer + " (" + ip.toString() + ").";
+                        busyStatus.message = sdr9700::waitingForBusyRadioMessage(devName, inComputer, ip.toString());
                         busyStatus.userVisibleMessage = true;
                         busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
                         busyStatus.messageSeverity = MessageSeverity::Warning;
@@ -845,7 +846,7 @@ void UdpHandler::dataReceived()
                     else if (inComputer != compName)
                     {
                         networkStatus busyStatus = status;
-                        busyStatus.message = "Waiting for " + devName + ". The radio is in use by another station.";
+                        busyStatus.message = sdr9700::waitingForBusyRadioMessage(devName, {}, {});
                         busyStatus.userVisibleMessage = true;
                         busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
                         busyStatus.messageSeverity = MessageSeverity::Warning;
@@ -857,7 +858,7 @@ void UdpHandler::dataReceived()
                 {
                     qDebug(logUdp()) << "Attempting to connect to radio";
                     networkStatus availableStatus = status;
-                    availableStatus.message = devName + " is available. Opening radio streams...";
+                    availableStatus.message = devName + " is available; opening radio streams";
                     availableStatus.userVisibleMessage = true;
                     availableStatus.connectionStage = ConnectionStage::OpeningStreams;
                     emit haveNetworkStatus(availableStatus);

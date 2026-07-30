@@ -14,6 +14,9 @@ class AudioDevicesSettingsPanel : public QWidget
   public:
     explicit AudioDevicesSettingsPanel(QWidget* parent = nullptr);
 
+  signals:
+    void audioSettingsChanged();
+
   private:
     void refreshInputDevices();
     void refreshOutputDevices();

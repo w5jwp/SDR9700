@@ -324,7 +324,13 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
     addPage(audioCategory, Page::AudioDevices, QStringLiteral("Audio Devices"),
             QStringLiteral("Choose audio devices for radio receive and transmit."),
             QStringLiteral("audio input output device microphone speaker codec channels receive transmit playback"),
-            []() { return new AudioDevicesSettingsPanel; });
+            [this]()
+            {
+                auto* panel = new AudioDevicesSettingsPanel;
+                connect(panel, &AudioDevicesSettingsPanel::audioSettingsChanged, this,
+                        &SettingsDialog::audioSettingsChanged);
+                return panel;
+            });
     for (int i = 0; i < m_navigation->topLevelItemCount(); ++i)
     {
         m_navigation->topLevelItem(i)->sortChildren(0, Qt::AscendingOrder);

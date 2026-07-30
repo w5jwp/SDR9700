@@ -24,6 +24,7 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     inputForm->setSpacing(8);
 
     m_inputCombo = new QComboBox(inputGroup);
+    m_inputCombo->setObjectName(QStringLiteral("audioInputDevice"));
     const AppSettings& settings = AppSettings::instance();
     const QByteArray savedIn = settings.value("audioInputDeviceID").toString().toUtf8();
     repopulateDeviceCombo(m_inputCombo, QMediaDevices::audioInputs(), savedIn);
@@ -37,8 +38,10 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     outputForm->setSpacing(8);
 
     m_outputCombo = new QComboBox(outputGroup);
+    m_outputCombo->setObjectName(QStringLiteral("audioOutputDevice"));
 
     m_outputChannelsCombo = new QComboBox(outputGroup);
+    m_outputChannelsCombo->setObjectName(QStringLiteral("audioOutputChannels"));
     m_outputChannelsCombo->addItem(QStringLiteral("LPCM 16-bit, 1 channel"), 1);
     m_outputChannelsCombo->addItem(QStringLiteral("LPCM 16-bit, 2 channels"), 2);
 
@@ -55,15 +58,24 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     vbox->addWidget(outputGroup);
     vbox->addStretch(1);
 
-    connect(m_inputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int)
-            { AppSettings::instance().setValue("audioInputDeviceID", m_inputCombo->currentData().toByteArray()); });
-    connect(m_outputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int)
-            { AppSettings::instance().setValue("audioOutputDeviceID", m_outputCombo->currentData().toByteArray()); });
+    connect(m_inputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int)
+            {
+                AppSettings::instance().setValue("audioInputDeviceID", m_inputCombo->currentData().toByteArray());
+                emit audioSettingsChanged();
+            });
+    connect(m_outputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int)
+            {
+                AppSettings::instance().setValue("audioOutputDeviceID", m_outputCombo->currentData().toByteArray());
+                emit audioSettingsChanged();
+            });
     connect(m_outputChannelsCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int)
             {
                 AppSettings::instance().setValue("audioOutputChannels",
                                                  qBound(1, m_outputChannelsCombo->currentData().toInt(), 2));
+                emit audioSettingsChanged();
             });
     connect(m_mediaDevices, &QMediaDevices::audioInputsChanged, this, &AudioDevicesSettingsPanel::refreshInputDevices);
     connect(m_mediaDevices, &QMediaDevices::audioOutputsChanged, this,

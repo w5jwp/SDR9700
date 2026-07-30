@@ -51,6 +51,7 @@ class SettingsDialog : public sdr9700::ui::UtilityWindow
     void spectrumScopeGridDensityChanged(int density);
     void reverseMouseWheelTuningChanged(bool reversed);
     void memoryPollIntervalSecondsChanged(int seconds);
+    void audioSettingsChanged();
 #ifdef HAVE_HIDAPI
     void icomRC28EncoderSettingsChanged(const QString& field, const QString& value);
 #endif
