@@ -80,16 +80,17 @@ sudo apt install build-essential cmake ninja-build pkg-config \
   libxkbcommon-dev libeigen3-dev libhidapi-dev
 ```
 
-To let the signed-in desktop user access an Icom RC-28 without running
-SDR9700 as root, install the included udev rule, reload the rules, and reconnect
-the controller:
+After building, `make install` creates the desktop launcher and icons for the
+current user. It also requests administrator access to install the Icom RC-28
+udev rule in `/etc/udev/rules.d`, reloads the rules, and triggers the `hidraw`
+subsystem:
 
 ```bash
-sudo install -m 0644 resources/packaging/linux/60-sdr9700-rc28.rules \
-  /etc/udev/rules.d/60-sdr9700-rc28.rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=hidraw
+make release
+make install
 ```
+
+Reconnect the RC-28 after installation if it was already attached.
 
 On macOS (Apple Silicon), Homebrew may be used to install build dependencies:
 

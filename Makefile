@@ -74,4 +74,21 @@ install:
 	    update-desktop-database -q ~/.local/share/applications 2>/dev/null || true; \
 	    gtk-update-icon-cache -q -f -t ~/.local/share/icons/hicolor 2>/dev/null || true; \
 	    kbuildsycoca6 --noincremental 2>/dev/null || true; \
+	    privilege=""; \
+	    if [ "$$(id -u)" -ne 0 ]; then \
+	        if ! command -v sudo >/dev/null 2>&1; then \
+	            echo "Installing the RC-28 udev rule requires root access or sudo."; \
+	            exit 1; \
+	        fi; \
+	        privilege="sudo"; \
+	    fi; \
+	    $$privilege install -d -m 0755 /etc/udev/rules.d; \
+	    $$privilege install -m 0644 resources/packaging/linux/60-sdr9700-rc28.rules \
+	        /etc/udev/rules.d/60-sdr9700-rc28.rules; \
+	    if command -v udevadm >/dev/null 2>&1; then \
+	        $$privilege udevadm control --reload-rules; \
+	        $$privilege udevadm trigger --subsystem-match=hidraw; \
+	    else \
+	        echo "Installed the RC-28 udev rule; reconnect the controller after udev rules are reloaded."; \
+	    fi; \
 	fi
