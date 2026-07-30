@@ -452,6 +452,13 @@ void UdpAudio::setTxAudioDevice(const QAudioDevice& device)
     }
 }
 
+void UdpAudio::stopLocalAudio()
+{
+    m_audioReady = false;
+    stopAudioWorker(rxaudio, rxAudioThread, "rxAudioThread");
+    stopAudioWorker(txaudio, txAudioThread, "txAudioThread");
+}
+
 void UdpAudio::startAudio()
 {
 

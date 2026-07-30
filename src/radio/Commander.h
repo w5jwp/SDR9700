@@ -36,6 +36,7 @@ class Commander : public RadioCommander
     void enableAudio();
     void setRxAudioDevice(const QAudioDevice& device);
     void setTxAudioDevice(const QAudioDevice& device);
+    void stopLocalAudio();
 
   private:
     enum class ReplyParseResult

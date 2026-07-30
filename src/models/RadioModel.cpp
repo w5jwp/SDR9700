@@ -88,6 +88,11 @@ void RadioModel::setTxAudioDevice(const QAudioDevice& dev)
     m_backend->setTxAudioDevice(dev);
 }
 
+void RadioModel::stopLocalAudio()
+{
+    m_backend->stopLocalAudio();
+}
+
 void RadioModel::setLanModLevel(int level)
 {
     m_backend->setLanModLevel(level);

@@ -116,8 +116,12 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
 
     auto* root = new QHBoxLayout(this);
     root->setContentsMargins(kNoMargins);
+#if defined(Q_OS_MAC)
+    root->setContentsMargins(10, 0, 0, 0);
+#endif
     root->setSpacing(0);
 
+#if !defined(Q_OS_MAC)
     // Menu buttons sit in a sub-layout so addMenu() can append to it
     auto* menuContainer = new QWidget(this);
     menuContainer->setObjectName(QStringLiteral("titleMenuContainer"));
@@ -128,9 +132,14 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     root->addWidget(menuContainer);
 
     root->addStretch(1);
+#endif
 
     m_titleLabel = new QLabel(this);
+#if defined(Q_OS_MAC)
+    m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+#else
     m_titleLabel->setAlignment(Qt::AlignCenter);
+#endif
     m_titleLabel->setTextFormat(Qt::RichText);
     m_titleLabel->setStyleSheet(QStringLiteral("QLabel { background: transparent; }"));
     root->addWidget(m_titleLabel);

@@ -336,6 +336,14 @@ void UdpHandler::setTxAudioDevice(const QAudioDevice& device)
     }
 }
 
+void UdpHandler::stopLocalAudio()
+{
+    if (audio != nullptr)
+    {
+        audio->stopLocalAudio();
+    }
+}
+
 void UdpHandler::setPttActive(bool active)
 {
     // UdpHandler and UdpAudio live on udpHandlerThread, so the handoff to

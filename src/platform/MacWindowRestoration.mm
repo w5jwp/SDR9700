@@ -10,6 +10,25 @@
 
 namespace
 {
+void removeFullScreenMenuItems(NSMenu* menu)
+{
+    if (!menu)
+    {
+        return;
+    }
+
+    for (NSInteger index = menu.numberOfItems - 1; index >= 0; --index)
+    {
+        NSMenuItem* item = [menu itemAtIndex:index];
+        if (item.action == @selector(toggleFullScreen:))
+        {
+            [menu removeItemAtIndex:index];
+            continue;
+        }
+        removeFullScreenMenuItems(item.submenu);
+    }
+}
+
 void disableRestoration(QWidget* widget)
 {
     if (!widget || !widget->isWindow())
@@ -26,7 +45,15 @@ void disableRestoration(QWidget* widget)
 
     nativeWindow.restorable = NO;
     nativeWindow.restorationClass = Nil;
+    nativeWindow.collectionBehavior =
+        (nativeWindow.collectionBehavior & ~NSWindowCollectionBehaviorFullScreenPrimary) |
+        NSWindowCollectionBehaviorFullScreenNone;
     [nativeWindow disableSnapshotRestoration];
+
+    // AppKit injects toggleFullScreen: into a native View menu even when Qt's
+    // fullscreen button hint is disabled. SDR9700 has a fixed-size main
+    // window, so remove the inapplicable system command after menu creation.
+    removeFullScreenMenuItems(NSApp.mainMenu);
 }
 
 class MacWindowRestorationFilter final : public QObject

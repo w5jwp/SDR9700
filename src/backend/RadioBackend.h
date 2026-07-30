@@ -75,6 +75,7 @@ class RadioBackend : public IRadioBackend
     void writeRadioMemory(MemoryType memory) override;
     void setRxAudioDevice(const QAudioDevice& dev) override;
     void setTxAudioDevice(const QAudioDevice& dev) override;
+    void stopLocalAudio() override;
     void setLanModLevel(int level) override;
     void sendDtmf(const QString& digits) override;
 

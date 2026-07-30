@@ -2963,6 +2963,15 @@ void Commander::setTxAudioDevice(const QAudioDevice& device)
     QMetaObject::invokeMethod(udp, [udp = udp, device]() { udp->setTxAudioDevice(device); }, Qt::QueuedConnection);
 }
 
+void Commander::stopLocalAudio()
+{
+    if (udp == nullptr)
+    {
+        return;
+    }
+    QMetaObject::invokeMethod(udp, [udp = udp]() { udp->stopLocalAudio(); }, Qt::QueuedConnection);
+}
+
 void Commander::setPttActive(bool active)
 {
     if (udp == nullptr)

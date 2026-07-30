@@ -64,6 +64,7 @@ class IRadioBackend : public QObject
 
     virtual void setRxAudioDevice(const QAudioDevice& dev) { Q_UNUSED(dev) }
     virtual void setTxAudioDevice(const QAudioDevice& dev) { Q_UNUSED(dev) }
+    virtual void stopLocalAudio() {}
     virtual void setLanModLevel(int level) { Q_UNUSED(level) } // 0-255
     virtual void sendDtmf(const QString& digits) { Q_UNUSED(digits) }
 

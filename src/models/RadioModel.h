@@ -43,6 +43,7 @@ class RadioModel : public QObject
     void disconnectFromRadio();
     void setRxAudioDevice(const QAudioDevice& dev);
     void setTxAudioDevice(const QAudioDevice& dev);
+    void stopLocalAudio();
     void setLanModLevel(int level);
     void setTuningStep(int step);
     void selectVfoMode();

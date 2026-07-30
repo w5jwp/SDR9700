@@ -663,6 +663,11 @@ void RadioBackend::setTxAudioDevice(const QAudioDevice& dev)
     invokeOnCurrentCommander([dev](Commander* commander) { commander->setTxAudioDevice(dev); });
 }
 
+void RadioBackend::stopLocalAudio()
+{
+    invokeOnCurrentCommander([](Commander* commander) { commander->stopLocalAudio(); });
+}
+
 void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisconnectedStage)
 {
     if (!m_commander)

@@ -111,6 +111,9 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     m_statusBarController = new StatusBarController(this);
 
     setWindowFlag(Qt::FramelessWindowHint);
+#if defined(Q_OS_MAC)
+    setWindowFlag(Qt::WindowFullscreenButtonHint, false);
+#endif
     updateWindowTitle();
     setFixedSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
 
@@ -121,6 +124,9 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     setCentralWidget(central);
 
     buildToolBar();
+#if defined(Q_OS_MAC)
+    vbox->addWidget(m_titleBar);
+#endif
     buildControlPanel(vbox);
     m_spectrumScopeController->buildSpectrumScope(vbox);
     buildMemoryWindow();
@@ -275,6 +281,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
 
 void MainWindow::buildToolBar()
 {
+#if !defined(Q_OS_MAC)
     const QString menuStyle =
         QStringLiteral("QMenu { background: %1; border: 1px solid %2; color: %3; }"
                        "QMenu::item { padding: 5px 18px 5px 10px; }"
@@ -282,14 +289,17 @@ void MainWindow::buildToolBar()
                        "QMenu::separator { height: 1px; background: %6; margin: 3px 8px; }")
             .arg(UiTheme::Color::MenuPanel, UiTheme::Color::BorderMedium, UiTheme::Color::TextPrimary,
                  UiTheme::Color::AccentDark, UiTheme::Color::White, UiTheme::Color::Border);
+#endif
 
     m_titleBar = new MainTitleBar(this);
     m_titleBar->setTitle(
         QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 %2</span>")
             .arg(QString::fromLatin1(APP_NAME).toHtmlEscaped(), QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
 
-    auto* fileMenu = new QMenu(this);
+    auto* fileMenu = new QMenu(QStringLiteral("&File"), this);
+#if !defined(Q_OS_MAC)
     fileMenu->setStyleSheet(menuStyle);
+#endif
     fileMenu->addAction("Connect to Radio", this, [this]() { showRadioChooserDialog(); });
     fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction("Quit");
@@ -298,27 +308,47 @@ void MainWindow::buildToolBar()
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this,
             [this]() { QMetaObject::invokeMethod(this, &QWidget::close, Qt::QueuedConnection); });
-    m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
-
-    m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
-
-    auto* viewMenu = new QMenu(this);
+    auto* viewMenu = new QMenu(QStringLiteral("&View"), this);
+#if !defined(Q_OS_MAC)
     viewMenu->setStyleSheet(menuStyle);
+#endif
     viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
     viewMenu->addAction("Memory Manager", this, &MainWindow::showMemoryWindow);
     viewMenu->addAction("Meters", this, &MainWindow::showMetersDialog);
-    m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
 
-    auto* helpMenu = new QMenu(this);
+    auto* helpMenu = new QMenu(QStringLiteral("&Help"), this);
+#if !defined(Q_OS_MAC)
     helpMenu->setStyleSheet(menuStyle);
-    helpMenu->addAction("About", this,
-                        [this]()
-                        {
-                            AboutDialog dlg(this);
-                            centerPopupWindow(&dlg);
-                            dlg.exec();
-                        });
+#endif
+    auto* aboutAction = helpMenu->addAction("About", this,
+                                            [this]()
+                                            {
+                                                AboutDialog dlg(this);
+                                                centerPopupWindow(&dlg);
+                                                dlg.exec();
+                                            });
+
+#if defined(Q_OS_MAC)
+    aboutAction->setMenuRole(QAction::NoRole);
+    auto* settingsMenu = new QMenu(QStringLiteral("&Settings"), this);
+    auto* settingsAction =
+        settingsMenu->addAction(QStringLiteral("Settings…"), this, [this]() { showSettingsDialog(); });
+    settingsAction->setMenuRole(QAction::NoRole);
+
+    QMenuBar* nativeMenuBar = menuBar();
+    nativeMenuBar->setNativeMenuBar(true);
+    nativeMenuBar->addMenu(fileMenu);
+    nativeMenuBar->addMenu(settingsMenu);
+    nativeMenuBar->addMenu(viewMenu);
+    nativeMenuBar->addMenu(helpMenu);
+    nativeMenuBar->setVisible(true);
+#else
+    Q_UNUSED(aboutAction);
+    m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
+    m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
+    m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
     m_titleBar->addMenu(QStringLiteral("&Help"), helpMenu);
+#endif
 
     connect(m_titleBar, &MainTitleBar::minimizeRequested, this, &QWidget::showMinimized);
     connect(m_titleBar, &MainTitleBar::closeRequested, this, &QWidget::close);
@@ -349,8 +379,10 @@ void MainWindow::buildToolBar()
                 }
             });
 
+#if !defined(Q_OS_MAC)
     menuBar()->setVisible(false);
     setMenuWidget(m_titleBar);
+#endif
 }
 
 void MainWindow::buildMemoryWindow()
@@ -1062,6 +1094,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
                        {
                            if (m_model)
                            {
+                               // Silence local playback before the orderly radio disconnect. This
+                               // does not close UDP streams or release the authentication token.
+                               m_model->stopLocalAudio();
                                m_model->disconnectFromRadio();
                            }
                            // Re-enter closeEvent only after the originating native event and

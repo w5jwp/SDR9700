@@ -296,12 +296,12 @@ void MemoryEditorForm::show(const QString& memoryId)
             QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
         layout->addWidget(divider);
     };
-    addToneColumn(toneValueRowLayout, toneValueRow, QStringLiteral("RX Tone"), ctcssPresetBtn);
-    addPairDivider(toneValueRowLayout, toneValueRow);
     addToneColumn(toneValueRowLayout, toneValueRow, QStringLiteral("TX Tone"), tonePresetBtn);
-    dtcsValueRowLayout->addWidget(dtcsRxRow, 1);
-    addPairDivider(dtcsValueRowLayout, dtcsValueRow);
+    addPairDivider(toneValueRowLayout, toneValueRow);
+    addToneColumn(toneValueRowLayout, toneValueRow, QStringLiteral("RX Tone"), ctcssPresetBtn);
     dtcsValueRowLayout->addWidget(dtcsRow, 1);
+    addPairDivider(dtcsValueRowLayout, dtcsValueRow);
+    dtcsValueRowLayout->addWidget(dtcsRxRow, 1);
     auto setTonePick = [tonePresetBtn, toneEdit](ushort value, const QString& label)
     {
         tonePresetBtn->setText(value == 0 ? QStringLiteral("NONE") : label);
