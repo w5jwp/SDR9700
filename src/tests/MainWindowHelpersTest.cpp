@@ -19,6 +19,7 @@ class MainWindowHelpersTest : public QObject
     void mapsTuningSteps();
     void providesBandSpecificOffsets();
     void identifiesModesWithSelectableAgcPresets();
+    void preservesMemorySelectionAcrossPttFrequencyTransitions();
 };
 
 void MainWindowHelpersTest::parsesFrequencyText_data()
@@ -125,6 +126,24 @@ void MainWindowHelpersTest::identifiesModesWithSelectableAgcPresets()
         QCOMPARE(agcDisplayMode(mode, QStringLiteral("slow")), QStringLiteral("FAST"));
     }
     QCOMPARE(agcDisplayMode(QStringLiteral("USB"), QStringLiteral("slow")), QStringLiteral("SLOW"));
+}
+
+void MainWindowHelpersTest::preservesMemorySelectionAcrossPttFrequencyTransitions()
+{
+    constexpr quint64 receiveHz = 145410000;
+    constexpr quint64 transmitHz = 144810000;
+    constexpr quint64 intermediateHz = 145000000;
+
+    QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, transmitHz, true, true));
+    QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, intermediateHz, true, true));
+    QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, transmitHz, false, true));
+    QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, receiveHz, false, true));
+    QVERIFY(!preserveMemorySelectionForReportedFrequency(receiveHz, intermediateHz, false, false));
+
+    // A second PTT cycle must receive the same protection after the first one
+    // has returned to the memory's receive frequency.
+    QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, transmitHz, true, true));
+    QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, receiveHz, false, true));
 }
 
 QTEST_GUILESS_MAIN(MainWindowHelpersTest)

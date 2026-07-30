@@ -63,7 +63,7 @@ constexpr int kSpectrumScopeTuneCommitDelayMs = 70;
 constexpr int kSpectrumScopeTuneReleaseDelayMs = 650;
 constexpr quint64 kSpectrumScopeFixedPanMinDeltaHz = 1000;
 constexpr int kMemoryOffsetCustom = -1;
-constexpr auto kNoActiveMemoryLabel = "-";
+constexpr auto kNoActiveMemoryLabel = "";
 constexpr auto kMemoryPollIntervalSecondsSettingsKey = "memoryPollIntervalSeconds";
 constexpr int kDefaultMemoryPollIntervalSeconds = 600;
 constexpr int kMemoryPollIntervalMinSeconds = 30;
@@ -78,6 +78,12 @@ constexpr int kMemoryModeColumn = 5;
 constexpr int kMemoryToneColumn = 6;
 constexpr int kMemoryFilterColumn = 7;
 constexpr int kMemoryIdColumn = 8;
+
+inline bool preserveMemorySelectionForReportedFrequency(quint64 receiveHz, quint64 reportedHz, bool pttActive,
+                                                        bool awaitingReceiveFrequency)
+{
+    return reportedHz == receiveHz || pttActive || awaitingReceiveFrequency;
+}
 constexpr QSize kMemoryWindowSize(980, 620);
 constexpr int kMemoryBandColumnWidth = 70;
 constexpr int kMemoryNumberColumnWidth = 76;

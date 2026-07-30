@@ -2,6 +2,7 @@
 
 #include "UiTheme.h"
 
+#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -29,7 +30,7 @@ constexpr int kVfoFieldBottomMargin = 3;
 constexpr int kFrequencyFontPixelSize = 28;
 constexpr int kFrequencyEditHeight = 40;
 constexpr int kMemoryNameHeight = 16;
-constexpr QRect kMemoryNameGeometry(6, 5, 200, 16);
+constexpr QRect kMemoryNameGeometry(6, 7, 200, 16);
 constexpr int kVfoFrequencyTopSpacing = 16;
 constexpr int kSignalMeterWidth = 220;
 constexpr int kSignalMeterHeight = 10;
@@ -288,23 +289,34 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     frequencyLayout->setSpacing(kNoSpacing);
 
     m_frequencyEdit = new QLineEdit(QStringLiteral("---.---.---"), frequencyField);
+    m_frequencyEdit->setObjectName(QStringLiteral("vfoFrequencyEdit"));
     m_frequencyEdit->setFixedHeight(kFrequencyEditHeight);
     m_frequencyEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_frequencyEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_frequencyEdit->setTextMargins(0, 0, 1, 0);
+    m_frequencyEdit->setAlignment(Qt::AlignCenter);
+    m_frequencyEdit->setTextMargins(kNoMargins);
     m_frequencyEdit->setFocusPolicy(Qt::ClickFocus);
     m_frequencyEdit->setAccessibleName(QStringLiteral("%1 frequency").arg(title));
     m_frequencyEdit->setAccessibleDescription(QStringLiteral("Enter frequency in MHz."));
     m_frequencyEdit->setToolTip(QStringLiteral("Enter frequency in MHz, then press Enter"));
-    m_frequencyEdit->setStyleSheet(QStringLiteral("QLineEdit { background: transparent; border: none; color: %1; }")
-                                       .arg(UiTheme::Color::TextField));
-    QFont freqFont;
+    m_frequencyEdit->setStyleSheet(
+        QStringLiteral("QLineEdit { background: transparent; border: none; padding: 0px; color: %1; }")
+            .arg(UiTheme::Color::TextField));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    QFont freqFont = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    // Tabular numerals keep the frequency display visually stable while
+    // retaining the platform UI font's plain (non-slashed) zero.
+    freqFont.setFeature(QFont::Tag("tnum"), 1);
+#else
+    // QFont OpenType feature selection was introduced in Qt 6.7. Preserve
+    // equal-width digits on older supported Qt releases.
+    QFont freqFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+#endif
     freqFont.setPixelSize(kFrequencyFontPixelSize);
     freqFont.setBold(true);
     m_frequencyEdit->setFont(freqFont);
     connect(m_frequencyEdit, &QLineEdit::returnPressed, this, &VfoPanel::frequencyReturnPressed);
 
-    m_memoryNameLabel = new QLineEdit(QStringLiteral("-"), frequencyField);
+    m_memoryNameLabel = new QLineEdit(frequencyField);
     m_memoryNameLabel->setFixedHeight(kMemoryNameHeight);
     m_memoryNameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_memoryNameLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);

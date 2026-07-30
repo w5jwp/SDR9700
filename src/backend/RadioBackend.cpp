@@ -1172,7 +1172,11 @@ void RadioBackend::setPtt(bool on)
                 if (selectedMemory)
                 {
                     const auto [group, channel] = *selectedMemory;
-                    selectMemoryForCommand(commandSession, group, channel);
+                    // The selected memory already established its band. Do
+                    // not run selectMemoryBandForCommand() here: that sequence
+                    // enters VFO mode and publishes a band-default frequency
+                    // before returning to memory mode.
+                    selectMemoryForCommand(commandSession, group, channel, false);
                 }
                 commandSession->setPttActive(true);
                 commandSession->receiveCommand(funcTransceiverStatus, QVariant::fromValue<bool>(true), 0);
@@ -1346,10 +1350,23 @@ void RadioBackend::selectRadioMemory(quint16 group, quint16 channel)
 {
     m_selectedRadioMemory = std::make_pair(group, channel);
     const uint memoryAddress = (static_cast<uint>(group) << 16) | static_cast<uint>(channel);
-    invokeOnCurrentCommander(
-        [group, channel, memoryAddress](Commander* commandSession)
+    bool prepareBand = true;
+    if (m_currentBandKey >= 0)
+    {
+        const auto currentBand = static_cast<availableBands>(m_currentBandKey);
+        if (const sdr9700::RadioBandDef* definition = sdr9700::radioBandDefinition(currentBand))
         {
-            selectMemoryForCommand(commandSession, group, channel);
+            prepareBand = definition->memGroup != group;
+        }
+    }
+    invokeOnCurrentCommander(
+        [group, channel, memoryAddress, prepareBand](Commander* commandSession)
+        {
+            // Memory channel numbers are band-scoped on the IC-9700. Only use
+            // the intermediate band-routing tune when changing bands; within
+            // the current band, selecting command 08h directly avoids an
+            // unnecessary frequency transition.
+            selectMemoryForCommand(commandSession, group, channel, prepareBand);
             commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0);
             commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
             commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
@@ -1745,9 +1762,15 @@ void RadioBackend::onLanReady()
             // flood the fresh CI-V socket before basic 03/04 VFO readback
             // completes. Quiet scope data first; onLanReady() enables it again
             // only after frequency and mode have been confirmed.
+            //
+            // CI-V has no non-mutating query for whether the radio is in VFO
+            // or memory mode, nor for the selected memory channel. Establish a
+            // deterministic startup state by explicitly selecting MAIN VFO
+            // mode before reading its frequency and mode.
             commandSession->receiveCommandNoReadback(funcScopeOnOff, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommandNoReadback(funcScopeDataOutput, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+            commandSession->receiveCommand(funcVFOModeSelect, QVariant(), 0);
             commandSession->readCurrentFrequencyAndMode();
         });
 

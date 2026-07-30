@@ -29,6 +29,9 @@
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
 #include "CachingQueue.h"
+#if defined(Q_OS_MAC)
+#include "platform/MacWindowRestoration.h"
+#endif
 
 namespace
 {
@@ -331,6 +334,9 @@ int main(int argc, char* argv[])
     installUnixSignalHandlers();
 
     QApplication app(argc, argv);
+#if defined(Q_OS_MAC)
+    configureMacWindowRestoration(app);
+#endif
     app.setApplicationName("SDR9700");
     app.setOrganizationName("SDR9700");
     app.setApplicationVersion(APP_VERSION);

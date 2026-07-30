@@ -1,6 +1,9 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
+#include "AppPaths.h"
+#include "RadioChooserDialog.h"
+#include "RadioProfile.h"
 #include "StatusBarController.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
@@ -8,8 +11,13 @@
 
 #include <QAction>
 #include <QComboBox>
+#include <QCloseEvent>
 #include <QApplication>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QDir>
+#include <QFontMetrics>
+#include <QLineEdit>
 #include <QLabel>
 #include <QPointer>
 #include <QPushButton>
@@ -25,6 +33,7 @@ class MemoryManagerSmokeTest : public QObject
 
   private slots:
     void initTestCase();
+    void newInstallationCanAddRadioProfile();
     void constructsMemoryManagerUi();
     void mainWindowRetainsFixedFramelessDesign();
     void selectorButtonsAvoidDynamicStyleSheets();
@@ -36,6 +45,49 @@ class MemoryManagerSmokeTest : public QObject
 void MemoryManagerSmokeTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QVERIFY(QDir(sdr9700::configDirectory()).removeRecursively() || !QDir(sdr9700::configDirectory()).exists());
+}
+
+void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()
+{
+    RadioProfileStore::instance().load();
+    QVERIFY(RadioProfileStore::instance().profiles().isEmpty());
+
+    RadioChooserDialog dialog;
+    QVERIFY(dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
+    QCOMPARE(dialog.minimumSize(), dialog.maximumSize());
+    auto* addButton = dialog.findChild<QPushButton*>(QStringLiteral("addRadioProfileButton"));
+    auto* saveButton = dialog.findChild<QPushButton*>(QStringLiteral("saveRadioProfileButton"));
+    auto* connectButton = dialog.findChild<QPushButton*>(QStringLiteral("connectRadioButton"));
+    auto* buttonBox = dialog.findChild<QDialogButtonBox*>(QStringLiteral("radioChooserButtonBox"));
+    auto* nameEdit = dialog.findChild<QLineEdit*>(QStringLiteral("radioProfileName"));
+    auto* hostEdit = dialog.findChild<QLineEdit*>(QStringLiteral("radioProfileHost"));
+    QVERIFY(addButton != nullptr);
+    QVERIFY(saveButton != nullptr);
+    QVERIFY(connectButton != nullptr);
+    QVERIFY(buttonBox != nullptr);
+    QVERIFY(nameEdit != nullptr);
+    QVERIFY(hostEdit != nullptr);
+    QCOMPARE(buttonBox->buttonRole(connectButton), QDialogButtonBox::AcceptRole);
+    QVERIFY(buttonBox->button(QDialogButtonBox::Cancel) != nullptr);
+    QVERIFY(!nameEdit->isEnabled());
+    QVERIFY(!hostEdit->isEnabled());
+
+    addButton->click();
+
+    QVERIFY(nameEdit->isEnabled());
+    QVERIFY(hostEdit->isEnabled());
+    QVERIFY(RadioProfileStore::instance().profiles().isEmpty());
+    nameEdit->setText(QStringLiteral("Test IC-9700"));
+    hostEdit->setText(QStringLiteral("192.0.2.1"));
+    QVERIFY(saveButton->isEnabled());
+    saveButton->click();
+
+    QCOMPARE(RadioProfileStore::instance().profiles().size(), 1);
+    const RadioProfile savedProfile = RadioProfileStore::instance().profiles().constFirst();
+    QCOMPARE(savedProfile.name, QStringLiteral("Test IC-9700"));
+    QCOMPARE(savedProfile.host, QStringLiteral("192.0.2.1"));
+    QVERIFY(RadioProfileStore::instance().removeProfile(savedProfile.id));
 }
 
 void MemoryManagerSmokeTest::constructsMemoryManagerUi()
@@ -91,8 +143,14 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     }
     QVERIFY(selectorCount > 0);
     auto* rfGainButton = window.findChild<QPushButton*>(QStringLiteral("rfGainButton"));
+    auto* frequencyEdit = window.findChild<QLineEdit*>(QStringLiteral("vfoFrequencyEdit"));
     QVERIFY(rfGainButton != nullptr);
+    QVERIFY(frequencyEdit != nullptr);
     QVERIFY(!rfGainButton->property("levelControl").toBool());
+    QCOMPARE(frequencyEdit->alignment(), Qt::AlignCenter);
+    const QFontMetrics frequencyMetrics(frequencyEdit->font());
+    QCOMPARE(frequencyMetrics.horizontalAdvance(QStringLiteral("000.000.000")),
+             frequencyMetrics.horizontalAdvance(QStringLiteral("111.111.111")));
 }
 
 void MemoryManagerSmokeTest::utilityWindowIsDestroyedWithHost()
@@ -110,7 +168,7 @@ void MemoryManagerSmokeTest::utilityWindowIsDestroyedWithHost()
 void MemoryManagerSmokeTest::quitActionDefersWindowClose()
 {
     RadioModel model;
-    MainWindow window(&model);
+    MainWindow window(&model, nullptr, false);
     // MainWindow normally opens the saved profile or chooser on its first event
     // turn. This test only exercises shutdown dispatch, so suppress that startup
     // callback before showing the window.
@@ -127,6 +185,15 @@ void MemoryManagerSmokeTest::quitActionDefersWindowClose()
     QVERIFY(window.isVisible());
     QCoreApplication::sendPostedEvents(&window, QEvent::MetaCall);
     QVERIFY(!window.isVisible());
+
+    // Shutdown disconnects model-to-UI delivery before the backend publishes
+    // its final ready=false state. A late state signal and a repeated close
+    // must not re-enter memory-table rebuilding during native teardown.
+    model.readyChanged(false);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+    QCloseEvent repeatedClose;
+    QCoreApplication::sendEvent(&window, &repeatedClose);
+    QVERIFY(repeatedClose.isAccepted());
 }
 
 void MemoryManagerSmokeTest::persistentToastCanBeClearedByOwner()

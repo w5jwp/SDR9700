@@ -8,31 +8,32 @@
 
 #include <QAbstractItemView>
 #include <QCheckBox>
+#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
-#include <QShowEvent>
 #include <QSpinBox>
-#include <QTimer>
 #include <QVBoxLayout>
 
-RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_centerHost(parent)
+RadioChooserDialog::RadioChooserDialog(QWidget* parent)
+    : sdr9700::ui::UtilityWindow(QStringLiteral("Radio Chooser"), parent)
 {
     const QString titleText = QStringLiteral("Radio Chooser");
-    setWindowTitle(titleText);
-    setMinimumSize(720, 430);
+    setFixedSize(720, 430);
     setStyleSheet(QStringLiteral("RadioChooserDialog { background: %1; border: 1px solid %2; }")
                       .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
+    auto* titleBar = new sdr9700::ui::UtilityTitleBar(titleText, this);
+    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QDialog::reject);
+    root->addWidget(titleBar);
 
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
@@ -67,6 +68,7 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
 
     auto* listBtns = new QHBoxLayout;
     m_addBtn = new QPushButton("Add", leftPanel);
+    m_addBtn->setObjectName(QStringLiteral("addRadioProfileButton"));
     m_removeBtn = new QPushButton("Remove", leftPanel);
     m_removeBtn->setEnabled(false);
     listBtns->addWidget(m_addBtn);
@@ -88,10 +90,12 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     form->setSpacing(8);
 
     m_nameEdit = new QLineEdit(content);
+    m_nameEdit->setObjectName(QStringLiteral("radioProfileName"));
     m_nameEdit->setPlaceholderText("e.g. Home IC-9700");
     form->addRow("Name:", m_nameEdit);
 
     m_hostEdit = new QLineEdit(content);
+    m_hostEdit->setObjectName(QStringLiteral("radioProfileHost"));
     m_hostEdit->setPlaceholderText("192.168.1.x");
     form->addRow("Host / IP:", m_hostEdit);
 
@@ -118,6 +122,7 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     auto* saveRow = new QHBoxLayout;
     saveRow->addStretch(1);
     m_saveBtn = new QPushButton("Save Target", content);
+    m_saveBtn->setObjectName(QStringLiteral("saveRadioProfileButton"));
     m_saveBtn->setEnabled(false);
     m_saveBtn->setStyleSheet(
         QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
@@ -144,15 +149,14 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     footerLine->setStyleSheet(QStringLiteral("background: %1;").arg(QLatin1String(UiTheme::Color::Border)));
     contentLayout->addWidget(footerLine);
 
-    auto* btnRow = new QHBoxLayout;
-    btnRow->addStretch(1);
-    auto* cancelBtn = new QPushButton("Cancel", content);
-    m_connectBtn = new QPushButton("Connect", content);
+    auto* buttonBox = new QDialogButtonBox(content);
+    buttonBox->setObjectName(QStringLiteral("radioChooserButtonBox"));
+    auto* cancelBtn = buttonBox->addButton(QDialogButtonBox::Cancel);
+    m_connectBtn = buttonBox->addButton(QStringLiteral("Connect"), QDialogButtonBox::AcceptRole);
+    m_connectBtn->setObjectName(QStringLiteral("connectRadioButton"));
     m_connectBtn->setDefault(true);
     m_connectBtn->setEnabled(false);
-    btnRow->addWidget(cancelBtn);
-    btnRow->addWidget(m_connectBtn);
-    contentLayout->addLayout(btnRow);
+    contentLayout->addWidget(buttonBox);
     root->addWidget(content, 1);
 
     setFormEnabled(false);
@@ -180,15 +184,6 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent) : QDialog(parent), m_cen
     connect(m_passEdit, &QLineEdit::textChanged, this, markDirty);
 
     rebuildList();
-}
-
-void RadioChooserDialog::showEvent(QShowEvent* event)
-{
-    QDialog::showEvent(event);
-
-    sdr9700::ui::centerWindowOn(this, m_centerHost);
-    QTimer::singleShot(0, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
-    QTimer::singleShot(50, this, [this]() { sdr9700::ui::centerWindowOn(this, m_centerHost); });
 }
 
 void RadioChooserDialog::rebuildList()
@@ -223,6 +218,7 @@ void RadioChooserDialog::rebuildList()
 void RadioChooserDialog::onSelectionChanged()
 {
     auto* item = m_list->currentItem();
+    m_isNewProfile = false;
     m_connectBtn->setEnabled(item != nullptr);
     if (!item)
     {
@@ -273,7 +269,8 @@ void RadioChooserDialog::onConnect()
 
     if (!RadioProfileStore::instance().setLastProfileId(id))
     {
-        QMessageBox::warning(this, "Radio Chooser", "Could not save the last selected radio target.");
+        sdr9700::ui::showWarning(this, QStringLiteral("Radio Chooser"),
+                                 QStringLiteral("Could not save the last selected radio target."));
     }
     emit connectRequested(id);
     accept();
@@ -281,18 +278,22 @@ void RadioChooserDialog::onConnect()
 
 void RadioChooserDialog::onAddProfile()
 {
-    RadioProfile profile;
-    profile.id = QUuid::createUuid();
-    profile.name = "New Radio";
-    profile.port = 50001;
-    if (!RadioProfileStore::instance().addProfile(profile))
     {
-        QMessageBox::warning(this, "Save Radio", "Could not save the new radio target.");
-        return;
+        QSignalBlocker listBlocker(m_list);
+        m_list->setCurrentItem(nullptr);
     }
-
-    m_currentId = profile.id;
-    rebuildList();
+    m_currentId = QUuid::createUuid();
+    m_isNewProfile = true;
+    setFormEnabled(true);
+    {
+        QSignalBlocker b1(m_nameEdit), b2(m_hostEdit), b3(m_portSpin), b4(m_userEdit), b5(m_passEdit);
+        m_nameEdit->setText(QStringLiteral("New Radio"));
+        m_hostEdit->clear();
+        m_portSpin->setValue(50001);
+        m_userEdit->clear();
+        m_passEdit->clear();
+    }
+    setFormDirty(false);
     m_nameEdit->setFocus();
     m_nameEdit->selectAll();
 }
@@ -314,7 +315,8 @@ void RadioChooserDialog::onRemoveProfile()
 
     if (!RadioProfileStore::instance().removeProfile(m_currentId))
     {
-        QMessageBox::warning(this, "Remove Radio", "Could not remove the selected radio target.");
+        sdr9700::ui::showWarning(this, QStringLiteral("Remove Radio"),
+                                 QStringLiteral("Could not remove the selected radio target."));
         return;
     }
 
@@ -330,17 +332,28 @@ void RadioChooserDialog::onSaveProfile()
     }
 
     RadioProfile profile = profileFromForm();
+    if (profile.host.isEmpty())
+    {
+        sdr9700::ui::showWarning(this, QStringLiteral("Save Radio"),
+                                 QStringLiteral("Enter the radio host name or IP address."));
+        m_hostEdit->setFocus();
+        return;
+    }
     if (profile.name.isEmpty())
     {
-        profile.name = profile.host.isEmpty() ? "Unnamed" : profile.host;
+        profile.name = profile.host;
     }
 
-    if (!RadioProfileStore::instance().updateProfile(profile))
+    const bool saved = m_isNewProfile ? RadioProfileStore::instance().addProfile(profile)
+                                      : RadioProfileStore::instance().updateProfile(profile);
+    if (!saved)
     {
-        QMessageBox::warning(this, "Save Radio", "Could not save the radio target.");
+        sdr9700::ui::showWarning(this, QStringLiteral("Save Radio"),
+                                 QStringLiteral("Could not save the radio target."));
         return;
     }
 
+    m_isNewProfile = false;
     setFormDirty(false);
     rebuildList();
 }
@@ -381,8 +394,8 @@ void RadioChooserDialog::setFormEnabled(bool enabled)
     m_userEdit->setEnabled(enabled);
     m_passEdit->setEnabled(enabled);
     m_showPassBtn->setEnabled(enabled);
-    m_removeBtn->setEnabled(enabled);
-    m_connectBtn->setEnabled(enabled);
+    m_removeBtn->setEnabled(enabled && !m_isNewProfile);
+    m_connectBtn->setEnabled(enabled && !m_isNewProfile);
     if (!enabled)
     {
         setFormDirty(false);

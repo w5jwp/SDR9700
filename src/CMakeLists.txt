@@ -241,7 +241,10 @@ set(SDR9700_EXECUTABLE_SOURCES
     ../resources/qt/resources.qrc
 )
 if(APPLE)
-    list(APPEND SDR9700_EXECUTABLE_SOURCES ${SDR9700_MACOS_ICON})
+    list(APPEND SDR9700_EXECUTABLE_SOURCES
+        ${SDR9700_MACOS_ICON}
+        platform/MacWindowRestoration.mm
+    )
 endif()
 
 if(APPLE)

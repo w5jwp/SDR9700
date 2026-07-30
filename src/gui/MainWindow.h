@@ -70,7 +70,7 @@ class MainWindow : public QMainWindow
     friend class StatusBarController;
 
   public:
-    explicit MainWindow(RadioModel* model, QWidget* parent = nullptr);
+    explicit MainWindow(RadioModel* model, QWidget* parent = nullptr, bool quitApplicationOnClose = true);
 
   private slots:
     void onConnectToProfile(const RadioProfile& profile);
@@ -246,6 +246,10 @@ class MainWindow : public QMainWindow
     bool m_activeMemoryOffsetSettled{false};
     bool m_activeMemoryToneModeSettled{false};
     bool m_activeMemoryToneValueSettled{false};
+    bool m_pttActive{false};
+    bool m_activeMemoryAwaitingReceiveFrequency{false};
+    bool m_shutdownStarted{false};
+    bool m_quitApplicationOnClose{true};
 
     QWidget* m_lockWidget{nullptr};
     QLabel* m_lockIndicator{nullptr};
@@ -334,6 +338,7 @@ class MainWindow : public QMainWindow
                          int toneMode, ushort toneValue);
     void clearActiveMemory();
     void leaveMemoryModeForManualFrequencyChange();
+    void beginMemoryPttFrequencyTransition();
     void updateMemoryNameLabel();
     void commitFrequencyEdit(VfoPanel* panel);
 };

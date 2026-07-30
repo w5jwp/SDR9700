@@ -2,20 +2,17 @@
 #pragma once
 
 #include "RadioProfile.h"
+#include "UtilityWindow.h"
 
-#include <QDialog>
-#include <QPointer>
 #include <QUuid>
 
 class QListWidget;
 class QPushButton;
 class QCheckBox;
 class QLineEdit;
-class QShowEvent;
 class QSpinBox;
-class QWidget;
 
-class RadioChooserDialog : public QDialog
+class RadioChooserDialog : public sdr9700::ui::UtilityWindow
 {
     Q_OBJECT
 
@@ -24,9 +21,6 @@ class RadioChooserDialog : public QDialog
 
   signals:
     void connectRequested(const QUuid& profileId);
-
-  protected:
-    void showEvent(QShowEvent* event) override;
 
   private slots:
     void onConnect();
@@ -57,7 +51,7 @@ class RadioChooserDialog : public QDialog
     QPushButton* m_showPassBtn{nullptr};
     QPushButton* m_saveBtn{nullptr};
 
-    QPointer<QWidget> m_centerHost;
     QUuid m_currentId;
     bool m_formDirty{false};
+    bool m_isNewProfile{false};
 };

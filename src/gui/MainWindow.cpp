@@ -91,8 +91,12 @@ constexpr int kMemorySelectionSettleDelayMs = 3000;
 
 using namespace sdr9700::ui::main_window;
 
-MainWindow::MainWindow(RadioModel* model, QWidget* parent)
-    : QMainWindow(parent), m_model(model), m_vfo(model->vfo()), m_spectrumScope(model->spectrumScope())
+MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationOnClose)
+    : QMainWindow(parent),
+      m_model(model),
+      m_vfo(model->vfo()),
+      m_spectrumScope(model->spectrumScope()),
+      m_quitApplicationOnClose(quitApplicationOnClose)
 {
     m_spectrumScopeController = new SpectrumScopeController(this);
     m_controlPanelController = new ControlPanelController(this);
@@ -187,6 +191,15 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent)
                             break;
                         }
                         const auto f = value.value<Frequency>();
+                        if (m_applyingMemorySelection && !m_activeMemoryId.isEmpty() &&
+                            f.Hz != m_activeMemoryFrequencyHz)
+                        {
+                            // Cross-band memory selection briefly tunes a
+                            // band-default VFO frequency before command 08h
+                            // selects the band-scoped channel. Keep that
+                            // routing-only transition out of the display.
+                            break;
+                        }
                         if (f.Hz > 0)
                         {
                             m_vfoFrequencyHz = f.Hz;
@@ -995,6 +1008,23 @@ void MainWindow::tryAutoConnect()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (m_shutdownStarted)
+    {
+        event->accept();
+        QMainWindow::closeEvent(event);
+        if (m_quitApplicationOnClose)
+        {
+            // The first shutdown phase hides the window before this accepted
+            // close. Qt therefore cannot infer that the last visible primary
+            // window was closed, and auxiliary windows can leave the event
+            // loop alive. The main window owns the application lifetime, so
+            // explicitly finish it after native close handling unwinds.
+            QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+        }
+        return;
+    }
+    m_shutdownStarted = true;
+
     saveWindowLayout();
 #ifdef HAVE_HIDAPI
     if (m_icomRC28Controller)
@@ -1003,8 +1033,37 @@ void MainWindow::closeEvent(QCloseEvent* event)
     }
 #endif
     m_userDisconnected = true;
-    m_model->disconnectFromRadio();
-    QMainWindow::closeEvent(event);
+
+    // Leave the native close/mouse event before performing synchronous radio
+    // teardown. macOS crash reports have shown both Qt view updates and
+    // Objective-C autorelease cleanup re-entered when disconnecting directly
+    // inside closeEvent().
+    event->ignore();
+    hide();
+
+    if (m_model)
+    {
+        // RadioBackend::shutdownConnection() emits readyChanged(false).
+        // MemorySyncController normally responds by finalizing its refresh and
+        // rebuilding the memory table. During closeEvent that re-enters Qt
+        // item-view and font layout while the native window is tearing down;
+        // macOS crash reports show this path failing inside CoreText. Stop all
+        // model-to-UI delivery before beginning the synchronous disconnect.
+        QObject::disconnect(m_model, nullptr, nullptr, nullptr);
+    }
+
+    QTimer::singleShot(0, this,
+                       [this]()
+                       {
+                           if (m_model)
+                           {
+                               m_model->disconnectFromRadio();
+                           }
+                           // Re-enter closeEvent only after the originating native event and
+                           // its autorelease pool have unwound. m_shutdownStarted makes this
+                           // second pass accept immediately.
+                           QMainWindow::close();
+                       });
 }
 
 void MainWindow::restoreWindowLayout()
@@ -1317,6 +1376,7 @@ void MainWindow::setActiveMemory(const QString& id, const QString& name, quint64
     const bool isDtcs = isDtcsToneMode(m_activeMemoryToneMode);
     m_activeMemoryToneValueSettled = toneMode == ratrNN || (isDtcs && m_dtcsCode == toneValue) ||
                                      (!isDtcs && toneMode != ratrNN && m_toneFrequency == toneValue);
+    m_activeMemoryAwaitingReceiveFrequency = false;
     updateMemoryNameLabel();
     if (m_memoryPanel)
     {
@@ -1333,6 +1393,7 @@ void MainWindow::clearActiveMemory()
     m_activeMemoryOffsetSettled = false;
     m_activeMemoryToneModeSettled = false;
     m_activeMemoryToneValueSettled = false;
+    m_activeMemoryAwaitingReceiveFrequency = false;
     if (m_activeMemoryId.isEmpty())
     {
         return;
@@ -1598,15 +1659,32 @@ void MainWindow::onRadioReadyChanged(bool ready)
 
 void MainWindow::onFrequencyChanged(quint64 hz)
 {
+    if (m_applyingMemorySelection && !m_activeMemoryId.isEmpty() && hz != m_activeMemoryFrequencyHz)
+    {
+        // See the radioValueUpdated path above. VfoModel also publishes the
+        // same transient frequency, so suppress it here until the selected
+        // memory's authoritative frequency arrives.
+        return;
+    }
+
     if (!m_activeMemoryId.isEmpty())
     {
         if (hz == m_activeMemoryFrequencyHz)
         {
+            if (!m_pttActive)
+            {
+                m_activeMemoryAwaitingReceiveFrequency = false;
+            }
             m_activeMemoryFrequencySettled = true;
             checkIfMemorySelectionComplete();
         }
         else if (m_activeMemoryFrequencySettled && !m_applyingMemorySelection)
         {
+            if (preserveMemorySelectionForReportedFrequency(m_activeMemoryFrequencyHz, hz, m_pttActive,
+                                                            m_activeMemoryAwaitingReceiveFrequency))
+            {
+                return;
+            }
             quint64 transmitMemoryHz = 0;
             if (m_activeMemoryDuplexMode == dmDupMinus && m_activeMemoryFrequencyHz > m_activeMemoryOffsetHz)
             {
@@ -1973,6 +2051,7 @@ void MainWindow::onDtmfSendRequested(const QString& digits)
         m_dtmfDialog->setSendInProgress(true);
     }
 
+    beginMemoryPttFrequencyTransition();
     m_vfo->setPtt(true);
 
     // The DTMF PCM buffer queued to UdpAudio is consumed only after the 1000 ms
@@ -2001,6 +2080,7 @@ void MainWindow::onPttPressed()
         return;
     }
 
+    beginMemoryPttFrequencyTransition();
     m_vfo->setPtt(true);
 }
 
@@ -2010,11 +2090,33 @@ void MainWindow::onPttReleased()
     {
         return;
     }
+    m_pttActive = false;
     m_vfo->setPtt(false);
+}
+
+void MainWindow::beginMemoryPttFrequencyTransition()
+{
+    if (m_activeMemoryId.isEmpty())
+    {
+        return;
+    }
+    // Begin protection when PTT is requested, not when its radio
+    // acknowledgement arrives. Split-frequency reports can precede that
+    // acknowledgement on the CI-V stream.
+    m_pttActive = true;
+    m_activeMemoryAwaitingReceiveFrequency = true;
 }
 
 void MainWindow::onPttChanged(bool on)
 {
+    m_pttActive = on;
+    if (!m_activeMemoryId.isEmpty())
+    {
+        // Split memories can publish transmit and intermediate selected
+        // frequencies while the radio changes paths. Keep the memory selected
+        // until an RX-frequency report confirms that key-up has settled.
+        m_activeMemoryAwaitingReceiveFrequency = true;
+    }
 #ifdef HAVE_HIDAPI
     m_icomRC28PttLatched = on;
 #endif

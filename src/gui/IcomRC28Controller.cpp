@@ -138,6 +138,14 @@ void IcomRC28Controller::setIcomRC28Ptt(bool on)
     {
         return;
     }
+    if (on)
+    {
+        m_window->beginMemoryPttFrequencyTransition();
+    }
+    else
+    {
+        m_window->m_pttActive = false;
+    }
     m_window->m_vfo->setPtt(on);
 }
 

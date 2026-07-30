@@ -9,6 +9,7 @@ option(SDR9700_THREAD_SANITIZE "Enable ThreadSanitizer instrumentation" OFF)
 option(SDR9700_ENABLE_HIDAPI "Build optional Icom RC-28 support when hidapi is available" ON)
 
 if(APPLE)
+    enable_language(OBJCXX)
     if(NOT CMAKE_OSX_ARCHITECTURES)
         set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "macOS target architecture" FORCE)
     endif()

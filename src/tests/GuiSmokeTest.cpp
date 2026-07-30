@@ -94,6 +94,9 @@ void GuiSmokeTest::confirmationDialogsUseSafeSemanticButtons()
     QCOMPARE(dialog.buttonRole(action), QMessageBox::DestructiveRole);
     QCOMPARE(dialog.defaultButton(), cancel);
     QCOMPARE(dialog.escapeButton(), cancel);
+    sdr9700::ui::configureMessageBoxWindow(dialog);
+    QVERIFY(dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
+    QCOMPARE(dialog.minimumSize(), dialog.maximumSize());
 }
 
 QTEST_MAIN(GuiSmokeTest)

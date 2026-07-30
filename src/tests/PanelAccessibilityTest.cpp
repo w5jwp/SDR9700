@@ -76,6 +76,17 @@ void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
         auto* closeButton = dialog->findChild<QPushButton*>(QString(), Qt::FindChildrenRecursively);
         QVERIFY(closeButton != nullptr);
     }
+
+    auto* metersFooterSeparator = meters.findChild<QWidget*>(QStringLiteral("metersFooterSeparator"));
+    auto* metersFooterRow = meters.findChild<QWidget*>(QStringLiteral("metersFooterRow"));
+    auto* metersCloseButton = meters.findChild<QPushButton*>(QStringLiteral("metersCloseButton"));
+    QVERIFY(metersFooterSeparator != nullptr);
+    QCOMPARE(metersFooterSeparator->height(), 1);
+    QVERIFY(metersFooterRow != nullptr);
+    QVERIFY(metersFooterRow->layout() != nullptr);
+    QCOMPARE(metersFooterRow->layout()->contentsMargins(), QMargins(0, 8, 0, 0));
+    QVERIFY(metersCloseButton != nullptr);
+    QCOMPARE(metersCloseButton->text(), QStringLiteral("Close"));
 }
 
 void PanelAccessibilityTest::metersSurviveRepeatedUpdatesAndDestruction()
