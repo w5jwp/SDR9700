@@ -160,7 +160,7 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     QCOMPARE(memoryNameField->width(), frequencyEdit->width());
     QCOMPARE(memoryNameField->layout()->contentsMargins(), QMargins());
     QCOMPARE(memoryNameLabel->alignment(), Qt::AlignRight | Qt::AlignVCenter);
-    QCOMPARE(memoryNameLabel->textMargins(), QMargins(0, 0, 7, 0));
+    QCOMPARE(memoryNameLabel->textMargins(), QMargins(0, 2, 7, 0));
     QCOMPARE(statusDateLabel->alignment(), Qt::AlignCenter);
     QCOMPARE(statusTimeLabel->alignment(), Qt::AlignCenter);
     const QFontMetrics frequencyMetrics(frequencyEdit->font());

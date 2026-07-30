@@ -30,6 +30,7 @@ constexpr int kVfoFieldBottomMargin = 3;
 constexpr int kFrequencyFontPixelSize = 28;
 constexpr int kFrequencyEditHeight = 40;
 constexpr int kMemoryNameHeight = 16;
+constexpr int kMemoryNameTopMargin = 2;
 constexpr int kMemoryNameRightMargin = kVfoFieldSideMargin + 1;
 constexpr int kSignalMeterWidth = 220;
 constexpr int kSignalMeterHeight = 10;
@@ -329,7 +330,7 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     m_memoryNameLabel->setFixedHeight(kMemoryNameHeight);
     m_memoryNameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_memoryNameLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_memoryNameLabel->setTextMargins(0, 0, kMemoryNameRightMargin, 0);
+    m_memoryNameLabel->setTextMargins(0, kMemoryNameTopMargin, kMemoryNameRightMargin, 0);
     m_memoryNameLabel->setReadOnly(true);
     m_memoryNameLabel->setFocusPolicy(Qt::NoFocus);
     m_memoryNameLabel->setCursor(Qt::ArrowCursor);
