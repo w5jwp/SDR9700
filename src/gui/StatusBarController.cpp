@@ -19,6 +19,8 @@ using namespace sdr9700::ui::main_window;
 
 namespace
 {
+constexpr int kClockSeparatorGap = 6;
+
 QString normalizedToastMessage(QString message)
 {
     message = message.trimmed();
@@ -436,6 +438,7 @@ void StatusBarController::buildStatusBar()
     }
 
     hbox->addWidget(makeSep());
+    hbox->addSpacing(kClockSeparatorGap);
 
     auto* clockStatusPanel = new ClickableStatusPanel(m_window);
     applyStatusContainerWidth(clockStatusPanel, uniformStackWidth);
@@ -449,9 +452,11 @@ void StatusBarController::buildStatusBar()
     clockStatusLayout->setAlignment(Qt::AlignVCenter);
 
     m_window->m_dateLabel = new QLabel(QString(), m_window);
+    m_window->m_dateLabel->setObjectName(QStringLiteral("statusDateLabel"));
     m_window->m_dateLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
     m_window->m_dateLabel->setAlignment(Qt::AlignCenter);
     m_window->m_timeLabel = new QLabel(QString(), m_window);
+    m_window->m_timeLabel->setObjectName(QStringLiteral("statusTimeLabel"));
     m_window->m_timeLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
     m_window->m_timeLabel->setAlignment(Qt::AlignCenter);
 

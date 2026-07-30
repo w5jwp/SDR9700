@@ -146,10 +146,14 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     auto* frequencyEdit = window.findChild<QLineEdit*>(QStringLiteral("vfoFrequencyEdit"));
     auto* memoryNameField = window.findChild<QWidget*>(QStringLiteral("vfoMemoryNameField"));
     auto* memoryNameLabel = window.findChild<QLineEdit*>(QStringLiteral("vfoMemoryNameLabel"));
+    auto* statusDateLabel = window.findChild<QLabel*>(QStringLiteral("statusDateLabel"));
+    auto* statusTimeLabel = window.findChild<QLabel*>(QStringLiteral("statusTimeLabel"));
     QVERIFY(rfGainButton != nullptr);
     QVERIFY(frequencyEdit != nullptr);
     QVERIFY(memoryNameField != nullptr);
     QVERIFY(memoryNameLabel != nullptr);
+    QVERIFY(statusDateLabel != nullptr);
+    QVERIFY(statusTimeLabel != nullptr);
     QVERIFY(!rfGainButton->property("levelControl").toBool());
     QCOMPARE(frequencyEdit->alignment(), Qt::AlignRight | Qt::AlignVCenter);
     QCOMPARE(frequencyEdit->textMargins(), QMargins(0, 0, 6, 0));
@@ -157,6 +161,8 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     QCOMPARE(memoryNameField->layout()->contentsMargins(), QMargins());
     QCOMPARE(memoryNameLabel->alignment(), Qt::AlignRight | Qt::AlignVCenter);
     QCOMPARE(memoryNameLabel->textMargins(), QMargins(0, 0, 7, 0));
+    QCOMPARE(statusDateLabel->alignment(), Qt::AlignCenter);
+    QCOMPARE(statusTimeLabel->alignment(), Qt::AlignCenter);
     const QFontMetrics frequencyMetrics(frequencyEdit->font());
     QCOMPARE(frequencyMetrics.horizontalAdvance(QStringLiteral("000.000.000")),
              frequencyMetrics.horizontalAdvance(QStringLiteral("111.111.111")));
