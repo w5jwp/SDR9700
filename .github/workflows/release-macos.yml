@@ -9,6 +9,10 @@ on:
         description: Git ref to package
         required: true
         default: main
+      release_tag:
+        description: Existing GitHub Release tag to replace the DMG on (optional)
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -25,8 +29,13 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "release" ]]; then
             echo "ref=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+            echo "release_tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ inputs.release_tag }}" ]]; then
+            echo "ref=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+            echo "release_tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
           else
             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+            echo "release_tag=" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -39,13 +48,19 @@ jobs:
           test "$(uname -m)" = "arm64"
           version="$(sed -n 's/^project(SDR9700 VERSION \([^ ]*\).*/\1/p' CMakeLists.txt)"
           test -n "$version"
-          if [[ "${{ github.event_name }}" == "release" ]]; then
+          if [[ -n "${{ steps.source.outputs.release_tag }}" ]]; then
             expected_tag="v${version}"
-            if [[ "${{ github.event.release.tag_name }}" != "$expected_tag" ]]; then
+            if [[ "${{ steps.source.outputs.release_tag }}" != "$expected_tag" ]]; then
               echo "::error::Release tag must be ${expected_tag}"
               exit 1
             fi
           fi
+
+      - name: Verify target GitHub Release
+        if: steps.source.outputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "${{ steps.source.outputs.release_tag }}"
 
       - name: Install build dependencies
         run: |
@@ -125,7 +140,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach DMG to GitHub Release
-        if: github.event_name == 'release'
+        if: steps.source.outputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "$SDR9700_DMG" --clobber
+        run: gh release upload "${{ steps.source.outputs.release_tag }}" "$SDR9700_DMG" --clobber
