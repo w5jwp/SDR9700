@@ -45,6 +45,8 @@ class UdpHandler : public UdpBase
 
   public slots:
     void enableAudio();
+    void setRxAudioDevice(const QAudioDevice& device);
+    void setTxAudioDevice(const QAudioDevice& device);
     void receiveDataFromUserToRadio(QByteArray data);
     void receiveFromCivStream(const QByteArray& data);
     void receiveAudioData(const audioPacket& data);

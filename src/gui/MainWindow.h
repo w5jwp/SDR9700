@@ -288,6 +288,7 @@ class MainWindow : public QMainWindow
 
     QTimer* m_reconnectTimer{nullptr};
     QTimer* m_audioSettingsApplyTimer{nullptr};
+    int m_connectedAudioOutputChannels{0};
     bool m_reconnecting{false};
     bool m_userDisconnected{false};
     bool m_lastErrorWasCredential{false};

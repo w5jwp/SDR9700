@@ -52,6 +52,8 @@ class UdpAudio : public UdpBase
 
   public slots:
     void enableAudio();
+    void setRxAudioDevice(const QAudioDevice& device);
+    void setTxAudioDevice(const QAudioDevice& device);
     void changeLatency(quint16 value);
     void setVolume(quint8 value);
     void setTxActive(bool active);

@@ -643,6 +643,26 @@ void RadioBackend::disconnectFromRadio()
     m_connectionPass.clear();
 }
 
+void RadioBackend::setRxAudioDevice(const QAudioDevice& dev)
+{
+    if (dev.isNull() || m_rxDevice == dev)
+    {
+        return;
+    }
+    m_rxDevice = dev;
+    invokeOnCurrentCommander([dev](Commander* commander) { commander->setRxAudioDevice(dev); });
+}
+
+void RadioBackend::setTxAudioDevice(const QAudioDevice& dev)
+{
+    if (dev.isNull() || m_txDevice == dev)
+    {
+        return;
+    }
+    m_txDevice = dev;
+    invokeOnCurrentCommander([dev](Commander* commander) { commander->setTxAudioDevice(dev); });
+}
+
 void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisconnectedStage)
 {
     if (!m_commander)

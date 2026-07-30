@@ -100,6 +100,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
       m_spectrumScope(model->spectrumScope()),
       m_quitApplicationOnClose(quitApplicationOnClose)
 {
+    m_connectedAudioOutputChannels = qBound(1, AppSettings::instance().value("audioOutputChannels", 2).toInt(), 2);
     m_spectrumScopeController = new SpectrumScopeController(this);
     m_controlPanelController = new ControlPanelController(this);
 #ifdef HAVE_HIDAPI
@@ -963,6 +964,7 @@ void MainWindow::showRadioChooserDialog()
 
 void MainWindow::onConnectToProfile(const RadioProfile& profile)
 {
+    m_connectedAudioOutputChannels = qBound(1, AppSettings::instance().value("audioOutputChannels", 2).toInt(), 2);
     m_pendingProfileId = profile.id;
     m_radioHost = profile.host;
     m_radioPort = profile.port;
@@ -1977,8 +1979,8 @@ void MainWindow::scheduleAudioSettingsApply()
         connect(m_audioSettingsApplyTimer, &QTimer::timeout, this, &MainWindow::applyAudioSettings);
     }
 
-    // One operator action can update both a device and its codec. Coalesce
-    // nearby changes so the active radio session is restarted only once.
+    // One operator action can update both input and output devices. Coalesce
+    // nearby changes so each affected audio worker is rebuilt only once.
     m_audioSettingsApplyTimer->start(400);
 }
 
@@ -2005,20 +2007,16 @@ void MainWindow::applyAudioSettings()
     m_model->setTxAudioDevice(findDevice(inputs, inputID));
     m_model->setRxAudioDevice(findDevice(outputs, outputID));
 
-    if (!m_model->isConnected())
+    const int outputChannels = qBound(1, settings.value("audioOutputChannels", 2).toInt(), 2);
+    if (m_model->isConnected() && outputChannels != m_connectedAudioOutputChannels)
     {
-        return;
+        showToast(QStringLiteral("Audio devices updated; codec applies on next connection"), 5000, ToastKind::Info);
     }
-
-    const RadioProfile* profile = RadioProfileStore::instance().profileById(m_pendingProfileId);
-    if (!profile)
+    else
     {
-        showToast(QStringLiteral("Reconnect the radio to apply audio settings"), 5000, ToastKind::Warning);
-        return;
+        m_connectedAudioOutputChannels = outputChannels;
+        showToast(QStringLiteral("Audio settings updated"), 3000, ToastKind::Info);
     }
-
-    showToast(QStringLiteral("Applying audio settings"), 0, ToastKind::Info);
-    onConnectToProfile(*profile);
 }
 
 void MainWindow::onAfGainChanged(int value)

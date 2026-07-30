@@ -2945,6 +2945,24 @@ void Commander::enableAudio()
     emit requestEnableAudio();
 }
 
+void Commander::setRxAudioDevice(const QAudioDevice& device)
+{
+    if (udp == nullptr)
+    {
+        return;
+    }
+    QMetaObject::invokeMethod(udp, [udp = udp, device]() { udp->setRxAudioDevice(device); }, Qt::QueuedConnection);
+}
+
+void Commander::setTxAudioDevice(const QAudioDevice& device)
+{
+    if (udp == nullptr)
+    {
+        return;
+    }
+    QMetaObject::invokeMethod(udp, [udp = udp, device]() { udp->setTxAudioDevice(device); }, Qt::QueuedConnection);
+}
+
 void Commander::setPttActive(bool active)
 {
     if (udp == nullptr)

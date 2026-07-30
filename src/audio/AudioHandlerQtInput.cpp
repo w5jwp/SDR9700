@@ -12,7 +12,7 @@ bool AudioHandlerQtInput::openDevice() noexcept
     audioDevice = audioInput->start();
     if (!audioDevice)
     {
-        audioInput->deleteLater();
+        delete audioInput;
         audioInput = nullptr;
         return false;
     }
@@ -30,7 +30,10 @@ void AudioHandlerQtInput::closeDevice() noexcept
         {
             audioInput->stop();
         }
-        audioInput->deleteLater();
+        // Keep native device destruction on the live audio thread. The caller
+        // stops that thread immediately after dispose(), so deferred deletion
+        // is not guaranteed to run.
+        delete audioInput;
         audioInput = nullptr;
     }
     audioDevice = nullptr;

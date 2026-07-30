@@ -421,6 +421,37 @@ void UdpAudio::enableAudio()
     }
 }
 
+void UdpAudio::setRxAudioDevice(const QAudioDevice& device)
+{
+    if (device.isNull() || rxSetup.port == device)
+    {
+        return;
+    }
+
+    rxSetup.port = device;
+    stopAudioWorker(rxaudio, rxAudioThread, "rxAudioThread");
+    if (m_audioReady)
+    {
+        startAudio();
+    }
+}
+
+void UdpAudio::setTxAudioDevice(const QAudioDevice& device)
+{
+    if (device.isNull() || txSetup.port == device)
+    {
+        return;
+    }
+
+    txSetup.port = device;
+    const bool restart = m_txActive.load();
+    stopTxAudio();
+    if (restart && m_audioReady)
+    {
+        startTxAudio();
+    }
+}
+
 void UdpAudio::startAudio()
 {
 

@@ -34,6 +34,8 @@ class Commander : public RadioCommander
     void setPttActive(bool active);
     void sendDtmfPcm(const QByteArray& pcm);
     void enableAudio();
+    void setRxAudioDevice(const QAudioDevice& device);
+    void setTxAudioDevice(const QAudioDevice& device);
 
   private:
     enum class ReplyParseResult

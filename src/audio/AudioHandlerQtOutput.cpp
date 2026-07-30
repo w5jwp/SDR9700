@@ -12,7 +12,7 @@ bool AudioHandlerQtOutput::openDevice() noexcept
     audioDevice = audioOutput->start();
     if (!audioDevice)
     {
-        audioOutput->deleteLater();
+        delete audioOutput;
         audioOutput = nullptr;
         return false;
     }
@@ -28,7 +28,6 @@ bool AudioHandlerQtOutput::openDevice() noexcept
         audioDevice->write(silence.constData(), silence.size());
     }
 
-    connect(audioOutput, &QAudioSink::destroyed, audioDevice, &QObject::deleteLater, Qt::UniqueConnection);
     qInfo(logAudio()) << "Connected to Qt audio output device" << deviceInfo.description();
     return true;
 }
@@ -41,7 +40,11 @@ void AudioHandlerQtOutput::closeDevice() noexcept
         {
             audioOutput->stop();
         }
-        audioOutput->deleteLater();
+        // dispose() marshals closeDevice() to this object's audio thread.
+        // Destroy the native sink there before UdpAudio stops that thread;
+        // deleteLater() can otherwise strand CoreAudio teardown on a stopped
+        // event loop during a live device change.
+        delete audioOutput;
         audioOutput = nullptr;
     }
     audioDevice = nullptr;

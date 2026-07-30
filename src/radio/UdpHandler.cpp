@@ -318,6 +318,24 @@ void UdpHandler::enableAudio()
     }
 }
 
+void UdpHandler::setRxAudioDevice(const QAudioDevice& device)
+{
+    rxSetup.port = device;
+    if (audio != nullptr)
+    {
+        audio->setRxAudioDevice(device);
+    }
+}
+
+void UdpHandler::setTxAudioDevice(const QAudioDevice& device)
+{
+    txSetup.port = device;
+    if (audio != nullptr)
+    {
+        audio->setTxAudioDevice(device);
+    }
+}
+
 void UdpHandler::setPttActive(bool active)
 {
     // UdpHandler and UdpAudio live on udpHandlerThread, so the handoff to
