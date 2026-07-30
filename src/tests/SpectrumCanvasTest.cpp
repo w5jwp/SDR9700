@@ -1,4 +1,6 @@
 #include "SpectrumScopeCanvas.h"
+#include "SpectrumScopeDisplay.h"
+#include "WaterfallCanvas.h"
 
 #include <QSignalSpy>
 #include <QTest>
@@ -10,6 +12,7 @@ class SpectrumCanvasTest : public QObject
 
   private slots:
     void mapsFrequencyAcrossClosedPixelRange();
+    void alignsWaterfallWithSpectrumFrequencyPlot();
     void normalizesReversedRange();
     void emitsFrequencyForClickWithoutDrag();
     void ignoresClicksOutsidePlotAndWhileLocked();
@@ -25,6 +28,25 @@ void SpectrumCanvasTest::mapsFrequencyAcrossClosedPixelRange()
     QCOMPARE(canvas.freqToX(144.0), SpectrumScopeCanvas::levelScalePanelWidth());
     QCOMPARE(canvas.freqToX(148.0), 429);
     QCOMPARE(canvas.freqToX(146.0), (SpectrumScopeCanvas::levelScalePanelWidth() + 429) / 2);
+}
+
+void SpectrumCanvasTest::alignsWaterfallWithSpectrumFrequencyPlot()
+{
+    SpectrumScopeDisplay display;
+    display.resize(700, 500);
+    display.show();
+
+    auto* spectrum = display.findChild<SpectrumScopeCanvas*>();
+    auto* waterfall = display.findChild<WaterfallCanvas*>();
+    QVERIFY(spectrum != nullptr);
+    QVERIFY(waterfall != nullptr);
+    QCOMPARE(waterfall->geometry().left(), spectrum->freqToX(144.0));
+    QCOMPARE(waterfall->geometry().right(), spectrum->freqToX(146.0));
+
+    display.resize(900, 600);
+    QCoreApplication::processEvents();
+    QCOMPARE(waterfall->geometry().left(), spectrum->freqToX(144.0));
+    QCOMPARE(waterfall->geometry().right(), spectrum->freqToX(146.0));
 }
 
 void SpectrumCanvasTest::normalizesReversedRange()

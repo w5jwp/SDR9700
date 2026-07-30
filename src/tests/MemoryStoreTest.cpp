@@ -1,6 +1,7 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MemoryStore.h"
 #include "MemoryConstants.h"
+#include "MemoryCsvHelpers.h"
 #include "MemoryEditorPolicy.h"
 #include "MemoryRecordHelpers.h"
 
@@ -26,6 +27,8 @@ class MemoryStoreTest : public QObject
     void radioMemoryReadbackNormalizesRepeaterOffsetUnits();
     void onlyStoredRadioMemoriesAreSelectedForDeletion();
     void editorPolicyNormalizesOffsets();
+    void exportFileNameIncludesDateAndTime();
+    void exportPathUsesRequestedDirectory();
     void csvFileRoundTrips();
     void csvFileIoFailuresAreReported();
     void arbitraryCsvInputNeverCrashes();
@@ -230,6 +233,21 @@ void MemoryStoreTest::editorPolicyNormalizesOffsets()
     QVERIFY(modeSupportsMemoryOffset(modeFM));
     QVERIFY(modeSupportsMemoryOffset(modeDV));
     QVERIFY(!modeSupportsMemoryOffset(modeUSB));
+}
+
+void MemoryStoreTest::exportFileNameIncludesDateAndTime()
+{
+    const QDateTime dateTime(QDate(2026, 7, 30), QTime(14, 5, 9));
+
+    QCOMPARE(memoryExportFileName(dateTime), QStringLiteral("sdr9700-memories-2026-07-30_140509.csv"));
+}
+
+void MemoryStoreTest::exportPathUsesRequestedDirectory()
+{
+    const QDateTime dateTime(QDate(2026, 7, 30), QTime(14, 5, 9));
+
+    QCOMPARE(memoryExportPath(QStringLiteral("/users/operator"), dateTime),
+             QStringLiteral("/users/operator/sdr9700-memories-2026-07-30_140509.csv"));
 }
 
 void MemoryStoreTest::csvFileRoundTrips()

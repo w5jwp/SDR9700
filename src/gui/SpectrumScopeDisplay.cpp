@@ -260,7 +260,7 @@ void SpectrumScopeDisplay::updateChildGeometry()
 
     m_spectrumScopeCanvas->setGeometry(0, 0, width(), spectrumScopeHeight);
     m_panScrollBar->setGeometry(plotLeft, splitTop, qMax(0, width() - plotLeft), panScrollBarHeight());
-    m_waterfallCanvas->setGeometry(0, waterfallTop, width(), waterfallHeight);
+    m_waterfallCanvas->setGeometry(plotLeft, waterfallTop, qMax(0, width() - plotLeft), waterfallHeight);
     m_waterfallController->setCanvasSize(m_waterfallCanvas->size());
     updateSpanComboGeometry();
 }

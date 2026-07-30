@@ -4,10 +4,13 @@
 #include "ConfirmationDialog.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
+#include "MemoryCsvHelpers.h"
 #include "MemoryRecordHelpers.h"
 #include "MemorySyncController.h"
 #include "models/RadioModel.h"
 
+#include <QDateTime>
+#include <QDir>
 #include <QFileDialog>
 #include <QMessageBox>
 
@@ -22,9 +25,9 @@ MemoryCsvController::MemoryCsvController(MemoryController* owner) : QObject(owne
 
 bool MemoryCsvController::exportRadioMemories()
 {
-    const QString path =
-        QFileDialog::getSaveFileName(m_owner->popupParent(), QStringLiteral("Export Memories"),
-                                     QStringLiteral("sdr9700-memories.csv"), QString::fromLatin1(kMemoryFileFilter));
+    const QString path = QFileDialog::getSaveFileName(m_owner->popupParent(), QStringLiteral("Export Memories"),
+                                                      memoryExportPath(QDir::homePath(), QDateTime::currentDateTime()),
+                                                      QString::fromLatin1(kMemoryFileFilter));
     if (path.isEmpty())
     {
         return false;

@@ -149,6 +149,7 @@ set(SDR9700_APP_SOURCES
     gui/ControlPanelController.cpp
     gui/MemoryCsvController.h
     gui/MemoryCsvController.cpp
+    gui/MemoryCsvHelpers.h
     gui/MemoryEditorController.h
     gui/MemoryEditorController.cpp
     gui/MemoryEditorForm.h
@@ -436,6 +437,9 @@ if(BUILD_TESTING)
     add_executable(SpectrumCanvasTest
         tests/SpectrumCanvasTest.cpp
         gui/SpectrumScopeCanvas.cpp
+        gui/SpectrumScopeDisplay.cpp
+        gui/WaterfallCanvas.cpp
+        gui/WaterfallController.cpp
     )
     target_include_directories(SpectrumCanvasTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
     target_link_libraries(SpectrumCanvasTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
