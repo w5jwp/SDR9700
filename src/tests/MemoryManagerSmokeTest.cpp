@@ -144,10 +144,19 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     QVERIFY(selectorCount > 0);
     auto* rfGainButton = window.findChild<QPushButton*>(QStringLiteral("rfGainButton"));
     auto* frequencyEdit = window.findChild<QLineEdit*>(QStringLiteral("vfoFrequencyEdit"));
+    auto* memoryNameField = window.findChild<QWidget*>(QStringLiteral("vfoMemoryNameField"));
+    auto* memoryNameLabel = window.findChild<QLineEdit*>(QStringLiteral("vfoMemoryNameLabel"));
     QVERIFY(rfGainButton != nullptr);
     QVERIFY(frequencyEdit != nullptr);
+    QVERIFY(memoryNameField != nullptr);
+    QVERIFY(memoryNameLabel != nullptr);
     QVERIFY(!rfGainButton->property("levelControl").toBool());
-    QCOMPARE(frequencyEdit->alignment(), Qt::AlignCenter);
+    QCOMPARE(frequencyEdit->alignment(), Qt::AlignRight | Qt::AlignVCenter);
+    QCOMPARE(frequencyEdit->textMargins(), QMargins(0, 0, 6, 0));
+    QCOMPARE(memoryNameField->width(), frequencyEdit->width());
+    QCOMPARE(memoryNameField->layout()->contentsMargins(), QMargins());
+    QCOMPARE(memoryNameLabel->alignment(), Qt::AlignRight | Qt::AlignVCenter);
+    QCOMPARE(memoryNameLabel->textMargins(), QMargins(0, 0, 7, 0));
     const QFontMetrics frequencyMetrics(frequencyEdit->font());
     QCOMPARE(frequencyMetrics.horizontalAdvance(QStringLiteral("000.000.000")),
              frequencyMetrics.horizontalAdvance(QStringLiteral("111.111.111")));

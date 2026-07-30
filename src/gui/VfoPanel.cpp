@@ -30,8 +30,7 @@ constexpr int kVfoFieldBottomMargin = 3;
 constexpr int kFrequencyFontPixelSize = 28;
 constexpr int kFrequencyEditHeight = 40;
 constexpr int kMemoryNameHeight = 16;
-constexpr QRect kMemoryNameGeometry(6, 7, 200, 16);
-constexpr int kVfoFrequencyTopSpacing = 16;
+constexpr int kMemoryNameRightMargin = kVfoFieldSideMargin + 1;
 constexpr int kSignalMeterWidth = 220;
 constexpr int kSignalMeterHeight = 10;
 constexpr int kSignalScaleHeight = 11;
@@ -279,9 +278,10 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     header->addWidget(m_modeButton);
 
     auto* frequencyField = new QWidget(this);
+    frequencyField->setObjectName(QStringLiteral("vfoFrequencyField"));
     frequencyField->setFixedSize(kVfoFieldSize);
     frequencyField->setStyleSheet(
-        QStringLiteral("QWidget { background: %1; border: 1px solid %2; border-radius: 3px; }")
+        QStringLiteral("QWidget#vfoFrequencyField { background: %1; border: 1px solid %2; border-radius: 3px; }")
             .arg(UiTheme::Color::Field, UiTheme::Color::BorderFocus));
     auto* frequencyLayout = new QVBoxLayout(frequencyField);
     frequencyLayout->setContentsMargins(kVfoFieldSideMargin, kVfoFieldTopMargin, kVfoFieldSideMargin,
@@ -292,8 +292,8 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     m_frequencyEdit->setObjectName(QStringLiteral("vfoFrequencyEdit"));
     m_frequencyEdit->setFixedHeight(kFrequencyEditHeight);
     m_frequencyEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_frequencyEdit->setAlignment(Qt::AlignCenter);
-    m_frequencyEdit->setTextMargins(kNoMargins);
+    m_frequencyEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_frequencyEdit->setTextMargins(0, 0, kVfoFieldSideMargin, 0);
     m_frequencyEdit->setFocusPolicy(Qt::ClickFocus);
     m_frequencyEdit->setAccessibleName(QStringLiteral("%1 frequency").arg(title));
     m_frequencyEdit->setAccessibleDescription(QStringLiteral("Enter frequency in MHz."));
@@ -316,21 +316,29 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     m_frequencyEdit->setFont(freqFont);
     connect(m_frequencyEdit, &QLineEdit::returnPressed, this, &VfoPanel::frequencyReturnPressed);
 
-    m_memoryNameLabel = new QLineEdit(frequencyField);
+    auto* memoryNameField = new QWidget(frequencyField);
+    memoryNameField->setObjectName(QStringLiteral("vfoMemoryNameField"));
+    memoryNameField->setFixedHeight(kMemoryNameHeight);
+    memoryNameField->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* memoryNameLayout = new QHBoxLayout(memoryNameField);
+    memoryNameLayout->setContentsMargins(kNoMargins);
+    memoryNameLayout->setSpacing(kNoSpacing);
+
+    m_memoryNameLabel = new QLineEdit(memoryNameField);
+    m_memoryNameLabel->setObjectName(QStringLiteral("vfoMemoryNameLabel"));
     m_memoryNameLabel->setFixedHeight(kMemoryNameHeight);
     m_memoryNameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_memoryNameLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_memoryNameLabel->setTextMargins(0, 1, 1, 0);
+    m_memoryNameLabel->setTextMargins(0, 0, kMemoryNameRightMargin, 0);
     m_memoryNameLabel->setReadOnly(true);
     m_memoryNameLabel->setFocusPolicy(Qt::NoFocus);
     m_memoryNameLabel->setCursor(Qt::ArrowCursor);
     m_memoryNameLabel->setStyleSheet(QStringLiteral("QLineEdit { background: transparent; border: none; color: %1; "
                                                     "font-size: 10px; font-weight: bold; padding: 0px; }")
                                          .arg(UiTheme::Color::TextMuted));
-    m_memoryNameLabel->setGeometry(kMemoryNameGeometry);
-    m_memoryNameLabel->raise();
+    memoryNameLayout->addWidget(m_memoryNameLabel);
 
-    frequencyLayout->addSpacing(kVfoFrequencyTopSpacing);
+    frequencyLayout->addWidget(memoryNameField);
     frequencyLayout->addWidget(m_frequencyEdit);
 
     auto* signalBox = new QWidget(this);
