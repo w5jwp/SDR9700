@@ -906,18 +906,18 @@ enum passbandActions
 struct PeriodicType
 {
     PeriodicType() : func(funcNone), priority(), prioVal(0), receiver(0) {}
-    PeriodicType(Funcs func, QString priority, char receiver)
+    PeriodicType(Funcs func, QString priority, qint8 receiver)
         : func(func), priority(priority), prioVal(0), receiver(receiver)
     {
     }
-    PeriodicType(Funcs func, QString priority, int prioVal, char receiver)
+    PeriodicType(Funcs func, QString priority, int prioVal, qint8 receiver)
         : func(func), priority(priority), prioVal(prioVal), receiver(receiver)
     {
     }
     Funcs func;
     QString priority;
     int prioVal;
-    char receiver;
+    qint8 receiver;
 };
 
 struct VfoCommandType

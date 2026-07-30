@@ -79,6 +79,11 @@ void RadioCapabilitiesTest::populatesRequiredIc9700Capabilities()
     QVERIFY(!capabilities.commands.isEmpty());
     QVERIFY(!capabilities.periodic.empty());
     QVERIFY(!capabilities.bands.empty());
+
+    const auto scopeMode = std::find_if(capabilities.periodic.cbegin(), capabilities.periodic.cend(),
+                                        [](const PeriodicType& periodic) { return periodic.func == funcScopeMode; });
+    QVERIFY(scopeMode != capabilities.periodic.cend());
+    QCOMPARE(scopeMode->receiver, qint8(-1));
 }
 
 void RadioCapabilitiesTest::commandMappingsRoundTrip()

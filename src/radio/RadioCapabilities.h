@@ -38,7 +38,7 @@ struct RadioPeriodicDef
 {
     Funcs func{funcNone};
     const char* priority{nullptr};
-    char receiver{0};
+    qint8 receiver{0};
 };
 
 struct RadioModeDef
