@@ -43,7 +43,6 @@ constexpr std::array kSettingDefinitions{
     SettingDefinition{"spectrumScopeGridLineColor", "spectrumScope", "gridLineColor"},
     SettingDefinition{"spectrumScopeInvertMouseWheel", "spectrumScope", "invertMouseWheel"},
     SettingDefinition{"spectrumScopeSpanHZ", "spectrumScope", "spanHZ"},
-    SettingDefinition{"spectrumScopeSpectrumHeight", "spectrumScope", "spectrumHeight"},
     SettingDefinition{"mainWindowPositionX", "mainWindow", "positionX"},
     SettingDefinition{"mainWindowPositionY", "mainWindow", "positionY"},
     SettingDefinition{"statusClockUTC", "mainWindow", "statusClockUTC"},

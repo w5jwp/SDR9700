@@ -98,11 +98,6 @@ int SpectrumScopeCanvas::plotHeight() const
     return qMax(1, height() - scaleHeight());
 }
 
-int SpectrumScopeCanvas::spectrumPaneHeight() const
-{
-    return plotHeight();
-}
-
 int SpectrumScopeCanvas::plotRightX() const
 {
     return qMax(plotLeftX(), width() - 1);

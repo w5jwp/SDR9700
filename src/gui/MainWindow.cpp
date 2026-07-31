@@ -1140,24 +1140,12 @@ void MainWindow::restoreWindowLayout()
                                : centeredRectInAvailableGeometry(fixedSize, availableGeometryFor(savedRect)).topLeft();
         move(pos);
     }
-    if (m_spectrumScopeDisplay)
-    {
-        const int spectrumHeight = AppSettings::instance().value("spectrumScopeSpectrumHeight", -1).toInt();
-        if (spectrumHeight > 0)
-        {
-            m_spectrumScopeDisplay->setSpectrumPaneHeight(spectrumHeight);
-        }
-    }
 }
 
 void MainWindow::saveWindowLayout() const
 {
     AppSettings::instance().setValue("mainWindowPositionX", normalGeometry().x());
     AppSettings::instance().setValue("mainWindowPositionY", normalGeometry().y());
-    if (m_spectrumScopeDisplay)
-    {
-        AppSettings::instance().setValue("spectrumScopeSpectrumHeight", m_spectrumScopeDisplay->spectrumPaneHeight());
-    }
 }
 
 void MainWindow::updateSpectrumVfoMarker()

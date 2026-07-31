@@ -14,9 +14,6 @@
 
 namespace
 {
-constexpr int kMinSpectrumHeight = 150;
-constexpr int kMinWaterfallHeight = 180;
-constexpr int kDefaultSpectrumScopeHeightBias = 0;
 constexpr int kSpanComboWidth = 94;
 constexpr int kSpanComboHeight = 24;
 constexpr int kSpanComboMargin = 8;
@@ -220,28 +217,6 @@ void SpectrumScopeDisplay::updatePanScrollBar()
     m_panScrollBar->setEnabled(!m_interactionLocked && canPan);
 }
 
-int SpectrumScopeDisplay::defaultSpectrumHeight() const
-{
-    return constrainedSpectrumHeight(((height() - SpectrumScopeCanvas::scaleHeight() - panScrollBarHeight()) / 2) +
-                                     kDefaultSpectrumScopeHeightBias);
-}
-
-int SpectrumScopeDisplay::constrainedSpectrumHeight(int requested) const
-{
-    const int available = qMax(0, height() - SpectrumScopeCanvas::scaleHeight() - panScrollBarHeight());
-    const int maxSpectrumHeight = qMax(kMinSpectrumHeight, available - kMinWaterfallHeight);
-    return qBound(qMin(kMinSpectrumHeight, maxSpectrumHeight), requested, maxSpectrumHeight);
-}
-
-int SpectrumScopeDisplay::currentSpectrumHeight() const
-{
-    if (m_spectrumHeight < 0)
-    {
-        return defaultSpectrumHeight();
-    }
-    return constrainedSpectrumHeight(m_spectrumHeight);
-}
-
 void SpectrumScopeDisplay::updateChildGeometry()
 {
     if (!m_spectrumScopeCanvas || !m_panScrollBar || !m_waterfallCanvas)
@@ -249,7 +224,8 @@ void SpectrumScopeDisplay::updateChildGeometry()
         return;
     }
 
-    const int spectrumHeight = currentSpectrumHeight();
+    const int availablePlotHeight = qMax(0, height() - SpectrumScopeCanvas::scaleHeight() - panScrollBarHeight());
+    const int spectrumHeight = availablePlotHeight / 2;
     const int spectrumScopeHeight = spectrumHeight + SpectrumScopeCanvas::scaleHeight();
     const int splitTop = spectrumScopeHeight;
     const int waterfallTop = splitTop + panScrollBarHeight();
@@ -353,22 +329,6 @@ void SpectrumScopeDisplay::setInteractionLocked(bool locked)
 void SpectrumScopeDisplay::setInvertMouseWheel(bool invert)
 {
     m_spectrumScopeCanvas->setInvertMouseWheel(invert);
-}
-
-int SpectrumScopeDisplay::spectrumPaneHeight() const
-{
-    return currentSpectrumHeight();
-}
-
-void SpectrumScopeDisplay::setSpectrumPaneHeight(int height)
-{
-    if (height <= 0 || m_spectrumHeight == height)
-    {
-        return;
-    }
-
-    m_spectrumHeight = height;
-    updateChildGeometry();
 }
 
 void SpectrumScopeDisplay::updateSpectrum(const QVector<float>& levels, bool outOfRange)

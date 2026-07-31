@@ -32,7 +32,6 @@ class SpectrumScopeCanvas : public QWidget
     void updateSpectrum(const QVector<float>& levels, bool outOfRange);
     void clearDisplay();
 
-    int spectrumPaneHeight() const;
     int freqToX(double mhz) const;
 
   signals:

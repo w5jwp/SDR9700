@@ -265,9 +265,6 @@ QJsonObject cleanConfigurationSettings(const QJsonDocument& doc)
     insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("spanHZ"),
                        [](const QJsonValue& value, QJsonValue* normalized)
                        { return intStringValue(value, 1, std::numeric_limits<int>::max(), normalized); });
-    insertCleanSetting(&spectrumScope, spectrumScopeSource, QStringLiteral("spectrumHeight"),
-                       [](const QJsonValue& value, QJsonValue* normalized)
-                       { return intStringValue(value, 1, std::numeric_limits<int>::max(), normalized); });
     if (!spectrumScope.isEmpty())
     {
         settings.insert(QStringLiteral("spectrumScope"), spectrumScope);

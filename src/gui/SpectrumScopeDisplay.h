@@ -38,8 +38,6 @@ class SpectrumScopeDisplay : public QWidget
     void setGridDensity(int density);
     void setInteractionLocked(bool locked);
     void setInvertMouseWheel(bool invert);
-    int spectrumPaneHeight() const;
-    void setSpectrumPaneHeight(int height);
     void updateSpectrum(const QVector<float>& levels, bool outOfRange);
     void clearDisplay();
     void setFilterWidth(int lowHz, int highHz);
@@ -61,9 +59,6 @@ class SpectrumScopeDisplay : public QWidget
     static int panScrollBarHeight() { return 16; }
     void updateSpanComboGeometry();
     void updatePanScrollBar();
-    int defaultSpectrumHeight() const;
-    int constrainedSpectrumHeight(int requested) const;
-    int currentSpectrumHeight() const;
     void updateChildGeometry();
 
     SpectrumScopeCanvas* m_spectrumScopeCanvas{nullptr};
@@ -77,5 +72,4 @@ class SpectrumScopeDisplay : public QWidget
     double m_panEndMhz{0.0};
     bool m_hasPanRange{false};
     bool m_interactionLocked{false};
-    int m_spectrumHeight{-1};
 };
