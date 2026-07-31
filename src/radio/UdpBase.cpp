@@ -20,6 +20,7 @@ int congestionPercent(quint32 packetsSent, quint32 packetsLost)
 
 bool UdpBase::init(quint16 bindPort)
 {
+    departureSent = false;
     udp = new QUdpSocket(this);
     if (!udp->bind(bindPort))
     {
@@ -30,7 +31,7 @@ bool UdpBase::init(quint16 bindPort)
     }
 
     localPort = udp->localPort();
-    qInfo(logUdp()) << "UDP Stream bound to local port:" << localPort << " remote port:" << port;
+    qInfo(logUdp()).noquote().nospace() << "UDP stream bound localPort=" << localPort << " remotePort=" << port;
     uint32_t addr = localIP.toIPv4Address();
     // The IC-9700 LAN protocol uses a 32-bit client/session ID. SDR9700
     // follows Icom's observed convention of combining the last two IPv4
@@ -66,13 +67,25 @@ bool UdpBase::acceptDatagramFrom(const QNetworkDatagram& datagram) const
 
 UdpBase::~UdpBase()
 {
-    qInfo(logUdp()) << "Closing UDP stream :" << radioIP.toString() << ":" << port;
+    qInfo(logUdp()).noquote().nospace() << "Closing UDP stream: " << radioIP.toString() << ':' << port;
     if (udp != nullptr)
     {
-        sendControl(false, 0x05, 0x00);
+        sendDeparture();
         udp->close();
         delete udp;
     }
+}
+
+void UdpBase::sendDeparture()
+{
+    if (udp == nullptr || departureSent)
+    {
+        return;
+    }
+
+    departureSent = true;
+    qInfo(logUdp()).noquote().nospace() << "Sending UDP stream departure to " << radioIP.toString() << ':' << port;
+    sendControl(false, 0x05, 0x00);
 }
 
 void UdpBase::dataReceived(const QByteArray& r)

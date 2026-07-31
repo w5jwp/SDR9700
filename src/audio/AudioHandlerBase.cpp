@@ -33,18 +33,19 @@ void AudioHandlerBase::stopConverterThread(const QString& roleName)
         return;
     }
 
-    qDebug(logAudio()) << "[SHUTDOWN] converterThread->quit(), role=" << roleName;
+    qDebug(logAudio()).noquote().nospace() << "[SHUTDOWN] converterThread->quit role=" << roleName;
     converterThread->quit();
     if (!converterThread->wait(kShutdownWaitMs))
     {
-        qWarning(logAudio()) << "[SHUTDOWN] converterThread did not stop within" << kShutdownWaitMs
-                             << "ms; requesting interruption, role=" << roleName;
+        qWarning(logAudio()).noquote().nospace()
+            << "[SHUTDOWN] converterThread did not stop timeoutMs=" << kShutdownWaitMs << " role=" << roleName
+            << "; requesting interruption";
         converterThread->requestInterruption();
         converterThread->quit();
         if (!converterThread->wait(kShutdownWaitMs))
         {
-            qCritical(logAudio()) << "[SHUTDOWN] converterThread did not stop after bounded shutdown, role="
-                                  << roleName;
+            qCritical(logAudio()).noquote().nospace()
+                << "[SHUTDOWN] converterThread did not stop after bounded shutdown role=" << roleName;
             converterThread->setParent(nullptr);
             connect(converterThread, &QThread::finished, converterThread, &QObject::deleteLater, Qt::DirectConnection);
             converterThread = nullptr;
@@ -52,7 +53,7 @@ void AudioHandlerBase::stopConverterThread(const QString& roleName)
             return;
         }
     }
-    qDebug(logAudio()) << "[SHUTDOWN] converterThread done, role=" << roleName;
+    qDebug(logAudio()).noquote().nospace() << "[SHUTDOWN] converterThread done role=" << roleName;
     delete converterThread;
     converterThread = nullptr;
     converter = nullptr;
@@ -60,12 +61,12 @@ void AudioHandlerBase::stopConverterThread(const QString& roleName)
 
 void AudioHandlerBase::dispose()
 {
-    qDebug(logAudio()) << "[SHUTDOWN] dispose() enter, role=" << role()
-                       << "onCorrectThread=" << (QThread::currentThread() == thread());
+    qDebug(logAudio()).noquote().nospace()
+        << "[SHUTDOWN] dispose enter role=" << role() << " onCorrectThread=" << (QThread::currentThread() == thread());
     // Run disposal on this object's thread to avoid races with audio callbacks.
     if (QThread::currentThread() != thread())
     {
-        qDebug(logAudio()) << "[SHUTDOWN] dispose() marshaling to audio thread ...";
+        qDebug(logAudio()) << "[SHUTDOWN] dispose() marshaling to audio thread";
         auto disposeDone = std::make_shared<QSemaphore>();
         const bool queued = QMetaObject::invokeMethod(
             this,
@@ -77,8 +78,8 @@ void AudioHandlerBase::dispose()
             Qt::QueuedConnection);
         if (!queued || !disposeDone->tryAcquire(1, kShutdownWaitMs))
         {
-            qWarning(logAudio()) << "[SHUTDOWN] dispose() did not finish within" << kShutdownWaitMs
-                                 << "ms, role=" << role();
+            qWarning(logAudio()).noquote().nospace()
+                << "[SHUTDOWN] dispose did not finish timeoutMs=" << kShutdownWaitMs << " role=" << role();
         }
         return;
     }
@@ -104,11 +105,11 @@ void AudioHandlerBase::dispose()
         stopConverterThread(role());
     }
 
-    qDebug(logAudio()) << "[SHUTDOWN] dispose() locking devMutex, role=" << role();
+    qDebug(logAudio()).noquote().nospace() << "[SHUTDOWN] dispose locking devMutex role=" << role();
     QMutexLocker lock(&devMutex);
-    qDebug(logAudio()) << "[SHUTDOWN] dispose() calling closeDevice(), role=" << role();
+    qDebug(logAudio()).noquote().nospace() << "[SHUTDOWN] dispose calling closeDevice role=" << role();
     closeDevice();
-    qDebug(logAudio()) << "[SHUTDOWN] dispose() closeDevice() done, role=" << role();
+    qDebug(logAudio()).noquote().nospace() << "[SHUTDOWN] dispose closeDevice done role=" << role();
 
     if (underTimer)
     {
@@ -117,7 +118,7 @@ void AudioHandlerBase::dispose()
         underTimer = nullptr;
     }
 
-    qDebug(logAudio()) << "[SHUTDOWN] dispose() complete, role=" << role();
+    qDebug(logAudio()).noquote().nospace() << "[SHUTDOWN] dispose complete role=" << role();
 }
 
 void AudioHandlerBase::reportError(const QString& msg)
@@ -185,9 +186,9 @@ bool AudioHandlerBase::negotiateFormat(int minSampleRate)
                 if (isFormatSupported(candidate))
                 {
                     nativeFormat = candidate;
-                    qDebug(logAudio()) << role() << "Selected format: ch=" << nativeFormat.channelCount()
-                                       << " rate=" << nativeFormat.sampleRate()
-                                       << " fmt=" << nativeFormat.sampleFormat();
+                    qDebug(logAudio()).noquote().nospace()
+                        << role() << " selected format channels=" << nativeFormat.channelCount()
+                        << " sampleRate=" << nativeFormat.sampleRate() << " format=" << nativeFormat.sampleFormat();
                     return true;
                 }
             }

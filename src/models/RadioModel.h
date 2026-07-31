@@ -70,6 +70,7 @@ class RadioModel : public QObject
     void errorOccurred(ErrorCode code, const QString& message);
     void statusMessage(const QString& message, MessageSeverity severity);
     void networkQualityChanged(int rttMs);
+    void sessionHeartbeat();
     void txAudioLevelChanged(int peak, int rms);
     void radioMemoryReceived(MemoryType memory);
 

@@ -25,9 +25,9 @@ void SpectrumCanvasTest::mapsFrequencyAcrossClosedPixelRange()
     SpectrumScopeCanvas canvas;
     canvas.resize(430, 240);
     canvas.setFrequencyRange(144.0, 148.0);
-    QCOMPARE(canvas.freqToX(144.0), SpectrumScopeCanvas::levelScalePanelWidth());
+    QCOMPARE(canvas.freqToX(144.0), 0);
     QCOMPARE(canvas.freqToX(148.0), 429);
-    QCOMPARE(canvas.freqToX(146.0), (SpectrumScopeCanvas::levelScalePanelWidth() + 429) / 2);
+    QCOMPARE(canvas.freqToX(146.0), 429 / 2);
 }
 
 void SpectrumCanvasTest::alignsWaterfallWithSpectrumFrequencyPlot()
@@ -64,7 +64,7 @@ void SpectrumCanvasTest::emitsFrequencyForClickWithoutDrag()
     canvas.setFrequencyRange(144.0, 148.0);
     canvas.show();
     QSignalSpy clickSpy(&canvas, &SpectrumScopeCanvas::frequencyClicked);
-    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, QPoint(230, 80));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, QPoint(canvas.freqToX(146.0), 80));
     QCOMPARE(clickSpy.count(), 1);
     QVERIFY(qAbs(clickSpy.takeFirst().at(0).toDouble() - 146.0) < 0.02);
 }
@@ -75,7 +75,7 @@ void SpectrumCanvasTest::ignoresClicksOutsidePlotAndWhileLocked()
     canvas.resize(430, 240);
     canvas.show();
     QSignalSpy clickSpy(&canvas, &SpectrumScopeCanvas::frequencyClicked);
-    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, QPoint(5, 80));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, QPoint(5, canvas.height() - 1));
     canvas.setInteractionLocked(true);
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, QPoint(230, 80));
     QCOMPARE(clickSpy.count(), 0);

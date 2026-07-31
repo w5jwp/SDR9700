@@ -79,7 +79,7 @@ void RadioCommander::receiveCommand(Funcs func, QVariant value, uchar receiver)
 
 void RadioCommander::handlePortError(errorType err)
 {
-    qInfo(logRadio()) << "Error using port " << err.device << " message: " << err.message;
+    qInfo(logRadio()).noquote().nospace() << "Radio error device=" << err.device << " message=" << err.message;
     emit havePortError(err);
 }
 

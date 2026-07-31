@@ -60,6 +60,8 @@ set(SDR9700_CORE_SOURCES
     core/LogCategories.cpp
     core/LoggingConfiguration.h
     core/LoggingConfiguration.cpp
+    core/RadioSessionWatchdog.h
+    core/SMeterScale.h
     core/AppSettings.cpp
     core/RadioProfile.cpp
     core/SystemStats.cpp
@@ -269,6 +271,14 @@ target_link_libraries(SDR9700 PRIVATE
     SDR9700_app_support
 )
 
+if(APPLE AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
+    # Darwin permission backends are non-default static Qt plugins. Import the
+    # microphone backend explicitly so QMicrophonePermission can reach macOS
+    # instead of falling back to Qt's "permission plugin not found" warning.
+    include("${Qt6Core_DIR}/Qt6QDarwinMicrophonePermissionPluginConfig.cmake")
+    qt_import_plugins(SDR9700 INCLUDE Qt6::QDarwinMicrophonePermissionPlugin)
+endif()
+
 set_target_properties(SDR9700 PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
@@ -401,6 +411,10 @@ if(BUILD_TESTING)
     add_executable(UdpBaseTest tests/UdpBaseTest.cpp)
     target_link_libraries(UdpBaseTest PRIVATE SDR9700_core Qt6::Test)
     add_test(NAME UdpBaseTest COMMAND UdpBaseTest)
+
+    add_executable(RadioSessionWatchdogTest tests/RadioSessionWatchdogTest.cpp)
+    target_link_libraries(RadioSessionWatchdogTest PRIVATE SDR9700_core Qt6::Test)
+    add_test(NAME RadioSessionWatchdogTest COMMAND RadioSessionWatchdogTest)
 
     add_executable(WaterfallScopeTest
         tests/WaterfallScopeTest.cpp

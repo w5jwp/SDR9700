@@ -4,7 +4,7 @@
 namespace
 {
 constexpr int kOpenStartRetryIntervalMs = 250;
-constexpr int kOpenStartMaxAttempts = 12;
+constexpr int kOpenStartMaxAttempts = 4;
 
 bool isScopeDataDatagram(const QByteArray& datagram)
 {
@@ -33,14 +33,11 @@ UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, qui
     idleTimer = new QTimer(this);
     areYouThereTimer = new QTimer(this);
     startCivDataTimer = new QTimer(this);
-    watchdogTimer = new QTimer(this);
 
     connect(pingTimer, &QTimer::timeout, this, &UdpBase::sendPing);
-    connect(watchdogTimer, &QTimer::timeout, this, &UdpCivData::watchdog);
     connect(idleTimer, &QTimer::timeout, this, std::bind(&UdpBase::sendControl, this, true, 0, 0));
     connect(startCivDataTimer, &QTimer::timeout, this, &UdpCivData::requestDataStart);
     connect(areYouThereTimer, &QTimer::timeout, this, std::bind(&UdpBase::sendControl, this, false, 0x03, 0));
-    watchdogTimer->start(WATCHDOG_PERIOD);
     // Ping and idle intervals use the LAN protocol constants from PacketTypes.h.
     // The are-you-there timer stops after the radio replies "I am here".
     pingTimer->start(PING_PERIOD);
@@ -67,45 +64,11 @@ void UdpCivData::closeStream()
     sendOpenClose(true);
 }
 
-void UdpCivData::watchdog()
+void UdpCivData::requestDataRestart()
 {
-    if (msSinceLastReceived() > 2000)
+    if (!m_closeSent)
     {
-        if (!m_watchdogAlerted)
-        {
-            if (m_readyEmitted)
-            {
-                // Once the CI-V stream has delivered its 0x06 ready handshake,
-                // the radio should answer command traffic. During stale-session
-                // recovery the first data-start packet can be lost or ignored;
-                // retry it a bounded number of times instead of restarting the
-                // old 100 ms forever-loop that could starve memory polling.
-                qInfo(logUdp())
-                    << " CIV Watchdog: no CI-V data received for 2s after stream ready; retrying data start.";
-                if (startCivDataTimer != nullptr && !startCivDataTimer->isActive() &&
-                    m_openStartRequestCount < kOpenStartMaxAttempts)
-                {
-                    startCivDataTimer->start(kOpenStartRetryIntervalMs);
-                }
-            }
-            else
-            {
-                qInfo(logUdp()) << " CIV Watchdog: no CI-V data received for 2s, requesting data start.";
-                if (startCivDataTimer != nullptr)
-                {
-                    startCivDataTimer->start(kOpenStartRetryIntervalMs);
-                }
-            }
-            m_watchdogAlerted = true;
-        }
-    }
-    else
-    {
-        m_watchdogAlerted = false;
-        if (startCivDataTimer != nullptr)
-        {
-            startCivDataTimer->stop();
-        }
+        sendOpenClose(false);
     }
 }
 
@@ -137,8 +100,8 @@ void UdpCivData::requestDataStart()
 
 void UdpCivData::send(QByteArray d)
 {
-    qDebug(logUdp()) << "UdpCivData::send() port=" << port << "radioIP=" << radioIP.toString() << "len=" << d.length()
-                     << "data=" << d.toHex(' ');
+    qDebug(logUdp()).noquote().nospace() << "UdpCivData::send port=" << port << " radioIP=" << radioIP.toString()
+                                         << " len=" << d.length() << " data=" << QString::fromLatin1(d.toHex(' '));
     data_packet p{};
     p.len = (quint32)sizeof(p) + d.length();
     p.sentid = myId;
@@ -162,7 +125,7 @@ void UdpCivData::sendOpenClose(bool close)
     {
         magic = 0x00;
     }
-    qDebug(logUdp()) << "UdpCivData::sendOpenClose close=" << close << "remoteId=0x" << Qt::hex << remoteId;
+    qDebug(logUdp()).nospace() << "UdpCivData::sendOpenClose close=" << close << " remoteId=0x" << Qt::hex << remoteId;
 
     openclose_packet p{};
     p.len = sizeof(p);
@@ -201,7 +164,7 @@ void UdpCivData::dataReceived()
             // startup/memory-sync evidence we actually need in field logs.
             if (in->type != 0x00)
             {
-                qDebug(logUdp()) << "UdpCivData: control type=0x" << Qt::hex << (int)in->type;
+                qDebug(logUdp()).nospace() << "UdpCivData: control type=0x" << Qt::hex << int(in->type);
             }
             if (in->type == 0x04)
             {
@@ -267,7 +230,8 @@ void UdpCivData::dataReceived()
                     // and memory-sync state.
                     if (!scopeDataDatagram)
                     {
-                        qDebug(logUdp()) << "UdpCivData: rx len=" << r.length() << "hex=" << r.left(16).toHex(' ');
+                        qDebug(logUdp()).noquote().nospace() << "UdpCivData: RX len=" << r.length()
+                                                             << " hex=" << QString::fromLatin1(r.left(16).toHex(' '));
                     }
                     emit receive(r.mid(0x15));
                 }

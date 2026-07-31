@@ -75,6 +75,7 @@ void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, 
     connect(udp, &UdpHandler::haveBaudRate, this, &Commander::receiveBaudRate);
     connect(udp, &UdpHandler::haveNetworkError, this, &Commander::handlePortError);
     connect(udp, &UdpHandler::haveNetworkStatus, this, &Commander::handleStatusUpdate);
+    connect(udp, &UdpHandler::sessionHeartbeat, this, &RadioCommander::haveSessionHeartbeat);
     connect(udp, &UdpHandler::haveNetworkAudioLevels, this, &Commander::handleNetworkAudioLevels);
     connect(udp, &UdpHandler::requestRadioSelection, this, &Commander::radioSelection);
     connect(udp, &UdpHandler::setRadioUsage, this, &Commander::radioUsage);
@@ -102,7 +103,7 @@ void Commander::shutdownComm()
     {
         if (udp)
         {
-            qDebug(logRadio()) << "[SHUTDOWN] closeComm() calling udp->shutdown() ...";
+            qDebug(logRadio()) << "[SHUTDOWN] closeComm() calling udp->shutdown()";
             auto shutdownDone = std::make_shared<QSemaphore>();
             UdpHandler* udpSession = udp;
             const bool invoked = QMetaObject::invokeMethod(
@@ -113,14 +114,14 @@ void Commander::shutdownComm()
                     shutdownDone->release();
                 },
                 Qt::QueuedConnection);
-            if (!invoked || !shutdownDone->tryAcquire(1, 3000))
+            if (!invoked || !shutdownDone->tryAcquire(1, 11000))
             {
-                qWarning(logRadio()) << "[SHUTDOWN] UdpHandler shutdown did not finish within 3000 ms";
+                qWarning(logRadio()) << "[SHUTDOWN] UdpHandler shutdown did not finish within 11000 ms";
             }
         }
         qDebug(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread->quit()";
         udpHandlerThread->quit();
-        qDebug(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread->wait(3000) ...";
+        qDebug(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread->wait(3000)";
         if (!udpHandlerThread->wait(3000))
         {
             qWarning(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread did not stop within 3000 ms; "
@@ -770,9 +771,7 @@ Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant
         }
         {
             const quint8 rawS = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
-            const double sMeter = getMeterCal(meterS, rawS);
-            qDebug(logRadioTraffic()).nospace() << "S meter raw=" << static_cast<int>(rawS) << " calibrated=" << sMeter;
-            value.setValue(sMeter);
+            value.setValue(static_cast<int>(rawS));
             return ReplyParseResult::Parsed;
         }
     case funcCenterMeter:
@@ -2963,13 +2962,29 @@ void Commander::setTxAudioDevice(const QAudioDevice& device)
     QMetaObject::invokeMethod(udp, [udp = udp, device]() { udp->setTxAudioDevice(device); }, Qt::QueuedConnection);
 }
 
-void Commander::stopLocalAudio()
+bool Commander::stopLocalAudio()
 {
     if (udp == nullptr)
     {
-        return;
+        return true;
     }
-    QMetaObject::invokeMethod(udp, [udp = udp]() { udp->stopLocalAudio(); }, Qt::QueuedConnection);
+
+    auto stopDone = std::make_shared<QSemaphore>();
+    UdpHandler* udpSession = udp;
+    const bool queued = QMetaObject::invokeMethod(
+        udpSession,
+        [udpSession, stopDone]()
+        {
+            udpSession->stopLocalAudio();
+            stopDone->release();
+        },
+        Qt::QueuedConnection);
+    if (!queued || !stopDone->tryAcquire(1, 2500))
+    {
+        qWarning(logAudio()) << "Timed out stopping local audio worker";
+        return false;
+    }
+    return true;
 }
 
 void Commander::setPttActive(bool active)

@@ -54,6 +54,7 @@ class RadioCommander : public QObject
 
     void havePortError(errorType err);
     void haveStatusUpdate(const networkStatus& status);
+    void haveSessionHeartbeat();
 
     void haveNetworkAudioLevels(const networkAudioLevels l);
     void dataForComm(const QByteArray& outData);

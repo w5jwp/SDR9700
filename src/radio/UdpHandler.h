@@ -24,6 +24,7 @@
 #include "UdpBase.h"
 #include "UdpCivData.h"
 #include "UdpAudio.h"
+#include "RadioSessionWatchdog.h"
 
 class UdpHandler : public UdpBase
 {
@@ -75,10 +76,12 @@ class UdpHandler : public UdpBase
     void requestRadioSelection(QList<radio_cap_packet> radios);
     void setRadioUsage(quint8, bool admin, quint8 busy, QString name, QString mac);
     void streamReady();
+    void sessionHeartbeat();
     void shutdownFinished();
 
   private:
     void sendAreYouThere();
+    void monitorSessionHealth();
 
     void dataReceived();
 
@@ -86,9 +89,10 @@ class UdpHandler : public UdpBase
     void sendLogin();
     void sendToken(uint8_t magic);
     bool requestStaleSessionReclaim(const QString& ownerName);
-    void waitForDisconnectStatus(int timeoutMs);
     void closeStreams();
-    void releaseAuthenticationToken(bool waitForAcknowledgement);
+    bool releaseAuthenticationToken(bool waitForAcknowledgement);
+    void beginStreamShutdown();
+    void waitForStreamShutdownSettle(int timeoutMs);
     bool reserveStreamPorts();
 
     bool gotA8ReplyID = false;
@@ -100,8 +104,13 @@ class UdpHandler : public UdpBase
     bool radioInUse = false;
     bool m_shuttingDown = false;
     bool m_disconnectStatusReceived = false;
+    bool m_tokenRemovalAcknowledged = false;
     bool m_staleSessionReclaimInProgress = false;
+    bool m_civStreamReady = false;
+    bool m_healthFailureReported = false;
+    bool m_audioSilenceReported = false;
     int m_staleSessionReclaimAttempts = 0;
+    RadioSessionWatchdog m_sessionWatchdog;
 
     quint16 controlPort;
     quint16 civPort;

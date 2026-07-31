@@ -135,6 +135,8 @@ make debug
 - `CONTRIBUTING.md`: contributor workflow.
 - `DEBUG.md`: developer diagnostics.
 - `ARCHITECTURE.md`: current technical architecture.
+- `NETWORK_SHUTDOWN.md`: verified IC-9700 LAN teardown sequence and regression
+  history.
 - `SECURITY.md`: vulnerability reporting.
 - `CODE_OF_CONDUCT.md`: community behavior expectations.
 

@@ -1,5 +1,6 @@
 #include "CachingQueue.h"
 #include "RadioRouter.h"
+#include "SMeterScale.h"
 
 #include <QSignalSpy>
 #include <QTest>
@@ -53,10 +54,24 @@ void RadioRouterTest::clampsMeterAndLevelValues()
     QSignalSpy powerSpy(&router, &RadioRouter::txPowerChanged);
     QSignalSpy squelchSpy(&router, &RadioRouter::squelchChanged);
 
-    router.route(CacheItem(funcSMeter, -999.0));
-    router.route(CacheItem(funcSMeter, 999.0));
+    router.route(CacheItem(funcSMeter, -1));
+    router.route(CacheItem(funcSMeter, 0));
+    router.route(CacheItem(funcSMeter, 120));
+    router.route(CacheItem(funcSMeter, 201));
+    router.route(CacheItem(funcSMeter, 240));
+    router.route(CacheItem(funcSMeter, 241));
+    router.route(CacheItem(funcSMeter, 255));
     QCOMPARE(smeterSpy.at(0).at(0).toInt(), 0);
-    QCOMPARE(smeterSpy.at(1).at(0).toInt(), 255);
+    QCOMPARE(smeterSpy.at(1).at(0).toInt(), 0);
+    QCOMPARE(smeterSpy.at(2).at(0).toInt(), 120);
+    QCOMPARE(smeterSpy.at(3).at(0).toInt(), 201);
+    QCOMPARE(smeterSpy.at(4).at(0).toInt(), 240);
+    QCOMPARE(smeterSpy.at(5).at(0).toInt(), 241);
+    QCOMPARE(smeterSpy.at(6).at(0).toInt(), 255);
+    QCOMPARE(sdr9700::sMeterDisplayValue(120), 146);
+    QCOMPARE(sdr9700::sMeterDisplayPercent(240), 99);
+    QCOMPARE(sdr9700::sMeterDisplayPercent(241), 100);
+    QCOMPARE(sdr9700::sMeterDisplayPercent(255), 100);
 
     router.route(CacheItem(funcRfGain, -1));
     router.route(CacheItem(funcNRLevel, 999));

@@ -4,6 +4,7 @@
 #include "MainTitleBar.h"
 #include "MainWindowHelpers.h"
 #include "MetersDialog.h"
+#include "SMeterScale.h"
 #include "UiTheme.h"
 #include "VfoPanel.h"
 #include "models/RadioModel.h"
@@ -71,8 +72,7 @@ void StatusBarController::updateTxIndicator(bool on)
         }
         else
         {
-            m_window->m_vfoPanel->setSMeterValue(
-                qBound(0, static_cast<int>(m_window->m_meterSnapshot.sMeter * 100 / 255), 100));
+            m_window->m_vfoPanel->setSMeterValue(sdr9700::sMeterDisplayPercent(m_window->m_meterSnapshot.sMeter));
         }
     }
     if (on)

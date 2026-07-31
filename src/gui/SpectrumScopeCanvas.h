@@ -18,7 +18,6 @@ class SpectrumScopeCanvas : public QWidget
     explicit SpectrumScopeCanvas(QWidget* parent = nullptr);
 
     static int scaleHeight() { return 26; }
-    static int levelScalePanelWidth() { return 30; }
 
     void setFrequencyRange(double startMhz, double endMhz);
     void setDataFrequencyRange(double startMhz, double endMhz);
@@ -48,7 +47,7 @@ class SpectrumScopeCanvas : public QWidget
 
   private:
     int plotHeight() const;
-    static int plotLeftX();
+    static int plotLeftX() { return 0; }
     int plotRightX() const;
     int plotWidthPx() const;
     double xToFreq(int x) const;

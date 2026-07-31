@@ -11,6 +11,7 @@ class QPushButton;
 class QLabel;
 class QHBoxLayout;
 class QMouseEvent;
+class QTimer;
 
 class MainTitleBar : public QWidget
 {
@@ -28,6 +29,8 @@ class MainTitleBar : public QWidget
     void setLocked(bool locked);
     void setTxDuration(const QString& duration, bool transmitting);
     void setTxDurationActive(bool transmitting);
+    void pulseRadioHeartbeat();
+    void clearRadioHeartbeat();
 
   signals:
     void volumeChanged(int value);
@@ -43,6 +46,8 @@ class MainTitleBar : public QWidget
   private:
     QHBoxLayout* m_menuLayout{nullptr};
     QLabel* m_titleLabel{nullptr};
+    QLabel* m_heartbeatIndicator{nullptr};
+    QTimer* m_heartbeatFadeTimer{nullptr};
     QPushButton* m_txDurationButton{nullptr};
     QPushButton* m_muteBtn{nullptr};
     QPushButton* m_lockBtn{nullptr};

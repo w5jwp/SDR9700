@@ -127,6 +127,22 @@ Run it before submitting source changes.
   tolerate unknown values, and log unexpected recoverable data.
 - Do not change the basic VFO RX flow unless the task explicitly requires
   it and the behavior is tested.
+- Preserve the authenticated LAN teardown order documented in
+  `NETWORK_SHUTDOWN.md`. In particular, send the control-port departure while
+  its socket is still open and after token-removal acknowledgement.
+
+## Logging
+
+- Format structured fields as `key=value`, without whitespace after `=`.
+- Use `QDebug::nospace()` with explicit separators when streaming structured
+  fields; do not rely on `QDebug`'s automatic spaces around punctuation.
+- In source, place each streamed key/value pair on its own line when a log
+  statement has multiple fields. Keep the emitted log record on one line.
+- Use `QDebug::noquote()` for human-readable strings such as addresses, device
+  names, roles, and hexadecimal dumps when quotation marks carry no meaning.
+- Format network endpoints as `address:port`, not `address : port`.
+- Do not end log messages with ellipses. Log the operation and its resulting
+  state as separate events when both are useful.
 
 ## Threading and Audio
 

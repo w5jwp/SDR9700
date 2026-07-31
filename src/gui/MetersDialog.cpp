@@ -1,4 +1,5 @@
 #include "MetersDialog.h"
+#include "SMeterScale.h"
 #include "UiTheme.h"
 
 #include <QGridLayout>
@@ -217,8 +218,8 @@ void MetersDialog::resetMeters()
 
 void MetersDialog::setSMeter(int value)
 {
-    const int bounded = qBound(0, value, kSMeterMax);
-    setMeterRow(m_sMeter, scaledValue(bounded, kSMeterMax), sMeterText(bounded));
+    const int displayValue = sdr9700::sMeterDisplayValue(value);
+    setMeterRow(m_sMeter, scaledValue(displayValue, kSMeterMax), sMeterText(displayValue));
 }
 
 void MetersDialog::setPowerMeter(double watts)

@@ -8,7 +8,7 @@
 namespace
 {
 constexpr uchar kMainReceiver = 0;
-}
+} // namespace
 
 RadioRouter::RadioRouter(QObject* parent) : QObject(parent) {}
 
@@ -139,31 +139,12 @@ void RadioRouter::route(const CacheItem& item)
         break;
     case funcSMeter:
     {
-        static constexpr double kS0Dbm = -147.0;
-        static constexpr double kS9Dbm = -93.0;
-        static constexpr double kS9p60Dbm = -33.0;
-        static constexpr double kS9MeterFraction = 4.0 / 7.0;
-
-        const double dbm = item.value.toDouble();
-        double fraction = 0.0;
-        if (dbm <= kS0Dbm)
-        {
-            fraction = 0.0;
-        }
-        else if (dbm <= kS9Dbm)
-        {
-            fraction = kS9MeterFraction * (dbm - kS0Dbm) / (kS9Dbm - kS0Dbm);
-        }
-        else
-        {
-            fraction = kS9MeterFraction + (1.0 - kS9MeterFraction) * (dbm - kS9Dbm) / (kS9p60Dbm - kS9Dbm);
-        }
-
-        const int value = qBound(0, static_cast<int>(fraction * 255.0 + 0.5), 255);
+        const int rawValue = qBound(0, item.value.toInt(), 255);
+        qDebug(logRadioTraffic()).nospace() << "S meter raw=" << rawValue;
         if (item.receiver == kMainReceiver)
         {
-            emit radioValueUpdated(item.command, QVariant(value), kMainReceiver);
-            emit smeterChanged(value);
+            emit radioValueUpdated(item.command, QVariant(rawValue), kMainReceiver);
+            emit smeterChanged(rawValue);
         }
         break;
     }

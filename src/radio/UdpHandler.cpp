@@ -74,10 +74,10 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
     std::fill(std::begin(audioLevelsTxRMS), std::end(audioLevelsTxRMS), 0);
     std::fill(std::begin(audioLevelsRxRMS), std::end(audioLevelsRxRMS), 0);
 
-    qInfo(logUdp()) << "Starting UdpHandler user:" << username << " client:" << compName
-                    << " rx latency:" << rxSetup.latency << " tx latency:" << txSetup.latency
-                    << " rx sample rate: " << rxSetup.sampleRate << " rx codec: " << rxSetup.codec
-                    << " tx sample rate: " << txSetup.sampleRate << " tx codec: " << txSetup.codec;
+    qInfo(logUdp()).noquote().nospace() << "Starting UdpHandler user=" << username << " client=" << compName
+                                        << " rxLatency=" << rxSetup.latency << " txLatency=" << txSetup.latency
+                                        << " rxSampleRate=" << rxSetup.sampleRate << " rxCodec=" << rxSetup.codec
+                                        << " txSampleRate=" << txSetup.sampleRate << " txCodec=" << txSetup.codec;
 
     // Use numeric IPv4 addresses only here. Synchronous DNS lookup can stall
     // connection setup; if hostname support is needed later, resolve it before
@@ -121,18 +121,24 @@ void UdpHandler::init()
     areYouThereTimer = new QTimer(this);
     pingTimer = new QTimer(this);
     idleTimer = new QTimer(this);
+    watchdogTimer = new QTimer(this);
 
     connect(tokenTimer, &QTimer::timeout, this, std::bind(&UdpHandler::sendToken, this, 0x05));
     connect(areYouThereTimer, &QTimer::timeout, this, &UdpHandler::sendAreYouThere);
     connect(pingTimer, &QTimer::timeout, this, &UdpBase::sendPing);
     connect(idleTimer, &QTimer::timeout, this, std::bind(&UdpBase::sendControl, this, true, 0, 0));
+    connect(watchdogTimer, &QTimer::timeout, this, &UdpHandler::monitorSessionHealth);
 
     // Probe until the IC-9700 replies with "I am here".
     areYouThereTimer->start(AREYOUTHERE_PERIOD);
+    watchdogTimer->start(WATCHDOG_PERIOD);
 }
 
 void UdpHandler::shutdown()
 {
+    QElapsedTimer shutdownTimer;
+    shutdownTimer.start();
+    const bool hadRadioSession = isAuthenticated || gotAuthOK || token != 0;
     qDebug(logUdp()) << "[SHUTDOWN] UdpHandler::shutdown() enter";
 
     // Stop all timers before deleting the UDP socket. Any timer that fires
@@ -166,12 +172,23 @@ void UdpHandler::shutdown()
 
     m_shuttingDown = true;
     m_disconnectStatusReceived = false;
+    m_tokenRemovalAcknowledged = false;
 
-    // Stream ownership and authentication are independent. Authentication can
-    // succeed before stream negotiation, and token renewal can fail while stream
-    // objects still exist, so neither cleanup operation may depend on the other.
+    qInfo(logUdp()).nospace() << "[SHUTDOWN] stage=stream-close elapsedMs=" << shutdownTimer.elapsed();
+    beginStreamShutdown();
+    waitForStreamShutdownSettle(500);
+
+    qInfo(logUdp()).nospace() << "[SHUTDOWN] stage=token-removal elapsedMs=" << shutdownTimer.elapsed();
+    const bool radioConfirmed = releaseAuthenticationToken(true);
+
+    // UdpBase normally sends this from its destructor. The staged shutdown
+    // closes the control socket earlier, so send the control-port departure
+    // explicitly after the radio has acknowledged token removal.
+    qInfo(logUdp()).nospace() << "[SHUTDOWN] stage=control-departure elapsedMs=" << shutdownTimer.elapsed();
+    sendDeparture();
+
+    qInfo(logUdp()).nospace() << "[SHUTDOWN] stage=local-stream-cleanup elapsedMs=" << shutdownTimer.elapsed();
     closeStreams();
-    releaseAuthenticationToken(true);
 
     if (civPortReservation)
     {
@@ -200,7 +217,10 @@ void UdpHandler::shutdown()
     passwordEncoded.clear();
     m_shuttingDown = false;
 
-    qDebug(logUdp()) << "[SHUTDOWN] UdpHandler::shutdown() complete";
+    qInfo(logUdp()).nospace() << "[SHUTDOWN] complete elapsedMs=" << shutdownTimer.elapsed()
+                              << " hadRadioSession=" << hadRadioSession << " radioConfirmed=" << radioConfirmed
+                              << " tokenAcknowledged=" << m_tokenRemovalAcknowledged
+                              << " disconnectStatusReceived=" << m_disconnectStatusReceived;
     emit shutdownFinished();
 }
 
@@ -233,38 +253,159 @@ void UdpHandler::closeStreams()
     }
     if (audio != nullptr)
     {
-        qDebug(logUdp()) << "[SHUTDOWN] deleting audio ...";
+        qDebug(logUdp()) << "[SHUTDOWN] deleting audio";
         delete audio;
         audio = nullptr;
         qDebug(logUdp()) << "[SHUTDOWN] audio deleted";
     }
     if (civ != nullptr)
     {
-        qDebug(logUdp()) << "[SHUTDOWN] deleting civ ...";
+        qDebug(logUdp()) << "[SHUTDOWN] deleting civ";
         delete civ;
         civ = nullptr;
         qDebug(logUdp()) << "[SHUTDOWN] civ deleted";
     }
     streamOpened = false;
+    m_civStreamReady = false;
+    m_healthFailureReported = false;
+    m_audioSilenceReported = false;
+    m_sessionWatchdog.reset();
 }
 
-void UdpHandler::releaseAuthenticationToken(bool waitForAcknowledgement)
+void UdpHandler::beginStreamShutdown()
 {
-    if (udp == nullptr || (!isAuthenticated && !gotAuthOK && token == 0))
+    if (civ != nullptr)
+    {
+        qInfo(logUdp()) << "[SHUTDOWN] sending CI-V stream close";
+        civ->closeStream();
+        civ->sendDeparture();
+    }
+    if (audio != nullptr)
+    {
+        qInfo(logUdp()) << "[SHUTDOWN] sending audio stream departure";
+        audio->sendDeparture();
+    }
+}
+
+void UdpHandler::waitForStreamShutdownSettle(int timeoutMs)
+{
+    if (udp == nullptr || timeoutMs <= 0)
     {
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < timeoutMs)
+    {
+        const int remaining = timeoutMs - static_cast<int>(timer.elapsed());
+        if (udp->waitForReadyRead(qMin(50, remaining)))
+        {
+            dataReceived();
+        }
+    }
+    qInfo(logUdp()).nospace() << "[SHUTDOWN] stream-close settle complete elapsedMs=" << timer.elapsed();
+}
+
+void UdpHandler::monitorSessionHealth()
+{
+    if (m_shuttingDown || !streamOpened || !m_civStreamReady || civ == nullptr || m_healthFailureReported)
+    {
+        return;
+    }
+
+    const qint64 controlSilenceMs = lastPacketAgeMs();
+    const qint64 civSilenceMs = civ->lastPacketAgeMs();
+    const qint64 audioSilenceMs = audio != nullptr ? audio->lastPacketAgeMs() : 0;
+
+    if (RadioSessionWatchdog::isHealthy(controlSilenceMs, civSilenceMs))
+    {
+        emit sessionHeartbeat();
+    }
+
+    if (audio != nullptr && audioSilenceMs >= RadioSessionWatchdog::kAudioSilenceDiagnosticMs)
+    {
+        if (!m_audioSilenceReported)
+        {
+            qWarning(logUdp()) << "Session watchdog: no audio packets for" << audioSilenceMs
+                               << "ms; control and CI-V health will determine recovery";
+            m_audioSilenceReported = true;
+        }
+    }
+    else if (m_audioSilenceReported)
+    {
+        qInfo(logUdp()) << "Session watchdog: audio packet flow resumed";
+        m_audioSilenceReported = false;
+    }
+
+    const RadioSessionWatchdog::Action action = m_sessionWatchdog.evaluate(controlSilenceMs, civSilenceMs);
+    if (action == RadioSessionWatchdog::Action::RestartCiv)
+    {
+        qWarning(logUdp()) << "Session watchdog: no CI-V data for" << civSilenceMs << "ms; restart attempt"
+                           << m_sessionWatchdog.civRecoveryAttempts() << "of"
+                           << RadioSessionWatchdog::kMaxCivRecoveryAttempts;
+        civ->requestDataRestart();
+        return;
+    }
+    if (action == RadioSessionWatchdog::Action::Disconnect)
+    {
+        m_healthFailureReported = true;
+        qCritical(logUdp()).nospace() << "Session watchdog: radio communication stalled controlSilenceMs="
+                                      << controlSilenceMs << " civSilenceMs=" << civSilenceMs
+                                      << " audioSilenceMs=" << audioSilenceMs;
+        emit haveNetworkError(errorType(false, radioIP.toString(), "Radio communication stalled; reconnecting.",
+                                        ErrorCode::Disconnected));
+    }
+}
+
+bool UdpHandler::releaseAuthenticationToken(bool waitForAcknowledgement)
+{
+    if (udp == nullptr || (!isAuthenticated && !gotAuthOK && token == 0))
+    {
+        qInfo(logUdp()) << "[SHUTDOWN] no active authentication token to remove";
+        return false;
+    }
+
     qInfo(logUdp()) << "Sending token removal packet";
     m_disconnectStatusReceived = false;
-    sendToken(0x01);
-    if (waitForAcknowledgement)
+    if (!waitForAcknowledgement)
     {
-        waitForDisconnectStatus(500);
+        sendToken(0x01);
+    }
+    else
+    {
+        constexpr int kDisconnectRetryIntervalMs = 500;
+        constexpr int kDisconnectMaxAttempts = 8;
+
+        for (int attempt = 1;
+             attempt <= kDisconnectMaxAttempts && !m_tokenRemovalAcknowledged && !m_disconnectStatusReceived; ++attempt)
+        {
+            qInfo(logUdp()) << "Token removal attempt" << attempt << "of" << kDisconnectMaxAttempts;
+            sendToken(0x01);
+
+            QElapsedTimer attemptTimer;
+            attemptTimer.start();
+            while (!m_tokenRemovalAcknowledged && !m_disconnectStatusReceived &&
+                   attemptTimer.elapsed() < kDisconnectRetryIntervalMs)
+            {
+                const int remaining = kDisconnectRetryIntervalMs - static_cast<int>(attemptTimer.elapsed());
+                if (udp->waitForReadyRead(qMin(50, remaining)))
+                {
+                    dataReceived();
+                }
+            }
+        }
+
+        if (!m_tokenRemovalAcknowledged && !m_disconnectStatusReceived)
+        {
+            qWarning(logUdp()) << "Radio did not acknowledge token removal after" << kDisconnectMaxAttempts
+                               << "attempts; completing local disconnect";
+        }
     }
     isAuthenticated = false;
     gotAuthOK = false;
     token = 0;
+    return m_tokenRemovalAcknowledged || m_disconnectStatusReceived;
 }
 
 bool UdpHandler::reserveStreamPorts()
@@ -376,13 +517,14 @@ void UdpHandler::receiveDataFromUserToRadio(QByteArray data)
 {
     if (civ != nullptr)
     {
-        qDebug(logUdp()) << "receiveDataFromUserToRadio: civ non-null, civPort=" << civPort
-                         << "data=" << data.toHex(' ');
+        qDebug(logUdp()).noquote().nospace()
+            << "CI-V TX civPort=" << civPort << " data=" << QString::fromLatin1(data.toHex(' '));
         civ->send(data);
     }
     else
     {
-        qDebug(logUdp()) << "receiveDataFromUserToRadio: civ IS NULL, dropping data=" << data.toHex(' ');
+        qDebug(logUdp()).noquote().nospace()
+            << "CI-V TX dropped: stream unavailable data=" << QString::fromLatin1(data.toHex(' '));
     }
 }
 
@@ -479,8 +621,9 @@ void UdpHandler::dataReceived()
             const control_packet* in = &*decoded;
             if (in->type == 0x04)
             {
-                qInfo(logUdp()) << this->metaObject()->className()
-                                << ": Received I am here from: " << datagram.senderAddress().toString();
+                qInfo(logUdp()).noquote().nospace()
+                    << this->metaObject()->className() << ": received I am here from "
+                    << datagram.senderAddress().toString() << ':' << datagram.senderPort();
 
                 if (areYouThereTimer->isActive())
                 {
@@ -586,9 +729,9 @@ void UdpHandler::dataReceived()
             }
             else if (in->requesttype == 0x01 && in->requestreply == 0x02 && in->type != 0x01)
             {
-                m_disconnectStatusReceived = true;
-                qInfo(logUdp()) << this->metaObject()->className()
-                                << ": Token removal acknowledged, response=" << Qt::hex << in->response;
+                m_tokenRemovalAcknowledged = true;
+                qInfo(logUdp()).nospace() << this->metaObject()->className()
+                                          << ": token removal acknowledged response=0x" << Qt::hex << in->response;
             }
             break;
         }
@@ -622,14 +765,15 @@ void UdpHandler::dataReceived()
                 {
                     civPort = qFromBigEndian(in->civport);
                     audioPort = qFromBigEndian(in->audioport);
-                    qInfo(logUdp()) << "Connection: error="
-                                    << QString("0x%1").arg(qFromBigEndian(in->error), 8, 16, QChar('0'))
-                                    << "disc=" << quint8(in->disc) << "civPort=" << civPort << "audioPort=" << audioPort
-                                    << "rx codec=" << rxSetup.codec << "tx codec=" << txSetup.codec;
+                    qInfo(logUdp()).noquote().nospace()
+                        << "Connection error=" << QString("0x%1").arg(qFromBigEndian(in->error), 8, 16, QChar('0'))
+                        << " disconnected=" << quint8(in->disc) << " civPort=" << civPort << " audioPort=" << audioPort
+                        << " rxCodec=" << rxSetup.codec << " txCodec=" << txSetup.codec;
                     if (civPort == 0 || audioPort == 0)
                     {
-                        qWarning(logUdp()) << "Radio returned invalid stream ports; refusing to open CIV/audio streams"
-                                           << "civPort=" << civPort << "audioPort=" << audioPort;
+                        qWarning(logUdp()).nospace()
+                            << "Radio returned invalid stream ports; refusing to open CI-V/audio streams civPort="
+                            << civPort << " audioPort=" << audioPort;
                         emit haveNetworkError(errorType(true, radioIP.toString(),
                                                         "Connection failed: radio returned invalid UDP stream ports.",
                                                         ErrorCode::ConnectionFailed));
@@ -674,6 +818,9 @@ void UdpHandler::dataReceived()
                                          [this]()
                                          {
                                              qInfo(logUdp()) << "CI-V stream ready";
+                                             m_civStreamReady = true;
+                                             m_healthFailureReported = false;
+                                             m_sessionWatchdog.reset();
                                              emit streamReady();
                                          });
                         streamOpened = true;
@@ -711,8 +858,8 @@ void UdpHandler::dataReceived()
                         QObject::connect(audio, &UdpAudio::haveTxLevels, this, &UdpHandler::getTxLevels);
                     }
 
-                    qInfo(logUdp()) << this->metaObject()->className()
-                                    << "Got serial and audio request success, device name: " << devName;
+                    qInfo(logUdp()).noquote().nospace()
+                        << this->metaObject()->className() << ": stream request accepted device=" << devName;
                 }
             }
             break;
@@ -725,7 +872,7 @@ void UdpHandler::dataReceived()
             {
 
                 m_connectionType = in->connection;
-                qInfo(logUdp()) << "Got connection type:" << m_connectionType;
+                qInfo(logUdp()).noquote().nospace() << "Connection type=" << m_connectionType;
                 // IC-9700 accepts mono LPCM16 for LAN audio; Qt audio handlers
                 // convert to/from the local device channel layout.
                 static constexpr quint8 kLpcmMono16 = 0x04;
@@ -761,7 +908,7 @@ void UdpHandler::dataReceived()
                     {
                         qInfo(logUdp()) << this->metaObject()->className() << ": Received matching token response";
                         networkStatus loginStatus = status;
-                        loginStatus.message = QStringLiteral("Radio login accepted. Negotiating stream access...");
+                        loginStatus.message = QStringLiteral("Radio login accepted. Negotiating stream access");
                         loginStatus.userVisibleMessage = true;
                         loginStatus.connectionStage = ConnectionStage::OpeningStreams;
                         emit haveNetworkStatus(loginStatus);
@@ -790,8 +937,9 @@ void UdpHandler::dataReceived()
             const conninfo_packet* in = &*decoded;
             QHostAddress ip = QHostAddress(qToBigEndian(in->ipaddress));
 
-            qInfo(logUdp()) << "Got Connection status for:" << in->name << "Busy:" << in->busy << "Computer"
-                            << in->computer << "IP" << ip.toString();
+            qInfo(logUdp()).noquote().nospace()
+                << "Connection status name=" << boundedLatin1(in->name, sizeof(in->name)) << " busy=" << in->busy
+                << " computer=" << boundedLatin1(in->computer, sizeof(in->computer)) << " ipAddress=" << ip.toString();
 
             // Match the status packet to a previously advertised radio.
             for (qsizetype f = 0; f < radios.size(); ++f)
@@ -810,12 +958,13 @@ void UdpHandler::dataReceived()
                         admin = true;
                     }
 
-                    qDebug(logUdp()) << "Is the user an admin? " << admin;
+                    qDebug(logUdp()).nospace() << "Radio user admin=" << admin;
                     emit setRadioUsage(static_cast<quint8>(f), admin, in->busy,
                                        boundedLatin1(in->computer, sizeof(in->computer)), ip.toString());
-                    qDebug(logUdp()) << "Set radio usage num:" << f << boundedLatin1(in->name, sizeof(in->name))
-                                     << "Busy:" << in->busy << "Computer"
-                                     << boundedLatin1(in->computer, sizeof(in->computer)) << "IP" << ip.toString();
+                    qDebug(logUdp()).noquote().nospace()
+                        << "Radio usage index=" << f << " name=" << boundedLatin1(in->name, sizeof(in->name))
+                        << " busy=" << in->busy << " computer=" << boundedLatin1(in->computer, sizeof(in->computer))
+                        << " ipAddress=" << ip.toString();
                 }
             }
 
@@ -1112,10 +1261,10 @@ void UdpHandler::sendRequestStream()
     p.audioport = qToBigEndian((quint32)audioLocalPort);
     p.convert = 1;
     QByteArray request = encodePacket(p);
-    qInfo(logUdp()) << "Requesting stream: rx codec=" << quint8(p.rxcodec) << "rx sample=" << qFromBigEndian(p.rxsample)
-                    << "tx enabled=" << quint8(p.txenable) << "tx codec=" << quint8(p.txcodec)
-                    << "tx sample=" << qFromBigEndian(p.txsample) << "civ local port=" << civLocalPort
-                    << "audio local port=" << audioLocalPort;
+    qInfo(logUdp()).nospace() << "Requesting stream: rxCodec=" << quint8(p.rxcodec)
+                              << " rxSampleRate=" << qFromBigEndian(p.rxsample) << " txEnabled=" << quint8(p.txenable)
+                              << " txCodec=" << quint8(p.txcodec) << " txSampleRate=" << qFromBigEndian(p.txsample)
+                              << " civLocalPort=" << civLocalPort << " audioLocalPort=" << audioLocalPort;
     sendTrackedPacket(request);
     return;
 }
@@ -1135,7 +1284,7 @@ void UdpHandler::sendAreYouThere()
         areYouThereTimer->stop();
         return;
     }
-    qInfo(logUdp()) << this->metaObject()->className() << ": Sending Are You There...";
+    qInfo(logUdp()) << this->metaObject()->className() << ": Sending Are You There";
 
     areYouThereCounter++;
     UdpBase::sendControl(false, 0x03, 0x00);
@@ -1184,28 +1333,4 @@ void UdpHandler::sendToken(uint8_t magic)
 
     sendTrackedPacket(encodePacket(p));
     return;
-}
-
-void UdpHandler::waitForDisconnectStatus(int timeoutMs)
-{
-    if (!udp)
-    {
-        return;
-    }
-
-    QElapsedTimer timer;
-    timer.start();
-    while (!m_disconnectStatusReceived && timer.elapsed() < timeoutMs)
-    {
-        if (!udp->waitForReadyRead(qMin(50, timeoutMs - static_cast<int>(timer.elapsed()))))
-        {
-            continue;
-        }
-        dataReceived();
-    }
-
-    if (!m_disconnectStatusReceived)
-    {
-        qWarning(logUdp()) << "Timed out waiting for radio disconnect acknowledgement after token removal";
-    }
 }

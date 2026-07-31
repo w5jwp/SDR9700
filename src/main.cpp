@@ -15,6 +15,9 @@
 #include <QSocketNotifier>
 #include <QSet>
 #include <QTimer>
+#if defined(Q_OS_MAC) && QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+#include <QPermissions>
+#endif
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -31,6 +34,7 @@
 #include "CachingQueue.h"
 #include "ApplicationLog.h"
 #include "LoggingConfiguration.h"
+#include "LogCategories.h"
 #if defined(Q_OS_MAC)
 #include "platform/MacWindowRestoration.h"
 #endif
@@ -48,6 +52,35 @@ QByteArray logFileBuffer;
 bool consoleLogEnabled{false};
 bool allConsoleCategoriesEnabled{false};
 QSet<QString> consoleLogCategories;
+
+void requestMacMicrophonePermission(QObject* context)
+{
+#if defined(Q_OS_MAC) && QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    if (!context)
+    {
+        return;
+    }
+
+    QMicrophonePermission permission;
+    const Qt::PermissionStatus status = qApp->checkPermission(permission);
+    const char* statusText = status == Qt::PermissionStatus::Granted  ? "granted"
+                             : status == Qt::PermissionStatus::Denied ? "denied"
+                                                                      : "undetermined";
+    qInfo(logSystem()).noquote().nospace() << "Microphone permission status=" << statusText;
+    if (status == Qt::PermissionStatus::Undetermined)
+    {
+        qApp->requestPermission(permission, context,
+                                [](const QPermission& result)
+                                {
+                                    qInfo(logSystem())
+                                        << "Microphone permission"
+                                        << (result.status() == Qt::PermissionStatus::Granted ? "granted" : "denied");
+                                });
+    }
+#else
+    Q_UNUSED(context)
+#endif
+}
 
 void flushLogOutput()
 {
@@ -432,6 +465,7 @@ int main(int argc, char* argv[])
             });
     }
     window->show();
+    QTimer::singleShot(0, window.get(), [context = window.get()]() { requestMacMicrophonePermission(context); });
 
     const int exitCode = app.exec();
 

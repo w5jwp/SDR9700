@@ -17,8 +17,6 @@ namespace
 constexpr int kMinSpectrumHeight = 150;
 constexpr int kMinWaterfallHeight = 180;
 constexpr int kDefaultSpectrumScopeHeightBias = 0;
-const QColor kScaleBackground(0x06, 0x11, 0x16);
-const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 constexpr int kSpanComboWidth = 94;
 constexpr int kSpanComboHeight = 24;
 constexpr int kSpanComboMargin = 8;
@@ -256,7 +254,7 @@ void SpectrumScopeDisplay::updateChildGeometry()
     const int splitTop = spectrumScopeHeight;
     const int waterfallTop = splitTop + panScrollBarHeight();
     const int waterfallHeight = qMax(0, height() - waterfallTop);
-    const int plotLeft = SpectrumScopeCanvas::levelScalePanelWidth();
+    constexpr int plotLeft = 0;
 
     m_spectrumScopeCanvas->setGeometry(0, 0, width(), spectrumScopeHeight);
     m_panScrollBar->setGeometry(plotLeft, splitTop, qMax(0, width() - plotLeft), panScrollBarHeight());
@@ -271,15 +269,6 @@ void SpectrumScopeDisplay::paintEvent(QPaintEvent* event)
 
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
-
-    if (m_spectrumScopeCanvas && m_panScrollBar)
-    {
-        const QRect scrollbarRect = m_panScrollBar->geometry();
-        const int fillerTop = qMax(0, scrollbarRect.top() - 1);
-        painter.fillRect(0, fillerTop, SpectrumScopeCanvas::levelScalePanelWidth(),
-                         scrollbarRect.bottom() - fillerTop + 1, kScaleBackground);
-        painter.fillRect(0, scrollbarRect.bottom(), SpectrumScopeCanvas::levelScalePanelWidth(), 1, kScaleAccentLine);
-    }
 }
 
 void SpectrumScopeDisplay::setFrequencyRange(double startMhz, double endMhz)

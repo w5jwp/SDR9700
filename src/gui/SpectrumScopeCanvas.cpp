@@ -19,6 +19,7 @@ constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
 constexpr int kClickMoveTolerancePx = 6;
 constexpr int kLevelScaleTopInsetPx = 6;
 constexpr int kLevelScaleBottomInsetPx = 9;
+constexpr int kFrequencyLabelHorizontalPaddingPx = 6;
 constexpr int kGridDensityFewer = 0;
 constexpr int kGridDensityMore = 2;
 constexpr double kWheelStepAngleDelta = 120.0;
@@ -102,11 +103,6 @@ int SpectrumScopeCanvas::spectrumPaneHeight() const
     return plotHeight();
 }
 
-int SpectrumScopeCanvas::plotLeftX()
-{
-    return levelScalePanelWidth();
-}
-
 int SpectrumScopeCanvas::plotRightX() const
 {
     return qMax(plotLeftX(), width() - 1);
@@ -185,8 +181,7 @@ int SpectrumScopeCanvas::binForDisplayX(int x, int binCount) const
 
 bool SpectrumScopeCanvas::isSpectrumClickArea(const QPoint& pos) const
 {
-    const QRect plotRect(levelScalePanelWidth(), 0, qMax(0, width() - levelScalePanelWidth()),
-                         qMax(0, plotHeight() - 1));
+    const QRect plotRect(plotLeftX(), 0, qMax(0, width() - plotLeftX()), qMax(0, plotHeight() - 1));
     return plotRect.contains(pos);
 }
 
@@ -233,7 +228,6 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
 
     static const QColor kBgScale(0x06, 0x11, 0x16);
     static const QColor kGridText(0xc6, 0xe0, 0xe8);
-    static const QColor kScalePanelBorder(0x52, 0x8f, 0x9e, 120);
     static const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 
     const int specH = plotHeight();
@@ -274,7 +268,7 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
             {
                 const float level = float(i) * step;
                 const int y = levelToY(level, specTop, specDrawH);
-                painter->drawLine(levelScalePanelWidth(), y, w, y);
+                painter->drawLine(plotLeftX(), y, w, y);
             }
         };
 
@@ -308,8 +302,8 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
         const double minorTickStep = tickStep / frequencyMinorDivisions;
         auto drawMhzLines = [&](double step)
         {
-            const qint64 firstStep = qint64(std::ceil(scaleStartMhz / step));
-            const qint64 lastStep = qint64(std::floor(scaleEndMhz / step));
+            const qint64 firstStep = qint64(std::ceil(scaleStartMhz / step - 1e-9));
+            const qint64 lastStep = qint64(std::floor(scaleEndMhz / step + 1e-9));
             for (qint64 i = firstStep; i <= lastStep; ++i)
             {
                 const double mhz = double(i) * step;
@@ -326,37 +320,9 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
     }
 
     {
-        painter->fillRect(0, specTop, levelScalePanelWidth(), qMax(0, specH - specTop), kBgScale);
-        painter->fillRect(0, specH - 1, levelScalePanelWidth(), scaleHeight(), kBgScale);
-        painter->setPen(kScalePanelBorder);
-        painter->drawLine(levelScalePanelWidth() - 1, specTop, levelScalePanelWidth() - 1, qMax(specTop, specH - 1));
-
-        QFont f = painter->font();
-        f.setPointSize(8);
-        painter->setFont(f);
-        painter->setPen(kGridText);
-        const QFontMetrics fontMetrics(f);
-
-        const float range = m_maxLevel - m_minLevel;
-        const float levelStep = range > 100.0f ? 20.0f : 10.0f;
-        for (float level = std::ceil(m_minLevel / levelStep) * levelStep; level <= m_maxLevel; level += levelStep)
-        {
-            const int y = levelToY(level, specTop, specDrawH);
-            const int labelH = fontMetrics.height();
-            const int labelY = y <= specTop ? specTop : y - labelH / 2;
-            const QRect labelRect(1, labelY, levelScalePanelWidth() - 4, labelH);
-            if (labelRect.intersects(QRect(0, specTop, levelScalePanelWidth(), specH + scaleHeight())))
-            {
-                const int relativeLevel = int(std::lround(level - m_maxLevel));
-                painter->drawText(labelRect, Qt::AlignRight | Qt::AlignVCenter, QString("%1").arg(relativeLevel));
-            }
-        }
-    }
-
-    {
         const int scaleY = specH - 1;
         painter->fillRect(0, scaleY, w, scaleHeight(), kBgScale);
-        painter->fillRect(levelScalePanelWidth(), scaleY, qMax(0, w - levelScalePanelWidth()), 1, kScaleAccentLine);
+        painter->fillRect(plotLeftX(), scaleY, qMax(0, w - plotLeftX()), 1, kScaleAccentLine);
         painter->setPen(kGridText);
 
         QFont f = painter->font();
@@ -387,14 +353,17 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
         const int tickTop = scaleY + 2;
         const int tickH = 6;
         const int textY = scaleY + 21;
-        const double first = std::ceil(scaleStartMhz / tickStep) * tickStep;
-        for (double mhz = first; mhz <= scaleEndMhz; mhz += tickStep)
+        const qint64 firstStep = qint64(std::ceil(scaleStartMhz / tickStep - 1e-9));
+        const qint64 lastStep = qint64(std::floor(scaleEndMhz / tickStep + 1e-9));
+        for (qint64 i = firstStep; i <= lastStep; ++i)
         {
+            const double mhz = double(i) * tickStep;
             const int x = freqToX(mhz);
             const QString label = QString::number(mhz, 'f', decimals);
             const int labelW = fontMetrics.horizontalAdvance(label);
-            const int labelX =
-                qBound(levelScalePanelWidth() + 2, x - labelW / 2, qMax(levelScalePanelWidth() + 2, w - labelW - 2));
+            const int labelX = qBound(plotLeftX() + kFrequencyLabelHorizontalPaddingPx, x - labelW / 2,
+                                      qMax(plotLeftX() + kFrequencyLabelHorizontalPaddingPx,
+                                           w - labelW - kFrequencyLabelHorizontalPaddingPx));
             painter->setPen(QPen(kGridText, 1));
             painter->drawLine(x, tickTop, x, tickTop + tickH);
             painter->setPen(kGridText);
@@ -623,8 +592,7 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     const int w = width();
     const int specTop = 0;
     const int specDrawH = specH;
-    const QRect spectrumPlotRect(levelScalePanelWidth(), specTop, qMax(0, w - levelScalePanelWidth()),
-                                 qMax(0, specDrawH - 1));
+    const QRect spectrumPlotRect(plotLeftX(), specTop, qMax(0, w - plotLeftX()), qMax(0, specDrawH - 1));
     p.drawPixmap(0, 0, m_staticLayer);
 
     if (m_spectrumBins.isEmpty())
@@ -646,7 +614,7 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
         QPainterPath specPath, peakPath;
         bool specFirst = true, peakFirst = true;
 
-        for (int x = levelScalePanelWidth(); x < w; ++x)
+        for (int x = plotLeftX(); x < w; ++x)
         {
             const int bin = (x >= 0 && x < m_displayBins.size()) ? m_displayBins[x] : -1;
             const float level = bin >= 0 ? m_spectrumBins[bin] : m_minLevel;
@@ -679,7 +647,7 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
 
         QPainterPath fillPath(specPath);
         fillPath.lineTo(w, specH);
-        fillPath.lineTo(levelScalePanelWidth(), specH);
+        fillPath.lineTo(plotLeftX(), specH);
         fillPath.closeSubpath();
 
         QLinearGradient fillGrad(0, specTop, 0, specH);
@@ -804,10 +772,11 @@ void SpectrumScopeCanvas::wheelEvent(QWheelEvent* ev)
     }
 
     m_wheelStepAccumulator -= acceptedSteps;
-    qDebug(logSpectrumScope()) << "Spectrum Scope wheel"
-                               << "angle=" << angle << "pixel=" << ev->pixelDelta() << "qtInverted=" << ev->inverted()
-                               << "physicalSteps=" << physicalSteps << "reversePref=" << m_invertMouseWheel
-                               << "acceptedSteps=" << acceptedSteps << "accumulator=" << m_wheelStepAccumulator;
+    qDebug(logSpectrumScope()).nospace() << "Spectrum scope wheel angle=" << angle << " pixel=" << ev->pixelDelta()
+                                         << " qtInverted=" << ev->inverted() << " physicalSteps=" << physicalSteps
+                                         << " reversePreference=" << m_invertMouseWheel
+                                         << " acceptedSteps=" << acceptedSteps
+                                         << " accumulator=" << m_wheelStepAccumulator;
 
     Q_EMIT wheelStepRequested(acceptedSteps);
     ev->accept();

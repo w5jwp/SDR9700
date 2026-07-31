@@ -116,6 +116,7 @@ class IRadioBackend : public QObject
     void spectrumDataReady(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange);
 
     void networkQualityChanged(int rttMs);
+    void sessionHeartbeat();
 
     void txAudioLevelChanged(int peak, int rms);
 

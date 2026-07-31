@@ -13,6 +13,7 @@
 #include <QSlider>
 #include <QStyleOption>
 #include <QToolButton>
+#include <QTimer>
 #include <QWindow>
 #include <memory>
 
@@ -59,7 +60,15 @@ constexpr int kVolumeLabelWidth = 30;
 constexpr int kTxDurationWidth = 62;
 constexpr int kTitleControlSpacing = 8;
 constexpr int kVolumeValueSpacing = 2;
+constexpr int kHeartbeatIndicatorWidth = 10;
+constexpr int kHeartbeatIndicatorSpacing = 12;
+constexpr int kHeartbeatLitDurationMs = 100;
 constexpr QMargins kNoMargins(0, 0, 0, 0);
+
+QString heartbeatStyle(const char* color)
+{
+    return QStringLiteral("QLabel { background: %1; border-radius: 5px; }").arg(QString::fromLatin1(color));
+}
 
 QString menuButtonStyle()
 {
@@ -143,6 +152,21 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     m_titleLabel->setTextFormat(Qt::RichText);
     m_titleLabel->setStyleSheet(QStringLiteral("QLabel { background: transparent; }"));
     root->addWidget(m_titleLabel);
+
+    root->addSpacing(kHeartbeatIndicatorSpacing);
+    m_heartbeatIndicator = new QLabel(this);
+    m_heartbeatIndicator->setObjectName(QStringLiteral("radioHeartbeatIndicator"));
+    m_heartbeatIndicator->setFixedSize(kHeartbeatIndicatorWidth, kHeartbeatIndicatorWidth);
+    m_heartbeatIndicator->setAlignment(Qt::AlignCenter);
+    m_heartbeatIndicator->setStyleSheet(heartbeatStyle(UiTheme::Color::TextStatusLabel));
+    m_heartbeatIndicator->setToolTip(QStringLiteral("Radio communication heartbeat"));
+    m_heartbeatIndicator->setAccessibleName(QStringLiteral("Radio communication heartbeat"));
+    root->addWidget(m_heartbeatIndicator);
+
+    m_heartbeatFadeTimer = new QTimer(this);
+    m_heartbeatFadeTimer->setSingleShot(true);
+    m_heartbeatFadeTimer->setInterval(kHeartbeatLitDurationMs);
+    connect(m_heartbeatFadeTimer, &QTimer::timeout, this, &MainTitleBar::clearRadioHeartbeat);
 
     root->addStretch(1);
 
@@ -372,6 +396,28 @@ void MainTitleBar::setTxDurationActive(bool transmitting)
     if (m_txDurationButton)
     {
         m_txDurationButton->setStyleSheet(txDurationStyle(transmitting));
+    }
+}
+
+void MainTitleBar::pulseRadioHeartbeat()
+{
+    if (!m_heartbeatIndicator || !m_heartbeatFadeTimer)
+    {
+        return;
+    }
+    m_heartbeatIndicator->setStyleSheet(heartbeatStyle(UiTheme::Color::Success));
+    m_heartbeatFadeTimer->start();
+}
+
+void MainTitleBar::clearRadioHeartbeat()
+{
+    if (m_heartbeatFadeTimer)
+    {
+        m_heartbeatFadeTimer->stop();
+    }
+    if (m_heartbeatIndicator)
+    {
+        m_heartbeatIndicator->setStyleSheet(heartbeatStyle(UiTheme::Color::TextStatusLabel));
     }
 }
 

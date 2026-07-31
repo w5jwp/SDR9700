@@ -28,6 +28,7 @@
 #include "AppSettings.h"
 #include "LogCategories.h"
 #include "RadioCapabilities.h"
+#include "SMeterScale.h"
 #include "backend/IRadioBackend.h"
 #ifdef HAVE_HIDAPI
 #include "IcomRC28Controller.h"
@@ -144,6 +145,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     connect(m_model, &RadioModel::statusMessage, this, &MainWindow::onStatusMessage);
     connect(m_model, &RadioModel::errorOccurred, this, &MainWindow::onError);
     connect(m_model, &RadioModel::networkQualityChanged, this, &MainWindow::updateNetworkQuality);
+    connect(m_model, &RadioModel::sessionHeartbeat, m_titleBar, &MainTitleBar::pulseRadioHeartbeat);
     connect(m_memoryController, &MemoryController::initialMemorySyncChanged, this,
             [this](bool) { onRadioReadyChanged(m_model && m_model->isReady()); });
 
@@ -1073,6 +1075,15 @@ void MainWindow::closeEvent(QCloseEvent* event)
     }
     m_shutdownStarted = true;
 
+    // Stop receive playback before hiding the window or beginning any other
+    // shutdown work. This is a bounded synchronous handoff so queued audio
+    // already held by the output worker cannot remain audible after the UI
+    // disappears.
+    if (m_model)
+    {
+        m_model->stopLocalAudio();
+    }
+
     saveWindowLayout();
 #ifdef HAVE_HIDAPI
     if (m_icomRC28Controller)
@@ -1105,9 +1116,6 @@ void MainWindow::closeEvent(QCloseEvent* event)
                        {
                            if (m_model)
                            {
-                               // Silence local playback before the orderly radio disconnect. This
-                               // does not close UDP streams or release the authentication token.
-                               m_model->stopLocalAudio();
                                m_model->disconnectFromRadio();
                            }
                            // Re-enter closeEvent only after the originating native event and
@@ -1853,7 +1861,7 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
         }
         else if (m_meterSnapshot.sMeterValid)
         {
-            m_vfoPanel->setSMeterValue(qBound(0, static_cast<int>(m_meterSnapshot.sMeter * 100 / 255), 100));
+            m_vfoPanel->setSMeterValue(sdr9700::sMeterDisplayPercent(m_meterSnapshot.sMeter));
         }
     }
 
@@ -1887,6 +1895,11 @@ void MainWindow::updateNetworkQuality(int rttMs)
 
 void MainWindow::onConnectionStageChanged(ConnectionStage stage, const QString& message)
 {
+    if (m_titleBar && (stage == ConnectionStage::Disconnected || stage == ConnectionStage::Disconnecting ||
+                       stage == ConnectionStage::Failed))
+    {
+        m_titleBar->clearRadioHeartbeat();
+    }
     const char* color = UiTheme::Color::TextStatusLabel;
     switch (stage)
     {

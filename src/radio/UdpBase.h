@@ -94,6 +94,7 @@ class UdpBase : public QObject
     void sendRetransmitRange(quint16 first, quint16 second, quint16 third, quint16 fourth);
 
     void sendControl(bool tracked, quint8 type, quint16 seq);
+    void sendDeparture();
 
     void printHex(const QByteArray& pdata);
     void printHex(const QByteArray& pdata, bool printVert, bool printHoriz);
@@ -101,6 +102,7 @@ class UdpBase : public QObject
     qint64 getTimeDifference() const { return pingLatenessMs; }
     quint32 packetsSentCount() const { return packetsSent; }
     quint32 packetsLostCount() const { return packetsLost; }
+    qint64 lastPacketAgeMs() const { return msSinceLastReceived(); }
 
   protected:
     QUdpSocket* udp = nullptr;
@@ -121,6 +123,7 @@ class UdpBase : public QObject
     quint16 port = 0;
     bool periodicRunning = false;
     bool sentPacketConnect2 = false;
+    bool departureSent = false;
     qint64 lastReceivedMs = 0; // Monotonic timestamp from mono; safe across wall-clock midnight.
     // udpMutex and txBufferMutex are never nested. Receive bookkeeping may
     // acquire rxBufferMutex followed by missingMutex, never the reverse.

@@ -45,9 +45,6 @@ UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint
     // frequency and mode. areYouThereTimer (below) keeps the audio stream
     // alive during the sync window.
 
-    watchdogTimer = new QTimer(this);
-    connect(watchdogTimer, &QTimer::timeout, this, &UdpAudio::watchdog);
-    watchdogTimer->start(WATCHDOG_PERIOD);
 
     areYouThereTimer = new QTimer(this);
     connect(areYouThereTimer, &QTimer::timeout, this, std::bind(&UdpBase::sendControl, this, false, 0x03, 0));
@@ -77,7 +74,7 @@ void UdpAudio::stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThrea
 {
     if (handler)
     {
-        qDebug(logUdp()) << "[SHUTDOWN]" << name << "handler dispose ...";
+        qDebug(logUdp()) << "[SHUTDOWN]" << name << "handler dispose";
         handler->dispose();
         if (!workerThread)
         {
@@ -112,28 +109,6 @@ void UdpAudio::stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThrea
     delete workerThread;
     workerThread = nullptr;
     qDebug(logUdp()) << "[SHUTDOWN]" << name << "done";
-}
-
-void UdpAudio::watchdog()
-{
-    if (msSinceLastReceived() > 30000)
-    {
-        if (!m_watchdogAlerted)
-        {
-            // Audio watchdog is intentionally conservative: it tears down the
-            // local audio workers and lets the user reconnect instead of
-            // issuing unsolicited recovery traffic on the control channel.
-            qInfo(logUdp()) << " Audio Watchdog: no audio data received for 30s, restart required; last packet was"
-                            << msSinceLastReceived() << "ms ago";
-            m_watchdogAlerted = true;
-            stopAudioWorker(rxaudio, rxAudioThread, "rxAudioThread");
-            stopAudioWorker(txaudio, txAudioThread, "txAudioThread");
-        }
-    }
-    else
-    {
-        m_watchdogAlerted = false;
-    }
 }
 
 void UdpAudio::sendAudioBuffer(const QByteArray& data)
@@ -360,9 +335,10 @@ void UdpAudio::dataReceived()
                 // so reconnects get fresh diagnostics.
                 if (++rxPacketDiagnosticsCount <= 3)
                 {
-                    qDebug(logUdp()) << "RX audio hdr: type=" << Qt::hex << in->type << "len=" << in->len
-                                     << "seq=" << in->seq << "data_len=" << (r.length() - 0x18)
-                                     << "hdr=" << r.left(0x18).toHex(' ');
+                    qDebug(logUdp()).noquote().nospace()
+                        << "RX audio header type=" << Qt::hex << in->type << " len=" << in->len << " seq=" << in->seq
+                        << " dataLen=" << (r.length() - 0x18)
+                        << " header=" << QString::fromLatin1(r.left(0x18).toHex(' '));
                 }
 
                 if (rxAudioThread == nullptr && m_audioReady)

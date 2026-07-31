@@ -61,6 +61,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::spectrumDataReady, this, &RadioModel::onSpectrumDataReady);
     connect(m_backend, &IRadioBackend::pttChanged, this, &RadioModel::onPttChanged);
     connect(m_backend, &IRadioBackend::networkQualityChanged, this, &RadioModel::networkQualityChanged);
+    connect(m_backend, &IRadioBackend::sessionHeartbeat, this, &RadioModel::sessionHeartbeat);
     connect(m_backend, &IRadioBackend::txAudioLevelChanged, m_meterController, &MeterController::setTransmitAudioLevel);
     connect(m_backend, &IRadioBackend::radioMemoryReceived, this, &RadioModel::radioMemoryReceived);
     connect(m_meterController, &MeterController::snapshotChanged, this, &RadioModel::onMeterSnapshotChanged);
@@ -157,8 +158,8 @@ void RadioModel::onBackendError(ErrorCode code, const QString& msg)
 
 void RadioModel::onBackendReadyChanged(bool ready)
 {
-    qInfo(logGui()) << "RadioModel observed backend readyChanged:" << ready << "connected=" << m_connected
-                    << "currentReady=" << m_ready;
+    qInfo(logGui()).nospace() << "RadioModel observed backend readyChanged=" << ready << " connected=" << m_connected
+                              << " currentReady=" << m_ready;
     if (m_ready == ready)
     {
         return;

@@ -41,6 +41,7 @@ class UdpBaseTest : public QObject
     void parsesNullTerminatedPacketText();
     void tracksMissingAndDuplicatePackets();
     void clearsTransmitWindowAtSequenceRollover();
+    void sendsDepartureOnlyOnce();
     void rejectsTruncatedPackets();
 };
 
@@ -136,6 +137,26 @@ void UdpBaseTest::clearsTransmitWindowAtSequenceRollover()
     QCOMPARE(stream.transmittedSequences(), QList<quint16>({0}));
     stream.sendTrackedControl();
     QCOMPARE(stream.transmittedSequences(), QList<quint16>({0, 1}));
+}
+
+void UdpBaseTest::sendsDepartureOnlyOnce()
+{
+    TestUdpBase stream;
+    QUdpSocket peer;
+    QVERIFY(stream.init(0));
+    QVERIFY(peer.bind(QHostAddress::LocalHost, 0));
+    stream.setExpectedPeer(QHostAddress::LocalHost, peer.localPort());
+
+    stream.sendDeparture();
+    stream.sendDeparture();
+
+    QTRY_VERIFY(peer.hasPendingDatagrams());
+    const QNetworkDatagram datagram = peer.receiveDatagram();
+    const auto departure = decodePacket<control_packet>(datagram.data());
+    QVERIFY(departure.has_value());
+    QCOMPARE(departure->type, quint8(0x05));
+    QTest::qWait(20);
+    QVERIFY(!peer.hasPendingDatagrams());
 }
 
 void UdpBaseTest::rejectsTruncatedPackets()

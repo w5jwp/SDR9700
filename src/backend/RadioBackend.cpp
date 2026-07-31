@@ -486,6 +486,14 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                     onNetworkStatus(status);
                 }
             });
+    connect(m_commander, &RadioCommander::haveSessionHeartbeat, this,
+            [this, session, commandSession]()
+            {
+                if (isCurrentSession(session, commandSession))
+                {
+                    emit sessionHeartbeat();
+                }
+            });
     connect(m_commander, &RadioCommander::haveAudioData, this,
             [this, session, commandSession](audioPacket pkt)
             {
@@ -636,6 +644,7 @@ void RadioBackend::disconnectFromRadio()
         m_syncWatchdogTimer->stop();
     }
     emit connectionStageChanged(ConnectionStage::Disconnecting, QStringLiteral("Disconnecting from radio"));
+    stopLocalAudio();
     shutdownConnection();
     m_connectionHost.clear();
     m_connectionPort = 0;
@@ -665,7 +674,27 @@ void RadioBackend::setTxAudioDevice(const QAudioDevice& dev)
 
 void RadioBackend::stopLocalAudio()
 {
-    invokeOnCurrentCommander([](Commander* commander) { commander->stopLocalAudio(); });
+    if (!m_commander || !m_sessionActive || !m_sessionActive->load(std::memory_order_acquire))
+    {
+        return;
+    }
+
+    Commander* commandSession = m_commander;
+    auto stopDone = std::make_shared<QSemaphore>();
+    const bool queued = QMetaObject::invokeMethod(
+        commandSession,
+        [commandSession, stopDone]()
+        {
+            commandSession->stopLocalAudio();
+            stopDone->release();
+        },
+        Qt::QueuedConnection);
+    if (!queued || !stopDone->tryAcquire(1, 3000))
+    {
+        qWarning(logAudio()) << "Timed out waiting for local audio playback to stop";
+        return;
+    }
+    qInfo(logAudio()) << "[SHUTDOWN] local playback stopped";
 }
 
 void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisconnectedStage)
@@ -744,9 +773,9 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
                 closeDone->release();
             },
             Qt::QueuedConnection);
-        if (!queued || !closeDone->tryAcquire(1, 5000))
+        if (!queued || !closeDone->tryAcquire(1, 14000))
         {
-            qWarning(logRadio()) << "[SHUTDOWN] closeComm() did not finish within 5000 ms; continuing disconnect";
+            qWarning(logRadio()) << "[SHUTDOWN] closeComm() did not finish within 14000 ms; continuing disconnect";
         }
     }
     commandSession->deleteLater();
@@ -1468,8 +1497,8 @@ void RadioBackend::requestInitialRadioState()
         return;
     }
 
-    qDebug(logRadio()) << "Retrying initial MAIN VFO state; frequencyReceived=" << m_initialMainFrequencyReceived
-                       << "modeReceived=" << m_initialMainModeReceived;
+    qDebug(logRadio()).nospace() << "Retrying initial MAIN VFO state frequencyReceived="
+                                 << m_initialMainFrequencyReceived << " modeReceived=" << m_initialMainModeReceived;
     requestMainVfoState();
 }
 
@@ -1557,10 +1586,10 @@ void RadioBackend::updateReadyState()
     }
 
     m_radioReady = ready;
-    qInfo(logRadio()) << "Radio backend readiness changed: ready=" << ready
-                      << "mainFrequencyReceived=" << m_initialMainFrequencyReceived
-                      << "mainModeReceived=" << m_initialMainModeReceived << "scopeReceived=" << m_scopeDataReceived
-                      << "scopeDegraded=" << m_scopeSyncDegraded;
+    qInfo(logRadio()).nospace() << "Radio backend readiness changed ready=" << ready
+                                << " mainFrequencyReceived=" << m_initialMainFrequencyReceived
+                                << " mainModeReceived=" << m_initialMainModeReceived
+                                << " scopeReceived=" << m_scopeDataReceived << " scopeDegraded=" << m_scopeSyncDegraded;
     emit readyChanged(ready);
     if (ready)
     {
@@ -1639,10 +1668,10 @@ void RadioBackend::restartAfterSyncTimeout()
     const QString user = m_connectionUser;
     const QString pass = m_connectionPass;
 
-    qWarning(logRadio()) << "Radio sync did not complete within" << kSyncWatchdogTimeoutMs
-                         << "ms; scopeReceived=" << m_scopeDataReceived
-                         << "mainFrequencyReceived=" << m_initialMainFrequencyReceived
-                         << "mainModeReceived=" << m_initialMainModeReceived;
+    qWarning(logRadio()).nospace() << "Radio sync did not complete timeoutMs=" << kSyncWatchdogTimeoutMs
+                                   << " scopeReceived=" << m_scopeDataReceived
+                                   << " mainFrequencyReceived=" << m_initialMainFrequencyReceived
+                                   << " mainModeReceived=" << m_initialMainModeReceived;
     if (m_syncReconnectAttempts >= kMaxSyncReconnectAttempts)
     {
         // A repeated failure here means LAN control authenticated but the CI-V
