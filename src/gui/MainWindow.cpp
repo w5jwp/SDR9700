@@ -4,6 +4,7 @@
 #include "RadioChooserDialog.h"
 #include "SettingsDialog.h"
 #include "AboutDialog.h"
+#include "ApplicationLogDialog.h"
 #include "DialogPlacement.h"
 #include "DtmfDialog.h"
 #include "SpectrumScopeController.h"
@@ -320,6 +321,16 @@ void MainWindow::buildToolBar()
 #if !defined(Q_OS_MAC)
     helpMenu->setStyleSheet(menuStyle);
 #endif
+    helpMenu->addAction(QStringLiteral("Application Log"), this,
+                        [this]()
+                        {
+                            if (!m_applicationLogDialog)
+                            {
+                                m_applicationLogDialog = new ApplicationLogDialog(this);
+                            }
+                            m_applicationLogDialog->showCentered();
+                        });
+    helpMenu->addSeparator();
     auto* aboutAction = helpMenu->addAction("About", this,
                                             [this]()
                                             {

@@ -7,13 +7,13 @@
 #include <QCommandLineParser>
 #include <QCommandLineOption>
 #include <QCoreApplication>
-#include <QDateTime>
 #include <QFile>
 #include <QIcon>
 #include <QLoggingCategory>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSocketNotifier>
+#include <QSet>
 #include <QTimer>
 #include <cerrno>
 #include <csignal>
@@ -29,6 +29,8 @@
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
 #include "CachingQueue.h"
+#include "ApplicationLog.h"
+#include "LoggingConfiguration.h"
 #if defined(Q_OS_MAC)
 #include "platform/MacWindowRestoration.h"
 #endif
@@ -44,6 +46,8 @@ QMutex logOutputMutex;
 std::unique_ptr<QFile> logFile;
 QByteArray logFileBuffer;
 bool consoleLogEnabled{false};
+bool allConsoleCategoriesEnabled{false};
+QSet<QString> consoleLogCategories;
 
 void flushLogOutput()
 {
@@ -74,34 +78,17 @@ struct LoggingOptions
     QString logFilePath;
 };
 
-QString logLevelName(QtMsgType type)
-{
-    switch (type)
-    {
-    case QtDebugMsg:
-        return QStringLiteral("DEBUG");
-    case QtInfoMsg:
-        return QStringLiteral("INFO");
-    case QtWarningMsg:
-        return QStringLiteral("WARN");
-    case QtCriticalMsg:
-        return QStringLiteral("ERROR");
-    case QtFatalMsg:
-        return QStringLiteral("FATAL");
-    }
-    return QStringLiteral("LOG");
-}
-
 void consoleMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
 {
-    const QString category = context.category ? QString::fromLatin1(context.category) : QStringLiteral("default");
-    const QString line = QStringLiteral("%1 %2 [%3] %4")
-                             .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz")),
-                                  logLevelName(type), category, message);
+    const QString line = ApplicationLog::instance().append(type, context, message);
     const QByteArray encoded = line.toLocal8Bit();
 
     QMutexLocker lock(&logOutputMutex);
-    if (consoleLogEnabled)
+    const QString category =
+        context.category ? QString::fromLatin1(context.category).toLower() : QStringLiteral("default");
+    const bool consoleCategoryEnabled = type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg ||
+                                        allConsoleCategoriesEnabled || consoleLogCategories.contains(category);
+    if (consoleLogEnabled && consoleCategoryEnabled)
     {
         std::fprintf(stderr, "%s\n", encoded.constData());
         if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
@@ -134,6 +121,13 @@ QString quietLoggingRules()
 {
     return QStringLiteral("*.debug=false\n"
                           "*.info=false\n"
+                          "system.info=true\n"
+                          "gui.info=true\n"
+                          "radio.info=true\n"
+                          "udp.info=true\n"
+                          "audio.info=true\n"
+                          "audioconverter.info=true\n"
+                          "icom-rc-28.info=true\n"
                           "*.warning=true\n"
                           "*.critical=true");
 }
@@ -329,7 +323,7 @@ int main(int argc, char* argv[])
 {
     configureQtMultimediaEnvironment();
 
-    QLoggingCategory::setFilterRules(quietLoggingRules());
+    LoggingConfiguration::applyBaseRules(quietLoggingRules());
     qInstallMessageHandler(consoleMessageHandler);
     installUnixSignalHandlers();
 
@@ -371,7 +365,10 @@ int main(int argc, char* argv[])
         return 1;
     }
     consoleLogEnabled = loggingOptions.logEnabled;
-    QLoggingCategory::setFilterRules(loggingRulesForOptions(loggingOptions));
+    const QStringList requestedCategories = parseLogCategories(loggingOptions.logCategories);
+    allConsoleCategoriesEnabled = requestedCategories.contains(QStringLiteral("all"));
+    consoleLogCategories = QSet<QString>(requestedCategories.begin(), requestedCategories.end());
+    LoggingConfiguration::applyBaseRules(loggingRulesForOptions(loggingOptions));
 
     auto* logFlushTimer = new QTimer(&app);
     logFlushTimer->setInterval(1000);

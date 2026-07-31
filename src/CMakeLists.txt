@@ -54,8 +54,12 @@ set(SDR9700_CORE_SOURCES
 
     # Core utilities
     core/CachingQueue.cpp
+    core/ApplicationLog.h
+    core/ApplicationLog.cpp
     core/AppPaths.cpp
     core/LogCategories.cpp
+    core/LoggingConfiguration.h
+    core/LoggingConfiguration.cpp
     core/AppSettings.cpp
     core/RadioProfile.cpp
     core/SystemStats.cpp
@@ -189,6 +193,8 @@ set(SDR9700_APP_SOURCES
     gui/AudioDevicesSettingsPanel.cpp
     gui/AboutDialog.h
     gui/AboutDialog.cpp
+    gui/ApplicationLogDialog.h
+    gui/ApplicationLogDialog.cpp
     gui/DtmfDialog.h
     gui/DtmfDialog.cpp
     gui/MetersDialog.h
@@ -280,6 +286,16 @@ if(APPLE)
 endif()
 
 if(BUILD_TESTING)
+    add_executable(ApplicationLogTest tests/ApplicationLogTest.cpp)
+    target_link_libraries(ApplicationLogTest PRIVATE SDR9700_core Qt6::Test)
+    add_test(NAME ApplicationLogTest COMMAND ApplicationLogTest)
+
+    add_executable(ApplicationLogDialogTest tests/ApplicationLogDialogTest.cpp)
+    target_include_directories(ApplicationLogDialogTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
+    target_link_libraries(ApplicationLogDialogTest PRIVATE SDR9700_app_support Qt6::Test)
+    add_test(NAME ApplicationLogDialogTest COMMAND ApplicationLogDialogTest)
+    set_tests_properties(ApplicationLogDialogTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     add_library(SDR9700_memory_test_support STATIC
         gui/MemoryStore.cpp
         gui/MainWindowHelpers.cpp

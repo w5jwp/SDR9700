@@ -44,6 +44,7 @@ class MetersDialog;
 class RadioCommandController;
 class RadioChooserDialog;
 class SettingsDialog;
+class ApplicationLogDialog;
 class StatusBarController;
 #ifdef HAVE_HIDAPI
 class IcomRC28Manager;
@@ -214,6 +215,7 @@ class MainWindow : public QMainWindow
     DtmfDialog* m_dtmfDialog{nullptr};
     MetersDialog* m_metersDialog{nullptr};
     QPointer<SettingsDialog> m_settingsDialog;
+    QPointer<ApplicationLogDialog> m_applicationLogDialog;
     QPointer<RadioChooserDialog> m_radioChooserDialog;
     QTimer* m_dtmfPttOffTimer{nullptr};
     bool m_dtmfSendActive{false};
