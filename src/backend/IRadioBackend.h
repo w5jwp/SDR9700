@@ -120,5 +120,5 @@ class IRadioBackend : public QObject
 
     void txAudioLevelChanged(int peak, int rms);
 
-    void audioDataReady(const QByteArray& pcm, int sampleRate);
+    void audioDataReady(const QByteArray& pcm, int sampleRate, int channelCount);
 };

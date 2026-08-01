@@ -1,5 +1,6 @@
 #include "RadioChooserDialog.h"
 #include "ConfirmationDialog.h"
+#include "DialogFooter.h"
 #include "AppSettings.h"
 #include "DialogPlacement.h"
 #include "RadioProfile.h"
@@ -8,7 +9,6 @@
 
 #include <QAbstractItemView>
 #include <QCheckBox>
-#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -37,8 +37,8 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent)
 
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(16, 14, 16, 16);
-    contentLayout->setSpacing(12);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 14, UiTheme::Size::DialogContentMargin, 0);
+    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
 
     auto* title = new QLabel("Select and manage radio targets:", content);
     title->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 14px; font-weight: bold; }")
@@ -144,19 +144,14 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent)
     m_autoConnectCheck->setChecked(AppSettings::instance().value("autoConnect", "True").toBool());
     contentLayout->addWidget(m_autoConnectCheck);
 
-    auto* footerLine = new QWidget(content);
-    footerLine->setFixedHeight(1);
-    footerLine->setStyleSheet(QStringLiteral("background: %1;").arg(QLatin1String(UiTheme::Color::Border)));
-    contentLayout->addWidget(footerLine);
-
-    auto* buttonBox = new QDialogButtonBox(content);
-    buttonBox->setObjectName(QStringLiteral("radioChooserButtonBox"));
-    auto* cancelBtn = buttonBox->addButton(QDialogButtonBox::Cancel);
-    m_connectBtn = buttonBox->addButton(QStringLiteral("Connect"), QDialogButtonBox::AcceptRole);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    footer.buttonBox->setObjectName(QStringLiteral("radioChooserButtonBox"));
+    auto* cancelBtn = footer.buttonBox->addButton(QDialogButtonBox::Cancel);
+    m_connectBtn = footer.buttonBox->addButton(QStringLiteral("Connect"), QDialogButtonBox::AcceptRole);
     m_connectBtn->setObjectName(QStringLiteral("connectRadioButton"));
     m_connectBtn->setDefault(true);
     m_connectBtn->setEnabled(false);
-    contentLayout->addWidget(buttonBox);
+    contentLayout->addWidget(footer.widget);
     root->addWidget(content, 1);
 
     setFormEnabled(false);

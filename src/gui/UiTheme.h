@@ -62,6 +62,7 @@ inline constexpr QColor MeterScaleText{0x7f, 0xa4, 0xc8};
 
 namespace Size
 {
+inline constexpr int DialogContentMargin = 12;
 inline constexpr int VfoControlHeight = 46;
 inline constexpr int ControlSliderHeight = 24;
 inline constexpr int InlineSliderBlockHeight = 42;

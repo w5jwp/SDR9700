@@ -45,6 +45,7 @@ class RadioCommandController;
 class RadioChooserDialog;
 class SettingsDialog;
 class ApplicationLogDialog;
+class DataDecoderDialog;
 class StatusBarController;
 #ifdef HAVE_HIDAPI
 class IcomRC28Manager;
@@ -150,6 +151,7 @@ class MainWindow : public QMainWindow
     void updateStepButton();
     void updateIcomRC28Leds();
     void showDtmfDialog();
+    void showDataDecoderDialog();
     void showMetersDialog();
     void buildMemoryWindow();
     void showMemoryWindow();
@@ -216,6 +218,7 @@ class MainWindow : public QMainWindow
     MetersDialog* m_metersDialog{nullptr};
     QPointer<SettingsDialog> m_settingsDialog;
     QPointer<ApplicationLogDialog> m_applicationLogDialog;
+    QPointer<DataDecoderDialog> m_dataDecoderDialog;
     QPointer<RadioChooserDialog> m_radioChooserDialog;
     QTimer* m_dtmfPttOffTimer{nullptr};
     bool m_dtmfSendActive{false};

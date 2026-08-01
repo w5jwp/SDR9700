@@ -46,6 +46,8 @@ hardware testing and polish before a stable release.
   usage.
 - VFO step selector for configurable tuning step sizes.
 - DTMF send panel with PTT gating.
+- Receive-only AX.25 packet decoding from 1200-baud Bell 202 radio audio, with
+  live decode-health indicators and text export in the Data Decoder window.
 - Radio-backed IC-9700 memory management with add/edit/copy/remove, periodic and
   on-demand synchronization, CSV import/export, band filtering, ordering, and
   selection from both the main window and Memory Manager.

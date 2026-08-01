@@ -600,6 +600,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     static constexpr quint16 kIc9700CivAddress = 0xA2;
     static constexpr quint16 kUnusedTcpPort = 0;
     const int outputChannels = qBound(1, AppSettings::instance().value("audioOutputChannels", 2).toInt(), 2);
+    m_rxChannelCount = outputChannels;
     const int outputVolume = qBound(0, AppSettings::instance().value("volumeLevel", 128).toInt(), 255);
 
     audioSetup rxSetup;
@@ -2053,5 +2054,5 @@ void RadioBackend::onNetworkStatus(networkStatus status)
 void RadioBackend::onHaveAudioData(const audioPacket& pkt)
 {
     // IC-9700 delivers LPCM16 audio; sampleRate comes from rxSetup.
-    emit audioDataReady(pkt.data, static_cast<int>(m_rxSampleRate));
+    emit audioDataReady(pkt.data, static_cast<int>(m_rxSampleRate), m_rxChannelCount);
 }

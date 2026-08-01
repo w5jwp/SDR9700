@@ -56,6 +56,8 @@ set(SDR9700_CORE_SOURCES
     core/CachingQueue.cpp
     core/ApplicationLog.h
     core/ApplicationLog.cpp
+    core/Ax25Decoder.h
+    core/Ax25Decoder.cpp
     core/AppPaths.cpp
     core/LogCategories.cpp
     core/LoggingConfiguration.h
@@ -143,6 +145,7 @@ set(SDR9700_APP_SOURCES
     gui/WaterfallController.h
     gui/WaterfallController.cpp
     gui/DialogPlacement.h
+    gui/DialogFooter.h
     gui/ConfirmationDialog.h
     gui/UiTheme.h
     gui/MemoryStore.h
@@ -197,6 +200,8 @@ set(SDR9700_APP_SOURCES
     gui/AboutDialog.cpp
     gui/ApplicationLogDialog.h
     gui/ApplicationLogDialog.cpp
+    gui/DataDecoderDialog.h
+    gui/DataDecoderDialog.cpp
     gui/DtmfDialog.h
     gui/DtmfDialog.cpp
     gui/MetersDialog.h
@@ -296,6 +301,10 @@ if(APPLE)
 endif()
 
 if(BUILD_TESTING)
+    add_executable(Ax25DecoderTest tests/Ax25DecoderTest.cpp)
+    target_link_libraries(Ax25DecoderTest PRIVATE SDR9700_core Qt6::Test)
+    add_test(NAME Ax25DecoderTest COMMAND Ax25DecoderTest)
+
     add_executable(ApplicationLogTest tests/ApplicationLogTest.cpp)
     target_link_libraries(ApplicationLogTest PRIVATE SDR9700_core Qt6::Test)
     add_test(NAME ApplicationLogTest COMMAND ApplicationLogTest)

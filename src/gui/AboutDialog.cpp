@@ -1,12 +1,14 @@
 #include "AboutDialog.h"
 #include "AppInfo.h"
+#include "DialogFooter.h"
+#include "UiTheme.h"
 
 #include <QLabel>
-#include <QDialogButtonBox>
 #include <QVBoxLayout>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+#include <QPushButton>
 
 static QPixmap roundedPixmap(const QPixmap& src, int radius)
 {
@@ -21,42 +23,56 @@ static QPixmap roundedPixmap(const QPixmap& src, int radius)
     return result;
 }
 
-AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent)
+AboutDialog::AboutDialog(QWidget* parent)
+    : sdr9700::ui::UtilityWindow(QStringLiteral("About %1").arg(QLatin1String(APP_NAME)), parent)
 {
-    setWindowTitle(QString("About %1").arg(APP_NAME));
-    setFixedSize(380, 300);
+    const QString title = QStringLiteral("About %1").arg(QLatin1String(APP_NAME));
+    setFixedSize(380, 340);
+    setStyleSheet(QStringLiteral("AboutDialog { background: %1; border: 1px solid %2; }")
+                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
 
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 20, 24, 16);
-    root->setSpacing(8);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
+    auto* titleBar = new sdr9700::ui::UtilityTitleBar(title, this);
+    connect(titleBar->closeButton(), &QPushButton::clicked, this, &QDialog::reject);
+    root->addWidget(titleBar);
 
-    auto* iconLabel = new QLabel;
+    auto* content = new QWidget(this);
+    auto* contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 12, UiTheme::Size::DialogContentMargin, 0);
+    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
+    root->addWidget(content, 1);
+
+    auto* iconLabel = new QLabel(content);
     iconLabel->setAlignment(Qt::AlignCenter);
     QPixmap src(":/images/icons/sdr9700_app_icon.png");
     QPixmap scaled = src.scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     iconLabel->setPixmap(roundedPixmap(scaled, 14));
-    root->addWidget(iconLabel);
+    contentLayout->addWidget(iconLabel);
 
-    auto* appLabel = new QLabel(QString("<b style='font-size:18px'>%1</b>").arg(APP_NAME));
+    auto* appLabel = new QLabel(QString("<b style='font-size:18px'>%1</b>").arg(APP_NAME), content);
     appLabel->setAlignment(Qt::AlignCenter);
-    root->addWidget(appLabel);
+    contentLayout->addWidget(appLabel);
 
-    auto* verLabel = new QLabel(QString("Version %1").arg(APP_VERSION));
+    auto* verLabel = new QLabel(QString("Version %1").arg(APP_VERSION), content);
     verLabel->setAlignment(Qt::AlignCenter);
-    root->addWidget(verLabel);
+    contentLayout->addWidget(verLabel);
 
-    root->addSpacing(8);
+    contentLayout->addSpacing(8);
 
     auto* desc = new QLabel("Linux LAN client for the Icom IC-9700\n"
                             "VHF/UHF/SHF transceiver.\n\n"
-                            "Built with Qt6 and the IC-9700 UDP remote protocol.");
+                            "Built with Qt6 and the IC-9700 UDP remote protocol.",
+                            content);
     desc->setAlignment(Qt::AlignCenter);
     desc->setWordWrap(true);
-    root->addWidget(desc);
+    contentLayout->addWidget(desc);
 
-    root->addStretch(1);
+    contentLayout->addStretch(1);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    root->addWidget(buttons);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    footer.buttonBox->addButton(QDialogButtonBox::Close);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    contentLayout->addWidget(footer.widget);
 }

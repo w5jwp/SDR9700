@@ -64,6 +64,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::sessionHeartbeat, this, &RadioModel::sessionHeartbeat);
     connect(m_backend, &IRadioBackend::txAudioLevelChanged, m_meterController, &MeterController::setTransmitAudioLevel);
     connect(m_backend, &IRadioBackend::radioMemoryReceived, this, &RadioModel::radioMemoryReceived);
+    connect(m_backend, &IRadioBackend::audioDataReady, this, &RadioModel::audioDataReady);
     connect(m_meterController, &MeterController::snapshotChanged, this, &RadioModel::onMeterSnapshotChanged);
 }
 

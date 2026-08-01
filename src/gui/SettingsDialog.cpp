@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "DialogFooter.h"
 #include "ApplicationConfigurationSettingsPanel.h"
 #include "AudioDevicesSettingsPanel.h"
 #include "SpectrumScopeSettingsPanel.h"
@@ -181,8 +182,8 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
     root->addWidget(titleBar);
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(12, 12, 12, 12);
-    contentLayout->setSpacing(10);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 12, UiTheme::Size::DialogContentMargin, 0);
+    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
 
     auto* search = new QLineEdit(content);
     search->setObjectName(QStringLiteral("settingsSearch"));
@@ -385,18 +386,10 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
 
     selectPage(page);
 
-    auto* closeBtn = new QPushButton(QStringLiteral("Close"), content);
-    auto* footerDivider = new QWidget(content);
-    footerDivider->setFixedHeight(1);
-    footerDivider->setStyleSheet(QStringLiteral("background: %1;").arg(QLatin1String(UiTheme::Color::Border)));
-    contentLayout->addWidget(footerDivider);
-
-    auto* btnRow = new QHBoxLayout;
-    btnRow->setContentsMargins(0, 0, 0, 0);
-    btnRow->addStretch(1);
-    btnRow->addWidget(closeBtn);
-    contentLayout->addLayout(btnRow);
-    connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    footer.buttonBox->addButton(QDialogButtonBox::Close);
+    contentLayout->addWidget(footer.widget);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QDialog::accept);
 
     root->addWidget(content, 1);
 }

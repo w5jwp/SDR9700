@@ -14,6 +14,23 @@ experience, and behavior comparison while SDR9700 was developed as its own
 IC-9700-focused application.
 
 - Reference project: AetherSDR
+- Reference URL: <https://github.com/aethersdr/AetherSDR>
+- License: GPL-3.0
+
+### Data Decoder Research References
+
+The receive-only AX.25 decoder was written as original SDR9700 code. AetherSDR,
+Dire Wolf, and libmodem were reviewed to understand common Bell 202 and AX.25
+decoder designs; no source code from these projects is incorporated into
+SDR9700's decoder.
+
+- Reference project: Dire Wolf
+- Reference URL: <https://github.com/wb2osz/direwolf>
+- License: GPL-2.0-or-later
+
+- Reference project: libmodem
+- Reference URL: <https://github.com/iontodirel/libmodem>
+- License: MIT
 
 ### Icom IC-9700 LAN Protocol Research
 

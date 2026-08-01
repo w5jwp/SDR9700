@@ -1,4 +1,5 @@
 #include "MetersDialog.h"
+#include "DialogFooter.h"
 #include "SMeterScale.h"
 #include "UiTheme.h"
 
@@ -8,7 +9,6 @@
 #include <QLabel>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QSizePolicy>
 #include <QVBoxLayout>
 
 namespace
@@ -24,12 +24,6 @@ constexpr double kCompressionMeterMaxDb = 25.5;
 constexpr double kVoltageMeterMax = 16.0;
 constexpr double kCurrentMeterMax = 20.0;
 constexpr int kAudioMax = 255;
-// Match the Memory Manager's separator and footer rhythm.
-constexpr int kFooterLayoutSpacing = 6;
-constexpr int kFooterLeadSpacing = 10;
-constexpr int kFooterTopPadding = 8;
-// The content layout already supplies the dialog's 12 px bottom margin.
-constexpr int kFooterBottomPadding = 0;
 
 QString meterStyle(const QString& fill)
 {
@@ -93,8 +87,8 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
 
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(12, 10, 12, 12);
-    contentLayout->setSpacing(kFooterLayoutSpacing);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
+    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
     root->addWidget(content);
 
     auto* grid = new QGridLayout;
@@ -117,25 +111,11 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
     m_swrMeter = addMeterRow(grid, 8, QStringLiteral("SWR"), QStringLiteral("Standing wave ratio"));
 
     contentLayout->addLayout(grid);
-    contentLayout->addSpacing(kFooterLeadSpacing);
-
-    auto* footerSeparator = new QWidget(content);
-    footerSeparator->setObjectName(QStringLiteral("metersFooterSeparator"));
-    footerSeparator->setFixedHeight(1);
-    footerSeparator->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    footerSeparator->setStyleSheet(QStringLiteral("background: %1;").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    contentLayout->addWidget(footerSeparator);
-
-    auto* footerRow = new QWidget(content);
-    footerRow->setObjectName(QStringLiteral("metersFooterRow"));
-    auto* footer = new QHBoxLayout(footerRow);
-    footer->setContentsMargins(0, kFooterTopPadding, 0, kFooterBottomPadding);
-    footer->addStretch(1);
-    auto* closeButton = new QPushButton(QStringLiteral("Close"), content);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    auto* closeButton = footer.buttonBox->addButton(QDialogButtonBox::Close);
     closeButton->setObjectName(QStringLiteral("metersCloseButton"));
-    footer->addWidget(closeButton);
-    contentLayout->addWidget(footerRow);
-    connect(closeButton, &QPushButton::clicked, this, &QWidget::hide);
+    contentLayout->addWidget(footer.widget);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
 
     resetMeters();
     setFixedSize(500, sizeHint().height());

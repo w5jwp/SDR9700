@@ -124,6 +124,7 @@ class RadioBackend : public IRadioBackend
     QString m_connectionPass;
 
     quint32 m_rxSampleRate{48000};
+    int m_rxChannelCount{2};
     QAudioDevice m_rxDevice;
     QAudioDevice m_txDevice;
     int m_lanModLevel{128}; // 0-255, set via setLanModLevel()

@@ -1,4 +1,5 @@
 #include "DtmfDialog.h"
+#include "DialogFooter.h"
 #include "MetersDialog.h"
 #include "PttPanel.h"
 #include "ReceivePanel.h"
@@ -77,14 +78,15 @@ void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
         QVERIFY(closeButton != nullptr);
     }
 
-    auto* metersFooterSeparator = meters.findChild<QWidget*>(QStringLiteral("metersFooterSeparator"));
-    auto* metersFooterRow = meters.findChild<QWidget*>(QStringLiteral("metersFooterRow"));
+    auto* metersFooterSeparator = meters.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator"));
+    auto* metersFooterRow = meters.findChild<QWidget*>(QStringLiteral("dialogFooterRow"));
     auto* metersCloseButton = meters.findChild<QPushButton*>(QStringLiteral("metersCloseButton"));
     QVERIFY(metersFooterSeparator != nullptr);
     QCOMPARE(metersFooterSeparator->height(), 1);
     QVERIFY(metersFooterRow != nullptr);
     QVERIFY(metersFooterRow->layout() != nullptr);
-    QCOMPARE(metersFooterRow->layout()->contentsMargins(), QMargins(0, 8, 0, 0));
+    QCOMPARE(metersFooterRow->layout()->contentsMargins(),
+             QMargins(0, sdr9700::ui::kDialogFooterSpacing, 0, sdr9700::ui::kDialogFooterSpacing));
     QVERIFY(metersCloseButton != nullptr);
     QCOMPARE(metersCloseButton->text(), QStringLiteral("Close"));
 }

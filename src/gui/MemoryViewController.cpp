@@ -1,6 +1,7 @@
 #include "MemoryViewController.h"
 
 #include "MainWindow.h"
+#include "DialogFooter.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
@@ -55,14 +56,14 @@ void MemoryViewController::buildMemoryWindow()
 
     auto* panel = new QWidget(m_owner->m_window->m_memoryWindow);
     auto* root = new QHBoxLayout(panel);
-    root->setContentsMargins(kMemoryPanelMargins);
+    root->setContentsMargins(kMemoryPanelMargins.left(), kMemoryPanelMargins.top(), kMemoryPanelMargins.right(), 0);
     root->setSpacing(kMemoryPanelSpacing);
 
     auto* leftPane = new QWidget(panel);
     leftPane->setFixedWidth(kMemoryWindowSize.width() - kMemoryPanelMargins.left() - kMemoryPanelMargins.right());
     auto* leftRoot = new QVBoxLayout(leftPane);
-    leftRoot->setContentsMargins(0, 0, kMemoryEditorGutter, 0);
-    leftRoot->setSpacing(kMemoryPanelSpacing);
+    leftRoot->setContentsMargins(0, 0, 0, 0);
+    leftRoot->setSpacing(sdr9700::ui::kDialogFooterSpacing);
 
     auto* toolbar = new QHBoxLayout;
     toolbar->setContentsMargins(kNoMargins);
@@ -199,9 +200,7 @@ void MemoryViewController::buildMemoryWindow()
     m_owner->m_memoryEditorPane->setFixedWidth(kMemoryEditorPaneWidth);
     m_owner->m_memoryEditorPane->hide();
 
-    auto* footerRow = new QWidget(panel);
-    auto* footer = new QHBoxLayout(footerRow);
-    footer->setContentsMargins(0, kMemoryFooterTopPadding, 0, kMemoryFooterBottomPadding);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(panel);
     m_owner->m_window->m_memoryCountLabel = new QLabel(panel);
     m_owner->m_window->m_memoryCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_owner->m_window->m_memoryCountLabel->setContentsMargins(kMemoryFooterTextLeftPadding, 0, 0, 0);
@@ -214,24 +213,16 @@ void MemoryViewController::buildMemoryWindow()
         QStringLiteral("QProgressBar { background: %1; border: 1px solid %2; border-radius: 3px; height: 8px; }"
                        "QProgressBar::chunk { background: %3; border-radius: 2px; }")
             .arg(UiTheme::Color::Field, UiTheme::Color::BorderMedium, UiTheme::Color::Accent));
-    auto* closeButton = new QPushButton("Close", panel);
-    footer->addWidget(m_owner->m_window->m_memoryCountLabel, 1);
-    footer->addWidget(m_owner->m_window->m_memoryProgressBar);
-    footer->addWidget(closeButton);
-    leftRoot->addSpacing(kMemoryEditorGutter);
-    auto* leftFooterSeparator = new QWidget(panel);
-    leftFooterSeparator->setFixedHeight(1);
-    leftFooterSeparator->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    leftFooterSeparator->setStyleSheet(
-        QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    leftRoot->addWidget(leftFooterSeparator);
-    leftRoot->addWidget(footerRow);
+    footer.rowLayout->insertWidget(0, m_owner->m_window->m_memoryCountLabel, 1);
+    footer.rowLayout->insertWidget(1, m_owner->m_window->m_memoryProgressBar);
+    footer.buttonBox->addButton(QDialogButtonBox::Close);
+    leftRoot->addWidget(footer.widget);
 
     root->addWidget(leftPane, 1);
     root->addWidget(m_owner->m_memoryEditorSeparator);
     root->addWidget(m_owner->m_memoryEditorPane);
 
-    connect(closeButton, &QPushButton::clicked, m_owner->m_window->m_memoryWindow, &QWidget::hide);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, m_owner->m_window->m_memoryWindow, &QWidget::hide);
 
     auto* windowLayout = new QVBoxLayout(m_owner->m_window->m_memoryWindow);
     windowLayout->setContentsMargins(kNoMargins);

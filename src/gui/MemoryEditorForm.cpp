@@ -1,6 +1,7 @@
 #include "MemoryEditorForm.h"
 
 #include "ConfirmationDialog.h"
+#include "DialogFooter.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
@@ -56,8 +57,8 @@ void MemoryEditorForm::show(const QString& memoryId)
     static_cast<sdr9700::ui::UtilityWindow*>(m_owner->m_window->m_memoryWindow)->centerOnHost();
 
     auto* root = new QVBoxLayout(editor);
-    root->setSpacing(8);
-    root->setContentsMargins(kMemoryEditorGutter, 8, kMemoryEditorGutter, 0);
+    root->setSpacing(sdr9700::ui::kDialogFooterSpacing);
+    root->setContentsMargins(kMemoryEditorGutter, 8, 0, 0);
 
     auto* editorTitle = new QLabel(editing ? QStringLiteral("Edit Memory") : QStringLiteral("Add Memory"), editor);
     editorTitle->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 12px; font-weight: bold; }")
@@ -854,30 +855,12 @@ void MemoryEditorForm::show(const QString& memoryId)
 
     root->addStretch(1);
     root->addSpacing(kMemoryEditorGutter);
-    auto* footerContainer = new QWidget(editor);
-    auto* footerLayout = new QVBoxLayout(footerContainer);
-    footerLayout->setContentsMargins(0, 0, 0, 0);
-    footerLayout->setSpacing(0);
-    auto* footerSeparator = new QWidget(footerContainer);
-    footerSeparator->setFixedHeight(1);
-    footerSeparator->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    footerSeparator->setStyleSheet(
-        QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    footerLayout->addWidget(footerSeparator);
-    auto* buttonRow = new QWidget(footerContainer);
-    auto* buttonRowLayout = new QHBoxLayout(buttonRow);
-    buttonRowLayout->setContentsMargins(0, kMemoryPanelSpacing + kMemoryFooterTopPadding, 0,
-                                        kMemoryFooterBottomPadding);
-    auto* copyButton = new QPushButton("Copy Current", buttonRow);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(editor);
+    auto* copyButton = footer.buttonBox->addButton(QStringLiteral("Copy Current"), QDialogButtonBox::ActionRole);
     copyButton->setMinimumWidth(copyButton->sizeHint().width() + 20);
-    auto* saveButton = new QPushButton("Save", buttonRow);
-    auto* cancelButton = new QPushButton("Cancel", buttonRow);
-    buttonRowLayout->addWidget(copyButton, 0, Qt::AlignLeft);
-    buttonRowLayout->addStretch(1);
-    buttonRowLayout->addWidget(cancelButton, 0, Qt::AlignRight);
-    buttonRowLayout->addWidget(saveButton, 0, Qt::AlignRight);
-    footerLayout->addWidget(buttonRow);
-    root->addWidget(footerContainer);
+    auto* cancelButton = footer.buttonBox->addButton(QDialogButtonBox::Cancel);
+    auto* saveButton = footer.buttonBox->addButton(QDialogButtonBox::Save);
+    root->addWidget(footer.widget);
     resizeEditorToContents();
     connect(copyButton, &QPushButton::clicked, editor, copyCurrentSettings);
     connect(cancelButton, &QPushButton::clicked, this,

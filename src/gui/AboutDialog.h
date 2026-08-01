@@ -1,8 +1,8 @@
 #pragma once
 
-#include <QDialog>
+#include "UtilityWindow.h"
 
-class AboutDialog : public QDialog
+class AboutDialog : public sdr9700::ui::UtilityWindow
 {
     Q_OBJECT
 

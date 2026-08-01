@@ -5,6 +5,7 @@
 #include "SettingsDialog.h"
 #include "AboutDialog.h"
 #include "ApplicationLogDialog.h"
+#include "DataDecoderDialog.h"
 #include "DialogPlacement.h"
 #include "DtmfDialog.h"
 #include "SpectrumScopeController.h"
@@ -315,6 +316,7 @@ void MainWindow::buildToolBar()
 #if !defined(Q_OS_MAC)
     viewMenu->setStyleSheet(menuStyle);
 #endif
+    viewMenu->addAction("Data Decoder", this, &MainWindow::showDataDecoderDialog);
     viewMenu->addAction("DTMF", this, &MainWindow::showDtmfDialog);
     viewMenu->addAction("Memory Manager", this, &MainWindow::showMemoryWindow);
     viewMenu->addAction("Meters", this, &MainWindow::showMetersDialog);
@@ -2095,6 +2097,24 @@ void MainWindow::showDtmfDialog()
     }
 
     m_dtmfDialog->showCentered();
+}
+
+void MainWindow::showDataDecoderDialog()
+{
+    if (!m_dataDecoderDialog)
+    {
+        m_dataDecoderDialog = new DataDecoderDialog(this);
+        connect(m_model, &RadioModel::audioDataReady, m_dataDecoderDialog, &DataDecoderDialog::processAudio);
+        connect(m_model, &RadioModel::connectionChanged, m_dataDecoderDialog,
+                [dialog = m_dataDecoderDialog](bool connected)
+                {
+                    if (!connected && dialog)
+                    {
+                        emit dialog->resetDecoder();
+                    }
+                });
+    }
+    m_dataDecoderDialog->showCentered();
 }
 
 void MainWindow::showMetersDialog()

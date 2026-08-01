@@ -95,7 +95,7 @@ constexpr int kMemoryDuplexColumnWidth = 96;
 constexpr int kMemoryToneColumnWidth = 220;
 constexpr QMargins kNoMargins(0, 0, 0, 0);
 constexpr int kNoSpacing = 0;
-constexpr QMargins kMemoryPanelMargins(8, 8, 8, 8);
+constexpr QMargins kMemoryPanelMargins(UiTheme::Size::DialogContentMargin, 8, UiTheme::Size::DialogContentMargin, 8);
 constexpr QMargins kMemoryToolbarGroupMargins(8, 6, 8, 6);
 constexpr int kMemoryPanelSpacing = 6;
 constexpr int kMemoryToolbarSpacing = 8;

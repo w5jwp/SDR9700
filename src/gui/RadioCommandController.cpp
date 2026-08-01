@@ -1,4 +1,5 @@
 #include "RadioCommandController.h"
+#include "DialogFooter.h"
 
 #include "AppSettings.h"
 #include "LogCategories.h"
@@ -276,6 +277,8 @@ void RadioCommandController::showCustomRitDialog()
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
+    layout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
     auto* form = new QFormLayout;
     auto* rit = new QSpinBox(&dialog);
     rit->setRange(-999, 999);
@@ -285,11 +288,12 @@ void RadioCommandController::showCustomRitDialog()
     form->addRow(QStringLiteral("RIT"), rit);
     layout->addLayout(form);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Set"));
-    layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(&dialog);
+    footer.buttonBox->addButton(QDialogButtonBox::Cancel);
+    footer.buttonBox->addButton(QStringLiteral("Set"), QDialogButtonBox::AcceptRole);
+    layout->addWidget(footer.widget);
+    connect(footer.buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     m_window->centerPopupWindow(&dialog);
     if (dialog.exec() != QDialog::Accepted)
@@ -370,6 +374,8 @@ void RadioCommandController::showCustomOffsetDialog()
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
+    layout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
     auto* form = new QFormLayout;
     auto* direction = new QComboBox(&dialog);
     direction->addItem(QStringLiteral("+"), QVariant::fromValue<int>(dmDupPlus));
@@ -387,11 +393,12 @@ void RadioCommandController::showCustomOffsetDialog()
     form->addRow(QStringLiteral("Offset"), offset);
     layout->addLayout(form);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Set"));
-    layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(&dialog);
+    footer.buttonBox->addButton(QDialogButtonBox::Cancel);
+    footer.buttonBox->addButton(QStringLiteral("Set"), QDialogButtonBox::AcceptRole);
+    layout->addWidget(footer.widget);
+    connect(footer.buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     m_window->centerPopupWindow(&dialog);
     if (dialog.exec() != QDialog::Accepted)

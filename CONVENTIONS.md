@@ -81,19 +81,19 @@ Run it before submitting source changes.
   ```
 
 - All existing tests must continue to pass. Do not remove, disable, or weaken a
-  test merely to make a code change pass; update a test only when the intended
-  behavior has deliberately changed.
-- When behavior requires an IC-9700, RC-28, audio device, or other physical
-  hardware, document the manual verification performed and still test the
-  hardware-independent logic where possible.
+  test merely to make a code change pass;
+update a test only when the intended behavior has deliberately changed.- When behavior
+        requires an
+    IC - 9700, RC - 28, audio device, or other physical hardware,
+    document the manual verification performed and still test the hardware -
+        independent logic where possible.
 
-## Naming
+        ##Naming
 
-- Classes and structs: `PascalCase`.
-- Functions, methods, and local variables: `camelCase`.
-- Member variables: `m_camelCase`.
-- Constants: `kPascalCase`.
-- App settings keys: `camelCase`; use all caps for abbreviations inside a key,
+        - Classes and structs : `PascalCase`.- Functions,
+    methods,
+    and local variables : `camelCase`.- Member variables : `m_camelCase`.- Constants : `kPascalCase`.-
+        App settings keys : `camelCase`; use all caps for abbreviations inside a key,
   such as `ID`, `UTC`, `LAN`, `PTT`, `ICOM`, `RC28`, and `HZ`.
 - File names should match the main class where practical.
 
@@ -105,8 +105,8 @@ Run it before submitting source changes.
 - Do not add new app-owned `QSettings` persistence.
 - Do not add configuration fallback paths, migration keys, or migration
   holdover code. Configuration import may clean and accept the current schema;
-  runtime loading should use only the current schema.
-- Radio capability definitions are compiled into the application; do not add
+runtime loading should use only the current schema.- Radio capability definitions are compiled into the application;
+do not add
   runtime radio definition files.
 - Store booleans as `"True"` or `"False"`.
 - Prefer one structured JSON value for feature configuration instead of many
@@ -126,16 +126,19 @@ Run it before submitting source changes.
 - Keep protocol parsing defensive: validate packet length before indexing,
   tolerate unknown values, and log unexpected recoverable data.
 - Do not change the basic VFO RX flow unless the task explicitly requires
-  it and the behavior is tested.
-- Preserve the authenticated LAN teardown order documented in
-  `NETWORK_SHUTDOWN.md`. In particular, send the control-port departure while
-  its socket is still open and after token-removal acknowledgement.
+  it and the
+behavior is tested.- Preserve the authenticated LAN teardown order documented in
+  `NETWORK_SHUTDOWN.md`.In particular,
+    send the control - port departure while its socket is still open and after token -
+        removal acknowledgement.
 
-## Logging
+        ##Logging
 
-- Format structured fields as `key=value`, without whitespace after `=`.
-- Use `QDebug::nospace()` with explicit separators when streaming structured
-  fields; do not rely on `QDebug`'s automatic spaces around punctuation.
+        -
+        Format structured fields as `key = value`,
+                                    without whitespace after `=`.- Use `QDebug::nospace()` with explicit separators when
+                                                                       streaming structured fields;
+do not rely on `QDebug`'s automatic spaces around punctuation.
 - In source, place each streamed key/value pair on its own line when a log
   statement has multiple fields. Keep the emitted log record on one line.
 - Use `QDebug::noquote()` for human-readable strings such as addresses, device
@@ -161,6 +164,17 @@ Run it before submitting source changes.
 - Use accessible names/descriptions for new interactive widgets.
 - Avoid hidden behavior copied from another radio client unless it is useful
   for IC-9700 operation and documented.
+- Dialog content uses `UiTheme::Size::DialogContentMargin` between the left and
+  right window edges and the nearest content. Nested layouts must not add a
+  second horizontal margin at a window edge.
+- Dialog footers use a full-width, 1-pixel separator in
+  `UiTheme::Color::BorderMedium`, with the shared spacing defined by
+  `kDialogFooterSpacing` above the separator, between the separator and
+  buttons, and below the buttons. The
+  footer owns the dialog's bottom spacing; do not add a second bottom margin
+  on its parent layout. Arrange dialog buttons with `QDialogButtonBox` and
+  appropriate button roles so Qt supplies the native button order on Linux
+  and macOS. Do not manually encode platform-specific button ordering.
 
 ## Third-Party Code
 

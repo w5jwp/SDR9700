@@ -73,6 +73,7 @@ class RadioModel : public QObject
     void sessionHeartbeat();
     void txAudioLevelChanged(int peak, int rms);
     void radioMemoryReceived(MemoryType memory);
+    void audioDataReady(const QByteArray& pcm, int sampleRate, int channelCount);
 
   private slots:
     void onBackendConnected();

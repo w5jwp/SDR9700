@@ -1,5 +1,6 @@
 #include "ApplicationLogDialog.h"
 #include "ApplicationLog.h"
+#include "DialogFooter.h"
 #include "LogCategories.h"
 #include "LoggingConfiguration.h"
 #include "UiTheme.h"
@@ -45,8 +46,8 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
 
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(12, 10, 12, 12);
-    contentLayout->setSpacing(8);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
+    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
     root->addWidget(content, 1);
 
     auto* filterRow = new QHBoxLayout;
@@ -99,31 +100,20 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
                                       QLatin1String(UiTheme::Color::TextField)));
     contentLayout->addWidget(m_logView, 1);
 
-    auto* footerSeparator = new QWidget(content);
-    footerSeparator->setFixedHeight(1);
-    footerSeparator->setStyleSheet(QStringLiteral("background: %1;").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    contentLayout->addWidget(footerSeparator);
-
-    auto* footer = new QHBoxLayout;
-    footer->setContentsMargins(0, 2, 0, 0);
-    m_pauseButton = new QPushButton(QStringLiteral("Pause"), content);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    m_pauseButton = footer.buttonBox->addButton(QStringLiteral("Pause"), QDialogButtonBox::ActionRole);
     m_pauseButton->setObjectName(QStringLiteral("applicationLogPauseButton"));
     m_pauseButton->setAccessibleDescription(
         QStringLiteral("Freeze the displayed log while messages continue to be collected."));
-    footer->addWidget(m_pauseButton);
-    auto* clearButton = new QPushButton(QStringLiteral("Clear"), content);
+    auto* clearButton = footer.buttonBox->addButton(QStringLiteral("Clear"), QDialogButtonBox::ResetRole);
     clearButton->setObjectName(QStringLiteral("applicationLogClearButton"));
     clearButton->setAccessibleDescription(QStringLiteral("Clear all retained application log messages."));
-    footer->addWidget(clearButton);
-    footer->addStretch();
-    auto* exportButton = new QPushButton(QStringLiteral("Export…"), content);
+    auto* exportButton = footer.buttonBox->addButton(QStringLiteral("Export…"), QDialogButtonBox::ActionRole);
     exportButton->setAccessibleName(QStringLiteral("Export application log"));
-    auto* closeButton = new QPushButton(QStringLiteral("Close"), content);
-    footer->addWidget(exportButton);
-    footer->addWidget(closeButton);
-    contentLayout->addLayout(footer);
+    footer.buttonBox->addButton(QDialogButtonBox::Close);
+    contentLayout->addWidget(footer.widget);
     connect(exportButton, &QPushButton::clicked, this, &ApplicationLogDialog::exportLog);
-    connect(closeButton, &QPushButton::clicked, this, &QWidget::hide);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
     connect(clearButton, &QPushButton::clicked, this,
             [this]()
             {

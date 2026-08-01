@@ -1,4 +1,5 @@
 #include "DtmfDialog.h"
+#include "DialogFooter.h"
 #include "UiTheme.h"
 
 #include <QGridLayout>
@@ -42,8 +43,8 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
     // Content
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setSpacing(8);
-    contentLayout->setContentsMargins(12, 10, 12, 12);
+    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
     root->addWidget(content);
 
     m_display = new QLineEdit(content);
@@ -177,6 +178,11 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
                     emit sendRequested(digits);
                 }
             });
+
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    footer.buttonBox->addButton(QDialogButtonBox::Close);
+    contentLayout->addWidget(footer.widget);
+    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
 
     setFixedSize(260, sizeHint().height());
 }
