@@ -83,6 +83,12 @@ inline bool preserveMemorySelectionForReportedFrequency(quint64 receiveHz, quint
     return reportedHz == receiveHz || pttActive || awaitingReceiveFrequency;
 }
 constexpr QSize kMemoryWindowSize(980, 620);
+constexpr int kMemoryChannelColumnWidth = 110;
+constexpr int kMemoryNameColumnWidth = 180;
+constexpr int kMemoryFrequencyColumnWidth = 135;
+constexpr int kMemoryDuplexColumnWidth = 100;
+constexpr int kMemoryModeColumnWidth = 70;
+constexpr int kMemoryToneColumnWidth = 210;
 constexpr QMargins kNoMargins(0, 0, 0, 0);
 constexpr int kNoSpacing = 0;
 constexpr QMargins kMemoryPanelMargins(UiTheme::Size::DialogContentMargin, 8, UiTheme::Size::DialogContentMargin, 8);

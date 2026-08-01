@@ -113,7 +113,8 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QCOMPARE(table->horizontalHeaderItem(0)->text(), QStringLiteral("Channel"));
     for (int column = 0; column < 6; ++column)
     {
-        QCOMPARE(table->horizontalHeader()->sectionResizeMode(column), QHeaderView::Stretch);
+        const auto expectedMode = column == 1 ? QHeaderView::Stretch : QHeaderView::Fixed;
+        QCOMPARE(table->horizontalHeader()->sectionResizeMode(column), expectedMode);
     }
     QCOMPARE(table->horizontalHeader()->height(), 32);
     QCOMPARE(table->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOn);

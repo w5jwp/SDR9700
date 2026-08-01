@@ -162,9 +162,16 @@ void MemoryViewController::buildMemoryWindow()
     m_owner->m_window->m_memoryTable->horizontalHeader()->setStretchLastSection(false);
     for (int column = kMemoryChannelColumn; column <= kMemoryToneColumn; ++column)
     {
-        m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Stretch);
+        m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Fixed);
     }
+    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNameColumn, QHeaderView::Stretch);
     m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryIdColumn, QHeaderView::Fixed);
+    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryChannelColumn, kMemoryChannelColumnWidth);
+    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryNameColumn, kMemoryNameColumnWidth);
+    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryFrequencyColumn, kMemoryFrequencyColumnWidth);
+    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryDuplexColumn, kMemoryDuplexColumnWidth);
+    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryModeColumn, kMemoryModeColumnWidth);
+    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryToneColumn, kMemoryToneColumnWidth);
     m_owner->m_window->m_memoryTable->setItemDelegateForColumn(kMemoryToneColumn,
                                                                new ToneCellDelegate(m_owner->m_window->m_memoryTable));
     leftRoot->addWidget(m_owner->m_window->m_memoryTable, 1);
