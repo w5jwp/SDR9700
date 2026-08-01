@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QStyledItemDelegate>
 #include <QStyle>
+#include <algorithm>
 
 namespace sdr9700::memory
 {
@@ -43,20 +44,27 @@ class ToneCellDelegate : public QStyledItemDelegate
             return;
         }
 
-        const int typeWidth = qMin(kMemoryToneTypeSectionWidth, rect.width() / 3);
-        const int valueWidth = (rect.width() - typeWidth) / 2;
-        const QRect typeRect(rect.left(), rect.top(), typeWidth, rect.height());
-        const QRect txRect(typeRect.right() + 1, rect.top(), valueWidth, rect.height());
-        const QRect rxRect(txRect.right() + 1, rect.top(), rect.right() - txRect.right(), rect.height());
+        constexpr int kFieldGap = 10;
+        const QFontMetrics metrics(option.font);
+        const int typeWidth = std::max({metrics.horizontalAdvance(QStringLiteral("CTCSS")),
+                                        metrics.horizontalAdvance(QStringLiteral("DTCS")),
+                                        metrics.horizontalAdvance(QStringLiteral("DCS"))});
+        const int txWidth = qMax(metrics.horizontalAdvance(QStringLiteral("TX: 000.0")),
+                                 metrics.horizontalAdvance(QStringLiteral("TX: 000N")));
+        const int typeX = rect.left() + kMemoryToneCellTextPadding;
+        const int txX = typeX + typeWidth + kFieldGap;
+        const int rxX = txX + txWidth + kFieldGap;
+        const QRect typeRect(typeX, rect.top(), typeWidth, rect.height());
+        const QRect txRect(txX, rect.top(), txWidth, rect.height());
+        const QRect rxRect(rxX, rect.top(), qMax(0, rect.right() - rxX + 1), rect.height());
 
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, false);
         painter->setPen(textColor);
-        painter->drawText(typeRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
-                          type);
-        painter->drawText(txRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+        painter->drawText(typeRect, Qt::AlignLeft | Qt::AlignVCenter, type);
+        painter->drawText(txRect, Qt::AlignLeft | Qt::AlignVCenter,
                           QStringLiteral("TX: %1").arg(tx.isEmpty() ? QStringLiteral("OFF") : tx));
-        painter->drawText(rxRect.adjusted(kMemoryToneCellTextPadding, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
+        painter->drawText(rxRect, Qt::AlignLeft | Qt::AlignVCenter,
                           QStringLiteral("RX: %1").arg(rx.isEmpty() ? QStringLiteral("OFF") : rx));
         painter->restore();
     }

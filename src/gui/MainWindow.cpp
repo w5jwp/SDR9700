@@ -1324,6 +1324,7 @@ void MainWindow::handleIcomRC28Button(int button, int action)
 
 #else
 
+// cppcheck-suppress functionStatic
 void MainWindow::updateIcomRC28Leds() {}
 
 #endif

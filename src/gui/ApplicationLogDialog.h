@@ -17,11 +17,13 @@ class ApplicationLogDialog : public sdr9700::ui::UtilityWindow
   private:
     void refreshLog();
     void exportLog();
-    QString visibleLogText() const;
+    void resetLogView();
 
     QComboBox* m_categoryCombo{nullptr};
     QPlainTextEdit* m_logView{nullptr};
     QPushButton* m_pauseButton{nullptr};
     QTimer* m_refreshTimer{nullptr};
     bool m_paused{false};
+    quint64 m_lastSequence{0};
+    QString m_activeCategory;
 };

@@ -52,6 +52,60 @@ QByteArray logFileBuffer;
 bool consoleLogEnabled{false};
 bool allConsoleCategoriesEnabled{false};
 QSet<QString> consoleLogCategories;
+bool logFileFailureReported{false};
+
+bool writeBufferedLog()
+{
+    if (!logFile || !logFile->isOpen() || logFileBuffer.isEmpty())
+    {
+        return true;
+    }
+
+    qsizetype written = 0;
+    while (written < logFileBuffer.size())
+    {
+        const qint64 result = logFile->write(logFileBuffer.constData() + written, logFileBuffer.size() - written);
+        if (result <= 0)
+        {
+            logFileBuffer.remove(0, written);
+            if (!logFileFailureReported)
+            {
+                std::fprintf(stderr, "Application log file write failed: %s\n",
+                             logFile->errorString().toLocal8Bit().constData());
+                std::fflush(stderr);
+                logFileFailureReported = true;
+            }
+            // Stop accepting new file records after a sink failure so the
+            // retained unwritten tail cannot grow without bound.
+            logFile->close();
+            return false;
+        }
+        written += result;
+    }
+    logFileBuffer.clear();
+    return true;
+}
+
+bool flushBufferedLog()
+{
+    if (!writeBufferedLog())
+    {
+        return false;
+    }
+    if (logFile && logFile->isOpen() && !logFile->flush())
+    {
+        if (!logFileFailureReported)
+        {
+            std::fprintf(stderr, "Application log file flush failed: %s\n",
+                         logFile->errorString().toLocal8Bit().constData());
+            std::fflush(stderr);
+            logFileFailureReported = true;
+        }
+        logFile->close();
+        return false;
+    }
+    return true;
+}
 
 void requestMacMicrophonePermission(QObject* context)
 {
@@ -91,16 +145,14 @@ void flushLogOutput()
     }
     if (!logFile || !logFile->isOpen())
     {
-        logFileBuffer.clear();
+        if (!logFileFailureReported)
+        {
+            logFileBuffer.clear();
+        }
         return;
     }
 
-    if (!logFileBuffer.isEmpty())
-    {
-        logFile->write(logFileBuffer);
-        logFileBuffer.clear();
-    }
-    logFile->flush();
+    flushBufferedLog();
 }
 
 struct LoggingOptions
@@ -138,9 +190,7 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext& context, co
         logFileBuffer.append('\n');
         if (logFileBuffer.size() >= 256 * 1024 || type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
         {
-            logFile->write(logFileBuffer);
-            logFileBuffer.clear();
-            logFile->flush();
+            flushBufferedLog();
         }
     }
 

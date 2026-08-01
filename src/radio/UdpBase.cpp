@@ -463,16 +463,17 @@ void UdpBase::sendRetransmitRequest()
         if (missingSeqs.length() == 4)
         {
             p.seq = quint16(quint8(missingSeqs[0])) | (quint16(quint8(missingSeqs[1])) << 8);
-            qInfo(logUdp()) << this->metaObject()->className()
-                            << ": sending request for missing packet : " << QString("0x%1").arg(p.seq, 0, 16);
+            qInfo(logUdp()).noquote().nospace()
+                << this->metaObject()->className()
+                << " requesting missing packet sequence=" << QStringLiteral("0x%1").arg(p.seq, 0, 16);
             udpMutex.lock();
             udp->writeDatagram(encodePacket(p), radioIP, port);
             udpMutex.unlock();
         }
         else
         {
-            qInfo(logUdp()) << this->metaObject()->className()
-                            << ": sending request for multiple missing packets : " << missingSeqs.toHex(':');
+            qInfo(logUdp()).noquote().nospace() << this->metaObject()->className()
+                                                << " requesting missing packets sequences=" << missingSeqs.toHex(':');
             p.len = (quint32)sizeof(p) + missingSeqs.size();
             missingSeqs.insert(0, p.packet, sizeof(p));
 

@@ -42,11 +42,18 @@ QString ApplicationLog::append(QtMsgType type, const QMessageLogContext& context
                                   logLevelName(type), category, message);
 
     QMutexLocker lock(&m_mutex);
-    m_entries.append({category, line});
+    m_entries.append({category, line, m_nextSequence++});
+    ++m_categoryCounts[category];
     m_textSize += line.size();
     while ((m_textSize > kMaximumLogTextSize || m_entries.size() > kMaximumLogEntries) && m_entries.size() > 1)
     {
-        m_textSize -= m_entries.front().text.size();
+        const Entry& removedEntry = m_entries.front();
+        m_textSize -= removedEntry.text.size();
+        auto categoryCount = m_categoryCounts.find(removedEntry.category);
+        if (categoryCount != m_categoryCounts.end() && --categoryCount.value() == 0)
+        {
+            m_categoryCounts.erase(categoryCount);
+        }
         m_entries.removeFirst();
     }
     return line;
@@ -61,13 +68,41 @@ QVector<ApplicationLog::Entry> ApplicationLog::entries() const
 QStringList ApplicationLog::categories() const
 {
     QMutexLocker lock(&m_mutex);
-    QSet<QString> uniqueCategories;
+    QStringList result(m_categoryCounts.keyBegin(), m_categoryCounts.keyEnd());
+    result.sort(Qt::CaseInsensitive);
+    return result;
+}
+
+QVector<ApplicationLog::Entry> ApplicationLog::entriesAfter(quint64 sequence, const QString& category,
+                                                            bool* resetRequired, quint64* latestSequence,
+                                                            QStringList* categoryNames) const
+{
+    QMutexLocker lock(&m_mutex);
+    const bool historyUnavailable =
+        sequence != 0 &&
+        (m_entries.isEmpty() ? sequence + 1 < m_nextSequence : sequence + 1 < m_entries.constFirst().sequence);
+    if (resetRequired)
+    {
+        *resetRequired = historyUnavailable;
+    }
+    if (latestSequence)
+    {
+        *latestSequence = m_nextSequence - 1;
+    }
+    if (categoryNames)
+    {
+        *categoryNames = QStringList(m_categoryCounts.keyBegin(), m_categoryCounts.keyEnd());
+        categoryNames->sort(Qt::CaseInsensitive);
+    }
+
+    QVector<Entry> result;
     for (const Entry& entry : m_entries)
     {
-        uniqueCategories.insert(entry.category);
+        if ((sequence == 0 || entry.sequence > sequence) && (category.isEmpty() || entry.category == category))
+        {
+            result.append(entry);
+        }
     }
-    QStringList result(uniqueCategories.begin(), uniqueCategories.end());
-    result.sort(Qt::CaseInsensitive);
     return result;
 }
 
@@ -75,5 +110,6 @@ void ApplicationLog::clear()
 {
     QMutexLocker lock(&m_mutex);
     m_entries.clear();
+    m_categoryCounts.clear();
     m_textSize = 0;
 }

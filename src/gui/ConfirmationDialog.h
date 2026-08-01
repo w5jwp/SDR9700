@@ -22,8 +22,8 @@ inline void configureMessageBoxWindow(QMessageBox& dialog)
 
 inline QPushButton* configureConfirmationButtons(QMessageBox& dialog, const QString& actionLabel, bool destructive)
 {
-    QPushButton* cancelButton = dialog.addButton(QMessageBox::Cancel);
-    QPushButton* actionButton =
+    QPushButton* const cancelButton = dialog.addButton(QMessageBox::Cancel);
+    QPushButton* const actionButton =
         dialog.addButton(actionLabel, destructive ? QMessageBox::DestructiveRole : QMessageBox::AcceptRole);
     dialog.setDefaultButton(cancelButton);
     dialog.setEscapeButton(cancelButton);
@@ -34,7 +34,7 @@ inline bool confirmAction(QWidget* parent, const QString& title, const QString& 
                           bool destructive)
 {
     QMessageBox dialog(QMessageBox::Question, title, message, QMessageBox::NoButton, parent);
-    QPushButton* actionButton = configureConfirmationButtons(dialog, actionLabel, destructive);
+    const QPushButton* const actionButton = configureConfirmationButtons(dialog, actionLabel, destructive);
     configureMessageBoxWindow(dialog);
     dialog.exec();
     return dialog.clickedButton() == actionButton;

@@ -17,16 +17,14 @@ constexpr int kMemoryPanelWidth = 430;
 constexpr int kControlGroupMargin = 5;
 constexpr int kMemoryItemHeight = 28;
 constexpr int kHeaderHeight = 18;
-constexpr int kBandColumnWidth = 52;
-constexpr int kNumberColumnWidth = 44;
+constexpr int kChannelColumnWidth = 96;
 constexpr int kModeColumnWidth = 48;
 constexpr int kFrequencyColumnWidth = 100;
-constexpr int kMemoryBandColumn = 0;
-constexpr int kMemoryNumberColumn = 1;
-constexpr int kMemoryColumn = 2;
-constexpr int kMemoryModeColumn = 3;
-constexpr int kMemoryFrequencyColumn = 4;
-constexpr int kMemoryColumnCount = 5;
+constexpr int kMemoryChannelColumn = 0;
+constexpr int kMemoryColumn = 1;
+constexpr int kMemoryModeColumn = 2;
+constexpr int kMemoryFrequencyColumn = 3;
+constexpr int kMemoryColumnCount = 4;
 
 QTableWidgetItem* makeCellItem(const QString& text, Qt::Alignment alignment, const QString& memoryId = QString())
 {
@@ -57,8 +55,8 @@ MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
     m_table->setAccessibleName(QStringLiteral("Memory browser"));
     m_table->setAccessibleDescription(QStringLiteral("Double-click a memory to tune the active VFO."));
     m_table->setColumnCount(kMemoryColumnCount);
-    m_table->setHorizontalHeaderLabels({QStringLiteral("Band"), QStringLiteral("CH"), QStringLiteral("Memory"),
-                                        QStringLiteral("Mode"), QStringLiteral("Frequency")});
+    m_table->setHorizontalHeaderLabels(
+        {QStringLiteral("Channel"), QStringLiteral("Name"), QStringLiteral("Mode"), QStringLiteral("Frequency")});
     m_table->setFrameShape(QFrame::NoFrame);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -67,30 +65,31 @@ MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
     m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_table->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_table->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_table->setAlternatingRowColors(true);
     m_table->setShowGrid(true);
     m_table->setGridStyle(Qt::SolidLine);
     m_table->verticalHeader()->setVisible(false);
-    m_table->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
+    m_table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_table->horizontalHeader()->setFixedHeight(kHeaderHeight);
     m_table->horizontalHeader()->setStretchLastSection(false);
-    m_table->horizontalHeader()->setSectionResizeMode(kMemoryBandColumn, QHeaderView::Fixed);
-    m_table->horizontalHeader()->setSectionResizeMode(kMemoryNumberColumn, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(kMemoryChannelColumn, QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(kMemoryColumn, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(kMemoryModeColumn, QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(kMemoryFrequencyColumn, QHeaderView::Fixed);
-    m_table->setColumnWidth(kMemoryBandColumn, kBandColumnWidth);
-    m_table->setColumnWidth(kMemoryNumberColumn, kNumberColumnWidth);
+    m_table->setColumnWidth(kMemoryChannelColumn, kChannelColumnWidth);
     m_table->setColumnWidth(kMemoryModeColumn, kModeColumnWidth);
     m_table->setColumnWidth(kMemoryFrequencyColumn, kFrequencyColumnWidth);
     m_table->setStyleSheet(
         QStringLiteral("QTableWidget#memoryBrowserTable { background: %1; border: 1px solid %2; "
                        "border-radius: 3px; color: %3; gridline-color: %2; outline: 0; }"
                        "QTableWidget#memoryBrowserTable::item { padding: 0 5px; border: none; }"
-                       "QTableWidget#memoryBrowserTable::item:selected { background: %4; color: %5; }"
-                       "QHeaderView::section { background: %1; border: 1px solid %2; color: %6; "
+                       "QTableWidget#memoryBrowserTable::item:alternate { background: %4; }"
+                       "QTableWidget#memoryBrowserTable::item:selected { background: %5; color: %6; }"
+                       "QHeaderView::section { background: %1; border: 1px solid %2; color: %7; "
                        "font-size: 9px; font-weight: bold; padding: 0 5px; }")
             .arg(UiTheme::Color::Field, UiTheme::Color::Border, UiTheme::Color::TextStatusPrimary,
-                 UiTheme::Color::AccentDark, UiTheme::Color::TextBright, UiTheme::Color::TextStatusSecondary));
+                 UiTheme::Color::PanelDark, UiTheme::Color::AccentDark, UiTheme::Color::TextBright,
+                 UiTheme::Color::TextStatusSecondary));
     layout->addWidget(m_table);
 
     connect(m_table, &QTableWidget::cellDoubleClicked, this,
@@ -101,7 +100,7 @@ MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
                 {
                     return;
                 }
-                const auto* item = m_table->item(row, kMemoryNumberColumn);
+                const auto* item = m_table->item(row, kMemoryChannelColumn);
                 const QString memoryId = item ? item->data(Qt::UserRole).toString() : QString();
                 if (!memoryId.isEmpty())
                 {
@@ -174,23 +173,22 @@ void MemoryPanel::rebuildList()
         const int row = m_table->rowCount();
         m_table->insertRow(row);
         const QString name = memory.name.isEmpty() ? QStringLiteral("(unnamed)") : memory.name;
-        auto* bandItem = makeCellItem(memoryBandLabelForGroup(memory.group), Qt::AlignCenter, memory.id);
-        auto* numberItem = makeCellItem(QString::number(memory.channel).rightJustified(3, QLatin1Char('0')),
-                                        Qt::AlignCenter, memory.id);
+        auto* channelItem = makeCellItem(QStringLiteral("%1-%2")
+                                             .arg(memoryBandLabelForGroup(memory.group))
+                                             .arg(memory.channel, 3, 10, QLatin1Char('0')),
+                                         Qt::AlignCenter, memory.id);
         auto* nameItem = makeCellItem(name, Qt::AlignLeft | Qt::AlignVCenter, memory.id);
         auto* modeItem =
             makeCellItem(sdr9700::ui::main_window::memoryModeLabel(memory.mode), Qt::AlignCenter, memory.id);
         auto* frequencyItem = makeCellItem(sdr9700::ui::main_window::memoryFrequencyLabel(memory.receiveHz),
                                            Qt::AlignRight | Qt::AlignVCenter, memory.id);
-        numberItem->setToolTip(QStringLiteral("%1\n%2  %3")
-                                   .arg(name, sdr9700::ui::main_window::memoryModeLabel(memory.mode),
-                                        sdr9700::ui::main_window::memoryFrequencyLabel(memory.receiveHz)));
-        bandItem->setToolTip(numberItem->toolTip());
-        nameItem->setToolTip(numberItem->toolTip());
-        modeItem->setToolTip(numberItem->toolTip());
-        frequencyItem->setToolTip(numberItem->toolTip());
-        m_table->setItem(row, kMemoryBandColumn, bandItem);
-        m_table->setItem(row, kMemoryNumberColumn, numberItem);
+        channelItem->setToolTip(QStringLiteral("%1\n%2  %3")
+                                    .arg(name, sdr9700::ui::main_window::memoryModeLabel(memory.mode),
+                                         sdr9700::ui::main_window::memoryFrequencyLabel(memory.receiveHz)));
+        nameItem->setToolTip(channelItem->toolTip());
+        modeItem->setToolTip(channelItem->toolTip());
+        frequencyItem->setToolTip(channelItem->toolTip());
+        m_table->setItem(row, kMemoryChannelColumn, channelItem);
         m_table->setItem(row, kMemoryColumn, nameItem);
         m_table->setItem(row, kMemoryModeColumn, modeItem);
         m_table->setItem(row, kMemoryFrequencyColumn, frequencyItem);
@@ -211,11 +209,11 @@ void MemoryPanel::applyActiveSelection()
     m_table->setCurrentCell(-1, -1);
     for (int row = 0; row < m_table->rowCount(); ++row)
     {
-        auto* item = m_table->item(row, kMemoryNumberColumn);
+        auto* item = m_table->item(row, kMemoryChannelColumn);
         if (item && item->data(Qt::UserRole).toString() == m_activeMemoryId)
         {
             m_table->selectRow(row);
-            m_table->setCurrentCell(row, kMemoryNumberColumn);
+            m_table->setCurrentCell(row, kMemoryChannelColumn);
             m_table->scrollToItem(item, QAbstractItemView::EnsureVisible);
             return;
         }

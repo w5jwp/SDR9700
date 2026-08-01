@@ -366,13 +366,3 @@ bool MemorySyncController::hasReceivedMemory(quint32 key) const
 {
     return m_receivedMemoryKeys.contains(key);
 }
-
-quint16 MemorySyncController::currentGroup() const
-{
-    return m_currentGroup;
-}
-
-quint16 MemorySyncController::currentChannel() const
-{
-    return m_currentChannel;
-}

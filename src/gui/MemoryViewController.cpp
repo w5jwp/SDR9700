@@ -141,50 +141,30 @@ void MemoryViewController::buildMemoryWindow()
     m_owner->m_window->m_memoryTable->setObjectName(QStringLiteral("memoryManagerTable"));
     m_owner->m_window->m_memoryTable->setColumnCount(kMemoryTableColumnCount);
     m_owner->m_window->m_memoryTable->setHorizontalHeaderLabels(
-        {QStringLiteral("Band"), QStringLiteral("Channel"), QStringLiteral("Name"), QStringLiteral("Frequency"),
-         QStringLiteral("Offset"), QStringLiteral("Mode"), QStringLiteral("Tone (TX/RX)"), QStringLiteral("Filter"),
-         QStringLiteral("ID")});
+        {QStringLiteral("Channel"), QStringLiteral("Name"), QStringLiteral("Frequency"), QStringLiteral("Offset"),
+         QStringLiteral("Mode"), QStringLiteral("Tone (TX/RX)"), QStringLiteral("ID")});
     m_owner->m_window->m_memoryTable->setColumnHidden(kMemoryIdColumn, true);
     m_owner->m_window->m_memoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_owner->m_window->m_memoryTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_owner->m_window->m_memoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_owner->m_window->m_memoryTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_owner->m_window->m_memoryTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     m_owner->m_window->m_memoryTable->setSortingEnabled(false);
     m_owner->m_window->m_memoryTable->setDragDropMode(QAbstractItemView::NoDragDrop);
     m_owner->m_window->m_memoryTable->setShowGrid(true);
     m_owner->m_window->m_memoryTable->setGridStyle(Qt::SolidLine);
-    m_owner->m_window->m_memoryTable->setStyleSheet(
-        QStringLiteral("QTableWidget#memoryManagerTable { gridline-color: %1; }"
-                       "QTableWidget#memoryManagerTable::item { padding: 0 10px; "
-                       "border: none; }")
-            .arg(UiTheme::Color::Border));
+    m_owner->m_window->m_memoryTable->setAlternatingRowColors(true);
+    m_owner->m_window->m_memoryTable->setStyleSheet(UiTheme::tableStyle(QStringLiteral("memoryManagerTable")));
     m_owner->m_window->m_memoryTable->verticalHeader()->setVisible(false);
+    m_owner->m_window->m_memoryTable->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_owner->m_window->m_memoryTable->horizontalHeader()->setFixedHeight(32);
+    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionsClickable(false);
     m_owner->m_window->m_memoryTable->horizontalHeader()->setStretchLastSection(false);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryBandColumn,
-                                                                               QHeaderView::Interactive);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNumberColumn,
-                                                                               QHeaderView::Interactive);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNameColumn,
-                                                                               QHeaderView::Interactive);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFrequencyColumn,
-                                                                               QHeaderView::Interactive);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryDuplexColumn,
-                                                                               QHeaderView::Interactive);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryModeColumn,
-                                                                               QHeaderView::Interactive);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryToneColumn,
-                                                                               QHeaderView::Interactive);
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryFilterColumn,
-                                                                               QHeaderView::Stretch);
+    for (int column = kMemoryChannelColumn; column <= kMemoryToneColumn; ++column)
+    {
+        m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Stretch);
+    }
     m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryIdColumn, QHeaderView::Fixed);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryBandColumn, kMemoryBandColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryNumberColumn, kMemoryNumberColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryNameColumn, kMemoryNameColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryFrequencyColumn, kMemoryFrequencyColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryDuplexColumn, kMemoryDuplexColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryModeColumn, kMemoryModeColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryToneColumn, kMemoryToneColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryFilterColumn, kMemorySmallColumnWidth);
     m_owner->m_window->m_memoryTable->setItemDelegateForColumn(kMemoryToneColumn,
                                                                new ToneCellDelegate(m_owner->m_window->m_memoryTable));
     leftRoot->addWidget(m_owner->m_window->m_memoryTable, 1);
@@ -448,12 +428,11 @@ void MemoryViewController::rebuild()
             return item;
         };
 
-        auto* bandItem = setItem(kMemoryBandColumn, memoryBandLabelForGroup(memory.group));
-        bandItem->setTextAlignment(Qt::AlignCenter);
-        auto* numberItem =
-            setItem(kMemoryNumberColumn, QString::number(memory.channel).rightJustified(3, QLatin1Char('0')));
-        numberItem->setData(Qt::UserRole, memory.channel);
-        numberItem->setTextAlignment(Qt::AlignCenter);
+        auto* channelItem = setItem(kMemoryChannelColumn, QStringLiteral("%1-%2")
+                                                              .arg(memoryBandLabelForGroup(memory.group))
+                                                              .arg(memory.channel, 3, 10, QLatin1Char('0')));
+        channelItem->setData(Qt::UserRole, memory.channel);
+        channelItem->setTextAlignment(Qt::AlignCenter);
         setItem(kMemoryNameColumn, memory.name);
         auto* frequencyItem = setItem(kMemoryFrequencyColumn, memoryFrequencyLabel(memory.receiveHz));
         frequencyItem->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(memory.receiveHz));
@@ -466,7 +445,6 @@ void MemoryViewController::rebuild()
         toneItem->setData(kMemoryToneTxRole, memoryToneTxLabel(memory));
         toneItem->setToolTip(toneItem->text());
         toneItem->setTextAlignment(Qt::AlignCenter);
-        setItem(kMemoryFilterColumn, memoryFilterLabel(memory.filter))->setTextAlignment(Qt::AlignCenter);
         setItem(kMemoryIdColumn, memory.id);
         ++visibleCount;
     }

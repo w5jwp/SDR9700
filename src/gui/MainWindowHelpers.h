@@ -68,16 +68,14 @@ constexpr auto kMemoryPollIntervalSecondsSettingsKey = "memoryPollIntervalSecond
 constexpr int kDefaultMemoryPollIntervalSeconds = 600;
 constexpr int kMemoryPollIntervalMinSeconds = 30;
 constexpr int kMemoryPollIntervalMaxSeconds = 3600;
-constexpr int kMemoryTableColumnCount = 9;
-constexpr int kMemoryBandColumn = 0;
-constexpr int kMemoryNumberColumn = 1;
-constexpr int kMemoryNameColumn = 2;
-constexpr int kMemoryFrequencyColumn = 3;
-constexpr int kMemoryDuplexColumn = 4;
-constexpr int kMemoryModeColumn = 5;
-constexpr int kMemoryToneColumn = 6;
-constexpr int kMemoryFilterColumn = 7;
-constexpr int kMemoryIdColumn = 8;
+constexpr int kMemoryTableColumnCount = 7;
+constexpr int kMemoryChannelColumn = 0;
+constexpr int kMemoryNameColumn = 1;
+constexpr int kMemoryFrequencyColumn = 2;
+constexpr int kMemoryDuplexColumn = 3;
+constexpr int kMemoryModeColumn = 4;
+constexpr int kMemoryToneColumn = 5;
+constexpr int kMemoryIdColumn = 6;
 
 inline bool preserveMemorySelectionForReportedFrequency(quint64 receiveHz, quint64 reportedHz, bool pttActive,
                                                         bool awaitingReceiveFrequency)
@@ -85,14 +83,6 @@ inline bool preserveMemorySelectionForReportedFrequency(quint64 receiveHz, quint
     return reportedHz == receiveHz || pttActive || awaitingReceiveFrequency;
 }
 constexpr QSize kMemoryWindowSize(980, 620);
-constexpr int kMemoryBandColumnWidth = 70;
-constexpr int kMemoryNumberColumnWidth = 76;
-constexpr int kMemoryNameColumnWidth = 185;
-constexpr int kMemoryFrequencyColumnWidth = 116;
-constexpr int kMemoryModeColumnWidth = 66;
-constexpr int kMemorySmallColumnWidth = 76;
-constexpr int kMemoryDuplexColumnWidth = 96;
-constexpr int kMemoryToneColumnWidth = 220;
 constexpr QMargins kNoMargins(0, 0, 0, 0);
 constexpr int kNoSpacing = 0;
 constexpr QMargins kMemoryPanelMargins(UiTheme::Size::DialogContentMargin, 8, UiTheme::Size::DialogContentMargin, 8);

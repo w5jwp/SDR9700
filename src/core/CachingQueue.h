@@ -166,7 +166,7 @@ class CachingQueue : public QObject
     radioCapabilities* radioCaps = nullptr; // Set after IC-9700 capabilities are loaded.
 
     void run();
-    Funcs checkCommandAvailable(Funcs cmd, bool set = false) const;
+    Funcs checkCommandAvailable(Funcs cmd) const;
     std::optional<CacheItem> updateCache(bool reply, QueueItem item);
     std::optional<CacheItem> updateCache(bool reply, Funcs func, QVariant value = QVariant(), uchar receiver = 0);
     RadioStateType radioState;

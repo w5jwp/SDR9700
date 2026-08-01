@@ -84,7 +84,7 @@ void CachingQueue::stopWorker()
 
 void CachingQueue::run()
 {
-    qInfo(logRadio()) << "Starting caching queue handler thread (ThreadId:" << QThread::currentThreadId() << ")";
+    qInfo(logRadio()).nospace() << "Starting caching queue handler thread threadId=" << QThread::currentThreadId();
 
     std::unique_lock locker(mutex);
     QDeadlineTimer deadline(queueInterval);
@@ -235,9 +235,8 @@ void CachingQueue::run()
     }
 }
 
-Funcs CachingQueue::checkCommandAvailable(Funcs cmd, bool set) const
+Funcs CachingQueue::checkCommandAvailable(Funcs cmd) const
 {
-    Q_UNUSED(set)
     if (radioCaps != nullptr && cmd != funcNone && cmd != funcSelectVFO && !radioCaps->commands.contains(cmd))
     {
         return funcNone;
@@ -271,7 +270,7 @@ void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
         return;
     }
 
-    item.command = checkCommandAvailable(item.command, item.param.isValid());
+    item.command = checkCommandAvailable(item.command);
     if (item.command == funcNone)
     {
         return;

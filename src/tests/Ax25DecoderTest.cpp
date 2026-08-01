@@ -6,7 +6,7 @@
 
 namespace
 {
-QByteArray encodedAddress(const QByteArray& call, int ssid, bool last)
+QByteArray encodedAddress(const QByteArray& call, int ssid, bool last, bool repeated = false)
 {
     QByteArray padded = call.leftJustified(6, ' ', true);
     QByteArray result;
@@ -14,7 +14,7 @@ QByteArray encodedAddress(const QByteArray& call, int ssid, bool last)
     {
         result.append(static_cast<char>(static_cast<quint8>(value) << 1));
     }
-    result.append(static_cast<char>(0x60U | ((ssid & 0x0f) << 1) | (last ? 1 : 0)));
+    result.append(static_cast<char>(0x60U | ((ssid & 0x0f) << 1) | (last ? 1 : 0) | (repeated ? 0x80U : 0U)));
     return result;
 }
 
@@ -103,6 +103,9 @@ class Ax25DecoderTest : public QObject
     void crcKnownCheck();
     void decodesUiFrame();
     void rejectsBadFcs();
+    void countsMalformedCandidate();
+    void preservesRepeatedDigipeaterState();
+    void acceptsLegitimateRepeatedFrames();
     void decodesStereoAudio();
 };
 
@@ -140,6 +143,47 @@ void Ax25DecoderTest::rejectsBadFcs()
     Ax25Decoder decoder;
     QCOMPARE(decoder.processNrziTones(nrziTones(hdlcBits(frame))).size(), 0);
     QCOMPARE(decoder.stats().fcsFailures, quint64(1));
+}
+
+void Ax25DecoderTest::countsMalformedCandidate()
+{
+    QByteArray frame(20, '\0');
+    const quint16 fcs = Ax25Decoder::frameCheckSequence(frame);
+    frame.append(static_cast<char>(fcs & 0xff));
+    frame.append(static_cast<char>(fcs >> 8));
+    Ax25Decoder decoder;
+    QCOMPARE(decoder.processNrziTones(nrziTones(hdlcBits(frame))).size(), 0);
+    QCOMPARE(decoder.stats().candidates, quint64(1));
+    QCOMPARE(decoder.stats().malformed, quint64(1));
+}
+
+void Ax25DecoderTest::preservesRepeatedDigipeaterState()
+{
+    QByteArray frame = encodedAddress("APRS", 0, false) + encodedAddress("N0CALL", 0, false) +
+                       encodedAddress("WIDE1", 1, false, true) + encodedAddress("WIDE2", 2, true);
+    frame.append(QByteArray::fromHex("03f0"));
+    frame.append("Path test");
+    bool valid = false;
+    const Ax25Frame decoded = Ax25Decoder::parseFrame(frame, &valid);
+    QVERIFY(valid);
+    QCOMPARE(decoded.path, QStringLiteral("WIDE1-1*,WIDE2-2"));
+}
+
+void Ax25DecoderTest::acceptsLegitimateRepeatedFrames()
+{
+    QByteArray frame = encodedAddress("APRS", 0, false) + encodedAddress("N0CALL", 0, true);
+    frame.append(QByteArray::fromHex("03f0"));
+    frame.append("Repeated packet");
+    const quint16 fcs = Ax25Decoder::frameCheckSequence(frame);
+    frame.append(static_cast<char>(fcs & 0xff));
+    frame.append(static_cast<char>(fcs >> 8));
+    const QVector<bool> packet = nrziTones(hdlcBits(frame));
+    QVector<bool> stream = packet;
+    stream.append(packet);
+
+    Ax25Decoder decoder;
+    QCOMPARE(decoder.processNrziTones(stream).size(), 2);
+    QCOMPARE(decoder.stats().decoded, quint64(2));
 }
 
 void Ax25DecoderTest::decodesStereoAudio()

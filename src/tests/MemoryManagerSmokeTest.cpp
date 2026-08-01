@@ -17,6 +17,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFontMetrics>
+#include <QHeaderView>
 #include <QLineEdit>
 #include <QLabel>
 #include <QPointer>
@@ -108,8 +109,32 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     auto* editor = memoryWindow->findChild<QWidget*>(QStringLiteral("memoryEditorPane"));
     QVERIFY(table != nullptr);
     QVERIFY(editor != nullptr);
-    QCOMPARE(table->columnCount(), 9);
+    QCOMPARE(table->columnCount(), 7);
+    QCOMPARE(table->horizontalHeaderItem(0)->text(), QStringLiteral("Channel"));
+    for (int column = 0; column < 6; ++column)
+    {
+        QCOMPARE(table->horizontalHeader()->sectionResizeMode(column), QHeaderView::Stretch);
+    }
+    QCOMPARE(table->horizontalHeader()->height(), 32);
+    QCOMPARE(table->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOn);
+    QVERIFY(table->styleSheet().contains(QLatin1String(UiTheme::Color::MenuBar)));
     QVERIFY(!editor->isVisible());
+
+    QPushButton* addMemoryButton = nullptr;
+    for (QPushButton* button : memoryWindow->findChildren<QPushButton*>())
+    {
+        if (button->text() == QLatin1String("Add"))
+        {
+            addMemoryButton = button;
+            break;
+        }
+    }
+    QVERIFY(addMemoryButton != nullptr);
+    addMemoryButton->click();
+    auto* channelCombo = memoryWindow->findChild<QComboBox*>(QStringLiteral("memoryEditorChannel"));
+    QVERIFY(channelCombo != nullptr);
+    QVERIFY(channelCombo->currentText().contains(QLatin1Char('-')));
+    QVERIFY(channelCombo->currentText().endsWith(QStringLiteral("001")));
 }
 
 void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
@@ -121,6 +146,14 @@ void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
     QVERIFY(window.windowFlags().testFlag(Qt::FramelessWindowHint));
     QCOMPARE(window.minimumSize(), window.maximumSize());
     QCOMPARE(window.minimumSize(), QSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight));
+    auto* memoryBrowser = window.findChild<QTableWidget*>(QStringLiteral("memoryBrowserTable"));
+    QVERIFY(memoryBrowser != nullptr);
+    QCOMPARE(memoryBrowser->columnCount(), 4);
+    QCOMPARE(memoryBrowser->horizontalHeaderItem(0)->text(), QStringLiteral("Channel"));
+    QCOMPARE(memoryBrowser->horizontalHeaderItem(1)->text(), QStringLiteral("Name"));
+    QCOMPARE(memoryBrowser->horizontalHeader()->defaultAlignment(), Qt::AlignLeft | Qt::AlignVCenter);
+    QVERIFY(memoryBrowser->alternatingRowColors());
+    QVERIFY(memoryBrowser->styleSheet().contains(QLatin1String(UiTheme::Color::PanelDark)));
 }
 
 void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
@@ -218,15 +251,11 @@ void MemoryManagerSmokeTest::persistentToastCanBeClearedByOwner()
     QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
 
     auto* toastLabel = window.findChild<QLabel*>(QStringLiteral("statusToastLabel"));
-    StatusBarController* statusBarController = nullptr;
-    for (QObject* child : window.children())
-    {
-        if (auto* candidate = dynamic_cast<StatusBarController*>(child))
-        {
-            statusBarController = candidate;
-            break;
-        }
-    }
+    const QObjectList children = window.children();
+    const auto controller = std::find_if(children.cbegin(), children.cend(), [](const QObject* child)
+                                         { return dynamic_cast<const StatusBarController*>(child) != nullptr; });
+    QVERIFY(controller != children.cend());
+    auto* statusBarController = dynamic_cast<StatusBarController*>(*controller);
     QVERIFY(toastLabel != nullptr);
     QVERIFY(statusBarController != nullptr);
 

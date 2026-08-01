@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QString>
 
 namespace UiTheme
 {
@@ -74,4 +75,18 @@ inline constexpr int StatusTxWidth = 80;
 inline constexpr int StatusClockWidth = 92;
 inline constexpr int StatusSeparatorWidth = 22;
 } // namespace Size
+
+inline QString tableStyle(const QString& objectName)
+{
+    return QStringLiteral(
+               "QTableWidget#%1 { background: %2; border: 1px solid %3; color: %4; gridline-color: %3; outline: 0; }"
+               "QTableWidget#%1::item { padding: 4px 8px; border: none; }"
+               "QTableWidget#%1::item:alternate { background: %5; }"
+               "QTableWidget#%1::item:selected { background: %6; color: %7; }"
+               "QHeaderView::section { background: %8; border: 0; border-right: 1px solid %3; "
+               "border-bottom: 1px solid %3; color: %9; font-weight: bold; padding: 5px 8px; }")
+        .arg(objectName, QLatin1String(Color::Field), QLatin1String(Color::Border), QLatin1String(Color::TextField),
+             QLatin1String(Color::PanelDark), QLatin1String(Color::AccentDark), QLatin1String(Color::TextBright),
+             QLatin1String(Color::MenuBar), QLatin1String(Color::TextStatusSecondary));
+}
 } // namespace UiTheme

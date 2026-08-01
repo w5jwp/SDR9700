@@ -28,8 +28,6 @@ class MemorySyncController : public QObject
     bool initialMemorySyncComplete() const;
     bool refreshInProgress() const;
     bool hasReceivedMemory(quint32 key) const;
-    quint16 currentGroup() const;
-    quint16 currentChannel() const;
 
   private:
     void startScheduledRadioMemoryRefresh();

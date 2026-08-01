@@ -28,7 +28,6 @@ constexpr int kMemoryFooterTopPadding = 8;
 constexpr int kMemoryFooterBottomPadding = 10;
 constexpr int kMemoryFooterTextLeftPadding = 6;
 constexpr int kMemoryToneCellTextPadding = 8;
-constexpr int kMemoryToneTypeSectionWidth = 62;
 constexpr int kMemoryToneTypeRole = Qt::UserRole + 1;
 constexpr int kMemoryToneRxRole = Qt::UserRole + 2;
 constexpr int kMemoryToneTxRole = Qt::UserRole + 3;

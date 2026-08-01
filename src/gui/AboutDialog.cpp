@@ -61,7 +61,7 @@ AboutDialog::AboutDialog(QWidget* parent)
 
     contentLayout->addSpacing(8);
 
-    auto* desc = new QLabel("Linux LAN client for the Icom IC-9700\n"
+    auto* desc = new QLabel("LAN client for the Icom IC-9700 on Linux and Apple Silicon macOS\n"
                             "VHF/UHF/SHF transceiver.\n\n"
                             "Built with Qt6 and the IC-9700 UDP remote protocol.",
                             content);

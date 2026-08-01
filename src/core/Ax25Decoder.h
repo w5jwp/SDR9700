@@ -59,6 +59,7 @@ class Ax25Decoder
     void acceptBit(HdlcState& state, bool bit, QVector<Ax25Frame>& frames);
     void finishFrame(const QVector<bool>& rawBits, QVector<Ax25Frame>& frames);
     void acceptTone(TimingLane& lane, bool tone, QVector<Ax25Frame>& frames);
+    bool isDistinctCandidate(quint64* lastSampleIndex, bool* haveSample);
 
     int m_sampleRate{0};
     int m_samplesPerSymbol{0};
@@ -73,7 +74,10 @@ class Ax25Decoder
     QVector<TimingLane> m_lanes;
     Ax25DecoderStats m_stats;
     QByteArray m_lastFrame;
-    qint64 m_lastFrameMs{0};
+    quint64 m_lastFrameSampleIndex{0};
+    bool m_haveFrameSample{false};
     quint64 m_lastRejectedSampleIndex{0};
     bool m_haveRejectedSample{false};
+    quint64 m_lastMalformedSampleIndex{0};
+    bool m_haveMalformedSample{false};
 };

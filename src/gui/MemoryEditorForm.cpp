@@ -92,10 +92,20 @@ void MemoryEditorForm::show(const QString& memoryId)
         return EditorSection{group, form};
     };
     auto* channelCombo = new QComboBox(editor);
+    channelCombo->setObjectName(QStringLiteral("memoryEditorChannel"));
     for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
     {
         channelCombo->addItem(QString::number(channel).rightJustified(3, QLatin1Char('0')), channel);
     }
+    auto updateChannelLabels = [channelCombo](quint16 group)
+    {
+        const QString band = memoryBandLabelForGroup(group);
+        for (int index = 0; index < channelCombo->count(); ++index)
+        {
+            channelCombo->setItemText(index, QStringLiteral("%1-%2").arg(band).arg(
+                                                 channelCombo->itemData(index).toUInt(), 3, 10, QLatin1Char('0')));
+        }
+    };
     auto* nameEdit = new QLineEdit(editor);
     nameEdit->setMaxLength(kRadioMemoryNameMaxChars);
     nameEdit->setPlaceholderText(QStringLiteral("Maximum %1 characters").arg(kRadioMemoryNameMaxChars));
@@ -744,23 +754,29 @@ void MemoryEditorForm::show(const QString& memoryId)
                 menu.exec(dtcsRxPresetBtn->mapToGlobal(QPoint(0, dtcsRxPresetBtn->height())));
             });
     connect(frequencyEdit, &QLineEdit::editingFinished, editor,
-            [populateOffsetOptions, updateCustomOffsetVisibility]()
+            [frequencyEdit, populateOffsetOptions, updateCustomOffsetVisibility, updateChannelLabels]()
             {
                 populateOffsetOptions();
                 updateCustomOffsetVisibility();
+                quint64 frequencyHz = 0;
+                if (parseFrequencyText(frequencyEdit->text(), &frequencyHz))
+                {
+                    updateChannelLabels(radioMemoryGroupForHz(frequencyHz));
+                }
             });
     connect(offsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), editor, updateCustomOffsetVisibility);
 
-    auto applyMemoryToForm = [this, channelCombo, nameEdit, frequencyEdit, modeCombo, filterCombo, dataModeCombo,
-                              scanGroupCombo, populateOffsetOptions, setOffsetSelection, updateCustomOffsetVisibility,
-                              toneOptionCombo, toneEdit, tsqlEdit, dsqlCombo, dtcsSpin, dtcsRxSpin, dtcsPolarityCombo,
-                              dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, setTonePick, setCtcssPick,
-                              setDtcsPick, setDtcsRxPick, populateToneValues,
+    auto applyMemoryToForm = [this, channelCombo, updateChannelLabels, nameEdit, frequencyEdit, modeCombo, filterCombo,
+                              dataModeCombo, scanGroupCombo, populateOffsetOptions, setOffsetSelection,
+                              updateCustomOffsetVisibility, toneOptionCombo, toneEdit, tsqlEdit, dsqlCombo, dtcsSpin,
+                              dtcsRxSpin, dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit,
+                              setTonePick, setCtcssPick, setDtcsPick, setDtcsRxPick, populateToneValues,
                               updateConditionalSections](const MemoryRecord& memory)
     {
         quint16 group = kRadioMemoryFirstGroup;
         quint16 channel = kRadioMemoryFirstChannel;
         m_owner->parseRadioMemoryId(memory.id, &group, &channel);
+        updateChannelLabels(group);
         channelCombo->setCurrentIndex(qMax(0, channelCombo->findData(channel)));
         nameEdit->setText(memory.name);
         frequencyEdit->setText(memoryFrequencyLabel(memory.receiveHz));
@@ -837,6 +853,7 @@ void MemoryEditorForm::show(const QString& memoryId)
         const quint16 defaultGroup = m_owner->m_window->m_vfo
                                          ? radioMemoryGroupForHz(m_owner->m_window->m_vfo->frequencyHz())
                                          : kRadioMemoryFirstGroup;
+        updateChannelLabels(defaultGroup);
         quint16 firstOpenChannel = kRadioMemoryFirstChannel;
         if (m_owner->firstOpenChannelForGroup(defaultGroup, &firstOpenChannel))
         {

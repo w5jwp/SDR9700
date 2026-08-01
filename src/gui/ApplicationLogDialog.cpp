@@ -20,6 +20,7 @@
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QTextStream>
+#include <QTextCursor>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -136,7 +137,7 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     connect(includeCivCheckBox, &QCheckBox::toggled, this,
             [](bool enabled) { LoggingConfiguration::setCivDataEnabled(enabled); });
 
-    connect(m_categoryCombo, &QComboBox::currentIndexChanged, this, &ApplicationLogDialog::refreshLog);
+    connect(m_categoryCombo, &QComboBox::currentIndexChanged, this, &ApplicationLogDialog::resetLogView);
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(1000);
     connect(m_refreshTimer, &QTimer::timeout, this, &ApplicationLogDialog::refreshLog);
@@ -144,18 +145,12 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     refreshLog();
 }
 
-QString ApplicationLogDialog::visibleLogText() const
+void ApplicationLogDialog::resetLogView()
 {
-    const QString selectedCategory = m_categoryCombo->currentData().toString();
-    QStringList lines;
-    for (const ApplicationLog::Entry& entry : ApplicationLog::instance().entries())
-    {
-        if (selectedCategory.isEmpty() || entry.category == selectedCategory)
-        {
-            lines.append(entry.text);
-        }
-    }
-    return lines.join(QLatin1Char('\n'));
+    m_lastSequence = 0;
+    m_activeCategory = m_categoryCombo->currentData().toString();
+    m_logView->clear();
+    refreshLog();
 }
 
 void ApplicationLogDialog::refreshLog()
@@ -165,7 +160,20 @@ void ApplicationLogDialog::refreshLog()
         return;
     }
     const QString selectedCategory = m_categoryCombo->currentData().toString();
-    for (const QString& category : ApplicationLog::instance().categories())
+    bool resetRequired = false;
+    quint64 latestSequence = m_lastSequence;
+    QStringList categories;
+    const QVector<ApplicationLog::Entry> entries = ApplicationLog::instance().entriesAfter(
+        m_lastSequence, selectedCategory, &resetRequired, &latestSequence, &categories);
+    if (resetRequired || selectedCategory != m_activeCategory)
+    {
+        m_lastSequence = 0;
+        m_activeCategory = selectedCategory;
+        m_logView->clear();
+        refreshLog();
+        return;
+    }
+    for (const QString& category : categories)
     {
         if (m_categoryCombo->findData(category) < 0)
         {
@@ -174,15 +182,24 @@ void ApplicationLogDialog::refreshLog()
     }
 
     const bool wasAtBottom = m_logView->verticalScrollBar()->value() >= m_logView->verticalScrollBar()->maximum();
-    const QString text = visibleLogText();
-    if (m_logView->toPlainText() != text)
+    if (!entries.isEmpty())
     {
-        m_logView->setPlainText(text);
+        QStringList lines;
+        lines.reserve(entries.size());
+        for (const ApplicationLog::Entry& entry : entries)
+        {
+            lines.append(entry.text);
+        }
+        QTextCursor cursor = m_logView->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        cursor.insertText((m_logView->document()->isEmpty() ? QString() : QStringLiteral("\n")) +
+                          lines.join(QLatin1Char('\n')));
         if (wasAtBottom)
         {
             m_logView->verticalScrollBar()->setValue(m_logView->verticalScrollBar()->maximum());
         }
     }
+    m_lastSequence = latestSequence;
     const int selectedIndex = m_categoryCombo->findData(selectedCategory);
     if (selectedIndex >= 0 && selectedIndex != m_categoryCombo->currentIndex())
     {

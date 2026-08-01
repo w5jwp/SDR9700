@@ -3,6 +3,8 @@
 #include "UiTheme.h"
 
 #include <QDateTime>
+#include <QApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -14,10 +16,15 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QTextStream>
 #include <QVBoxLayout>
 #include <utility>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QStyle>
+#include <QUrl>
 
 namespace
 {
@@ -48,63 +55,85 @@ void addMetric(QHBoxLayout* layout, const QString& name, QLabel* value, QWidget*
     layout->addWidget(metric, 1, Qt::AlignVCenter);
 }
 
-QString linkedAddress(const QString& address, bool* containsLink)
+QString callsignFromAddress(const QString& address)
 {
     static const QRegularExpression callsignPattern(QStringLiteral("^[A-Z0-9]{1,2}[0-9][A-Z]{1,4}$"));
-    QStringList linkedParts;
-    for (const QString& part : address.split(QLatin1Char(','), Qt::KeepEmptyParts))
+    QString base = address;
+    if (base.endsWith(QLatin1Char('*')))
     {
-        QString base = part;
-        if (base.endsWith(QLatin1Char('*')))
-        {
-            base.chop(1);
-        }
-        const qsizetype ssidSeparator = base.lastIndexOf(QLatin1Char('-'));
-        if (ssidSeparator > 0)
-        {
-            base.truncate(ssidSeparator);
-        }
-        if (callsignPattern.match(base).hasMatch())
-        {
-            *containsLink = true;
-            linkedParts.append(
-                QStringLiteral("<a style=\"color:%1;\" href=\"https://qrz.com/db/%2\">%3</a>")
-                    .arg(QLatin1String(UiTheme::Color::AccentBright), base.toHtmlEscaped(), part.toHtmlEscaped()));
-        }
-        else
-        {
-            linkedParts.append(part.toHtmlEscaped());
-        }
+        base.chop(1);
     }
-    return linkedParts.join(QLatin1Char(','));
+    const qsizetype ssidSeparator = base.lastIndexOf(QLatin1Char('-'));
+    if (ssidSeparator > 0)
+    {
+        base.truncate(ssidSeparator);
+    }
+    return callsignPattern.match(base).hasMatch() ? base : QString();
 }
 
-void addAddressLinks(QTableWidget* table, int row, int column, const QString& address, bool elide = false)
+class CallsignDelegate final : public QStyledItemDelegate
 {
-    bool containsLink = false;
-    const QString displayedAddress =
-        elide ? table->fontMetrics().elidedText(address, Qt::ElideRight, qMax(20, table->columnWidth(column) - 16))
-              : address;
-    const QString html = linkedAddress(displayedAddress, &containsLink);
-    if (!containsLink)
+  public:
+    explicit CallsignDelegate(QObject* parent) : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
-        return;
+        QStyleOptionViewItem styledOption(option);
+        initStyleOption(&styledOption, index);
+        const QString callsign = callsignFromAddress(index.data().toString());
+        if (callsign.isEmpty())
+        {
+            QStyledItemDelegate::paint(painter, styledOption, index);
+            return;
+        }
+
+        const QString suffix = styledOption.text.mid(callsign.size());
+        styledOption.text.clear();
+        const QStyle* style = option.widget ? option.widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &styledOption, painter, option.widget);
+        const QRect textRect = style->subElementRect(QStyle::SE_ItemViewItemText, &styledOption, option.widget);
+        QFont linkFont = option.font;
+        linkFont.setUnderline(true);
+        const QFontMetrics linkMetrics(linkFont);
+        const QFontMetrics normalMetrics(option.font);
+        const int baseline = textRect.top() + (textRect.height() - normalMetrics.height()) / 2 + normalMetrics.ascent();
+        const QColor normalColor =
+            option.palette.color((option.state & QStyle::State_Selected) ? QPalette::HighlightedText : QPalette::Text);
+        painter->save();
+        painter->setFont(linkFont);
+        painter->setPen((option.state & QStyle::State_Selected) ? normalColor
+                                                                : QColor(QLatin1String(UiTheme::Color::AccentBright)));
+        painter->drawText(textRect.left(), baseline, callsign);
+        painter->setFont(option.font);
+        painter->setPen(normalColor);
+        painter->drawText(textRect.left() + linkMetrics.horizontalAdvance(callsign), baseline, suffix);
+        painter->restore();
     }
-    auto* label = new QLabel(table);
-    label->setTextFormat(Qt::RichText);
-    label->setTextInteractionFlags(Qt::TextBrowserInteraction);
-    label->setOpenExternalLinks(true);
-    label->setText(html);
-    label->setFont(table->font());
-    label->setContentsMargins(8, 0, 8, 0);
-    label->setAccessibleName(QStringLiteral("%1; open callsign on QRZ.com").arg(address));
-    label->setStyleSheet(QStringLiteral("background: transparent;"));
-    if (QTableWidgetItem* item = table->item(row, column))
+
+    bool editorEvent(QEvent* event, QAbstractItemModel*, const QStyleOptionViewItem& option,
+                     const QModelIndex& index) override
     {
-        item->setData(Qt::DisplayRole, QString());
+        if (event->type() != QEvent::MouseButtonRelease || static_cast<QMouseEvent*>(event)->button() != Qt::LeftButton)
+        {
+            return false;
+        }
+        const QString callsign = callsignFromAddress(index.data().toString());
+        if (callsign.isEmpty())
+        {
+            return false;
+        }
+        QStyleOptionViewItem styledOption(option);
+        initStyleOption(&styledOption, index);
+        const QStyle* style = option.widget ? option.widget->style() : QApplication::style();
+        QRect linkRect = style->subElementRect(QStyle::SE_ItemViewItemText, &styledOption, option.widget);
+        linkRect.setWidth(QFontMetrics(styledOption.font).horizontalAdvance(callsign));
+        if (!linkRect.contains(static_cast<QMouseEvent*>(event)->position().toPoint()))
+        {
+            return false;
+        }
+        return QDesktopServices::openUrl(QUrl(QStringLiteral("https://qrz.com/db/%1").arg(callsign)));
     }
-    table->setCellWidget(row, column, label);
-}
+};
 } // namespace
 
 void Ax25DecoderWorker::processAudio(const QByteArray& pcm, int sampleRate, int channelCount)
@@ -189,56 +218,43 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
 
     m_packetTable = new QTableWidget(content);
     m_packetTable->setObjectName(QStringLiteral("ax25PacketTable"));
-    m_packetTable->setColumnCount(6);
-    m_packetTable->setHorizontalHeaderLabels({QStringLiteral("Timestamp"), QStringLiteral("Protocol"),
-                                              QStringLiteral("Source"), QStringLiteral("Destination"),
-                                              QStringLiteral("Path"), QStringLiteral("Payload")});
+    m_packetTable->setColumnCount(4);
+    m_packetTable->setHorizontalHeaderLabels(
+        {QStringLiteral("Timestamp"), QStringLiteral("Protocol"), QStringLiteral("Source"), QStringLiteral("Payload")});
     m_packetTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_packetTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_packetTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_packetTable->setAlternatingRowColors(true);
     m_packetTable->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_packetTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     m_packetTable->setShowGrid(true);
     m_packetTable->setGridStyle(Qt::SolidLine);
     m_packetTable->verticalHeader()->hide();
     m_packetTable->verticalHeader()->setDefaultSectionSize(28);
-    m_packetTable->setStyleSheet(
-        QStringLiteral("QTableWidget#ax25PacketTable { background: %1; border: 1px solid %2; color: %3; "
-                       "gridline-color: %2; outline: 0; }"
-                       "QTableWidget#ax25PacketTable::item { padding: 4px 8px; border: none; }"
-                       "QTableWidget#ax25PacketTable::item:alternate { background: %4; }"
-                       "QTableWidget#ax25PacketTable::item:selected { background: %5; color: %6; }"
-                       "QHeaderView::section { background: %4; border: 1px solid %2; color: %7; "
-                       "font-weight: bold; padding: 5px 10px; }")
-            .arg(QLatin1String(UiTheme::Color::Field), QLatin1String(UiTheme::Color::Border),
-                 QLatin1String(UiTheme::Color::TextField), QLatin1String(UiTheme::Color::PanelDark),
-                 QLatin1String(UiTheme::Color::AccentDark), QLatin1String(UiTheme::Color::TextBright),
-                 QLatin1String(UiTheme::Color::TextStatusSecondary)));
+    m_packetTable->setStyleSheet(UiTheme::tableStyle(QStringLiteral("ax25PacketTable")));
     m_packetTable->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_packetTable->horizontalHeader()->setFixedHeight(32);
-    m_packetTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
-    for (int column = 0; column < 5; ++column)
+    m_packetTable->horizontalHeader()->setSectionsClickable(false);
+    m_packetTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    for (int column = 0; column < 3; ++column)
     {
         m_packetTable->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Interactive);
     }
-    m_packetTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    m_packetTable->setColumnWidth(0, 110);
-    m_packetTable->setColumnWidth(1, 115);
-    m_packetTable->setColumnWidth(2, 105);
-    m_packetTable->setColumnWidth(3, 105);
-    m_packetTable->setColumnWidth(4, 230);
-    m_packetTable->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    m_packetTable->setColumnWidth(0, 140);
+    m_packetTable->setColumnWidth(1, 140);
+    m_packetTable->setColumnWidth(2, 125);
+    m_packetTable->setItemDelegateForColumn(2, new CallsignDelegate(m_packetTable));
     layout->addWidget(m_packetTable, 1);
 
-    auto* detailsLabel = new QLabel(QStringLiteral("Raw Packet"), content);
+    auto* detailsLabel = new QLabel(QStringLiteral("Packet Details"), content);
     detailsLabel->setStyleSheet(QStringLiteral("color: %1;").arg(QLatin1String(UiTheme::Color::TextMuted)));
     layout->addWidget(detailsLabel);
     m_packetDetails = new QPlainTextEdit(content);
     m_packetDetails->setObjectName(QStringLiteral("dataDecoderPacketDetails"));
     m_packetDetails->setReadOnly(true);
     m_packetDetails->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-    m_packetDetails->setPlaceholderText(QStringLiteral("Select a packet to view the raw packet."));
-    m_packetDetails->setAccessibleName(QStringLiteral("Raw packet"));
+    m_packetDetails->setPlaceholderText(QStringLiteral("Select a packet to view its details."));
+    m_packetDetails->setAccessibleName(QStringLiteral("Packet details"));
     m_packetDetails->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     m_packetDetails->setFixedHeight(76);
     m_packetDetails->setStyleSheet(
@@ -299,9 +315,12 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
                     const QTableWidgetItem* item = m_packetTable->item(currentRow, column);
                     values.append(item ? item->data(Qt::UserRole).toString() : QString());
                 }
-                const QString route = values.at(2) + QLatin1Char('>') + values.at(3) +
-                                      (values.at(4).isEmpty() ? QString() : QLatin1Char(',') + values.at(4));
-                m_packetDetails->setPlainText(route + QLatin1Char(':') + values.at(5));
+                const QTableWidgetItem* metadataItem = m_packetTable->item(currentRow, 0);
+                const QString destination = metadataItem->data(Qt::UserRole + 1).toString();
+                const QString path = metadataItem->data(Qt::UserRole + 2).toString();
+                const QString route = values.at(2) + QLatin1Char('>') + destination +
+                                      (path.isEmpty() ? QString() : QLatin1Char(',') + path);
+                m_packetDetails->setPlainText(route + QLatin1Char(':') + values.at(3));
             });
     updateStats({});
 }
@@ -336,21 +355,16 @@ void DataDecoderDialog::appendFrames(const QVector<Ax25Frame>& frames)
         }
         const int row = m_packetTable->rowCount();
         m_packetTable->insertRow(row);
-        const QStringList values{frame.receivedAt.toString(QStringLiteral("HH:mm:ss.zzz")),
-                                 frame.protocol,
-                                 frame.source,
-                                 frame.destination,
-                                 frame.path,
-                                 frame.payload};
+        const QStringList values{frame.receivedAt.toString(QStringLiteral("HH:mm:ss.zzz")), frame.protocol,
+                                 frame.source, frame.payload};
         for (int column = 0; column < values.size(); ++column)
         {
             auto* item = new QTableWidgetItem(values.at(column));
             item->setData(Qt::UserRole, values.at(column));
             m_packetTable->setItem(row, column, item);
         }
-        addAddressLinks(m_packetTable, row, 2, frame.source);
-        addAddressLinks(m_packetTable, row, 3, frame.destination);
-        addAddressLinks(m_packetTable, row, 4, frame.path, true);
+        m_packetTable->item(row, 0)->setData(Qt::UserRole + 1, frame.destination);
+        m_packetTable->item(row, 0)->setData(Qt::UserRole + 2, frame.path);
         m_packetTable->scrollToBottom();
     }
 }
@@ -397,12 +411,13 @@ QString DataDecoderDialog::exportText() const
     for (int row = 0; row < m_packetTable->rowCount(); ++row)
     {
         QStringList fields;
-        for (int column = 0; column < m_packetTable->columnCount(); ++column)
-        {
-            const QTableWidgetItem* item = m_packetTable->item(row, column);
-            const QVariant retainedValue = item->data(Qt::UserRole);
-            fields.append(retainedValue.isValid() ? retainedValue.toString() : item->text());
-        }
+        const QTableWidgetItem* metadataItem = m_packetTable->item(row, 0);
+        fields.append(metadataItem->data(Qt::UserRole).toString());
+        fields.append(m_packetTable->item(row, 1)->data(Qt::UserRole).toString());
+        fields.append(m_packetTable->item(row, 2)->data(Qt::UserRole).toString());
+        fields.append(metadataItem->data(Qt::UserRole + 1).toString());
+        fields.append(metadataItem->data(Qt::UserRole + 2).toString());
+        fields.append(m_packetTable->item(row, 3)->data(Qt::UserRole).toString());
         lines.append(fields.join(QLatin1Char('\t')));
     }
     return lines.join(QLatin1Char('\n'));
@@ -425,5 +440,11 @@ void DataDecoderDialog::exportPackets()
         QMessageBox::warning(this, QStringLiteral("Export AX.25 Packets"), file.errorString());
         return;
     }
-    QTextStream(&file) << exportText();
+    QTextStream stream(&file);
+    stream << exportText();
+    if (stream.status() != QTextStream::Ok || !file.flush())
+    {
+        QMessageBox::warning(this, QStringLiteral("Export AX.25 Packets"),
+                             QStringLiteral("The packet export could not be written completely."));
+    }
 }

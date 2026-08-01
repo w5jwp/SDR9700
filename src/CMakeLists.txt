@@ -315,6 +315,12 @@ if(BUILD_TESTING)
     add_test(NAME ApplicationLogDialogTest COMMAND ApplicationLogDialogTest)
     set_tests_properties(ApplicationLogDialogTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+    add_executable(DataDecoderDialogTest tests/DataDecoderDialogTest.cpp)
+    target_include_directories(DataDecoderDialogTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
+    target_link_libraries(DataDecoderDialogTest PRIVATE SDR9700_app_support Qt6::Test)
+    add_test(NAME DataDecoderDialogTest COMMAND DataDecoderDialogTest)
+    set_tests_properties(DataDecoderDialogTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     add_library(SDR9700_memory_test_support STATIC
         gui/MemoryStore.cpp
         gui/MainWindowHelpers.cpp

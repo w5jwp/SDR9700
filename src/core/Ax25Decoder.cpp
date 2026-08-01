@@ -13,7 +13,7 @@ constexpr double kMarkFrequency = 1200.0;
 constexpr double kSpaceFrequency = 2200.0;
 constexpr int kMinimumFrameBytes = 18;
 
-QString decodeAddress(const QByteArray& bytes, int offset)
+QString decodeAddress(const QByteArray& bytes, int offset, bool digipeater)
 {
     QString call;
     for (int i = 0; i < 6; ++i)
@@ -28,6 +28,10 @@ QString decodeAddress(const QByteArray& bytes, int offset)
     if (ssid != 0)
     {
         call.append(QStringLiteral("-%1").arg(ssid));
+    }
+    if (digipeater && (static_cast<quint8>(bytes.at(offset + 6)) & 0x80U) != 0)
+    {
+        call.append(QLatin1Char('*'));
     }
     return call;
 }
@@ -157,6 +161,7 @@ QVector<Ax25Frame> Ax25Decoder::processNrziTones(const QVector<bool>& tones)
     for (const bool tone : tones)
     {
         acceptTone(lane, tone, frames);
+        ++m_sampleIndex;
     }
     return frames;
 }
@@ -241,18 +246,11 @@ void Ax25Decoder::finishFrame(const QVector<bool>& rawBits, QVector<Ax25Frame>& 
         return;
     }
     const QByteArray frame = bytes.left(bytes.size() - 2);
-    bool structurallyValid = false;
-    Ax25Frame decoded = parseFrame(frame, &structurallyValid);
-    if (!structurallyValid)
-    {
-        return;
-    }
     const quint16 expected = static_cast<quint8>(bytes.at(bytes.size() - 2)) |
                              (static_cast<quint16>(static_cast<quint8>(bytes.back())) << 8);
     if (frameCheckSequence(frame) != expected)
     {
-        const quint64 rejectionWindow = static_cast<quint64>(qMax(1, m_samplesPerSymbol * 2));
-        if (!m_haveRejectedSample || m_sampleIndex - m_lastRejectedSampleIndex > rejectionWindow)
+        if (isDistinctCandidate(&m_lastRejectedSampleIndex, &m_haveRejectedSample))
         {
             ++m_stats.candidates;
             ++m_stats.fcsFailures;
@@ -261,18 +259,43 @@ void Ax25Decoder::finishFrame(const QVector<bool>& rawBits, QVector<Ax25Frame>& 
         }
         return;
     }
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (frame == m_lastFrame && now - m_lastFrameMs < 1500)
+    bool structurallyValid = false;
+    Ax25Frame decoded = parseFrame(frame, &structurallyValid);
+    if (!structurallyValid)
+    {
+        if (isDistinctCandidate(&m_lastMalformedSampleIndex, &m_haveMalformedSample))
+        {
+            ++m_stats.candidates;
+            ++m_stats.malformed;
+        }
+        return;
+    }
+    const quint64 duplicateWindow = static_cast<quint64>(qMax(1, m_samplesPerSymbol * 2));
+    if (m_haveFrameSample && frame == m_lastFrame && m_sampleIndex >= m_lastFrameSampleIndex &&
+        m_sampleIndex - m_lastFrameSampleIndex <= duplicateWindow)
     {
         return;
     }
     m_lastFrame = frame;
-    m_lastFrameMs = now;
+    m_lastFrameSampleIndex = m_sampleIndex;
+    m_haveFrameSample = true;
     decoded.receivedAt = QDateTime::currentDateTime();
     decoded.protocol = QStringLiteral("AX.25 (1200)");
     ++m_stats.candidates;
     ++m_stats.decoded;
     frames.append(decoded);
+}
+
+bool Ax25Decoder::isDistinctCandidate(quint64* lastSampleIndex, bool* haveSample)
+{
+    const quint64 rejectionWindow = static_cast<quint64>(qMax(1, m_samplesPerSymbol * 2));
+    if (*haveSample && m_sampleIndex >= *lastSampleIndex && m_sampleIndex - *lastSampleIndex <= rejectionWindow)
+    {
+        return false;
+    }
+    *lastSampleIndex = m_sampleIndex;
+    *haveSample = true;
+    return true;
 }
 
 quint16 Ax25Decoder::frameCheckSequence(const QByteArray& bytes)
@@ -308,7 +331,7 @@ Ax25Frame Ax25Decoder::parseFrame(const QByteArray& bytes, bool* valid)
             ok = false;
             break;
         }
-        addresses.append(decodeAddress(bytes, offset));
+        addresses.append(decodeAddress(bytes, offset, addresses.size() >= 2));
         const bool last = (static_cast<quint8>(bytes.at(offset + 6)) & 0x01U) != 0;
         offset += 7;
         if (last)
@@ -371,7 +394,10 @@ void Ax25Decoder::reset()
     m_lanes.clear();
     m_stats = {};
     m_lastFrame.clear();
-    m_lastFrameMs = 0;
+    m_lastFrameSampleIndex = 0;
+    m_haveFrameSample = false;
     m_lastRejectedSampleIndex = 0;
     m_haveRejectedSample = false;
+    m_lastMalformedSampleIndex = 0;
+    m_haveMalformedSample = false;
 }

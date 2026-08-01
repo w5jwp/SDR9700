@@ -13,6 +13,14 @@ unusedFunction:src/tests/MainWindowHelpersTest.cpp
 unusedFunction:src/tests/MeterControllerTest.cpp
 unusedFunction:src/tests/MemoryStoreTest.cpp
 unusedFunction:src/tests/MemoryManagerSmokeTest.cpp
+unusedFunction:src/tests/ApplicationLogDialogTest.cpp
+unusedFunction:src/tests/ApplicationLogTest.cpp
+unusedFunction:src/tests/Ax25DecoderTest.cpp
+unusedFunction:src/tests/DataDecoderDialogTest.cpp
+unusedFunction:src/tests/RadioSessionWatchdogTest.cpp
+unusedFunction:src/tests/UdpStatusMessagesTest.cpp
+functionConst:src/tests/RadioSessionWatchdogTest.cpp
+functionStatic:src/gui/MainWindow.cpp
 unusedFunction:src/tests/RadioCapabilitiesTest.cpp
 unusedFunction:src/tests/RadioRouterTest.cpp
 unusedFunction:src/tests/PacketLayoutTest.cpp

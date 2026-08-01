@@ -37,7 +37,7 @@ class VfoModel : public QObject
     bool manualNotchOn() const { return m_manualNotchOn; }
     bool compressorOn() const { return m_compressorOn; }
     bool xfcOn() const { return m_xfcOn; }
-    QString agcMode() const { return m_agcMode; }
+    const QString& agcMode() const { return m_agcMode; }
     bool ritOn() const { return m_ritOn; }
     short ritHz() const { return m_ritHz; }
 
