@@ -590,16 +590,6 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     const QRect spectrumPlotRect(plotLeftX(), specTop, qMax(0, w - plotLeftX()), qMax(0, specDrawH - 1));
     p.drawPixmap(0, 0, m_staticLayer);
 
-    if (m_spectrumBins.isEmpty())
-    {
-        p.setPen(QColor(0x4a, 0x60, 0x78));
-        QFont f = p.font();
-        f.setPointSize(9);
-        p.setFont(f);
-        p.drawText(QRect(0, specTop, w, specDrawH), Qt::AlignCenter,
-                   "No Spectrum Scope data - waiting for radio stream");
-    }
-
     if (!m_spectrumBins.isEmpty())
     {
         ensureDisplayBinMap(m_spectrumBins.size());

@@ -297,7 +297,7 @@ void MainWindow::buildToolBar()
 
     m_titleBar = new MainTitleBar(this);
     m_titleBar->setTitle(
-        QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 %2</span>")
+        QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 v%2</span>")
             .arg(QString::fromLatin1(APP_NAME).toHtmlEscaped(), QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
 
     auto* fileMenu = new QMenu(QStringLiteral("&File"), this);
@@ -563,7 +563,7 @@ void MainWindow::moveSelectedMemory(int direction)
 
 void MainWindow::updateWindowTitle()
 {
-    QString title = QStringLiteral("%1 %2").arg(QString::fromLatin1(APP_NAME), QString::fromLatin1(APP_VERSION));
+    QString title = QStringLiteral("%1 v%2").arg(QString::fromLatin1(APP_NAME), QString::fromLatin1(APP_VERSION));
 #if SDR9700_DEBUG_BUILD
     title += QStringLiteral(" (DEBUG)");
 #endif
