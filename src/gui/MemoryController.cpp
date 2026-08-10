@@ -116,24 +116,6 @@ bool MemoryController::memoryOperationInProgress() const
     return m_memoryViewController->operationInProgress();
 }
 
-bool MemoryController::memoryEditorVisible() const
-{
-    return m_memoryEditorPane && m_memoryEditorPane->isVisible();
-}
-
-void MemoryController::clearMemoryEditButtonChecked()
-{
-    if (m_memoryEditButton)
-    {
-        m_memoryEditButton->setChecked(false);
-    }
-}
-
-void MemoryController::closeMemoryEditorFromController()
-{
-    m_memoryViewController->closeEditorPane();
-}
-
 void MemoryController::showMemoryToast(const QString& message)
 {
     m_window->showToast(message);
@@ -396,9 +378,4 @@ void MemoryController::clearMemoryProgress()
 void MemoryController::rebuildMemoryViews()
 {
     m_memoryViewController->rebuild();
-}
-
-void MemoryController::closeMemoryEditorPane(bool resizeWindow)
-{
-    m_memoryViewController->closeEditorPane(resizeWindow);
 }

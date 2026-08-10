@@ -112,11 +112,6 @@ void MemoryViewController::buildMemoryWindow()
     memoryLayout->setSpacing(kMemoryToolbarGroupSpacing);
     auto* addButton = new QPushButton("Add", panel);
     auto* editButton = new QPushButton("Edit", panel);
-    editButton->setCheckable(true);
-    editButton->setStyleSheet(QStringLiteral("QPushButton:checked { background: %1; border: 1px solid %2; "
-                                             "border-radius: 3px; color: %3; }")
-                                  .arg(UiTheme::Color::AccentDark, UiTheme::Color::Accent, UiTheme::Color::TextBright));
-    m_owner->m_memoryEditButton = editButton;
     auto* copyButton = new QPushButton("Copy", panel);
     auto* removeButton = new QPushButton("Remove", panel);
     memoryLayout->addWidget(addButton);
@@ -176,17 +171,6 @@ void MemoryViewController::buildMemoryWindow()
                                                                new ToneCellDelegate(m_owner->m_window->m_memoryTable));
     leftRoot->addWidget(m_owner->m_window->m_memoryTable, 1);
 
-    m_owner->m_memoryEditorSeparator = new QWidget(panel);
-    m_owner->m_memoryEditorSeparator->setFixedWidth(1);
-    m_owner->m_memoryEditorSeparator->setStyleSheet(
-        QStringLiteral("QWidget { background: %1; }").arg(QLatin1String(UiTheme::Color::BorderMedium)));
-    m_owner->m_memoryEditorSeparator->hide();
-
-    m_owner->m_memoryEditorPane = new QWidget(panel);
-    m_owner->m_memoryEditorPane->setObjectName(QStringLiteral("memoryEditorPane"));
-    m_owner->m_memoryEditorPane->setFixedWidth(kMemoryEditorPaneWidth);
-    m_owner->m_memoryEditorPane->hide();
-
     const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(panel);
     m_owner->m_window->m_memoryCountLabel = new QLabel(panel);
     m_owner->m_window->m_memoryCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -206,8 +190,6 @@ void MemoryViewController::buildMemoryWindow()
     leftRoot->addWidget(footer.widget);
 
     root->addWidget(leftPane, 1);
-    root->addWidget(m_owner->m_memoryEditorSeparator);
-    root->addWidget(m_owner->m_memoryEditorPane);
 
     connect(footer.buttonBox, &QDialogButtonBox::rejected, m_owner->m_window->m_memoryWindow, &QWidget::hide);
 
@@ -223,22 +205,6 @@ void MemoryViewController::buildMemoryWindow()
     connect(m_owner->m_window->m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), m_owner,
             &MemoryController::reloadMemoryTable);
     connect(syncButton, &QPushButton::clicked, m_owner, &MemoryController::forceRadioMemorySync);
-    connect(m_owner->m_window->m_memoryTable, &QTableWidget::cellClicked, this,
-            [this](int row, int column)
-            {
-                Q_UNUSED(column)
-                if (!m_owner->m_memoryEditorPane || !m_owner->m_memoryEditorPane->isVisible())
-                {
-                    return;
-                }
-
-                const auto* idItem = m_owner->m_window->m_memoryTable->item(row, kMemoryIdColumn);
-                const QString memoryId = idItem ? idItem->text() : QString();
-                if (memoryId != m_owner->m_openMemoryEditorId)
-                {
-                    closeEditorPane();
-                }
-            });
     connect(upButton, &QPushButton::clicked, m_owner, &MemoryController::moveSelectedMemoryUp);
     connect(downButton, &QPushButton::clicked, m_owner, &MemoryController::moveSelectedMemoryDown);
     connect(addButton, &QPushButton::clicked, m_owner, &MemoryController::storeCurrentMemory);
@@ -267,49 +233,6 @@ void MemoryViewController::showMemoryWindow()
     }
     m_owner->reloadMemoryTable();
     static_cast<sdr9700::ui::UtilityWindow*>(m_owner->m_window->m_memoryWindow)->showCentered();
-}
-
-
-void MemoryViewController::closeEditorPane(bool resizeWindow)
-{
-    if (!m_owner->m_memoryEditorPane || !m_owner->m_window || !m_owner->m_window->m_memoryWindow)
-    {
-        return;
-    }
-
-    if (QLayout* layout = m_owner->m_memoryEditorPane->layout())
-    {
-        while (QLayoutItem* item = layout->takeAt(0))
-        {
-            if (QWidget* widget = item->widget())
-            {
-                delete widget;
-            }
-            delete item;
-        }
-        delete layout;
-    }
-
-    m_owner->m_memoryEditorPane->hide();
-    if (m_owner->m_memoryEditorSeparator)
-    {
-        m_owner->m_memoryEditorSeparator->hide();
-    }
-    m_owner->m_openMemoryEditorId.clear();
-    if (m_owner->m_memoryEditButton)
-    {
-        m_owner->m_memoryEditButton->setChecked(false);
-    }
-    if (!resizeWindow)
-    {
-        return;
-    }
-
-    m_owner->m_window->m_memoryWindow->setFixedSize(kMemoryWindowSize);
-    if (m_owner->m_window->m_memoryWindow->isVisible())
-    {
-        static_cast<sdr9700::ui::UtilityWindow*>(m_owner->m_window->m_memoryWindow)->centerOnHost();
-    }
 }
 
 

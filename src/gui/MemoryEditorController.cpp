@@ -35,16 +35,9 @@ MemoryEditorController::MemoryEditorController(MemoryController* owner) : QObjec
 
 void MemoryEditorController::editSelectedMemory()
 {
-    if (m_owner->memoryEditorVisible())
-    {
-        m_owner->closeMemoryEditorFromController();
-        return;
-    }
-
     const QString id = m_owner->selectedMemoryId();
     if (id.isEmpty())
     {
-        m_owner->clearMemoryEditButtonChecked();
         QMessageBox::information(m_owner->popupParent(), QStringLiteral("Edit Memory"),
                                  QStringLiteral("Choose one memory first."));
         return;

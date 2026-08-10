@@ -287,6 +287,7 @@ class MainWindow : public QMainWindow
 #endif
 
     QLabel* m_statusLabel{nullptr};
+    QAction* m_radioConnectionAction{nullptr};
 
     QString m_connStateName;
     QTimer* m_toastTimer{nullptr};

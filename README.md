@@ -53,7 +53,7 @@ hardware testing and polish before a stable release.
   activation from the main-window memory browser. The active channel remains
   highlighted until its frequency, mode, duplex, offset, or tone settings
   change. Memory Manager selection is reserved for managing memory records and
-  does not tune the radio.
+  does not tune the radio; Add and Edit open a modal form over Memory Manager.
 - Main-window lock mode that prevents accidental radio-control changes while
   leaving PTT, mute, and AF gain usable.
 - Icom RC-28 rotary controller support for step tuning and button mapping,

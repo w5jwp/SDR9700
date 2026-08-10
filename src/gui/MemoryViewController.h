@@ -20,7 +20,6 @@ class MemoryViewController : public QObject
     void setProgress(const QString& label, int value, int maximum);
     void clearProgress();
     void updateTableInteraction();
-    void closeEditorPane(bool resizeWindow = true);
     void stopScheduledRefresh();
     bool operationInProgress() const;
 

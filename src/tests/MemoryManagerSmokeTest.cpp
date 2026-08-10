@@ -27,6 +27,7 @@
 #include <QScrollBar>
 #include <QStandardPaths>
 #include <QTableWidget>
+#include <QTimer>
 #include <QWidget>
 #include <QtTest>
 #include <algorithm>
@@ -41,6 +42,7 @@ class MemoryManagerSmokeTest : public QObject
     void constructsMemoryManagerUi();
     void mainMemoryBrowserKeepsActiveMemorySelected();
     void mainWindowRetainsFixedFramelessDesign();
+    void fileMenuTracksRadioConnection();
     void selectorButtonsAvoidDynamicStyleSheets();
     void utilityWindowIsDestroyedWithHost();
     void quitActionDefersWindowClose();
@@ -150,6 +152,7 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
 {
     RadioModel model;
     MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
 
     const QWidgetList topLevelWidgets = QApplication::topLevelWidgets();
     const auto memoryWindowIt =
@@ -161,9 +164,8 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QVERIFY(memoryWindow->windowFlags().testFlag(Qt::FramelessWindowHint));
     QCOMPARE(memoryWindow->minimumSize(), memoryWindow->maximumSize());
     auto* table = memoryWindow->findChild<QTableWidget*>(QStringLiteral("memoryManagerTable"));
-    auto* editor = memoryWindow->findChild<QWidget*>(QStringLiteral("memoryEditorPane"));
     QVERIFY(table != nullptr);
-    QVERIFY(editor != nullptr);
+    QVERIFY(memoryWindow->findChild<QWidget*>(QStringLiteral("memoryEditorPane")) == nullptr);
     QCOMPARE(table->columnCount(), 7);
     QCOMPARE(table->horizontalHeaderItem(0)->text(), QStringLiteral("Channel"));
     for (int column = 0; column < 6; ++column)
@@ -174,7 +176,6 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QCOMPARE(table->horizontalHeader()->height(), 32);
     QCOMPARE(table->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOn);
     QVERIFY(table->styleSheet().contains(QLatin1String(UiTheme::Color::MenuBar)));
-    QVERIFY(!editor->isVisible());
 
     QPushButton* addMemoryButton = nullptr;
     for (QPushButton* button : memoryWindow->findChildren<QPushButton*>())
@@ -186,11 +187,40 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
         }
     }
     QVERIFY(addMemoryButton != nullptr);
+    bool foundEditorDialog = false;
+    bool editorWasModal = false;
+    bool editorWasFrameless = false;
+    bool editorHadTitleBar = false;
+    bool editorHadScrollArea = false;
+    QString editorChannelText;
+    QTimer::singleShot(
+        100, QCoreApplication::instance(),
+        [&]()
+        {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+            {
+                return;
+            }
+            foundEditorDialog = dialog->objectName() == QLatin1String("memoryEditorDialog");
+            editorWasModal = dialog->isModal();
+            editorWasFrameless = dialog->windowFlags().testFlag(Qt::FramelessWindowHint);
+            editorHadTitleBar = dialog->findChild<QWidget*>(QStringLiteral("memoryEditorTitleBar")) != nullptr;
+            editorHadScrollArea = dialog->findChild<QWidget*>(QStringLiteral("memoryEditorScrollArea")) != nullptr;
+            if (auto* channelCombo = dialog->findChild<QComboBox*>(QStringLiteral("memoryEditorChannel")))
+            {
+                editorChannelText = channelCombo->currentText();
+            }
+            dialog->reject();
+        });
     addMemoryButton->click();
-    auto* channelCombo = memoryWindow->findChild<QComboBox*>(QStringLiteral("memoryEditorChannel"));
-    QVERIFY(channelCombo != nullptr);
-    QVERIFY(channelCombo->currentText().contains(QLatin1Char('-')));
-    QVERIFY(channelCombo->currentText().endsWith(QStringLiteral("001")));
+    QVERIFY(foundEditorDialog);
+    QVERIFY(editorWasModal);
+    QVERIFY(editorWasFrameless);
+    QVERIFY(editorHadTitleBar);
+    QVERIFY(editorHadScrollArea);
+    QVERIFY(editorChannelText.contains(QLatin1Char('-')));
+    QVERIFY(editorChannelText.endsWith(QStringLiteral("001")));
 }
 
 void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
@@ -215,6 +245,23 @@ void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
     QCOMPARE(memoryBrowser->horizontalHeader()->defaultAlignment(), Qt::AlignLeft | Qt::AlignVCenter);
     QVERIFY(memoryBrowser->alternatingRowColors());
     QVERIFY(memoryBrowser->styleSheet().contains(QLatin1String(UiTheme::Color::PanelDark)));
+}
+
+void MemoryManagerSmokeTest::fileMenuTracksRadioConnection()
+{
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+
+    auto* connectionAction = window.findChild<QAction*>(QStringLiteral("radioConnectionAction"));
+    QVERIFY(connectionAction != nullptr);
+    QCOMPARE(connectionAction->text(), QStringLiteral("Connect to Radio"));
+
+    QVERIFY(QMetaObject::invokeMethod(&window, "onConnectionChanged", Q_ARG(bool, true)));
+    QCOMPARE(connectionAction->text(), QStringLiteral("Disconnect from Radio"));
+
+    QVERIFY(QMetaObject::invokeMethod(&window, "onConnectionChanged", Q_ARG(bool, false)));
+    QCOMPARE(connectionAction->text(), QStringLiteral("Connect to Radio"));
 }
 
 void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
@@ -250,7 +297,7 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     QVERIFY(statusTimeLabel != nullptr);
     QVERIFY(!rfGainButton->property("levelControl").toBool());
     QCOMPARE(frequencyField->size(), QSize(220, 48));
-    QCOMPARE(frequencyField->layout()->contentsMargins(), QMargins(6, 5, 6, 3));
+    QCOMPARE(frequencyField->layout()->contentsMargins(), QMargins(6, 4, 6, 4));
     QCOMPARE(frequencyField->parentWidget()->layout()->spacing(), 6);
     QCOMPARE(frequencyField->parentWidget()->layout()->itemAt(0)->layout()->contentsMargins(), QMargins(0, 0, 0, 5));
     QCOMPARE(frequencyEdit->alignment(), Qt::AlignRight | Qt::AlignVCenter);

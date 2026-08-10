@@ -12,10 +12,11 @@
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
 
-#include <QApplication>
 #include <QComboBox>
+#include <QDialog>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -24,9 +25,10 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPointer>
+#include <QScrollArea>
 #include <QSizePolicy>
 #include <QSpinBox>
-#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidgetAction>
 
@@ -41,29 +43,48 @@ void MemoryEditorForm::show(const QString& memoryId)
 {
     QWidget* parent = m_owner->popupParent();
     const bool editing = !memoryId.isEmpty();
-    if (!m_owner->m_memoryEditorPane || !m_owner->m_window || !m_owner->m_window->m_memoryWindow)
+    if (!m_owner->m_window || !m_owner->m_window->m_memoryWindow)
     {
         return;
     }
 
-    m_owner->closeMemoryEditorPane(false);
-    auto* editor = m_owner->m_memoryEditorPane;
-    editor->show();
-    if (m_owner->m_memoryEditorSeparator)
-    {
-        m_owner->m_memoryEditorSeparator->show();
-    }
-    m_owner->m_window->m_memoryWindow->setFixedSize(memoryManagerWindowSize());
-    static_cast<sdr9700::ui::UtilityWindow*>(m_owner->m_window->m_memoryWindow)->centerOnHost();
+    const QString dialogTitle = editing ? QStringLiteral("Edit Memory") : QStringLiteral("Add Memory");
+    sdr9700::ui::UtilityWindow dialog(dialogTitle, m_owner->m_window->m_memoryWindow);
+    dialog.setObjectName(QStringLiteral("memoryEditorDialog"));
+    dialog.setModal(true);
+    dialog.resize(kMemoryEditorDialogWidth, kMemoryEditorDialogHeight);
+    dialog.setMinimumSize(440, 400);
+    dialog.setMaximumSize(kMemoryEditorDialogWidth, kMemoryEditorDialogHeight);
+    dialog.setStyleSheet(QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
+                             .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
+    parent = &dialog;
+
+    auto* windowRoot = new QVBoxLayout(&dialog);
+    windowRoot->setContentsMargins(0, 0, 0, 0);
+    windowRoot->setSpacing(0);
+    auto* titleBar = new sdr9700::ui::UtilityTitleBar(dialogTitle, &dialog);
+    titleBar->setObjectName(QStringLiteral("memoryEditorTitleBar"));
+    connect(titleBar->closeButton(), &QPushButton::clicked, &dialog, &QDialog::reject);
+    windowRoot->addWidget(titleBar);
+
+    auto* content = new QWidget(&dialog);
+    auto* dialogRoot = new QVBoxLayout(content);
+    dialogRoot->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
+    dialogRoot->setSpacing(sdr9700::ui::kDialogFooterSpacing);
+    windowRoot->addWidget(content, 1);
+
+    auto* scrollArea = new QScrollArea(content);
+    scrollArea->setObjectName(QStringLiteral("memoryEditorScrollArea"));
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    auto* editor = new QWidget(scrollArea);
+    editor->setObjectName(QStringLiteral("memoryEditorContent"));
+    scrollArea->setWidget(editor);
+    dialogRoot->addWidget(scrollArea, 1);
 
     auto* root = new QVBoxLayout(editor);
     root->setSpacing(sdr9700::ui::kDialogFooterSpacing);
-    root->setContentsMargins(kMemoryEditorGutter, 8, 0, 0);
-
-    auto* editorTitle = new QLabel(editing ? QStringLiteral("Edit Memory") : QStringLiteral("Add Memory"), editor);
-    editorTitle->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 12px; font-weight: bold; }")
-                                   .arg(QLatin1String(UiTheme::Color::TextStatusPrimary)));
-    root->addWidget(editorTitle);
+    root->setContentsMargins(0, 0, 0, 0);
 
     auto configureSectionForm = [](QFormLayout* form)
     {
@@ -843,7 +864,6 @@ void MemoryEditorForm::show(const QString& memoryId)
         if (!found)
         {
             QMessageBox::information(parent, "Edit Memory", "Select a memory to edit.");
-            m_owner->closeMemoryEditorPane();
             return;
         }
         applyMemoryToForm(memory);
@@ -864,31 +884,25 @@ void MemoryEditorForm::show(const QString& memoryId)
     updateCustomOffsetVisibility();
     updateConditionalSections();
 
-    m_owner->m_openMemoryEditorId = memoryId;
-    if (m_owner->m_memoryEditButton)
-    {
-        m_owner->m_memoryEditButton->setChecked(editing);
-    }
-
     root->addStretch(1);
-    root->addSpacing(kMemoryEditorGutter);
-    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(editor);
+    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
     auto* copyButton = footer.buttonBox->addButton(QStringLiteral("Copy Current"), QDialogButtonBox::ActionRole);
     copyButton->setMinimumWidth(copyButton->sizeHint().width() + 20);
     auto* cancelButton = footer.buttonBox->addButton(QDialogButtonBox::Cancel);
     auto* saveButton = footer.buttonBox->addButton(QDialogButtonBox::Save);
-    root->addWidget(footer.widget);
+    dialogRoot->addWidget(footer.widget);
     resizeEditorToContents();
     connect(copyButton, &QPushButton::clicked, editor, copyCurrentSettings);
-    connect(cancelButton, &QPushButton::clicked, this,
-            [this]() { QTimer::singleShot(0, this, [this]() { m_owner->closeMemoryEditorPane(); }); });
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+    const QPointer<QDialog> dialogGuard(&dialog);
 
     connect(
         saveButton, &QPushButton::clicked, editor,
         [this, editor, frequencyEdit, toneOptionCombo, toneEdit, tsqlEdit, dtcsSpin, dtcsRxSpin, nameEdit, modeCombo,
          filterCombo, dataModeCombo, scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin, dsqlCombo,
          dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, channelCombo, editing, memoryId,
-         parent]()
+         parent, dialogGuard]()
         {
             quint64 receiveHz = 0;
             if (!parseFrequencyText(frequencyEdit->text(), &receiveHz))
@@ -1052,16 +1066,21 @@ void MemoryEditorForm::show(const QString& memoryId)
             // success while either command was still pending or had failed.
             m_owner->queueRadioMemoryWrites(
                 writes, 0, editing ? QStringLiteral("Updating memory") : QStringLiteral("Storing memory"),
-                [this, editing](bool success)
+                [this, editing, dialogGuard](bool success)
                 {
                     if (!success)
                     {
                         return;
                     }
                     m_owner->reloadMemoryTable();
-                    m_owner->closeMemoryEditorPane();
+                    if (dialogGuard)
+                    {
+                        dialogGuard->accept();
+                    }
                     m_owner->m_window->showToast(editing ? QStringLiteral("Memory updated")
                                                          : QStringLiteral("Memory stored"));
                 });
         });
+
+    dialog.exec();
 }

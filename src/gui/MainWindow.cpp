@@ -304,7 +304,26 @@ void MainWindow::buildToolBar()
 #if !defined(Q_OS_MAC)
     fileMenu->setStyleSheet(menuStyle);
 #endif
-    fileMenu->addAction("Connect to Radio", this, [this]() { showRadioChooserDialog(); });
+    m_radioConnectionAction = fileMenu->addAction(QStringLiteral("Connect to Radio"));
+    m_radioConnectionAction->setObjectName(QStringLiteral("radioConnectionAction"));
+    connect(m_radioConnectionAction, &QAction::triggered, this,
+            [this]()
+            {
+                if (!m_model || !m_model->isConnected())
+                {
+                    showRadioChooserDialog();
+                    return;
+                }
+
+                m_userDisconnected = true;
+                m_allowChooserOnDisconnect = false;
+                m_reconnecting = false;
+                if (m_reconnectTimer)
+                {
+                    m_reconnectTimer->stop();
+                }
+                m_model->disconnectFromRadio();
+            });
     fileMenu->addSeparator();
     auto* quitAction = fileMenu->addAction("Quit");
     quitAction->setObjectName(QStringLiteral("quitAction"));
@@ -1527,6 +1546,12 @@ void MainWindow::updateConnectionTooltip()
 
 void MainWindow::onConnectionChanged(bool connected)
 {
+    if (m_radioConnectionAction)
+    {
+        m_radioConnectionAction->setText(connected ? QStringLiteral("Disconnect from Radio")
+                                                   : QStringLiteral("Connect to Radio"));
+    }
+
     setRadioControlsEnabled(radioUiReady());
     resetRadioOwnedControlsForSync();
 

@@ -17,7 +17,6 @@ class MemorySyncController;
 class MemorySelectionController;
 class MemoryViewController;
 class MemoryWriteController;
-class QPushButton;
 class QWidget;
 
 class MemoryController : public QObject
@@ -48,9 +47,6 @@ class MemoryController : public QObject
 
     bool memoryRefreshInProgress() const;
     bool memoryOperationInProgress() const;
-    bool memoryEditorVisible() const;
-    void clearMemoryEditButtonChecked();
-    void closeMemoryEditorFromController();
     void showMemoryToast(const QString& message);
     QWidget* popupParent() const;
 
@@ -91,7 +87,6 @@ class MemoryController : public QObject
     bool firstOpenChannelForGroup(quint16 group, quint16* channel) const;
     void setMemoryProgress(const QString& label, int value, int maximum);
     void clearMemoryProgress();
-    void closeMemoryEditorPane(bool resizeWindow = true);
 
     MainWindow* m_window{nullptr};
     MemoryCsvController* m_memoryCsvController{nullptr};
@@ -101,8 +96,4 @@ class MemoryController : public QObject
     MemoryViewController* m_memoryViewController{nullptr};
     MemoryWriteController* m_memoryWriteController{nullptr};
     QHash<quint32, MemoryType> m_radioMemoriesByKey;
-    QString m_openMemoryEditorId;
-    QPushButton* m_memoryEditButton{nullptr};
-    QWidget* m_memoryEditorPane{nullptr};
-    QWidget* m_memoryEditorSeparator{nullptr};
 };
