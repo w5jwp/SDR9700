@@ -4,6 +4,8 @@
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
 
+#include <QSize>
+
 namespace sdr9700::memory
 {
 using namespace sdr9700::ui::main_window;
@@ -24,6 +26,13 @@ inline MemoryToneFamily memoryToneFamilyForMode(rptAccessTxRx_t mode)
 inline bool modeSupportsMemoryOffset(int mode)
 {
     return mode == modeFM || mode == modeDV || mode == modeDD;
+}
+
+inline QSize memoryEditorDialogSize(const QSize& availableSize)
+{
+    constexpr int kScreenMargin = 24;
+    return QSize(qMin(kMemoryEditorDialogWidth, qMax(1, availableSize.width() - kScreenMargin)),
+                 qMin(kMemoryEditorDialogHeight, qMax(1, availableSize.height() - kScreenMargin)));
 }
 
 constexpr int radioMemorySyncTimeoutMs()

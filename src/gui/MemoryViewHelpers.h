@@ -124,14 +124,5 @@ inline QString memoryToneTableLabel(const MemoryRecord& memory)
     return QStringLiteral("%1: %2/%3").arg(type, memoryToneTxLabel(memory), memoryToneRxLabel(memory));
 }
 
-inline QString memoryFilterLabel(int filter)
-{
-    if (filter >= 1 && filter <= 3)
-    {
-        return QStringLiteral("FIL%1").arg(filter);
-    }
-    return QString::number(filter);
-}
-
 
 } // namespace sdr9700::memory

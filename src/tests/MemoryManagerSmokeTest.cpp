@@ -4,6 +4,7 @@
 #include "AppInfo.h"
 #include "AppPaths.h"
 #include "MemoryPanel.h"
+#include "MemoryEditorPolicy.h"
 #include "RadioChooserDialog.h"
 #include "RadioProfile.h"
 #include "StatusBarController.h"
@@ -177,15 +178,10 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QCOMPARE(table->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOn);
     QVERIFY(table->styleSheet().contains(QLatin1String(UiTheme::Color::MenuBar)));
 
-    QPushButton* addMemoryButton = nullptr;
-    for (QPushButton* button : memoryWindow->findChildren<QPushButton*>())
-    {
-        if (button->text() == QLatin1String("Add"))
-        {
-            addMemoryButton = button;
-            break;
-        }
-    }
+    const QList<QPushButton*> memoryButtons = memoryWindow->findChildren<QPushButton*>();
+    const auto addButtonIt = std::find_if(memoryButtons.cbegin(), memoryButtons.cend(), [](const QPushButton* button)
+                                          { return button->text() == QLatin1String("Add"); });
+    QPushButton* addMemoryButton = addButtonIt != memoryButtons.cend() ? *addButtonIt : nullptr;
     QVERIFY(addMemoryButton != nullptr);
     bool foundEditorDialog = false;
     bool editorWasModal = false;
@@ -221,6 +217,8 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QVERIFY(editorHadScrollArea);
     QVERIFY(editorChannelText.contains(QLatin1Char('-')));
     QVERIFY(editorChannelText.endsWith(QStringLiteral("001")));
+    QCOMPARE(sdr9700::memory::memoryEditorDialogSize(QSize(1366, 768)), QSize(520, 620));
+    QCOMPARE(sdr9700::memory::memoryEditorDialogSize(QSize(1024, 600)), QSize(520, 576));
 }
 
 void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
@@ -257,10 +255,18 @@ void MemoryManagerSmokeTest::fileMenuTracksRadioConnection()
     QVERIFY(connectionAction != nullptr);
     QCOMPARE(connectionAction->text(), QStringLiteral("Connect to Radio"));
 
-    QVERIFY(QMetaObject::invokeMethod(&window, "onConnectionChanged", Q_ARG(bool, true)));
+    QSignalSpy connectionSpy(&model, &RadioModel::connectionChanged);
+    QSignalSpy stageSpy(&model, &RadioModel::connectionStageChanged);
+    QVERIFY(QMetaObject::invokeMethod(&model, "onBackendConnected"));
+    QVERIFY(model.isConnected());
     QCOMPARE(connectionAction->text(), QStringLiteral("Disconnect from Radio"));
 
-    QVERIFY(QMetaObject::invokeMethod(&window, "onConnectionChanged", Q_ARG(bool, false)));
+    connectionAction->trigger();
+    QCOMPARE(stageSpy.count(), 1);
+    QCOMPARE(stageSpy.constFirst().constFirst().value<ConnectionStage>(), ConnectionStage::Disconnecting);
+    QVERIFY(QMetaObject::invokeMethod(&model, "onBackendDisconnected"));
+    QVERIFY(!model.isConnected());
+    QVERIFY(connectionSpy.count() >= 2);
     QCOMPARE(connectionAction->text(), QStringLiteral("Connect to Radio"));
 }
 

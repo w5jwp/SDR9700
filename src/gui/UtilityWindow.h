@@ -2,6 +2,7 @@
 
 #include "DialogPlacement.h"
 #include "UiTheme.h"
+#include <QCloseEvent>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -99,6 +100,16 @@ class UtilityWindow : public QDialog
     }
 
   protected:
+    void closeEvent(QCloseEvent* event) override
+    {
+        if (property("closeBlocked").toBool())
+        {
+            event->ignore();
+            return;
+        }
+        QDialog::closeEvent(event);
+    }
+
     void showEvent(QShowEvent* event) override
     {
         QDialog::showEvent(event);

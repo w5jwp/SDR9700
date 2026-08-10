@@ -18,6 +18,7 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
+#include <QGuiApplication>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -27,6 +28,7 @@
 #include <QPushButton>
 #include <QPointer>
 #include <QScrollArea>
+#include <QScreen>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -41,7 +43,6 @@ MemoryEditorForm::MemoryEditorForm(MemoryController* owner) : QObject(owner), m_
 
 void MemoryEditorForm::show(const QString& memoryId)
 {
-    QWidget* parent = m_owner->popupParent();
     const bool editing = !memoryId.isEmpty();
     if (!m_owner->m_window || !m_owner->m_window->m_memoryWindow)
     {
@@ -52,12 +53,21 @@ void MemoryEditorForm::show(const QString& memoryId)
     sdr9700::ui::UtilityWindow dialog(dialogTitle, m_owner->m_window->m_memoryWindow);
     dialog.setObjectName(QStringLiteral("memoryEditorDialog"));
     dialog.setModal(true);
-    dialog.resize(kMemoryEditorDialogWidth, kMemoryEditorDialogHeight);
-    dialog.setMinimumSize(440, 400);
-    dialog.setMaximumSize(kMemoryEditorDialogWidth, kMemoryEditorDialogHeight);
+    const QPoint hostCenter = m_owner->m_window->m_memoryWindow->frameGeometry().center();
+    QScreen* screen = QGuiApplication::screenAt(hostCenter);
+    if (!screen)
+    {
+        screen = QGuiApplication::primaryScreen();
+    }
+    const QSize availableSize =
+        screen ? screen->availableGeometry().size() : QSize(kMemoryEditorDialogWidth, kMemoryEditorDialogHeight);
+    const QSize dialogSize = memoryEditorDialogSize(availableSize);
+    dialog.resize(dialogSize);
+    dialog.setMinimumSize(qMin(440, dialogSize.width()), qMin(400, dialogSize.height()));
+    dialog.setMaximumSize(dialogSize);
     dialog.setStyleSheet(QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
                              .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-    parent = &dialog;
+    QWidget* parent = &dialog;
 
     auto* windowRoot = new QVBoxLayout(&dialog);
     windowRoot->setContentsMargins(0, 0, 0, 0);
@@ -895,6 +905,16 @@ void MemoryEditorForm::show(const QString& memoryId)
     connect(copyButton, &QPushButton::clicked, editor, copyCurrentSettings);
     connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
 
+    auto setWriteInProgress = [&dialog, editor, titleBar, copyButton, cancelButton, saveButton](bool inProgress)
+    {
+        dialog.setProperty("closeBlocked", inProgress);
+        editor->setEnabled(!inProgress);
+        titleBar->closeButton()->setEnabled(!inProgress);
+        copyButton->setEnabled(!inProgress);
+        cancelButton->setEnabled(!inProgress);
+        saveButton->setEnabled(!inProgress);
+    };
+
     const QPointer<QDialog> dialogGuard(&dialog);
 
     connect(
@@ -902,7 +922,7 @@ void MemoryEditorForm::show(const QString& memoryId)
         [this, editor, frequencyEdit, toneOptionCombo, toneEdit, tsqlEdit, dtcsSpin, dtcsRxSpin, nameEdit, modeCombo,
          filterCombo, dataModeCombo, scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin, dsqlCombo,
          dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, channelCombo, editing, memoryId,
-         parent, dialogGuard]()
+         parent, dialogGuard, setWriteInProgress]()
         {
             quint64 receiveHz = 0;
             if (!parseFrequencyText(frequencyEdit->text(), &receiveHz))
@@ -1064,12 +1084,17 @@ void MemoryEditorForm::show(const QString& memoryId)
             // slot. A moved memory is one ordered batch (delete old, write new),
             // preventing the previous fire-and-forget path from reporting
             // success while either command was still pending or had failed.
+            setWriteInProgress(true);
             m_owner->queueRadioMemoryWrites(
                 writes, 0, editing ? QStringLiteral("Updating memory") : QStringLiteral("Storing memory"),
-                [this, editing, dialogGuard](bool success)
+                [this, editing, dialogGuard, setWriteInProgress](bool success)
                 {
                     if (!success)
                     {
+                        if (dialogGuard)
+                        {
+                            setWriteInProgress(false);
+                        }
                         return;
                     }
                     m_owner->reloadMemoryTable();
