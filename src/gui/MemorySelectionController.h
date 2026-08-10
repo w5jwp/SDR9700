@@ -15,7 +15,6 @@ class MemorySelectionController : public QObject
     explicit MemorySelectionController(MemoryController* owner);
 
     QString selectedMemoryId() const;
-    void selectCheckedMemory();
     void selectMemoryById(const QString& id, bool showDialogOnFailure);
     void copySelectedMemory();
     void removeSelectedMemory();

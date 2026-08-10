@@ -223,21 +223,6 @@ void MemoryViewController::buildMemoryWindow()
     connect(m_owner->m_window->m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), m_owner,
             &MemoryController::reloadMemoryTable);
     connect(syncButton, &QPushButton::clicked, m_owner, &MemoryController::forceRadioMemorySync);
-    connect(m_owner->m_window->m_memoryTable, &QTableWidget::cellDoubleClicked, this,
-            [this](int row, int column)
-            {
-                Q_UNUSED(column)
-                if (m_owner->m_memorySyncController->refreshInProgress())
-                {
-                    return;
-                }
-                const auto* idItem = m_owner->m_window->m_memoryTable->item(row, kMemoryIdColumn);
-                const QString memoryId = idItem ? idItem->text() : QString();
-                if (!memoryId.isEmpty())
-                {
-                    m_owner->selectMemoryById(memoryId, true);
-                }
-            });
     connect(m_owner->m_window->m_memoryTable, &QTableWidget::cellClicked, this,
             [this](int row, int column)
             {

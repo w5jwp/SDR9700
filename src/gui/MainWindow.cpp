@@ -521,11 +521,6 @@ QString MainWindow::selectedMemoryId() const
     return m_memoryController->selectedMemoryId();
 }
 
-void MainWindow::selectCheckedMemory()
-{
-    m_memoryController->selectCheckedMemory();
-}
-
 void MainWindow::selectMemoryById(const QString& id, bool showDialogOnFailure)
 {
     m_memoryController->selectMemoryById(id, showDialogOnFailure);
@@ -835,6 +830,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
         const QAction* chosen = menu.exec(widget->modeMenuPosition());
         if (chosen)
         {
+            leaveMemoryModeForManualChange();
             m_vfo->setMode(chosen->text());
         }
     };
@@ -869,7 +865,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
                 return;
             }
             qInfo(logGui()) << "VFO action: band selected" << sdr9700::radioBandShortLabel(band) << hz;
-            leaveMemoryModeForManualFrequencyChange();
+            leaveMemoryModeForManualChange();
             m_vfo->setFrequencyHz(hz);
         }
     };
@@ -1408,16 +1404,18 @@ void MainWindow::scheduleSpectrumScopeTune(quint64 hz)
     m_spectrumScopeController->scheduleSpectrumScopeTune(hz);
 }
 
-void MainWindow::setActiveMemory(const QString& id, quint64 frequencyHz, int duplexMode, quint64 offsetHz, int toneMode,
-                                 ushort toneValue)
+void MainWindow::setActiveMemory(const QString& id, quint64 frequencyHz, int mode, int duplexMode, quint64 offsetHz,
+                                 int toneMode, ushort toneValue)
 {
     m_activeMemoryId = id;
+    m_activeMemoryMode = sdr9700::ui::main_window::memoryModeLabel(mode).toUpper();
     m_activeMemoryFrequencyHz = frequencyHz;
     m_activeMemoryDuplexMode = static_cast<duplexMode_t>(duplexMode);
     m_activeMemoryOffsetHz = offsetHz;
     m_activeMemoryToneMode = static_cast<rptAccessTxRx_t>(toneMode);
     m_activeMemoryToneValue = toneValue;
     m_activeMemoryFrequencySettled = m_vfo && m_vfo->frequencyHz() == frequencyHz;
+    m_activeMemoryModeSettled = m_vfo && m_vfo->mode().compare(m_activeMemoryMode, Qt::CaseInsensitive) == 0;
     m_activeMemoryDuplexSettled = m_duplexMode == m_activeMemoryDuplexMode;
     m_activeMemoryOffsetSettled = m_activeMemoryDuplexMode == dmSimplex || m_repeaterOffsetHz == offsetHz;
     m_activeMemoryToneModeSettled = m_toneAccessMode == m_activeMemoryToneMode;
@@ -1436,6 +1434,7 @@ void MainWindow::clearActiveMemory()
     m_applyingMemorySelection = false;
     m_activeMemorySelectionReleaseScheduled = false;
     m_activeMemoryFrequencySettled = false;
+    m_activeMemoryModeSettled = false;
     m_activeMemoryDuplexSettled = false;
     m_activeMemoryOffsetSettled = false;
     m_activeMemoryToneModeSettled = false;
@@ -1447,6 +1446,7 @@ void MainWindow::clearActiveMemory()
     }
 
     m_activeMemoryId.clear();
+    m_activeMemoryMode.clear();
     m_activeMemoryFrequencyHz = 0;
     m_activeMemoryDuplexMode = dmSimplex;
     m_activeMemoryOffsetHz = 0;
@@ -1458,7 +1458,7 @@ void MainWindow::clearActiveMemory()
     }
 }
 
-void MainWindow::leaveMemoryModeForManualFrequencyChange()
+void MainWindow::leaveMemoryModeForManualChange()
 {
     if (!m_activeMemoryId.isEmpty() && m_model && m_model->isReady())
     {
@@ -1473,8 +1473,8 @@ void MainWindow::checkIfMemorySelectionComplete()
     {
         return;
     }
-    if (m_activeMemoryFrequencySettled && m_activeMemoryDuplexSettled && m_activeMemoryOffsetSettled &&
-        m_activeMemoryToneModeSettled && m_activeMemoryToneValueSettled)
+    if (m_activeMemoryFrequencySettled && m_activeMemoryModeSettled && m_activeMemoryDuplexSettled &&
+        m_activeMemoryOffsetSettled && m_activeMemoryToneModeSettled && m_activeMemoryToneValueSettled)
     {
         if (m_activeMemorySelectionReleaseScheduled)
         {
@@ -1731,7 +1731,7 @@ void MainWindow::onFrequencyChanged(quint64 hz)
             {
                 return;
             }
-            leaveMemoryModeForManualFrequencyChange();
+            leaveMemoryModeForManualChange();
         }
     }
 
@@ -1766,6 +1766,18 @@ void MainWindow::onFrequencyChanged(quint64 hz)
 
 void MainWindow::onModeChanged(const QString& mode)
 {
+    if (!m_activeMemoryId.isEmpty())
+    {
+        if (mode.compare(m_activeMemoryMode, Qt::CaseInsensitive) == 0)
+        {
+            m_activeMemoryModeSettled = true;
+            checkIfMemorySelectionComplete();
+        }
+        else if (m_activeMemoryModeSettled && !m_applyingMemorySelection)
+        {
+            clearActiveMemory();
+        }
+    }
     if (m_vfoPanel)
     {
         m_vfoPanel->setModeText(mode);
@@ -2372,7 +2384,7 @@ void MainWindow::commitFrequencyEdit(VfoPanel* panel)
         return;
     }
 
-    leaveMemoryModeForManualFrequencyChange();
+    leaveMemoryModeForManualChange();
     backend->setFrequencyHz(hz);
     panel->clearFrequencyFocus();
 }

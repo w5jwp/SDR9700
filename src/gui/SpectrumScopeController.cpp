@@ -89,7 +89,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                 {
                     return;
                 }
-                m_window->leaveMemoryModeForManualFrequencyChange();
+                m_window->leaveMemoryModeForManualChange();
                 m_window->m_vfo->setFrequencyHz(m_window->m_pendingSpectrumScopeTuneHz);
             });
 
@@ -287,7 +287,7 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
     hz = clampFrequencyHzToActiveBand(hz);
     const quint64 displayCenterHz =
         clampSpectrumScopeCenterHz(hz, m_window->m_spectrumScope ? m_window->m_spectrumScope->bandwidthMhz() : 0.0);
-    m_window->leaveMemoryModeForManualFrequencyChange();
+    m_window->leaveMemoryModeForManualChange();
     m_window->m_pendingSpectrumScopeTuneHz = hz;
     updateSpectrumScopeBandLimits(hz);
     if (clearStaleDisplay && m_window->m_spectrumScopeDisplay)
@@ -327,7 +327,7 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
         }
         if (m_window->m_pendingSpectrumScopeTuneHz != 0 && m_window->m_model->isReady() && !m_window->m_controlsLocked)
         {
-            m_window->leaveMemoryModeForManualFrequencyChange();
+            m_window->leaveMemoryModeForManualChange();
             m_window->m_vfo->setFrequencyHz(m_window->m_pendingSpectrumScopeTuneHz);
         }
     }

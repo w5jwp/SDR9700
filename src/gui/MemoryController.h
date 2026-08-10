@@ -32,7 +32,6 @@ class MemoryController : public QObject
     void forceRadioMemorySync();
     void setMemoryPollIntervalSeconds(int seconds);
     QString selectedMemoryId() const;
-    void selectCheckedMemory();
     void selectMemoryById(const QString& id, bool showDialogOnFailure);
     void editSelectedMemory();
     void copySelectedMemory();

@@ -24,7 +24,7 @@ class MemoryPanel : public QGroupBox
 
   private:
     void rebuildList();
-    void applyActiveSelection();
+    void applyActiveSelection(bool ensureVisible = true);
 
     QTableWidget* m_table{nullptr};
     QVector<MemoryRecord> m_memories;

@@ -162,7 +162,6 @@ class MainWindow : public QMainWindow
     void moveSelectedMemoryUp();
     void moveSelectedMemoryDown();
     void moveSelectedMemory(int direction);
-    void selectCheckedMemory();
     void reloadMemoryTable();
     void selectMemoryById(const QString& id, bool showDialogOnFailure);
     QString selectedMemoryId() const;
@@ -239,6 +238,7 @@ class MainWindow : public QMainWindow
     ushort m_toneFrequency{670};
     ushort m_dtcsCode{23};
     QString m_activeMemoryId;
+    QString m_activeMemoryMode;
     quint64 m_activeMemoryFrequencyHz{0};
     duplexMode_t m_activeMemoryDuplexMode{dmSimplex};
     quint64 m_activeMemoryOffsetHz{0};
@@ -248,6 +248,7 @@ class MainWindow : public QMainWindow
     bool m_activeMemorySelectionReleaseScheduled{false};
     int m_memorySelectionGeneration{0};
     bool m_activeMemoryFrequencySettled{false};
+    bool m_activeMemoryModeSettled{false};
     bool m_activeMemoryDuplexSettled{false};
     bool m_activeMemoryOffsetSettled{false};
     bool m_activeMemoryToneModeSettled{false};
@@ -342,10 +343,10 @@ class MainWindow : public QMainWindow
     quint64 clampSpectrumScopeCenterHz(quint64 hz, double bandwidthMhz) const;
     quint64 clampFrequencyHzToActiveBand(quint64 hz) const;
     void scheduleSpectrumScopeTune(quint64 hz);
-    void setActiveMemory(const QString& id, quint64 frequencyHz, int duplexMode, quint64 offsetHz, int toneMode,
-                         ushort toneValue);
+    void setActiveMemory(const QString& id, quint64 frequencyHz, int mode, int duplexMode, quint64 offsetHz,
+                         int toneMode, ushort toneValue);
     void clearActiveMemory();
-    void leaveMemoryModeForManualFrequencyChange();
+    void leaveMemoryModeForManualChange();
     void beginMemoryPttFrequencyTransition();
     void commitFrequencyEdit(VfoPanel* panel);
 };

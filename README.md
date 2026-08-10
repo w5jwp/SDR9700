@@ -50,7 +50,10 @@ hardware testing and polish before a stable release.
   live decode-health indicators and text export in the Data Decoder window.
 - Radio-backed IC-9700 memory management with add/edit/copy/remove, periodic and
   on-demand synchronization, CSV import/export, band filtering, ordering, and
-  selection from both the main window and Memory Manager.
+  activation from the main-window memory browser. The active channel remains
+  highlighted until its frequency, mode, duplex, offset, or tone settings
+  change. Memory Manager selection is reserved for managing memory records and
+  does not tune the radio.
 - Main-window lock mode that prevents accidental radio-control changes while
   leaving PTT, mute, and AF gain usable.
 - Icom RC-28 rotary controller support for step tuning and button mapping,

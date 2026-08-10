@@ -78,6 +78,7 @@ void RadioCommandController::cycleMode()
     const QString current = m_window->m_vfo->mode();
     const int index = modes.indexOf(current);
     const int nextIndex = index >= 0 ? (index + 1) % modes.size() : 0;
+    m_window->leaveMemoryModeForManualChange();
     m_window->m_vfo->setMode(modes.at(nextIndex));
 }
 
@@ -418,7 +419,7 @@ void RadioCommandController::applyOffsetSelection(duplexMode_t mode, quint64 off
         return;
     }
 
-    m_window->clearActiveMemory();
+    m_window->leaveMemoryModeForManualChange();
 
     if (mode == dmSimplex)
     {
@@ -553,7 +554,7 @@ void RadioCommandController::applyToneSelection(rptAccessTxRx_t mode, ushort val
     }
 
     const bool dtcs = isDtcsToneMode(mode);
-    m_window->clearActiveMemory();
+    m_window->leaveMemoryModeForManualChange();
 
     if (mode == ratrNN)
     {

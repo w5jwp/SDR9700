@@ -72,11 +72,6 @@ QString MemoryController::selectedMemoryId() const
     return m_memorySelectionController->selectedMemoryId();
 }
 
-void MemoryController::selectCheckedMemory()
-{
-    m_memorySelectionController->selectCheckedMemory();
-}
-
 void MemoryController::selectMemoryById(const QString& id, bool showDialogOnFailure)
 {
     m_memorySelectionController->selectMemoryById(id, showDialogOnFailure);
@@ -164,8 +159,9 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
         if (m_window->m_activeMemoryId == radioMemoryId(memory.group, memory.channel))
         {
             const MemoryRecord activeMemory = recordFromRadioMemory(memory);
-            m_window->setActiveMemory(activeMemory.id, activeMemory.receiveHz, activeMemory.duplexMode,
-                                      activeMemory.offsetHz, activeMemory.toneMode, activeMemory.toneValue);
+            m_window->setActiveMemory(activeMemory.id, activeMemory.receiveHz, activeMemory.mode,
+                                      activeMemory.duplexMode, activeMemory.offsetHz, activeMemory.toneMode,
+                                      activeMemory.toneValue);
             applyMemoryToVfo(activeMemory);
         }
     }

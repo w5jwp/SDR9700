@@ -3,6 +3,7 @@
 #include "MainWindowHelpers.h"
 #include "AppInfo.h"
 #include "AppPaths.h"
+#include "MemoryPanel.h"
 #include "RadioChooserDialog.h"
 #include "RadioProfile.h"
 #include "StatusBarController.h"
@@ -23,6 +24,7 @@
 #include <QLabel>
 #include <QPointer>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QWidget>
@@ -37,6 +39,7 @@ class MemoryManagerSmokeTest : public QObject
     void initTestCase();
     void newInstallationCanAddRadioProfile();
     void constructsMemoryManagerUi();
+    void mainMemoryBrowserKeepsActiveMemorySelected();
     void mainWindowRetainsFixedFramelessDesign();
     void selectorButtonsAvoidDynamicStyleSheets();
     void utilityWindowIsDestroyedWithHost();
@@ -90,6 +93,57 @@ void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()
     QCOMPARE(savedProfile.name, QStringLiteral("Test IC-9700"));
     QCOMPARE(savedProfile.host, QStringLiteral("192.0.2.1"));
     QVERIFY(RadioProfileStore::instance().removeProfile(savedProfile.id));
+}
+
+void MemoryManagerSmokeTest::mainMemoryBrowserKeepsActiveMemorySelected()
+{
+    MemoryPanel panel;
+    MemoryRecord first;
+    first.id = QStringLiteral("0:1");
+    first.group = 0;
+    first.channel = 1;
+    first.name = QStringLiteral("First");
+    MemoryRecord second;
+    second.id = QStringLiteral("0:2");
+    second.group = 0;
+    second.channel = 2;
+    second.name = QStringLiteral("Second");
+
+    panel.setMemories({first, second}, first.id);
+    auto* table = panel.findChild<QTableWidget*>(QStringLiteral("memoryBrowserTable"));
+    QVERIFY(table != nullptr);
+    QCOMPARE(table->currentRow(), 0);
+
+    table->selectRow(1);
+    QCOMPARE(table->currentRow(), 0);
+
+    QSignalSpy activatedSpy(&panel, &MemoryPanel::memoryActivated);
+    QVERIFY(QMetaObject::invokeMethod(table, "cellDoubleClicked", Qt::DirectConnection, Q_ARG(int, 1), Q_ARG(int, 0)));
+    QCOMPARE(activatedSpy.count(), 1);
+    QCOMPARE(activatedSpy.constFirst().constFirst().toString(), second.id);
+    QCOMPARE(table->currentRow(), 0);
+
+    QVector<MemoryRecord> manyMemories;
+    for (int channel = 1; channel <= 30; ++channel)
+    {
+        MemoryRecord memory;
+        memory.id = QStringLiteral("0:%1").arg(channel);
+        memory.group = 0;
+        memory.channel = static_cast<quint16>(channel);
+        memory.name = QStringLiteral("Memory %1").arg(channel);
+        manyMemories.append(memory);
+    }
+    panel.setFixedHeight(160);
+    panel.setMemories(manyMemories, manyMemories.constFirst().id);
+    panel.show();
+    QCoreApplication::processEvents();
+    table->verticalScrollBar()->setValue(table->verticalScrollBar()->maximum());
+    const int scrollPosition = table->verticalScrollBar()->value();
+    QVERIFY(scrollPosition > 0);
+
+    table->selectRow(table->rowCount() - 1);
+    QCOMPARE(table->currentRow(), 0);
+    QCOMPARE(table->verticalScrollBar()->value(), scrollPosition);
 }
 
 void MemoryManagerSmokeTest::constructsMemoryManagerUi()

@@ -6,6 +6,7 @@
 #include <QAbstractItemView>
 #include <QHeaderView>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSize>
 #include <QTableWidget>
@@ -107,6 +108,7 @@ MemoryPanel::MemoryPanel(QWidget* parent) : QGroupBox(parent)
                     emit memoryActivated(memoryId);
                 }
             });
+    connect(m_table, &QTableWidget::itemSelectionChanged, this, [this]() { applyActiveSelection(false); });
 }
 
 void MemoryPanel::setMemories(const QVector<MemoryRecord>& memories, const QString& activeMemoryId)
@@ -198,13 +200,14 @@ void MemoryPanel::rebuildList()
     applyActiveSelection();
 }
 
-void MemoryPanel::applyActiveSelection()
+void MemoryPanel::applyActiveSelection(bool ensureVisible)
 {
     if (!m_table)
     {
         return;
     }
 
+    const QSignalBlocker blocker(m_table->selectionModel());
     m_table->clearSelection();
     m_table->setCurrentCell(-1, -1);
     for (int row = 0; row < m_table->rowCount(); ++row)
@@ -214,7 +217,10 @@ void MemoryPanel::applyActiveSelection()
         {
             m_table->selectRow(row);
             m_table->setCurrentCell(row, kMemoryChannelColumn);
-            m_table->scrollToItem(item, QAbstractItemView::EnsureVisible);
+            if (ensureVisible)
+            {
+                m_table->scrollToItem(item, QAbstractItemView::EnsureVisible);
+            }
             return;
         }
     }
