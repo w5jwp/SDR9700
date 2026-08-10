@@ -636,7 +636,6 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     m_vfoPanel->setFrequencyText(QStringLiteral("---.---.---"));
     m_vfoPanel->setBandText(QStringLiteral("--"));
     m_vfoPanel->setModeText(QStringLiteral("--"));
-    m_vfoPanel->setMemoryName(QString::fromLatin1(kNoActiveMemoryLabel), QStringLiteral("No active memory"));
     m_vfoPanel->setTxPower(0);
     m_vfoPanel->setLanMod(m_lanModValue);
     const int appVolume = appVolumeSettingValue();
@@ -1409,11 +1408,10 @@ void MainWindow::scheduleSpectrumScopeTune(quint64 hz)
     m_spectrumScopeController->scheduleSpectrumScopeTune(hz);
 }
 
-void MainWindow::setActiveMemory(const QString& id, const QString& name, quint64 frequencyHz, int duplexMode,
-                                 quint64 offsetHz, int toneMode, ushort toneValue)
+void MainWindow::setActiveMemory(const QString& id, quint64 frequencyHz, int duplexMode, quint64 offsetHz, int toneMode,
+                                 ushort toneValue)
 {
     m_activeMemoryId = id;
-    m_activeMemoryName = name.left(sdr9700::memory::kRadioMemoryNameMaxChars);
     m_activeMemoryFrequencyHz = frequencyHz;
     m_activeMemoryDuplexMode = static_cast<duplexMode_t>(duplexMode);
     m_activeMemoryOffsetHz = offsetHz;
@@ -1427,7 +1425,6 @@ void MainWindow::setActiveMemory(const QString& id, const QString& name, quint64
     m_activeMemoryToneValueSettled = toneMode == ratrNN || (isDtcs && m_dtcsCode == toneValue) ||
                                      (!isDtcs && toneMode != ratrNN && m_toneFrequency == toneValue);
     m_activeMemoryAwaitingReceiveFrequency = false;
-    updateMemoryNameLabel();
     if (m_memoryPanel)
     {
         m_memoryPanel->setActiveMemoryId(m_activeMemoryId);
@@ -1450,13 +1447,11 @@ void MainWindow::clearActiveMemory()
     }
 
     m_activeMemoryId.clear();
-    m_activeMemoryName.clear();
     m_activeMemoryFrequencyHz = 0;
     m_activeMemoryDuplexMode = dmSimplex;
     m_activeMemoryOffsetHz = 0;
     m_activeMemoryToneMode = ratrNN;
     m_activeMemoryToneValue = 0;
-    updateMemoryNameLabel();
     if (m_memoryPanel)
     {
         m_memoryPanel->setActiveMemoryId(QString());
@@ -1499,18 +1494,6 @@ void MainWindow::checkIfMemorySelectionComplete()
                                m_activeMemorySelectionReleaseScheduled = false;
                            });
     }
-}
-
-void MainWindow::updateMemoryNameLabel()
-{
-    if (!m_vfoPanel)
-    {
-        return;
-    }
-
-    const QString text = m_activeMemoryId.isEmpty() ? QString::fromLatin1(kNoActiveMemoryLabel) : m_activeMemoryName;
-    m_vfoPanel->setMemoryName(text, m_activeMemoryId.isEmpty() ? QStringLiteral("No active memory")
-                                                               : QStringLiteral("Active memory: %1").arg(text));
 }
 
 void MainWindow::updateConnectionTooltip()

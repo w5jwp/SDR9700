@@ -20,18 +20,16 @@ constexpr QMargins kNoMargins(0, 0, 0, 0);
 constexpr int kNoSpacing = 0;
 constexpr int kGroupMargin = 8;
 constexpr int kGroupSpacing = 6;
+constexpr int kHeaderFrequencyExtraSpacing = 5;
 constexpr int kInlineSpacing = 4;
 constexpr int kSliderRowSpacing = 2;
 constexpr int kSliderWidth = 118;
-constexpr QSize kVfoFieldSize(220, 64);
+constexpr QSize kVfoFieldSize(220, 48);
 constexpr int kVfoFieldSideMargin = 6;
 constexpr int kVfoFieldTopMargin = 5;
 constexpr int kVfoFieldBottomMargin = 3;
 constexpr int kFrequencyFontPixelSize = 28;
 constexpr int kFrequencyEditHeight = 40;
-constexpr int kMemoryNameHeight = 16;
-constexpr int kMemoryNameTopMargin = 2;
-constexpr int kMemoryNameRightMargin = kVfoFieldSideMargin + 1;
 constexpr int kSignalMeterWidth = 220;
 constexpr int kSignalMeterHeight = 10;
 constexpr int kSignalScaleHeight = 11;
@@ -262,7 +260,7 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     layout->setSpacing(kGroupSpacing);
 
     auto* header = new QHBoxLayout;
-    header->setContentsMargins(kNoMargins);
+    header->setContentsMargins(0, 0, 0, kHeaderFrequencyExtraSpacing);
     header->setSpacing(kInlineSpacing);
     m_bandButton = makeSelectorButton(QStringLiteral("BAND"), QStringLiteral("--"), QStringLiteral("Band menu"),
                                       QStringLiteral("Open IC-9700 band presets."));
@@ -317,29 +315,6 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     m_frequencyEdit->setFont(freqFont);
     connect(m_frequencyEdit, &QLineEdit::returnPressed, this, &VfoPanel::frequencyReturnPressed);
 
-    auto* memoryNameField = new QWidget(frequencyField);
-    memoryNameField->setObjectName(QStringLiteral("vfoMemoryNameField"));
-    memoryNameField->setFixedHeight(kMemoryNameHeight);
-    memoryNameField->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* memoryNameLayout = new QHBoxLayout(memoryNameField);
-    memoryNameLayout->setContentsMargins(kNoMargins);
-    memoryNameLayout->setSpacing(kNoSpacing);
-
-    m_memoryNameLabel = new QLineEdit(memoryNameField);
-    m_memoryNameLabel->setObjectName(QStringLiteral("vfoMemoryNameLabel"));
-    m_memoryNameLabel->setFixedHeight(kMemoryNameHeight);
-    m_memoryNameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_memoryNameLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_memoryNameLabel->setTextMargins(0, kMemoryNameTopMargin, kMemoryNameRightMargin, 0);
-    m_memoryNameLabel->setReadOnly(true);
-    m_memoryNameLabel->setFocusPolicy(Qt::NoFocus);
-    m_memoryNameLabel->setCursor(Qt::ArrowCursor);
-    m_memoryNameLabel->setStyleSheet(QStringLiteral("QLineEdit { background: transparent; border: none; color: %1; "
-                                                    "font-size: 10px; font-weight: bold; padding: 0px; }")
-                                         .arg(UiTheme::Color::TextMuted));
-    memoryNameLayout->addWidget(m_memoryNameLabel);
-
-    frequencyLayout->addWidget(memoryNameField);
     frequencyLayout->addWidget(m_frequencyEdit);
 
     auto* signalBox = new QWidget(this);
@@ -412,15 +387,6 @@ void VfoPanel::setFrequencyReadOnly(bool readOnly)
     {
         m_frequencyEdit->setReadOnly(readOnly);
         m_frequencyEdit->setFocusPolicy(readOnly ? Qt::NoFocus : Qt::ClickFocus);
-    }
-}
-
-void VfoPanel::setMemoryName(const QString& text, const QString& tooltip)
-{
-    if (m_memoryNameLabel)
-    {
-        m_memoryNameLabel->setText(text);
-        m_memoryNameLabel->setToolTip(tooltip);
     }
 }
 

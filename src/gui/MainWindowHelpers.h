@@ -63,7 +63,6 @@ constexpr int kSpectrumScopeTuneCommitDelayMs = 70;
 constexpr int kSpectrumScopeTuneReleaseDelayMs = 650;
 constexpr quint64 kSpectrumScopeFixedPanMinDeltaHz = 1000;
 constexpr int kMemoryOffsetCustom = -1;
-constexpr auto kNoActiveMemoryLabel = "";
 constexpr auto kMemoryPollIntervalSecondsSettingsKey = "memoryPollIntervalSeconds";
 constexpr int kDefaultMemoryPollIntervalSeconds = 600;
 constexpr int kMemoryPollIntervalMinSeconds = 30;

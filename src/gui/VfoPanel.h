@@ -23,7 +23,6 @@ class VfoPanel : public QGroupBox
     void clearFrequencyFocus();
     void setFrequencyText(const QString& text);
     void setFrequencyReadOnly(bool readOnly);
-    void setMemoryName(const QString& text, const QString& tooltip);
     void setBandText(const QString& text);
     void setModeText(const QString& text);
     void setControlsEnabled(bool enabled);
@@ -56,7 +55,6 @@ class VfoPanel : public QGroupBox
     void updateSliderValueLabel(QLabel* label, int value);
 
     QLineEdit* m_frequencyEdit{nullptr};
-    QLineEdit* m_memoryNameLabel{nullptr};
     QPushButton* m_bandButton{nullptr};
     QPushButton* m_modeButton{nullptr};
     QPushButton* m_stepButton{nullptr};

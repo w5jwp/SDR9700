@@ -239,7 +239,6 @@ class MainWindow : public QMainWindow
     ushort m_toneFrequency{670};
     ushort m_dtcsCode{23};
     QString m_activeMemoryId;
-    QString m_activeMemoryName;
     quint64 m_activeMemoryFrequencyHz{0};
     duplexMode_t m_activeMemoryDuplexMode{dmSimplex};
     quint64 m_activeMemoryOffsetHz{0};
@@ -343,11 +342,10 @@ class MainWindow : public QMainWindow
     quint64 clampSpectrumScopeCenterHz(quint64 hz, double bandwidthMhz) const;
     quint64 clampFrequencyHzToActiveBand(quint64 hz) const;
     void scheduleSpectrumScopeTune(quint64 hz);
-    void setActiveMemory(const QString& id, const QString& name, quint64 frequencyHz, int duplexMode, quint64 offsetHz,
-                         int toneMode, ushort toneValue);
+    void setActiveMemory(const QString& id, quint64 frequencyHz, int duplexMode, quint64 offsetHz, int toneMode,
+                         ushort toneValue);
     void clearActiveMemory();
     void leaveMemoryModeForManualFrequencyChange();
     void beginMemoryPttFrequencyTransition();
-    void updateMemoryNameLabel();
     void commitFrequencyEdit(VfoPanel* panel);
 };

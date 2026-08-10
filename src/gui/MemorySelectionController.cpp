@@ -100,8 +100,8 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
     m_owner->m_window->m_applyingMemorySelection = true;
     m_owner->m_window->m_activeMemorySelectionReleaseScheduled = false;
     const int generation = ++m_owner->m_window->m_memorySelectionGeneration;
-    m_owner->m_window->setActiveMemory(memory.id, memory.name, memory.receiveHz, memory.duplexMode, memory.offsetHz,
-                                       memory.toneMode, memory.toneValue);
+    m_owner->m_window->setActiveMemory(memory.id, memory.receiveHz, memory.duplexMode, memory.offsetHz, memory.toneMode,
+                                       memory.toneValue);
     m_owner->m_window->m_model->selectRadioMemory(group, channel);
     m_owner->m_window->checkIfMemorySelectionComplete();
     // Timeout guard: release the memory-selection protection after 3 s in case
