@@ -1,6 +1,7 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
+#include "AppInfo.h"
 #include "AppPaths.h"
 #include "RadioChooserDialog.h"
 #include "RadioProfile.h"
@@ -145,6 +146,11 @@ void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
     QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
 
     QVERIFY(window.windowFlags().testFlag(Qt::FramelessWindowHint));
+    QString expectedTitle = QStringLiteral("SDR9700 v%1").arg(QString::fromLatin1(APP_VERSION));
+#if SDR9700_DEBUG_BUILD
+    expectedTitle += QStringLiteral(" (DEBUG)");
+#endif
+    QCOMPARE(window.windowTitle(), expectedTitle);
     QCOMPARE(window.minimumSize(), window.maximumSize());
     QCOMPARE(window.minimumSize(), QSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight));
     auto* memoryBrowser = window.findChild<QTableWidget*>(QStringLiteral("memoryBrowserTable"));

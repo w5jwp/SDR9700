@@ -4,7 +4,32 @@ Every GitHub release must include substantive, maintainer-readable release
 notes. GitHub-generated notes may be used as source material, but a changelog
 link by itself is not an acceptable release description.
 
-## Release checklist
+## Version naming
+
+Stable releases use the numeric version directly, for example `26.8.2`.
+Prereleases append a hyphenated prerelease identifier, starting with
+`-beta.1` and incrementing the final number for each subsequent beta, for
+example `26.8.2-beta.1` and `26.8.2-beta.2`.
+
+Keep the CMake project version numeric because CMake's `project(VERSION)`
+field does not accept prerelease suffixes. For a beta of `26.8.2`, set the
+project version to `26.8.2` and `SDR9700_DISPLAY_VERSION` to the complete
+prerelease version such as `26.8.2-beta.1`.
+
+Do not include a leading `v` in `SDR9700_DISPLAY_VERSION`. The application
+adds that prefix when it builds the title bar, which must read
+`SDR9700 v<version>` (for example, `SDR9700 v26.8.2-beta.1`).
+
+Git tags always add a leading `v`. A beta release therefore uses a tag such
+as `v26.8.2-beta.1`, the title `SDR9700 v26.8.2-beta.1`, and must be marked as
+a GitHub prerelease. Create it with:
+
+```bash
+gh release create v26.8.2-beta.1 --prerelease \
+  --title "SDR9700 v26.8.2-beta.1" --notes-file <file>
+```
+
+## Stable release checklist
 
 1. Set `SDR9700_DISPLAY_VERSION` in `CMakeLists.txt` to the final version.
 2. Run a clean Release build with `make release`.
