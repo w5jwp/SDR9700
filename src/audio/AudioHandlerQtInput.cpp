@@ -18,7 +18,7 @@ bool AudioHandlerQtInput::openDevice() noexcept
     }
 
     connect(audioDevice, &QIODevice::readyRead, this, &AudioHandlerQtInput::onReadyRead, Qt::UniqueConnection);
-    qInfo(logAudio()) << "Connected to Qt audio input device" << deviceInfo.description();
+    qInfo(logAudio()).noquote() << "Connected to Qt audio input device" << deviceInfo.description();
     return true;
 }
 
@@ -85,8 +85,8 @@ void AudioHandlerQtInput::onConverted(const audioPacket& audio)
 
     if (lastReceived.isValid() && lastReceived.elapsed() > 100)
     {
-        qDebug(logAudio()) << role() << "Time since last audio packet" << lastReceived.elapsed() << "Expected around"
-                           << setupData.blockSize;
+        qDebug(logAudio()).noquote() << role() << "Time since last audio packet" << lastReceived.elapsed()
+                                     << "Expected around" << setupData.blockSize;
     }
     if (!lastReceived.isValid())
     {

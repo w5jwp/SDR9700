@@ -14,7 +14,7 @@ constexpr quint8 kLpcmMono16Codec = 0x04;
 UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint16 lport, audioSetup rxSetup,
                    audioSetup txSetup)
 {
-    qInfo(logUdp()) << "Starting UdpAudio";
+    qInfo(logUdp()).noquote() << "Starting UdpAudio";
     this->localIP = local;
     this->port = audioPort;
     this->radioIP = ip;
@@ -64,17 +64,17 @@ UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint
 
 UdpAudio::~UdpAudio()
 {
-    qDebug(logUdp()) << "[SHUTDOWN] ~UdpAudio enter";
+    qDebug(logUdp()).noquote() << "[SHUTDOWN] ~UdpAudio enter";
     stopAudioWorker(rxaudio, rxAudioThread, "rxAudioThread");
     stopAudioWorker(txaudio, txAudioThread, "txAudioThread");
-    qDebug(logUdp()) << "[SHUTDOWN] ~UdpAudio complete";
+    qDebug(logUdp()).noquote() << "[SHUTDOWN] ~UdpAudio complete";
 }
 
 void UdpAudio::stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThread, const char* name)
 {
     if (handler)
     {
-        qDebug(logUdp()) << "[SHUTDOWN]" << name << "handler dispose";
+        qDebug(logUdp()).noquote() << "[SHUTDOWN]" << name << "handler dispose";
         handler->dispose();
         if (!workerThread)
         {
@@ -88,18 +88,18 @@ void UdpAudio::stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThrea
         return;
     }
 
-    qDebug(logUdp()) << "[SHUTDOWN]" << name << "quit";
+    qDebug(logUdp()).noquote() << "[SHUTDOWN]" << name << "quit";
     workerThread->quit();
     if (!workerThread->wait(kAudioThreadShutdownWaitMs))
     {
-        qWarning(logUdp()) << "[SHUTDOWN]" << name << "did not stop within" << kAudioThreadShutdownWaitMs
-                           << "ms; requesting interruption";
+        qWarning(logUdp()).noquote() << "[SHUTDOWN]" << name << "did not stop within" << kAudioThreadShutdownWaitMs
+                                     << "ms; requesting interruption";
         workerThread->requestInterruption();
         workerThread->quit();
         if (!workerThread->wait(kAudioThreadShutdownWaitMs))
         {
-            qCritical(logUdp()) << "[SHUTDOWN]" << name
-                                << "did not stop after bounded shutdown; leaving thread detached";
+            qCritical(logUdp()).noquote()
+                << "[SHUTDOWN]" << name << "did not stop after bounded shutdown; leaving thread detached";
             workerThread->setParent(nullptr);
             connect(workerThread, &QThread::finished, workerThread, &QObject::deleteLater, Qt::DirectConnection);
             workerThread = nullptr;
@@ -108,7 +108,7 @@ void UdpAudio::stopAudioWorker(AudioHandlerBase*& handler, QThread*& workerThrea
     }
     delete workerThread;
     workerThread = nullptr;
-    qDebug(logUdp()) << "[SHUTDOWN]" << name << "done";
+    qDebug(logUdp()).noquote() << "[SHUTDOWN]" << name << "done";
 }
 
 void UdpAudio::sendAudioBuffer(const QByteArray& data)
@@ -142,7 +142,7 @@ void UdpAudio::receiveAudioData(audioPacket audio)
 {
     if (txaudio == nullptr)
     {
-        qDebug(logUdp()) << "TX: receiveAudioData called but txaudio is null";
+        qDebug(logUdp()).noquote() << "TX: receiveAudioData called but txaudio is null";
         return;
     }
     if (audio.data.length() > 0)
@@ -310,8 +310,8 @@ void UdpAudio::dataReceived()
                 const quint32 packetLength = in->len;
                 if (packetLength != quint32(r.length()))
                 {
-                    qWarning(logUdp()) << "Dropping audio datagram with mismatched length: header" << packetLength
-                                       << "actual" << r.length();
+                    qWarning(logUdp()).noquote() << "Dropping audio datagram with mismatched length: header"
+                                                 << packetLength << "actual" << r.length();
                     break;
                 }
 
@@ -321,8 +321,8 @@ void UdpAudio::dataReceived()
                 const quint16 declaredPayloadLength = qFromBigEndian(audioIn->datalen);
                 if (declaredPayloadLength != payloadLength)
                 {
-                    qWarning(logUdp()) << "Dropping audio datagram with mismatched payload length: header"
-                                       << declaredPayloadLength << "actual" << payloadLength;
+                    qWarning(logUdp()).noquote() << "Dropping audio datagram with mismatched payload length: header"
+                                                 << declaredPayloadLength << "actual" << payloadLength;
                     break;
                 }
 
@@ -350,13 +350,13 @@ void UdpAudio::dataReceived()
 
                 if (excess > 0)
                 {
-                    qDebug(logUdp()) << "Audio latency high:"
-                                     << "lateness" << pingLatenessMs << "baseline" << pingBaselineMs << "excess"
-                                     << excess;
+                    qDebug(logUdp()).noquote()
+                        << "Audio latency high:"
+                        << "lateness" << pingLatenessMs << "baseline" << pingBaselineMs << "excess" << excess;
 
                     if (++latencyCounter > 5)
                     {
-                        qInfo(logUdp()) << "Latency sustained -> flushing audio";
+                        qInfo(logUdp()).noquote() << "Latency sustained -> flushing audio";
                         latencyCounter = 0;
                         break;
                     }
@@ -444,7 +444,7 @@ void UdpAudio::startAudio()
     }
     else
     {
-        qCritical(logAudio()) << "Unsupported Receive Audio Handler selected! Only qtAudio is supported.";
+        qCritical(logAudio()).noquote() << "Unsupported Receive Audio Handler selected! Only qtAudio is supported.";
         return;
     }
 
@@ -487,7 +487,7 @@ void UdpAudio::startTxAudio()
 
     if (txSetup.type != qtAudio)
     {
-        qCritical(logAudio()) << "Unsupported Transmit Audio Handler selected! Only qtAudio is supported.";
+        qCritical(logAudio()).noquote() << "Unsupported Transmit Audio Handler selected! Only qtAudio is supported.";
         return;
     }
 
@@ -545,12 +545,12 @@ void UdpAudio::setTxActive(bool active)
         txAudioTimer->start();
         sendNextTxAudioFrame();
     }
-    qDebug(logUdp()) << "UdpAudio: TX audio" << (active ? "ENABLED (PTT on)" : "DISABLED (PTT off)");
+    qDebug(logUdp()).noquote() << "UdpAudio: TX audio" << (active ? "ENABLED (PTT on)" : "DISABLED (PTT off)");
 }
 
 void UdpAudio::onRxAudioInitFailed()
 {
-    qWarning(logAudio()) << "RX Audio Initialization failed. Cleaning up.";
+    qWarning(logAudio()).noquote() << "RX Audio Initialization failed. Cleaning up.";
     if (rxAudioThread)
     {
         rxAudioThread->quit();
@@ -566,7 +566,7 @@ void UdpAudio::onRxAudioInitFailed()
 
 void UdpAudio::onTxAudioInitFailed()
 {
-    qWarning(logAudio()) << "TX Audio Initialization failed. Cleaning up.";
+    qWarning(logAudio()).noquote() << "TX Audio Initialization failed. Cleaning up.";
     if (txAudioThread)
     {
         txAudioThread->quit();

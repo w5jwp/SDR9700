@@ -29,7 +29,7 @@ CachingQueue* CachingQueue::getInstance()
         instance = new CachingQueue();
         instance->setObjectName(QStringLiteral("CachingQueue()"));
         instance->startWorker();
-        qDebug(logRadio()) << "Created shared application CachingQueue";
+        qDebug(logRadio()).noquote() << "Created shared application CachingQueue";
     }
     return instance;
 }
@@ -42,7 +42,7 @@ CachingQueue::~CachingQueue()
     {
         instance = nullptr;
     }
-    qInfo(logRadio()) << "Destroying caching queue";
+    qInfo(logRadio()).noquote() << "Destroying caching queue";
 }
 
 void CachingQueue::shutdownInstance()
@@ -84,7 +84,8 @@ void CachingQueue::stopWorker()
 
 void CachingQueue::run()
 {
-    qInfo(logRadio()).nospace() << "Starting caching queue handler thread threadId=" << QThread::currentThreadId();
+    qInfo(logRadio()).noquote().nospace()
+        << "Starting caching queue handler thread threadId=" << QThread::currentThreadId();
 
     std::unique_lock locker(mutex);
     QDeadlineTimer deadline(queueInterval);
@@ -281,8 +282,9 @@ void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
     {
         if (item.recurring && prio == kPriorityImmediate)
         {
-            qWarning(logRadio()) << "CachingQueue::add() Warning, cannot add recurring command with immediate priority!"
-                                 << funcString[item.command];
+            qWarning(logRadio()).noquote()
+                << "CachingQueue::add() Warning, cannot add recurring command with immediate priority!"
+                << funcString[item.command];
         }
         else
         {
@@ -291,8 +293,8 @@ void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
                 int count = queue.remove(prio, item);
                 if (count > 0)
                 {
-                    qDebug(logRadio()) << "CachingQueue::add() deleted" << count << "entries from queue for"
-                                       << funcString[item.command] << "on receiver" << item.receiver;
+                    qDebug(logRadio()).noquote() << "CachingQueue::add() deleted" << count << "entries from queue for"
+                                                 << funcString[item.command] << "on receiver" << item.receiver;
                 }
             }
 
@@ -377,8 +379,8 @@ QueuePriority CachingQueue::del(Funcs func, uchar receiver)
             int count = queue.remove(it.key(), it.value());
             if (count > 0)
             {
-                qDebug(logRadio()) << "CachingQueue()::del" << count << "entries from queue for" << funcString[func]
-                                   << "on receiver" << receiver;
+                qDebug(logRadio()).noquote() << "CachingQueue()::del" << count << "entries from queue for"
+                                             << funcString[func] << "on receiver" << receiver;
             }
         }
     }
@@ -448,7 +450,7 @@ void CachingQueue::message(QString msg)
         std::lock_guard locker(mutex);
         messages.append(msg);
     }
-    qDebug(logRadio()) << "Received:" << msg;
+    qDebug(logRadio()).noquote() << "Received:" << msg;
     waiting.notify_one();
 }
 
@@ -623,7 +625,8 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
         (!ret.value.isValid() || ret.command == funcSWRMeter || ret.command == funcALCMeter ||
          ret.reply.addSecs(QRandomGenerator::global()->bounded(5, 20)) <= QDateTime::currentDateTime()))
     {
-        qDebug(logRadio()) << "No (or expired) cache found for" << funcString[func] << "requesting" << ret.reply;
+        qDebug(logRadio()).noquote() << "No (or expired) cache found for" << funcString[func] << "requesting"
+                                     << ret.reply;
         add(kPriorityImmediate, func, false, receiver);
     }
     return ret;
@@ -750,7 +753,7 @@ bool CachingQueue::cacheValuesDiffer(const QVariant& a, const QVariant& b)
         }
         else
         {
-            qInfo(logRadio()) << "Unsupported cache value:" << a.typeName();
+            qInfo(logRadio()).noquote() << "Unsupported cache value:" << a.typeName();
             // Unknown payloads must be treated as changed so newly introduced
             // response types still reach models until an intentional
             // comparison policy is added above.

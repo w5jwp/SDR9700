@@ -120,9 +120,9 @@ void MemoryWriteController::handleReadback(quint32 key, const MemoryType& memory
                                         : QStringList{QStringLiteral("unexpected batch position")};
     if (!differences.isEmpty())
     {
-        qWarning(logGui()) << "Radio memory write readback did not match requested contents for"
-                           << memoryBandLabelForGroup(memory.group) << "channel" << memory.channel
-                           << "differing fields:" << differences;
+        qWarning(logGui()).noquote() << "Radio memory write readback did not match requested contents for"
+                                     << memoryBandLabelForGroup(memory.group) << "channel" << memory.channel
+                                     << "differing fields:" << differences;
         // The IC-9700 can briefly return the old contents while it commits a
         // memory write. The retry timer requests this slot again without
         // resending the mutation.

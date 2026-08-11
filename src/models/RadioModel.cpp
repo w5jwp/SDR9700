@@ -159,8 +159,8 @@ void RadioModel::onBackendError(ErrorCode code, const QString& msg)
 
 void RadioModel::onBackendReadyChanged(bool ready)
 {
-    qInfo(logGui()).nospace() << "RadioModel observed backend readyChanged=" << ready << " connected=" << m_connected
-                              << " currentReady=" << m_ready;
+    qInfo(logGui()).noquote().nospace() << "RadioModel observed backend readyChanged=" << ready
+                                        << " connected=" << m_connected << " currentReady=" << m_ready;
     if (m_ready == ready)
     {
         return;

@@ -121,7 +121,7 @@ void SettingsProfileTest::removesSettings()
 void SettingsProfileTest::rejectsUnknownSettings()
 {
     AppSettings& settings = AppSettings::instance();
-    QTest::ignoreMessage(QtWarningMsg, "Refusing to save unknown application setting: \"unknownSetting\"");
+    QTest::ignoreMessage(QtWarningMsg, "Refusing to save unknown application setting: unknownSetting");
     QVERIFY(!settings.setValue(QStringLiteral("unknownSetting"), 42));
     QVERIFY(!settings.contains(QStringLiteral("unknownSetting")));
 }

@@ -28,7 +28,7 @@ bool AudioHandlerQtOutput::openDevice() noexcept
         audioDevice->write(silence.constData(), silence.size());
     }
 
-    qInfo(logAudio()) << "Connected to Qt audio output device" << deviceInfo.description();
+    qInfo(logAudio()).noquote() << "Connected to Qt audio output device" << deviceInfo.description();
     return true;
 }
 

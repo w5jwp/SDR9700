@@ -258,7 +258,7 @@ void WaterfallController::renderPendingRow()
                     ++zeroCount;
                 }
             }
-            qDebug(logWaterfall()).nospace()
+            qDebug(logWaterfall()).noquote().nospace()
                 << "Waterfall row: image=" << w << "x" << h << " bins=" << levels.size() << " levels[min=" << minLevel
                 << " max=" << maxLevel << " avg=" << (totalLevel / double(levels.size())) << " floor=" << zeroCount
                 << "/" << levels.size() << "]";

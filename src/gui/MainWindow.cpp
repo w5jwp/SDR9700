@@ -216,7 +216,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                         if (f.Hz > 0)
                         {
                             m_vfoFrequencyHz = f.Hz;
-                            qInfo(logGui()) << "VFO route: MAIN frequency to VFO" << f.Hz;
+                            qInfo(logGui()).noquote() << "VFO route: MAIN frequency to VFO" << f.Hz;
                             receiverPanel->setFrequencyText(formatFrequency(f.Hz));
                             receiverPanel->setBandText(bandLabelForHz(f.Hz));
                         }
@@ -235,7 +235,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                             break;
                         }
                         const auto mi = value.value<ModeInfo>();
-                        qInfo(logGui()) << "VFO route: MAIN mode to VFO" << mi.name.toUpper();
+                        qInfo(logGui()).noquote() << "VFO route: MAIN mode to VFO" << mi.name.toUpper();
                         receiverPanel->setModeText(mi.name.toUpper());
                         break;
                     }
@@ -883,7 +883,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
             {
                 return;
             }
-            qInfo(logGui()) << "VFO action: band selected" << sdr9700::radioBandShortLabel(band) << hz;
+            qInfo(logGui()).noquote() << "VFO action: band selected" << sdr9700::radioBandShortLabel(band) << hz;
             leaveMemoryModeForManualChange();
             m_vfo->setFrequencyHz(hz);
         }
@@ -1777,7 +1777,7 @@ void MainWindow::onFrequencyChanged(quint64 hz)
     {
         m_lastBandFrequencyHz[bandIndex] = hz;
     }
-    qInfo(logGui()) << "VFO route: selected MAIN frequency" << hz;
+    qInfo(logGui()).noquote() << "VFO route: selected MAIN frequency" << hz;
     if (m_vfoPanel && !m_vfoPanel->frequencyHasFocus())
     {
         m_vfoPanel->setFrequencyText(formatFrequency(hz));

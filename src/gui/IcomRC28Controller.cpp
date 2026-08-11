@@ -51,14 +51,14 @@ void IcomRC28Controller::initialize()
     connect(m_window->m_icomRC28Manager, &IcomRC28Manager::multipleDevicesDetected, this,
             [this](const QString& deviceName)
             {
-                qInfo(logIcomRC28()) << "Multiple devices detected:" << deviceName;
+                qInfo(logIcomRC28()).noquote() << "Multiple devices detected:" << deviceName;
                 m_window->showToast(QStringLiteral("Duplicate accessory blocked (%1)").arg(deviceName), 8000,
                                     MainWindow::ToastKind::Warning);
             });
     connect(m_window->m_icomRC28Manager, &IcomRC28Manager::connectionChanged, this,
             [this](bool connected, const QString& deviceName)
             {
-                qInfo(logIcomRC28()) << (connected ? "Connected" : "Disconnected") << deviceName;
+                qInfo(logIcomRC28()).noquote() << (connected ? "Connected" : "Disconnected") << deviceName;
                 if (connected)
                 {
                     updateIcomRC28Leds();
@@ -199,7 +199,7 @@ void IcomRC28Controller::updateIcomRC28Leds()
 
 void IcomRC28Controller::handleIcomRC28Tune(int steps)
 {
-    qInfo(logIcomRC28()) << "Tune steps:" << steps;
+    qInfo(logIcomRC28()).noquote() << "Tune steps:" << steps;
 
     if (!m_window->m_vfo || !m_window->m_model->isReady())
     {
@@ -296,7 +296,7 @@ void IcomRC28Controller::snapIcomRC28FrequencyToKhz()
 
 void IcomRC28Controller::handleIcomRC28Button(int button, int action)
 {
-    qInfo(logIcomRC28()) << "Button" << button << (action == 0 ? "press" : "release");
+    qInfo(logIcomRC28()).noquote() << "Button" << button << (action == 0 ? "press" : "release");
 
     if (!m_window->m_icomRC28Manager)
     {

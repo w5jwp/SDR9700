@@ -132,8 +132,8 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
     const quint32 key = radioMemoryKey(memory.group, memory.channel);
     if (m_memorySyncController->refreshInProgress() && (memory.channel <= 5 || (memory.channel % 25) == 0))
     {
-        qInfo(logGui()) << "Radio memory sync received" << memoryBandLabelForGroup(memory.group) << "channel"
-                        << memory.channel;
+        qInfo(logGui()).noquote() << "Radio memory sync received" << memoryBandLabelForGroup(memory.group) << "channel"
+                                  << memory.channel;
     }
     if (radioMemoryIsStored(memory))
     {

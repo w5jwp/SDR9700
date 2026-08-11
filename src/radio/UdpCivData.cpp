@@ -15,7 +15,7 @@ bool isScopeDataDatagram(const QByteArray& datagram)
 
 UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, quint16 localPort)
 {
-    qInfo(logUdp()) << "Starting UdpCivData";
+    qInfo(logUdp()).noquote() << "Starting UdpCivData";
     localIP = local;
     port = civPort;
     radioIP = ip;
@@ -85,8 +85,8 @@ void UdpCivData::requestDataStart()
 
     if (m_openStartRequestCount >= kOpenStartMaxAttempts)
     {
-        qWarning(logUdp()) << "CI-V data-start request did not produce data after" << m_openStartRequestCount
-                           << "attempts";
+        qWarning(logUdp()).noquote() << "CI-V data-start request did not produce data after" << m_openStartRequestCount
+                                     << "attempts";
         if (startCivDataTimer != nullptr)
         {
             startCivDataTimer->stop();
@@ -125,7 +125,8 @@ void UdpCivData::sendOpenClose(bool close)
     {
         magic = 0x00;
     }
-    qDebug(logUdp()).nospace() << "UdpCivData::sendOpenClose close=" << close << " remoteId=0x" << Qt::hex << remoteId;
+    qDebug(logUdp()).noquote().nospace() << "UdpCivData::sendOpenClose close=" << close << " remoteId=0x" << Qt::hex
+                                         << remoteId;
 
     openclose_packet p{};
     p.len = sizeof(p);
@@ -164,7 +165,7 @@ void UdpCivData::dataReceived()
             // startup/memory-sync evidence we actually need in field logs.
             if (in->type != 0x00)
             {
-                qDebug(logUdp()).nospace() << "UdpCivData: control type=0x" << Qt::hex << int(in->type);
+                qDebug(logUdp()).noquote().nospace() << "UdpCivData: control type=0x" << Qt::hex << int(in->type);
             }
             if (in->type == 0x04)
             {
@@ -206,14 +207,14 @@ void UdpCivData::dataReceived()
                 {
                     if (in->len != quint32(r.length()))
                     {
-                        qWarning(logUdp()) << "Dropping CI-V datagram with mismatched length: header" << in->len
-                                           << "actual" << r.length();
+                        qWarning(logUdp()).noquote() << "Dropping CI-V datagram with mismatched length: header"
+                                                     << in->len << "actual" << r.length();
                         break;
                     }
                     if (quint32(in->datalen) + DATA_SIZE != in->len)
                     {
-                        qWarning(logUdp()) << "Dropping CI-V datagram with mismatched payload length: header"
-                                           << in->datalen << "packet length" << in->len;
+                        qWarning(logUdp()).noquote() << "Dropping CI-V datagram with mismatched payload length: header"
+                                                     << in->datalen << "packet length" << in->len;
                         break;
                     }
                     // Stop start requests once valid CI-V data arrives.

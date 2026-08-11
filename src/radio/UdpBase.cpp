@@ -24,7 +24,7 @@ bool UdpBase::init(quint16 bindPort)
     udp = new QUdpSocket(this);
     if (!udp->bind(bindPort))
     {
-        qCritical(logUdp()) << "Unable to bind UDP port" << bindPort << ":" << udp->errorString();
+        qCritical(logUdp()).noquote() << "Unable to bind UDP port" << bindPort << ":" << udp->errorString();
         delete udp;
         udp = nullptr;
         return false;
@@ -58,8 +58,9 @@ bool UdpBase::acceptDatagramFrom(const QNetworkDatagram& datagram) const
     const bool portMatches = datagram.senderPort() == port;
     if (!addressMatches || !portMatches)
     {
-        qWarning(logUdp()) << "Ignoring UDP datagram from unexpected endpoint" << datagram.senderAddress().toString()
-                           << datagram.senderPort() << "expected" << radioIP.toString() << port;
+        qWarning(logUdp()).noquote() << "Ignoring UDP datagram from unexpected endpoint"
+                                     << datagram.senderAddress().toString() << datagram.senderPort() << "expected"
+                                     << radioIP.toString() << port;
         return false;
     }
     return true;
@@ -114,8 +115,9 @@ void UdpBase::dataReceived(const QByteArray& r)
                 {
                     // Copy under the buffer lock, then send after releasing it
                     // to avoid nesting txBufferMutex and udpMutex.
-                    qDebug(logUdp()) << this->metaObject()->className() << ": Sending (single packet) retransmit of "
-                                     << QString("0x%1").arg(match->seqNum, 0, 16);
+                    qDebug(logUdp()).noquote()
+                        << this->metaObject()->className() << ": Sending (single packet) retransmit of "
+                        << QString("0x%1").arg(match->seqNum, 0, 16);
                     match->retransmitCount++;
                     retransmitData = match->data;
                 }
@@ -125,8 +127,8 @@ void UdpBase::dataReceived(const QByteArray& r)
                                                                       : QStringLiteral("have 0x%1 to 0x%2")
                                                                             .arg(txSeqBuf.firstKey(), 0, 16)
                                                                             .arg(txSeqBuf.lastKey(), 0, 16);
-                    qDebug(logUdp()) << this->metaObject()->className() << ": Remote requested packet"
-                                     << QString("0x%1").arg(in.seq, 0, 16) << "not found," << availableRange;
+                    qDebug(logUdp()).noquote() << this->metaObject()->className() << ": Remote requested packet"
+                                               << QString("0x%1").arg(in.seq, 0, 16) << "not found," << availableRange;
                 }
                 txLocker.unlock();
                 if (!retransmitData.isEmpty())
@@ -138,7 +140,7 @@ void UdpBase::dataReceived(const QByteArray& r)
         }
         if (in.type == 0x04)
         {
-            qInfo(logUdp()) << this->metaObject()->className() << ": Received I am here ";
+            qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Received I am here ";
             areYouThereCounter = 0;
             // IC-9700 sends "I am here" during discovery in response to this
             // client's "Are you there" probe.
@@ -247,7 +249,8 @@ void UdpBase::dataReceived(const QByteArray& r)
             }
             else
             {
-                qInfo(logUdp()) << this->metaObject()->className() << "Unhandled ping response. byte 0x10=" << r[16];
+                qInfo(logUdp()).noquote()
+                    << this->metaObject()->className() << "Unhandled ping response. byte 0x10=" << r[16];
             }
         }
         break;
@@ -277,14 +280,15 @@ void UdpBase::dataReceived(const QByteArray& r)
                                                                       : QStringLiteral("have 0x%1 to 0x%2")
                                                                             .arg(txSeqBuf.firstKey(), 0, 16)
                                                                             .arg(txSeqBuf.lastKey(), 0, 16);
-                    qDebug(logUdp()) << this->metaObject()->className() << ": Remote requested packet"
-                                     << QString("0x%1").arg(seq, 0, 16) << "not found," << availableRange;
+                    qDebug(logUdp()).noquote() << this->metaObject()->className() << ": Remote requested packet"
+                                               << QString("0x%1").arg(seq, 0, 16) << "not found," << availableRange;
                     unavailableSequences.append(seq);
                 }
                 else
                 {
-                    qDebug(logUdp()) << this->metaObject()->className() << ": Sending (multiple packet) retransmit of "
-                                     << QString("0x%1").arg(match->seqNum, 0, 16);
+                    qDebug(logUdp()).noquote()
+                        << this->metaObject()->className() << ": Sending (multiple packet) retransmit of "
+                        << QString("0x%1").arg(match->seqNum, 0, 16);
                     match->retransmitCount++;
                     retransmitData.append(match->data);
                     packetsLost++;
@@ -308,8 +312,8 @@ void UdpBase::dataReceived(const QByteArray& r)
         }
         if ((r.length() - 0x10) % 2 != 0)
         {
-            qWarning(logUdp()) << this->metaObject()->className()
-                               << ": Ignoring malformed odd-length retransmit request:" << r.length();
+            qWarning(logUdp()).noquote() << this->metaObject()->className()
+                                         << ": Ignoring malformed odd-length retransmit request:" << r.length();
         }
     }
     else if (in.len != PING_SIZE && in.type == 0x00 && in.seq != 0x00)
@@ -324,10 +328,10 @@ void UdpBase::dataReceived(const QByteArray& r)
             if (in.seq < rxSeqBuf.firstKey() ||
                 static_cast<qint16>(in.seq - rxSeqBuf.lastKey()) > static_cast<qint16>(MAX_MISSING))
             {
-                qDebug(logUdp()) << this->metaObject()->className()
-                                 << "Large seq number gap detected, previous highest: "
-                                 << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
-                                 << " current: " << QString("0x%1").arg(in.seq, 0, 16);
+                qDebug(logUdp()).noquote()
+                    << this->metaObject()->className() << "Large seq number gap detected, previous highest: "
+                    << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
+                    << " current: " << QString("0x%1").arg(in.seq, 0, 16);
                 rxSeqBuf.clear();
                 rxSeqBuf.insert(in.seq, receivedAtMs);
                 rxBufferMutex.unlock();
@@ -341,10 +345,10 @@ void UdpBase::dataReceived(const QByteArray& r)
             {
                 if (in.seq > rxSeqBuf.lastKey() + 1)
                 {
-                    qDebug(logUdp()) << this->metaObject()->className()
-                                     << "1 or more missing packets detected, previous: "
-                                     << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
-                                     << " current: " << QString("0x%1").arg(in.seq, 0, 16);
+                    qDebug(logUdp()).noquote()
+                        << this->metaObject()->className() << "1 or more missing packets detected, previous: "
+                        << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
+                        << " current: " << QString("0x%1").arg(in.seq, 0, 16);
                     missingMutex.lock();
                     // Iterate in a wider type. A quint16 loop variable wraps to
                     // zero after sequence 65535 and would otherwise never leave
@@ -386,8 +390,8 @@ void UdpBase::dataReceived(const QByteArray& r)
                 auto s = rxMissing.find(in.seq);
                 if (s != rxMissing.end())
                 {
-                    qDebug(logUdp()) << this->metaObject()->className() << ": Missing SEQ has been received! "
-                                     << QString("0x%1").arg(in.seq, 0, 16);
+                    qDebug(logUdp()).noquote() << this->metaObject()->className() << ": Missing SEQ has been received! "
+                                               << QString("0x%1").arg(in.seq, 0, 16);
 
                     s = rxMissing.erase(s);
                 }
@@ -410,7 +414,7 @@ void UdpBase::sendRetransmitRequest()
     }
     else if (rxMissing.size() > MAX_MISSING)
     {
-        qInfo(logUdp()) << "Too many missing packets," << rxMissing.size() << "flushing all buffers";
+        qInfo(logUdp()).noquote() << "Too many missing packets," << rxMissing.size() << "flushing all buffers";
         rxMissing.clear();
         rxSeqBuf.clear();
         return;
@@ -439,14 +443,14 @@ void UdpBase::sendRetransmitRequest()
             }
             else
             {
-                qInfo(logUdp()) << this->metaObject()->className() << ": No response for missing packet"
-                                << QString("0x%1").arg(it.key(), 0, 16) << "deleting";
+                qInfo(logUdp()).noquote() << this->metaObject()->className() << ": No response for missing packet"
+                                          << QString("0x%1").arg(it.key(), 0, 16) << "deleting";
                 it = rxMissing.erase(it);
             }
         }
         else
         {
-            qInfo(logUdp()) << this->metaObject()->className() << ": found empty key in missing buffer";
+            qInfo(logUdp()).noquote() << this->metaObject()->className() << ": found empty key in missing buffer";
             it++;
         }
     }
@@ -539,8 +543,8 @@ void UdpBase::sendTrackedPacket(QByteArray d)
     }
     if (d.size() < CONTROL_SIZE)
     {
-        qWarning(logUdp()) << this->metaObject()->className()
-                           << "Refusing to send short tracked UDP packet:" << d.size();
+        qWarning(logUdp()).noquote() << this->metaObject()->className()
+                                     << "Refusing to send short tracked UDP packet:" << d.size();
         return;
     }
 
@@ -576,8 +580,8 @@ void UdpBase::sendTrackedPacket(QByteArray d)
     qint64 ret = udp->writeDatagram(d, radioIP, port);
     if (ret < 0)
     {
-        qWarning(logUdp()) << this->metaObject()->className() << "writeDatagram FAILED to" << radioIP.toString() << ":"
-                           << port << udp->errorString();
+        qWarning(logUdp()).noquote() << this->metaObject()->className() << "writeDatagram FAILED to"
+                                     << radioIP.toString() << ":" << port << udp->errorString();
     }
 
     if (idleTimer != nullptr && idleTimer->isActive())
@@ -612,7 +616,7 @@ void UdpBase::purgeOldEntries()
     }
     else
     {
-        qInfo(logUdp()) << this->metaObject()->className() << ": txBuffer mutex is locked";
+        qInfo(logUdp()).noquote() << this->metaObject()->className() << ": txBuffer mutex is locked";
     }
 
     if (rxBufferMutex.tryLock(5))
@@ -635,7 +639,7 @@ void UdpBase::purgeOldEntries()
     }
     else
     {
-        qInfo(logUdp()) << this->metaObject()->className() << ": rxBuffer mutex is locked";
+        qInfo(logUdp()).noquote() << this->metaObject()->className() << ": rxBuffer mutex is locked";
     }
 
     if (missingMutex.tryLock(5))
@@ -652,7 +656,7 @@ void UdpBase::purgeOldEntries()
     }
     else
     {
-        qInfo(logUdp()) << this->metaObject()->className() << ": missingBuffer mutex is locked";
+        qInfo(logUdp()).noquote() << this->metaObject()->className() << ": missingBuffer mutex is locked";
     }
 }
 
@@ -664,7 +668,7 @@ void UdpBase::printHex(const QByteArray& pdata)
 void UdpBase::printHex(const QByteArray& pdata, bool printVert, bool printHoriz)
 {
     // Manual packet dump helper; call only from gated diagnostics.
-    qDebug(logUdp()) << "---- Begin hex dump -----:";
+    qDebug(logUdp()).noquote() << "---- Begin hex dump -----:";
     QString sdata("DATA:  ");
     QString index("INDEX: ");
     QStringList strings;
@@ -680,14 +684,14 @@ void UdpBase::printHex(const QByteArray& pdata, bool printVert, bool printHoriz)
     {
         for (int i = 0; i < strings.length(); i++)
         {
-            qDebug(logUdp()) << strings.at(i);
+            qDebug(logUdp()).noquote() << strings.at(i);
         }
     }
 
     if (printHoriz)
     {
-        qDebug(logUdp()) << index;
-        qDebug(logUdp()) << sdata;
+        qDebug(logUdp()).noquote() << index;
+        qDebug(logUdp()).noquote() << sdata;
     }
-    qDebug(logUdp()) << "----- End hex dump -----";
+    qDebug(logUdp()).noquote() << "----- End hex dump -----";
 }

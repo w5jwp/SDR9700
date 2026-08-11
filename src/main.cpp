@@ -126,7 +126,7 @@ void requestMacMicrophonePermission(QObject* context)
         qApp->requestPermission(permission, context,
                                 [](const QPermission& result)
                                 {
-                                    qInfo(logSystem())
+                                    qInfo(logSystem()).noquote()
                                         << "Microphone permission"
                                         << (result.status() == Qt::PermissionStatus::Granted ? "granted" : "denied");
                                 });

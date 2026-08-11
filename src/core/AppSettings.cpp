@@ -121,7 +121,8 @@ AppSettings::AppSettings()
                      {
                          if (!save())
                          {
-                             qWarning(logSystem()) << "Could not save deferred application settings; retrying";
+                             qWarning(logSystem()).noquote()
+                                 << "Could not save deferred application settings; retrying";
                              m_deferredSaveTimer.start(1000);
                          }
                      });
@@ -132,7 +133,7 @@ AppSettings::~AppSettings()
 {
     if (m_deferredSavePending && !save())
     {
-        qWarning(logSystem()) << "Could not save deferred application settings during shutdown";
+        qWarning(logSystem()).noquote() << "Could not save deferred application settings during shutdown";
     }
 }
 
@@ -150,7 +151,7 @@ bool AppSettings::setValue(const QString& key, const QVariant& settingValue)
 {
     if (!settingDefinition(key))
     {
-        qWarning(logSystem()) << "Refusing to save unknown application setting:" << key;
+        qWarning(logSystem()).noquote() << "Refusing to save unknown application setting:" << key;
         return false;
     }
 
@@ -182,7 +183,7 @@ void AppSettings::setValueDeferred(const QString& key, const QVariant& settingVa
 {
     if (!settingDefinition(key))
     {
-        qWarning(logSystem()) << "Refusing to defer unknown application setting:" << key;
+        qWarning(logSystem()).noquote() << "Refusing to defer unknown application setting:" << key;
         return;
     }
 
@@ -253,7 +254,7 @@ bool AppSettings::writeFile() const
         const SettingDefinition* definition = settingDefinition(key);
         if (!definition)
         {
-            qWarning(logSystem()) << "Ignoring unknown in-memory application setting:" << key;
+            qWarning(logSystem()).noquote() << "Ignoring unknown in-memory application setting:" << key;
             continue;
         }
 
@@ -288,7 +289,7 @@ bool AppSettings::writeFile() const
 
     if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner))
     {
-        qWarning(logSystem()) << "Could not set owner-only permissions on settings file:" << path;
+        qWarning(logSystem()).noquote() << "Could not set owner-only permissions on settings file:" << path;
     }
     return true;
 }

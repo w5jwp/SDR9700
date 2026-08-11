@@ -30,7 +30,7 @@ IcomRC28Manager::IcomRC28Manager(QObject* parent) : QObject(parent)
 {
     if (hid_init() != 0)
     {
-        qWarning(logIcomRC28()) << "hidapi initialization failed; RC-28 support will remain unavailable";
+        qWarning(logIcomRC28()).noquote() << "hidapi initialization failed; RC-28 support will remain unavailable";
     }
 
     m_pollTimer = new QTimer(this);
@@ -199,7 +199,7 @@ bool IcomRC28Manager::open()
 
     if (hid_set_nonblocking(device, 1) != 0)
     {
-        qWarning(logIcomRC28()) << "Could not configure the RC-28 for nonblocking reads";
+        qWarning(logIcomRC28()).noquote() << "Could not configure the RC-28 for nonblocking reads";
         hid_close(device);
         return false;
     }
@@ -218,7 +218,7 @@ bool IcomRC28Manager::open()
     m_hotplugTimer->stop();
     m_prevButtons = kIcomRC28ButtonsIdle;
     emit connectionChanged(true, m_deviceName);
-    qInfo(logIcomRC28()) << "RC-28 opened";
+    qInfo(logIcomRC28()).noquote() << "RC-28 opened";
     return true;
 }
 
@@ -233,7 +233,7 @@ void IcomRC28Manager::close()
     {
         if (!writeLeds(device, kIcomRC28LedsOff))
         {
-            qWarning(logIcomRC28()) << "Could not turn off RC-28 LEDs before closing the device";
+            qWarning(logIcomRC28()).noquote() << "Could not turn off RC-28 LEDs before closing the device";
         }
         hid_close(device);
     }
@@ -280,7 +280,7 @@ void IcomRC28Manager::setIcomRC28Leds(uint8_t ledByte)
 {
     if (!sendLeds(ledByte) && isOpen())
     {
-        qWarning(logIcomRC28()) << "Could not update RC-28 LEDs";
+        qWarning(logIcomRC28()).noquote() << "Could not update RC-28 LEDs";
     }
 }
 

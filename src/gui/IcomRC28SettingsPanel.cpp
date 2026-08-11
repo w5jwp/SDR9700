@@ -201,7 +201,7 @@ void IcomRC28SettingsPanel::refreshDeviceInfo()
 
 void IcomRC28SettingsPanel::appendLog(const QString& text)
 {
-    qInfo(logIcomRC28()) << text;
+    qInfo(logIcomRC28()).noquote() << text;
 }
 
 void IcomRC28SettingsPanel::loadSettings()

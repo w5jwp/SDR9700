@@ -36,10 +36,11 @@ bool AudioConverter::init(QAudioFormat inputFormat, codecType inputCodec, QAudio
     opusComplexity = encoderComplexity;
     resampleQuality = converterResampleQuality;
 
-    qInfo(logAudioConverter) << "Starting AudioConverter() Input:" << inputFormat.channelCount() << "Channels of"
-                             << inputCodec << inputFormat.sampleRate() << inputFormat.sampleFormat()
-                             << "Output:" << outputFormat.channelCount() << "Channels of" << outputCodec
-                             << outputFormat.sampleRate() << outputFormat.sampleFormat();
+    qInfo(logAudioConverter).noquote() << "Starting AudioConverter() Input:" << inputFormat.channelCount()
+                                       << "Channels of" << inputCodec << inputFormat.sampleRate()
+                                       << inputFormat.sampleFormat() << "Output:" << outputFormat.channelCount()
+                                       << "Channels of" << outputCodec << outputFormat.sampleRate()
+                                       << outputFormat.sampleFormat();
 
     initialized = false;
     if (inputFormat.channelCount() <= 0 || outputFormat.channelCount() <= 0 || inputFormat.sampleRate() <= 0 ||
@@ -57,7 +58,7 @@ bool AudioConverter::init(QAudioFormat inputFormat, codecType inputCodec, QAudio
     {
         int opus_err = 0;
         opusDecoder = opus_decoder_create(inputFormat.sampleRate(), inputFormat.channelCount(), &opus_err);
-        qInfo(logAudioConverter()) << "Creating opus decoder: " << opus_strerror(opus_err);
+        qInfo(logAudioConverter()).noquote() << "Creating opus decoder: " << opus_strerror(opus_err);
         if (opusDecoder == nullptr)
         {
             const QString message =
@@ -81,7 +82,7 @@ bool AudioConverter::init(QAudioFormat inputFormat, codecType inputCodec, QAudio
             opus_encoder_ctl(opusEncoder, OPUS_SET_COMPLEXITY(encoderComplexity));
         }
 
-        qInfo(logAudioConverter()) << "Creating opus encoder: " << opus_strerror(opus_err);
+        qInfo(logAudioConverter()).noquote() << "Creating opus encoder: " << opus_strerror(opus_err);
         if (opusEncoder == nullptr)
         {
             const QString message =
@@ -110,8 +111,8 @@ bool AudioConverter::init(QAudioFormat inputFormat, codecType inputCodec, QAudio
         speex_resampler_get_ratio(resampler, &ratioNum, &ratioDen);
         // Speex stores the ratio as input/output (num/den), so output/input = den/num.
         resampleRatio = static_cast<double>(ratioDen) / ratioNum;
-        qInfo(logAudioConverter()) << "speex_resampler_init() returned: " << resampleError
-                                   << " resampleRatio: " << resampleRatio;
+        qInfo(logAudioConverter()).noquote()
+            << "speex_resampler_init() returned: " << resampleError << " resampleRatio: " << resampleRatio;
     }
     initialized = true;
     return true;
@@ -120,10 +121,10 @@ bool AudioConverter::init(QAudioFormat inputFormat, codecType inputCodec, QAudio
 AudioConverter::~AudioConverter()
 {
 
-    qInfo(logAudioConverter) << "Closing AudioConverter() Input:" << inFormat.channelCount() << "Channels of" << inCodec
-                             << inFormat.sampleRate() << inFormat.sampleFormat()
-                             << "Output:" << outFormat.channelCount() << "Channels of" << outCodec
-                             << outFormat.sampleRate() << outFormat.sampleFormat();
+    qInfo(logAudioConverter).noquote() << "Closing AudioConverter() Input:" << inFormat.channelCount() << "Channels of"
+                                       << inCodec << inFormat.sampleRate() << inFormat.sampleFormat()
+                                       << "Output:" << outFormat.channelCount() << "Channels of" << outCodec
+                                       << outFormat.sampleRate() << outFormat.sampleFormat();
 
     releaseCodecState();
 }
@@ -140,14 +141,14 @@ void AudioConverter::releaseCodecState()
 {
     if (opusEncoder != nullptr)
     {
-        qInfo(logAudioConverter()) << "Destroying opus encoder";
+        qInfo(logAudioConverter()).noquote() << "Destroying opus encoder";
         opus_encoder_destroy(opusEncoder);
         opusEncoder = nullptr;
     }
 
     if (opusDecoder != nullptr)
     {
-        qInfo(logAudioConverter()) << "Destroying opus decoder";
+        qInfo(logAudioConverter()).noquote() << "Destroying opus decoder";
         opus_decoder_destroy(opusDecoder);
         opusDecoder = nullptr;
     }
@@ -156,7 +157,7 @@ void AudioConverter::releaseCodecState()
     {
         speex_resampler_destroy(resampler);
         resampler = nullptr;
-        qDebug(logAudioConverter()) << "Resampler closed";
+        qDebug(logAudioConverter()).noquote() << "Resampler closed";
     }
     resampleRatio = 1.0;
 }
@@ -166,7 +167,7 @@ bool AudioConverter::convert(audioPacket audio)
 
     if (!initialized)
     {
-        qWarning(logAudioConverter()) << "AudioConverter::convert() called before successful initialization";
+        qWarning(logAudioConverter()).noquote() << "AudioConverter::convert() called before successful initialization";
         return false;
     }
 
@@ -192,18 +193,19 @@ bool AudioConverter::convert(audioPacket audio)
             int ret = opus_decode_float(opusDecoder, in, audio.data.size(), out, nSamples, 0);
             if (ret < 0)
             {
-                qWarning(logAudioConverter()) << "Opus decode failed:" << opus_strerror(ret);
+                qWarning(logAudioConverter()).noquote() << "Opus decode failed:" << opus_strerror(ret);
                 return false;
             }
             if (ret > nSamples)
             {
-                qWarning(logAudioConverter())
+                qWarning(logAudioConverter()).noquote()
                     << "Opus decode returned more samples than requested:" << ret << "requested:" << nSamples;
                 return false;
             }
             if (ret != nSamples)
             {
-                qDebug(logAudio()) << "opus_decode_float: returned:" << ret << "samples, expected:" << nSamples;
+                qDebug(logAudio()).noquote()
+                    << "opus_decode_float: returned:" << ret << "samples, expected:" << nSamples;
                 scratchIn.resize(ret * int(sizeof(float)) * inFormat.channelCount());
             }
             audio.data.swap(scratchIn);
@@ -240,7 +242,7 @@ bool AudioConverter::convert(audioPacket audio)
         {
             if (!byteCountMatchesSampleSize(audio.data, int(sizeof(qint32))))
             {
-                qWarning(logAudioConverter())
+                qWarning(logAudioConverter()).noquote()
                     << "Dropping malformed Int32 audio packet with byte count" << audio.data.size();
                 return false;
             }
@@ -256,7 +258,7 @@ bool AudioConverter::convert(audioPacket audio)
         {
             if (!byteCountMatchesSampleSize(audio.data, int(sizeof(qint16))))
             {
-                qWarning(logAudioConverter())
+                qWarning(logAudioConverter()).noquote()
                     << "Dropping malformed Int16 audio packet with byte count" << audio.data.size();
                 return false;
             }
@@ -278,7 +280,7 @@ bool AudioConverter::convert(audioPacket audio)
         {
             if (!byteCountMatchesSampleSize(audio.data, int(sizeof(float))))
             {
-                qWarning(logAudioConverter())
+                qWarning(logAudioConverter()).noquote()
                     << "Dropping malformed float audio packet with byte count" << audio.data.size();
                 return false;
             }
@@ -289,7 +291,7 @@ bool AudioConverter::convert(audioPacket audio)
         }
         else
         {
-            qWarning(logAudioConverter()) << "Unsupported input sample format:" << sampleFormat;
+            qWarning(logAudioConverter()).noquote() << "Unsupported input sample format:" << sampleFormat;
             return false;
         }
 
@@ -298,8 +300,8 @@ bool AudioConverter::convert(audioPacket audio)
         {
             if (!sampleCountMatchesChannels(samplesF.size(), inFormat.channelCount()))
             {
-                qWarning(logAudioConverter()) << "Dropping malformed audio packet with" << samplesF.size()
-                                              << "samples for" << inFormat.channelCount() << "input channels";
+                qWarning(logAudioConverter()).noquote() << "Dropping malformed audio packet with" << samplesF.size()
+                                                        << "samples for" << inFormat.channelCount() << "input channels";
                 return false;
             }
 
@@ -336,7 +338,7 @@ bool AudioConverter::convert(audioPacket audio)
             {
                 if (!sampleCountMatchesChannels(samplesF.size(), outFormat.channelCount()))
                 {
-                    qWarning(logAudioConverter())
+                    qWarning(logAudioConverter()).noquote()
                         << "Dropping malformed audio packet with" << samplesF.size() << "samples for"
                         << outFormat.channelCount() << "output channels before resampling";
                     return false;
@@ -364,7 +366,7 @@ bool AudioConverter::convert(audioPacket audio)
 
                 if (err)
                 {
-                    qInfo(logAudioConverter())
+                    qInfo(logAudioConverter()).noquote()
                         << "Resampler error " << err << " inFrames:" << inFrames << " outFrames:" << outFrames;
                     return false;
                 }
@@ -380,7 +382,7 @@ bool AudioConverter::convert(audioPacket audio)
             {
                 if (!sampleCountMatchesChannels(samplesF.size(), outFormat.channelCount()))
                 {
-                    qWarning(logAudioConverter())
+                    qWarning(logAudioConverter()).noquote()
                         << "Dropping malformed audio packet with" << samplesF.size() << "samples for"
                         << outFormat.channelCount() << "output channels before Opus encode";
                     return false;
@@ -393,7 +395,7 @@ bool AudioConverter::convert(audioPacket audio)
                                                 scratchOut.length());
                 if (nbBytes < 0)
                 {
-                    qInfo(logAudioConverter())
+                    qInfo(logAudioConverter()).noquote()
                         << "Opus encode failed:" << opus_strerror(nbBytes) << "Num Samples:" << samplesF.size();
                     return false;
                 }
@@ -518,14 +520,15 @@ bool AudioConverter::convert(audioPacket audio)
                 }
                 else
                 {
-                    qWarning(logAudioConverter()) << "Unsupported output sample format:" << outFormat.sampleFormat();
+                    qWarning(logAudioConverter()).noquote()
+                        << "Unsupported output sample format:" << outFormat.sampleFormat();
                     return false;
                 }
             }
         }
         else
         {
-            qDebug(logAudioConverter()) << "Detected empty packet";
+            qDebug(logAudioConverter()).noquote() << "Detected empty packet";
         }
     }
     emit converted(audio);

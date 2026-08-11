@@ -87,7 +87,7 @@ QByteArray readOrCreateProfileKey()
         {
             if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner))
             {
-                qWarning(logSystem()) << "Could not tighten profile key permissions for" << path;
+                qWarning(logSystem()).noquote() << "Could not tighten profile key permissions for" << path;
             }
             const QByteArray result = key.left(kPasswordKeyBytes);
             secureZero(key);
@@ -114,7 +114,7 @@ QByteArray readOrCreateProfileKey()
     }
     if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner))
     {
-        qWarning(logSystem()) << "Could not tighten profile key permissions for" << path;
+        qWarning(logSystem()).noquote() << "Could not tighten profile key permissions for" << path;
     }
     return key;
 }
@@ -306,7 +306,7 @@ void RadioProfileStore::load()
         const int port = obj.value("port").toInt(50001);
         if (!validRadioPort(port))
         {
-            qWarning(logSystem()) << "Skipping radio profile with invalid LAN port:" << p.name << port;
+            qWarning(logSystem()).noquote() << "Skipping radio profile with invalid LAN port:" << p.name << port;
             continue;
         }
         p.port = static_cast<quint16>(port);
@@ -315,7 +315,7 @@ void RadioProfileStore::load()
         p.password = decryptPassword(storedPassword);
         if (!storedPassword.isEmpty() && p.password.isEmpty())
         {
-            qWarning(logSystem()) << "Loading radio profile with unreadable encrypted password:" << p.name;
+            qWarning(logSystem()).noquote() << "Loading radio profile with unreadable encrypted password:" << p.name;
             m_unreadablePasswords.insert(p.id, storedPassword);
         }
         if (!p.id.isNull() && !p.host.isEmpty())
@@ -343,7 +343,8 @@ bool RadioProfileStore::save() const
             p.password.isEmpty() ? m_unreadablePasswords.value(p.id) : encryptPassword(p.password);
         if (!p.password.isEmpty() && encryptedPassword.isEmpty())
         {
-            qWarning(logSystem()) << "Radio profile password encryption failed; refusing to overwrite saved profiles";
+            qWarning(logSystem()).noquote()
+                << "Radio profile password encryption failed; refusing to overwrite saved profiles";
             return false;
         }
         obj.insert("password", encryptedPassword);

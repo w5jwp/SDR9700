@@ -17,25 +17,25 @@
 Commander::Commander(RadioCommander* parent) : RadioCommander(parent)
 {
 
-    qInfo(logRadio()) << "creating instance of Commander()";
+    qInfo(logRadio()).noquote() << "creating instance of Commander()";
 }
 
 Commander::Commander(quint8 guid[GUIDLEN], RadioCommander* parent) : RadioCommander(parent)
 {
     Q_ASSERT(guid != nullptr);
-    qInfo(logRadio()) << "creating instance of Commander() with GUID";
+    qInfo(logRadio()).noquote() << "creating instance of Commander() with GUID";
     memcpy(this->guid, guid, GUIDLEN);
 }
 
 Commander::~Commander()
 {
-    qInfo(logRadio()) << "[SHUTDOWN] ~Commander enter";
+    qInfo(logRadio()).noquote() << "[SHUTDOWN] ~Commander enter";
 
     emit requestRadioSelection(QList<radio_cap_packet>());
 
     shutdownComm();
 
-    qDebug(logRadio()) << "[SHUTDOWN] ~Commander complete";
+    qDebug(logRadio()).noquote() << "[SHUTDOWN] ~Commander complete";
 }
 
 void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup,
@@ -98,12 +98,12 @@ void Commander::shutdownComm()
         return;
     }
 
-    qDebug(logRadio()) << "[SHUTDOWN] closeComm() enter";
+    qDebug(logRadio()).noquote() << "[SHUTDOWN] closeComm() enter";
     if (udpHandlerThread != nullptr)
     {
         if (udp)
         {
-            qDebug(logRadio()) << "[SHUTDOWN] closeComm() calling udp->shutdown()";
+            qDebug(logRadio()).noquote() << "[SHUTDOWN] closeComm() calling udp->shutdown()";
             auto shutdownDone = std::make_shared<QSemaphore>();
             UdpHandler* udpSession = udp;
             const bool invoked = QMetaObject::invokeMethod(
@@ -116,22 +116,22 @@ void Commander::shutdownComm()
                 Qt::QueuedConnection);
             if (!invoked || !shutdownDone->tryAcquire(1, 11000))
             {
-                qWarning(logRadio()) << "[SHUTDOWN] UdpHandler shutdown did not finish within 11000 ms";
+                qWarning(logRadio()).noquote() << "[SHUTDOWN] UdpHandler shutdown did not finish within 11000 ms";
             }
         }
-        qDebug(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread->quit()";
+        qDebug(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread->quit()";
         udpHandlerThread->quit();
-        qDebug(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread->wait(3000)";
+        qDebug(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread->wait(3000)";
         if (!udpHandlerThread->wait(3000))
         {
-            qWarning(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread did not stop within 3000 ms; "
-                                    "requesting interruption";
+            qWarning(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread did not stop within 3000 ms; "
+                                              "requesting interruption";
             udpHandlerThread->requestInterruption();
             udpHandlerThread->quit();
             if (!udpHandlerThread->wait(1000))
             {
-                qCritical(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread did not stop after bounded "
-                                         "shutdown; leaving thread detached";
+                qCritical(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread did not stop after bounded "
+                                                   "shutdown; leaving thread detached";
                 udpHandlerThread->setParent(nullptr);
                 connect(udpHandlerThread, &QThread::finished, udpHandlerThread, &QObject::deleteLater,
                         Qt::DirectConnection);
@@ -140,7 +140,7 @@ void Commander::shutdownComm()
         }
         else
         {
-            qDebug(logRadio()) << "[SHUTDOWN] closeComm() udpHandlerThread done";
+            qDebug(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread done";
         }
         if (udpHandlerThread != nullptr)
         {
@@ -276,7 +276,8 @@ void Commander::rememberPendingSetCommand(Funcs func, const QByteArray& payload,
         CommandErrorType(func, payload, value, receiver, command.minVal, command.maxVal, command.bytes));
     if (m_pendingSetCommands.size() > kMaxPendingSetCommands)
     {
-        qCritical(logRadio()) << "CI-V acknowledgement queue overflow; dropping the oldest command correlation";
+        qCritical(logRadio()).noquote()
+            << "CI-V acknowledgement queue overflow; dropping the oldest command correlation";
         m_pendingSetCommands.dequeue();
     }
 }
@@ -336,8 +337,8 @@ FuncType Commander::getCommand(Funcs func, QByteArray& payload, int value, uchar
                 case funcScopeEdge:
                     break;
                 default:
-                    qDebug(logRadio()) << "Radio has no Command29, removing command:" << funcString[func] << "VFO"
-                                       << receiver;
+                    qDebug(logRadio()).noquote()
+                        << "Radio has no Command29, removing command:" << funcString[func] << "VFO" << receiver;
                     queue->del(func, receiver);
                     break;
                 }
@@ -347,17 +348,18 @@ FuncType Commander::getCommand(Funcs func, QByteArray& payload, int value, uchar
         }
         else if (value != INT_MIN)
         {
-            qDebug(logRadio()) << QString("Value %1 for %2 is outside of allowed range (%3-%4)")
-                                      .arg(value)
-                                      .arg(funcString[func])
-                                      .arg(it.value().minVal)
-                                      .arg(it.value().maxVal);
+            qDebug(logRadio()).noquote() << QString("Value %1 for %2 is outside of allowed range (%3-%4)")
+                                                .arg(value)
+                                                .arg(funcString[func])
+                                                .arg(it.value().minVal)
+                                                .arg(it.value().maxVal);
         }
     }
     else
     {
         // The built-in IC-9700 table does not support this command.
-        qDebug(logRadio()) << "Removing unsupported command from queue" << funcString[func] << "VFO" << receiver;
+        qDebug(logRadio()).noquote() << "Removing unsupported command from queue" << funcString[func] << "VFO"
+                                     << receiver;
         queue->del(func, receiver);
     }
     return cmd;
@@ -534,7 +536,8 @@ void Commander::parseData(const QByteArray& dataInput)
         {
             if (data.length())
             {
-                qDebug(logRadio()) << "Short CI-V fragment while parsing LAN data:" << data.length() << "bytes";
+                qDebug(logRadio()).noquote()
+                    << "Short CI-V fragment while parsing LAN data:" << data.length() << "bytes";
             }
             // Keep parsing the remaining byte stream. A short fragment can
             // appear ahead of a valid frame after LAN packet coalescing or
@@ -580,7 +583,7 @@ void Commander::parseData(const QByteArray& dataInput)
                 // Echo of a local broadcast request.
                 if (radioPoweredOn)
                 {
-                    qDebug(logRadio()) << "Echo caught:" << data.toHex(' ');
+                    qDebug(logRadio()).noquote() << "Echo caught:" << data.toHex(' ');
                     queue->message("Radio is available but may be powered-off");
                     queue->receiveValue(funcPowerControl, QVariant::fromValue<bool>(false), 0);
                     radioPoweredOn = false;
@@ -610,8 +613,8 @@ Commander::ReplyParseResult Commander::parseFrequencyReply(Funcs& func, QVariant
     {
         if (payloadIn.isEmpty())
         {
-            qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[func] << "required" << 1 << "got"
-                                 << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            qWarning(logRadio()).noquote() << "Ignoring short CI-V payload for" << funcString[func] << "required" << 1
+                                           << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
             return ReplyParseResult::Malformed;
         }
         receiver = static_cast<uchar>(payloadIn.at(0));
@@ -649,8 +652,8 @@ Commander::ReplyParseResult Commander::parseModeReply(Funcs& func, QVariant& val
     {
         if (payloadIn.isEmpty())
         {
-            qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[func] << "required" << 1 << "got"
-                                 << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            qWarning(logRadio()).noquote() << "Ignoring short CI-V payload for" << funcString[func] << "required" << 1
+                                           << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
             return ReplyParseResult::Malformed;
         }
         receiver = static_cast<uchar>(payloadIn.at(0));
@@ -690,8 +693,9 @@ Commander::ReplyParseResult Commander::parseModeReply(Funcs& func, QVariant& val
     {
         if (payloadIn.size() < 2)
         {
-            qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[originalFunc] << "required" << 2
-                                 << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            qWarning(logRadio()).noquote()
+                << "Ignoring short CI-V payload for" << funcString[originalFunc] << "required" << 2 << "got"
+                << payloadIn.size() << "data:" << payloadIn.toHex(' ');
             return ReplyParseResult::Malformed;
         }
         mode.filter = bcdHexToUChar(payloadIn.at(1));
@@ -726,8 +730,8 @@ bool Commander::replyPayloadTooShort(Funcs func, int requiredBytes) const
     {
         return false;
     }
-    qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[func] << "required" << requiredBytes
-                         << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+    qWarning(logRadio()).noquote() << "Ignoring short CI-V payload for" << funcString[func] << "required"
+                                   << requiredBytes << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
     return true;
 }
 
@@ -796,7 +800,7 @@ Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant
         {
             const quint8 rawSwr = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
             const double swr = getMeterCal(meterSWR, rawSwr);
-            qDebug(logRadioTraffic()).nospace()
+            qDebug(logRadioTraffic()).noquote().nospace()
                 << "SWR meter raw=" << static_cast<int>(rawSwr) << " calibrated=" << swr;
             value.setValue(swr);
             return ReplyParseResult::Parsed;
@@ -809,7 +813,7 @@ Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant
         {
             const quint8 rawAlc = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
             const double alc = getMeterCal(meterALC, rawAlc);
-            qDebug(logRadioTraffic()).nospace()
+            qDebug(logRadioTraffic()).noquote().nospace()
                 << "ALC meter raw=" << static_cast<int>(rawAlc) << " calibrated=" << alc;
             value.setValue(alc);
             return ReplyParseResult::Parsed;
@@ -938,7 +942,7 @@ Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant
         }
         else
         {
-            qWarning(logRadio()) << "Unknown meter type received!";
+            qWarning(logRadio()).noquote() << "Unknown meter type received!";
             m.type = meterNone;
         }
         value.setValue(m);
@@ -969,7 +973,7 @@ Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant
         }
         else
         {
-            qWarning(logRadio()) << "Unknown meterType received!";
+            qWarning(logRadio()).noquote() << "Unknown meterType received!";
             m = meterNone;
         }
         value.setValue(m);
@@ -1040,7 +1044,7 @@ Commander::ReplyParseResult Commander::parseFeatureReply(Funcs func, QVariant& v
             {
                 this->model = kRadioModelId;
             }
-            qInfo(logRadio()) << QString("Have new radio ID: 0x%1").arg(radioCaps.modelID, 2, 16);
+            qInfo(logRadio()).noquote() << QString("Have new radio ID: 0x%1").arg(radioCaps.modelID, 2, 16);
             determineRadioCaps();
         }
         value.setValue(radioCaps.modelID);
@@ -1072,7 +1076,7 @@ Commander::ReplyParseResult Commander::parseFeatureReply(Funcs func, QVariant& v
         return ReplyParseResult::Parsed;
     }
     case funcAFMute:
-        qWarning(logRadio()) << "AF mute response parsing is not implemented";
+        qWarning(logRadio()).noquote() << "AF mute response parsing is not implemented";
         return ReplyParseResult::Parsed;
     // CI-V 1A05 two-byte level registers.
     case funcREFAdjust:
@@ -1431,8 +1435,8 @@ void Commander::parseCommand()
         // Capability detection may still be in progress.
         if (haveRadioCaps)
         {
-            qInfo(logRadio()) << "Unsupported command received from radio" << payloadIn.toHex().mid(0, 10)
-                              << "Check radio file";
+            qInfo(logRadio()).noquote() << "Unsupported command received from radio" << payloadIn.toHex().mid(0, 10)
+                                        << "Check radio file";
         }
         return;
     }
@@ -1456,8 +1460,8 @@ void Commander::parseCommand()
             return false;
         }
 
-        qWarning(logRadio()) << "Ignoring short CI-V payload for" << funcString[func] << "required" << requiredBytes
-                             << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+        qWarning(logRadio()).noquote() << "Ignoring short CI-V payload for" << funcString[func] << "required"
+                                       << requiredBytes << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
         return true;
     };
 
@@ -1501,14 +1505,14 @@ void Commander::parseCommand()
         value.setValue(static_cast<bool>(payloadIn.at(0)));
         break;
     case funcMemoryMode:
-        qInfo(logRadio()) << "Memory Mode command!";
+        qInfo(logRadio()).noquote() << "Memory Mode command!";
         break;
     case funcSatelliteMemory:
         memParser = radioCaps.satParser;
         [[fallthrough]];
     case funcMemoryContents:
     {
-        qDebug(logRadio()) << "Received mem:" << payloadIn.toHex(' ');
+        qDebug(logRadio()).noquote() << "Received mem:" << payloadIn.toHex(' ');
         MemoryType mem;
         if (memParser.isEmpty())
         {
@@ -1808,14 +1812,15 @@ void Commander::parseCommand()
     case funcMainSubPrefix:
         break;
     case funcPowerControl:
-        qWarning(logRadio()) << "Received power control command from radio" << payloadIn;
+        qWarning(logRadio()).noquote() << "Received power control command from radio" << payloadIn;
         break;
     case funcFB:
     {
         CommandErrorType acknowledgedCommand;
         if (takePendingSetCommand(&acknowledgedCommand) && acknowledgedCommand.value.isValid() && queue != nullptr)
         {
-            qDebug(logRadio()) << "Radio (FB) acknowledged set command:" << funcString[acknowledgedCommand.func];
+            qDebug(logRadio()).noquote() << "Radio (FB) acknowledged set command:"
+                                         << funcString[acknowledgedCommand.func];
             // FB confirms that the command was accepted, not the resulting
             // radio state. In particular, a delayed PTT-on acknowledgement can
             // arrive after a later unkey and must not repaint the UI as TX.
@@ -1833,13 +1838,14 @@ void Commander::parseCommand()
         CommandErrorType rejectedCommand;
         if (takePendingSetCommand(&rejectedCommand))
         {
-            qWarning(logRadio()) << "Radio rejected CI-V set command (FA):" << funcString[rejectedCommand.func]
-                                 << "(min:" << rejectedCommand.minValue << "max:" << rejectedCommand.maxValue
-                                 << "bytes:" << rejectedCommand.bytes << ") data:" << rejectedCommand.data.toHex(' ');
+            qWarning(logRadio()).noquote()
+                << "Radio rejected CI-V set command (FA):" << funcString[rejectedCommand.func]
+                << "(min:" << rejectedCommand.minValue << "max:" << rejectedCommand.maxValue
+                << "bytes:" << rejectedCommand.bytes << ") data:" << rejectedCommand.data.toHex(' ');
         }
         else
         {
-            qWarning(logRadio()) << "Radio returned CI-V rejection (FA) with no pending set command";
+            qWarning(logRadio()).noquote() << "Radio returned CI-V rejection (FA) with no pending set command";
         }
         break;
     }
@@ -1853,8 +1859,8 @@ void Commander::parseCommand()
         func != funcVdMeter && func != funcIdMeter)
     {
         // Spectrum and meter replies are high-volume and obscure useful traffic.
-        qDebug(logRadioTraffic()) << QString("Received from radio: %1").arg(funcString[func]);
-        qDebug(logRadioTraffic()) << payloadIn.toHex(' ');
+        qDebug(logRadioTraffic()).noquote() << QString("Received from radio: %1").arg(funcString[func]);
+        qDebug(logRadioTraffic()).noquote() << payloadIn.toHex(' ');
     }
 
 #ifdef DEBUG_PARSE
@@ -1871,11 +1877,11 @@ void Commander::parseCommand()
     numParseSamples++;
     if (lastParseReport.msecsTo(QTime::currentTime()) >= 10000)
     {
-        qInfo(logRadio()) << QString("10 second average command parse time %1 ns (low=%2, high=%3, num=%4:")
-                                 .arg(averageParseTime / numParseSamples)
-                                 .arg(lowParse)
-                                 .arg(highParse)
-                                 .arg(numParseSamples);
+        qInfo(logRadio()).noquote() << QString("10 second average command parse time %1 ns (low=%2, high=%3, num=%4:")
+                                           .arg(averageParseTime / numParseSamples)
+                                           .arg(lowParse)
+                                           .arg(highParse)
+                                           .arg(numParseSamples);
         averageParseTime = 0;
         numParseSamples = 0;
         lowParse = 9999;
@@ -1919,14 +1925,15 @@ void Commander::determineRadioCaps()
     // The IC-9700 transceiver ID response normally sets modelID before this point.
     if (radioCaps.modelID != kRadioModelId)
     {
-        qWarning(logRadio()) << QString("Unsupported CI-V radio ID: 0x%1. SDR9700 only supports the IC-9700.")
-                                    .arg(radioCaps.modelID, 2, 16);
+        qWarning(logRadio()).noquote() << QString("Unsupported CI-V radio ID: 0x%1. SDR9700 only supports the IC-9700.")
+                                              .arg(radioCaps.modelID, 2, 16);
         return;
     }
 
     sdr9700::populateRadioCapabilities(radioCaps);
 
-    qInfo(logRadio()) << QString("Loading Radio: %1 from built-in IC-9700 capabilities").arg(radioCaps.modelName);
+    qInfo(logRadio()).noquote()
+        << QString("Loading Radio: %1 from built-in IC-9700 capabilities").arg(radioCaps.modelName);
 
     // Publish half-duplex capability before the queue starts normal polling.
     emit setHalfDuplex(!radioCaps.hasFDcomms);
@@ -1971,13 +1978,13 @@ void Commander::determineRadioCaps()
         lookingForRadio = false;
         foundRadio = true;
 
-        qDebug(logRadio()) << "---Radio FOUND from broadcast query:";
+        qDebug(logRadio()).noquote() << "---Radio FOUND from broadcast query:";
         this->civAddr = incomingCIVAddr & 0xff; // Override and use immediately.
         payloadPrefix = QByteArray("\xFE\xFE");
         payloadPrefix.append((char)civAddr);
         payloadPrefix.append((char)compCivAddr);
-        qInfo(logRadio()) << "Using incomingCIVAddr: (int): " << this->civAddr
-                          << " hex: " << QString("0x%1").arg(this->civAddr, 0, 16);
+        qInfo(logRadio()).noquote() << "Using incomingCIVAddr: (int): " << this->civAddr
+                                    << " hex: " << QString("0x%1").arg(this->civAddr, 0, 16);
         emit discoveredRadioID(radioCaps);
     }
     else
@@ -1995,7 +2002,7 @@ bool Commander::decodeSpectrumSequence(quint8& sequence, quint8& sequenceMax) co
 {
     if (payloadIn.size() < 2)
     {
-        qWarning(logSpectrumScope()) << "Ignoring short scope payload:" << payloadIn.toHex(' ');
+        qWarning(logSpectrumScope()).noquote() << "Ignoring short scope payload:" << payloadIn.toHex(' ');
         return false;
     }
     sequence = bcdHexToUChar(payloadIn.at(0));
@@ -2009,12 +2016,12 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
 
     if (!haveRadioCaps)
     {
-        qDebug(logSpectrumScope()) << "Spectrum received in Commander, but radioID is incomplete.";
+        qDebug(logSpectrumScope()).noquote() << "Spectrum received in Commander, but radioID is incomplete.";
         return ret;
     }
     if (radioCaps.spectSeqMax == 0)
     {
-        qInfo(logSpectrumScope()) << "Spectrum received before IC-9700 scope capabilities were ready.";
+        qInfo(logSpectrumScope()).noquote() << "Spectrum received before IC-9700 scope capabilities were ready.";
         return ret;
     }
 
@@ -2049,8 +2056,9 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     {
         if (payloadIn.size() < waveInfoBytes)
         {
-            qWarning(logSpectrumScope()) << "Ignoring short single-frame scope payload. required" << waveInfoBytes
-                                         << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            qWarning(logSpectrumScope()).noquote()
+                << "Ignoring short single-frame scope payload. required" << waveInfoBytes << "got" << payloadIn.size()
+                << "data:" << payloadIn.toHex(' ');
             return false;
         }
 
@@ -2092,8 +2100,8 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
         }
         ret = !d.data.isEmpty();
         d.valid = ret;
-        qInfo(logSpectrumScope()) << "Spectrum single-frame start:" << d.startFreq << "end:" << d.endFreq
-                                  << "mode:" << d.mode << "oor:" << d.oor << "dataLen:" << d.data.size();
+        qInfo(logSpectrumScope()).noquote() << "Spectrum single-frame start:" << d.startFreq << "end:" << d.endFreq
+                                            << "mode:" << d.mode << "oor:" << d.oor << "dataLen:" << d.data.size();
         return ret;
     }
 
@@ -2104,9 +2112,9 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
         const int multiFrameWaveInfoBytes = 4 + (freqLen * 2);
         if (payloadIn.size() < multiFrameWaveInfoBytes)
         {
-            qWarning(logSpectrumScope()) << "Ignoring short scope wave-info payload. required"
-                                         << multiFrameWaveInfoBytes << "got" << payloadIn.size()
-                                         << "data:" << payloadIn.toHex(' ');
+            qWarning(logSpectrumScope()).noquote()
+                << "Ignoring short scope wave-info payload. required" << multiFrameWaveInfoBytes << "got"
+                << payloadIn.size() << "data:" << payloadIn.toHex(' ');
             return false;
         }
 
@@ -2155,24 +2163,26 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
             ret = true;
         }
 
-        qInfo(logSpectrumScope()) << "Spectrum seq 1/" << sequenceMax << "start:" << d.startFreq << "end:" << d.endFreq
-                                  << "mode:" << d.mode << "oor:" << d.oor << "payloadLen:" << payloadIn.length();
+        qInfo(logSpectrumScope()).noquote()
+            << "Spectrum seq 1/" << sequenceMax << "start:" << d.startFreq << "end:" << d.endFreq << "mode:" << d.mode
+            << "oor:" << d.oor << "payloadLen:" << payloadIn.length();
     }
     else if ((sequence > 1) && (sequence < sequenceMax))
     {
         // Intermediate scope chunks carry 50 pixels each.
         d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
         ret = false;
-        qInfo(logSpectrumScope()) << "Spectrum seq" << sequence << "/" << sequenceMax << "dataAccum:" << d.data.size()
-                                  << "payloadLen:" << payloadIn.length();
+        qInfo(logSpectrumScope()).noquote() << "Spectrum seq" << sequence << "/" << sequenceMax
+                                            << "dataAccum:" << d.data.size() << "payloadLen:" << payloadIn.length();
     }
     else if (sequence == sequenceMax)
     {
         // Final IC-9700 scope chunk carries the remaining waveform pixels.
         d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
         ret = true;
-        qInfo(logSpectrumScope()) << "Spectrum seq" << sequence << "/" << sequenceMax
-                                  << "(LAST) totalData:" << d.data.size() << "payloadLen:" << payloadIn.length();
+        qInfo(logSpectrumScope()).noquote()
+            << "Spectrum seq" << sequence << "/" << sequenceMax << "(LAST) totalData:" << d.data.size()
+            << "payloadLen:" << payloadIn.length();
     }
     d.valid = ret;
 
@@ -2232,7 +2242,7 @@ quint8 Commander::bcdHexToUChar(quint8 hundreds, quint8 tensunits)
     const int rtnVal = (hundreds & 0x0f) * 100 + ((tensunits & 0xf0) >> 4) * 10 + (tensunits & 0x0f);
     if (rtnVal > 255)
     {
-        qWarning(logRadio()) << "bcdHexToUChar: decoded value" << rtnVal << "exceeds quint8 range; clamping";
+        qWarning(logRadio()).noquote() << "bcdHexToUChar: decoded value" << rtnVal << "exceeds quint8 range; clamping";
     }
     return static_cast<quint8>(qMin(rtnVal, 255));
 }
@@ -2241,7 +2251,7 @@ QByteArray Commander::bcdEncodeInt(quint16 num)
 {
     if (num > 9999)
     {
-        qInfo(logRadio()) << __FUNCTION__ << "Error, number is too big for four-digit conversion: " << num;
+        qInfo(logRadio()).noquote() << __FUNCTION__ << "Error, number is too big for four-digit conversion: " << num;
         return QByteArray();
     }
 
@@ -2262,7 +2272,7 @@ QByteArray Commander::bcdEncodeInt(unsigned int num)
 {
     if (num > 999999)
     {
-        qInfo(logRadio()) << __FUNCTION__ << "Error, number is too big for six-digit conversion: " << num;
+        qInfo(logRadio()).noquote() << __FUNCTION__ << "Error, number is too big for six-digit conversion: " << num;
         return QByteArray();
     }
 
@@ -2278,7 +2288,7 @@ QByteArray Commander::bcdEncodeInt(unsigned int num)
 
     QByteArray result;
     result.append(b0).append(b1).append(b2);
-    qInfo(logRadio()) << __FUNCTION__ << " encoding value " << num << " as hex:" << result.toHex(' ');
+    qInfo(logRadio()).noquote() << __FUNCTION__ << " encoding value " << num << " as hex:" << result.toHex(' ');
 
     return result;
 }
@@ -2286,7 +2296,7 @@ QByteArray Commander::bcdEncodeChar(quint8 num)
 {
     if (num > 99)
     {
-        qInfo(logRadio()) << __FUNCTION__ << "Error, number is too big for two-digit conversion: " << num;
+        qInfo(logRadio()).noquote() << __FUNCTION__ << "Error, number is too big for two-digit conversion: " << num;
         return QByteArray();
     }
 
@@ -2309,7 +2319,7 @@ Frequency Commander::parseFrequency()
     // Minimum meaningful payload is 5 bytes (indices 1-4, octal literals).
     if (payloadIn.length() < 5)
     {
-        qWarning(logRadio()) << "parseFrequency(): payload too short:" << payloadIn.length();
+        qWarning(logRadio()).noquote() << "parseFrequency(): payload too short:" << payloadIn.length();
         return freq;
     }
 
@@ -2362,7 +2372,7 @@ Frequency Commander::parseFrequencyRptOffset(QByteArray data)
 
     if (data.size() < 3)
     {
-        qWarning(logRadio()) << "Repeater offset response too short:" << data.toHex(' ');
+        qWarning(logRadio()).noquote() << "Repeater offset response too short:" << data.toHex(' ');
         return f;
     }
 
@@ -2387,8 +2397,8 @@ Frequency Commander::parseFrequency(QByteArray data, quint8 lastPosition)
 
     if (data.length() <= lastPosition)
     {
-        qWarning(logRadio()) << "parseFrequency() given last position:" << lastPosition << "but data is only"
-                             << data.length() << "bytes";
+        qWarning(logRadio()).noquote() << "parseFrequency() given last position:" << lastPosition << "but data is only"
+                                       << data.length() << "bytes";
         return freqs;
     }
     // Optional high-frequency bytes carry 100 MHz and GHz digits.
@@ -2476,8 +2486,8 @@ ModeInfo Commander::parseMode(uchar mode, uchar data, uchar filter, uchar receiv
 
     if (!found)
     {
-        qInfo(logRadio()) << QString("parseMode() No such mode %1 with filter %2").arg(mode).arg(filter)
-                          << payloadIn.toHex(' ');
+        qInfo(logRadio()).noquote() << QString("parseMode() No such mode %1 with filter %2").arg(mode).arg(filter)
+                                    << payloadIn.toHex(' ');
     }
 
     // When CI-V 29h is unavailable, only the active receiver's filter width is queryable.
@@ -2821,8 +2831,8 @@ void Commander::parseMemoryField(const MemParserFormat& format, const QByteArray
 
         break;
     default:
-        qInfo(logRadio()) << "Parser didn't match!" << "spec:" << format.spec << "pos:" << format.pos << "len"
-                          << format.len;
+        qInfo(logRadio()).noquote() << "Parser didn't match!" << "spec:" << format.spec << "pos:" << format.pos << "len"
+                                    << format.len;
         break;
     }
 }
@@ -2930,7 +2940,7 @@ unsigned char Commander::convertNumberToHex(unsigned char num)
     // BCD-encode a two-digit decimal value.
     if (num > 99)
     {
-        qInfo(logRadio()) << "Invalid numeric conversion from num " << num << " to hex.";
+        qInfo(logRadio()).noquote() << "Invalid numeric conversion from num " << num << " to hex.";
         return 0xFA;
     }
     unsigned char result = 0;
@@ -2981,7 +2991,7 @@ bool Commander::stopLocalAudio()
         Qt::QueuedConnection);
     if (!queued || !stopDone->tryAcquire(1, 2500))
     {
-        qWarning(logAudio()) << "Timed out stopping local audio worker";
+        qWarning(logAudio()).noquote() << "Timed out stopping local audio worker";
         return false;
     }
     return true;
@@ -3032,14 +3042,16 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
 
     if (!cmd.setCmd)
     {
-        qDebug(logRadio()) << "Removing unsupported set command from queue" << funcString[func] << "VFO" << receiver;
+        qDebug(logRadio()).noquote() << "Removing unsupported set command from queue" << funcString[func] << "VFO"
+                                     << receiver;
         queue->del(func, receiver);
         return false;
     }
 
     if (!isRadioAdmin && cmd.admin)
     {
-        qWarning(logRadio()) << "Admin permission required for set command" << funcString[func] << "access denied";
+        qWarning(logRadio()).noquote() << "Admin permission required for set command" << funcString[func]
+                                       << "access denied";
         return false;
     }
 
@@ -3076,7 +3088,7 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
         if (func == funcSendCW)
         {
             QByteArray textData = text.toLatin1();
-            qDebug(logRadio()) << "CW input:" << textData;
+            qDebug(logRadio()).noquote() << "CW input:" << textData;
             for (int c = 0; c < textData.length(); c++)
             {
                 const quint8 p = textData.at(c);
@@ -3089,8 +3101,8 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
                 }
                 else
                 {
-                    qWarning(logRadio()) << "Invalid character detected in CW message at position " << c
-                                         << ", the character is " << text.at(c);
+                    qWarning(logRadio()).noquote() << "Invalid character detected in CW message at position " << c
+                                                   << ", the character is " << text.at(c);
                     textData[c] = 0x3F; // "?"
                 }
             }
@@ -3103,9 +3115,9 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
             {
                 emit sidetone(QString(textData));
                 payload.append(textData);
-                qDebug(logRadio()) << "CW output::" << textData;
+                qDebug(logRadio()).noquote() << "CW output::" << textData;
             }
-            qDebug(logRadio()) << "Sending CW: payload:" << payload.toHex(' ');
+            qDebug(logRadio()).noquote() << "Sending CW: payload:" << payload.toHex(' ');
         }
     }
     else if (valueHolds(qMetaTypeId<uchar>()))
@@ -3129,7 +3141,7 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
         else if (func == funcKeySpeed)
         {
             ushort wpm = round((value.value<ushort>() - 6) * (6.071));
-            qDebug(logRadio()) << "Sending key speed orig:" << value.value<ushort>() << "sent:" << wpm;
+            qDebug(logRadio()).noquote() << "Sending key speed orig:" << value.value<ushort>() << "sent:" << wpm;
             payload.append(bcdEncodeInt(wpm));
         }
         else if (func == funcCwPitch)
@@ -3148,7 +3160,7 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
         // RIT/XIT offset payload.
         bool isNegative = false;
         short ritValue = value.value<short>();
-        qDebug(logRadio()) << "Setting RIT to " << ritValue;
+        qDebug(logRadio()).noquote() << "Setting RIT to " << ritValue;
         if (ritValue < 0)
         {
             isNegative = true;
@@ -3164,8 +3176,8 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
     }
     else if (valueHolds(qMetaTypeId<uint>()) && (func == funcMemoryContents || func == funcMemoryMode))
     {
-        qDebug(logRadio()) << "Get Memory Contents" << (value.value<uint>() & 0xffff);
-        qDebug(logRadio()) << "Get Memory Group (if exists)" << (value.value<uint>() >> 16 & 0xffff);
+        qDebug(logRadio()).noquote() << "Get Memory Contents" << (value.value<uint>() & 0xffff);
+        qDebug(logRadio()).noquote() << "Get Memory Group (if exists)" << (value.value<uint>() >> 16 & 0xffff);
         if (func == funcMemoryContents)
         {
             const auto groupFormat = std::find_if(radioCaps.memParser.cbegin(), radioCaps.memParser.cend(),
@@ -3287,9 +3299,9 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
             case 'f':
                 if (mem.del)
                 {
-                    qDebug(logRadio()) << "Pre deleting f" << payload.toHex(' ');
+                    qDebug(logRadio()).noquote() << "Pre deleting f" << payload.toHex(' ');
                     payload.append(ffchar);
-                    qDebug(logRadio()) << "Deleting f" << payload.toHex(' ');
+                    qDebug(logRadio()).noquote() << "Deleting f" << payload.toHex(' ');
                     finished = true;
                     break;
                 }
@@ -3471,7 +3483,7 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
                 break;
             }
         }
-        qDebug(logRadio()) << "Writing memory location:" << payload.toHex(' ');
+        qDebug(logRadio()).noquote() << "Writing memory location:" << payload.toHex(' ');
     }
     else if (valueHolds(qMetaTypeId<int>()) && (func == funcScopeRef))
     {
@@ -3508,8 +3520,8 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
                 {
                     payload.append(m.filter);
                 }
-                qDebug(logRadio()) << "Sending mode command" << funcString[func] << " mode:" << m.name
-                                   << "data:" << m.data << "filter" << m.filter;
+                qDebug(logRadio()).noquote() << "Sending mode command" << funcString[func] << " mode:" << m.name
+                                             << "data:" << m.data << "filter" << m.filter;
             }
         }
     }
@@ -3578,7 +3590,8 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
     else if (valueHolds(qMetaTypeId<DateKind>()))
     {
         DateKind d = value.value<DateKind>();
-        qInfo(logRadio()) << QString("Sending new date: (MM-DD-YYYY) %1-%2-%3").arg(d.month).arg(d.day).arg(d.year);
+        qInfo(logRadio()).noquote()
+            << QString("Sending new date: (MM-DD-YYYY) %1-%2-%3").arg(d.month).arg(d.day).arg(d.year);
         payload.append(convertNumberToHex(d.year / 100));                  // 20
         payload.append(convertNumberToHex(d.year - 100 * (d.year / 100))); // 21
         payload.append(convertNumberToHex(d.month));
@@ -3589,13 +3602,13 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
         TimeKind t = value.value<TimeKind>();
         if (cmd.cmd == funcTime)
         {
-            qInfo(logRadio()) << QString("Sending new time: (HH:MM) %1:%2").arg(t.hours).arg(t.minutes);
+            qInfo(logRadio()).noquote() << QString("Sending new time: (HH:MM) %1:%2").arg(t.hours).arg(t.minutes);
             payload.append(convertNumberToHex(t.hours));
             payload.append(convertNumberToHex(t.minutes));
         }
         else if (cmd.cmd == funcUTCOffset)
         {
-            qInfo(logRadio())
+            qInfo(logRadio()).noquote()
                 << QString("Sending new UTC offset: %1%2:%3").arg(t.isMinus ? "-" : "+").arg(t.hours).arg(t.minutes);
             payload.append(convertNumberToHex(t.hours));
             payload.append(convertNumberToHex(t.minutes));
@@ -3605,12 +3618,12 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
     else if (valueHolds(qMetaTypeId<RptrAccessData>()))
     {
         RptrAccessData r = value.value<RptrAccessData>();
-        qDebug(logRadio()) << "Sending RptrAccessData Mode" << r.accessMode;
+        qDebug(logRadio()).noquote() << "Sending RptrAccessData Mode" << r.accessMode;
         payload.append(bcdEncodeChar(static_cast<uchar>(r.accessMode)));
     }
     else
     {
-        qInfo(logRadio()) << funcString[func] << "Got unknown value type" << QString(value.typeName());
+        qInfo(logRadio()).noquote() << funcString[func] << "Got unknown value type" << QString(value.typeName());
         return false;
     }
 
@@ -3627,8 +3640,8 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
         if (func == funcMemoryContents || func == funcMemoryClear || func == funcMemoryWrite || func == funcMemoryMode)
         {
             // Strip memory group bits before range-checking the channel number.
-            qDebug(logRadio()) << "Memory Command" << funcString[func] << "with valuetype "
-                               << QString(value.typeName());
+            qDebug(logRadio()).noquote() << "Memory Command" << funcString[func] << "with valuetype "
+                                         << QString(value.typeName());
             val = val & 0xffff;
         }
     }
@@ -3691,8 +3704,8 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
         {
             if (!cmd.getCmd)
             {
-                qDebug(logRadio()) << "Removing unsupported get command from queue" << funcString[func] << "VFO"
-                                   << receiver;
+                qDebug(logRadio()).noquote()
+                    << "Removing unsupported get command from queue" << funcString[func] << "VFO" << receiver;
                 queue->del(func, receiver);
                 return;
             }
@@ -3714,7 +3727,7 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
     }
     else
     {
-        qDebug(logRadio()) << "CachingQueue(): unimplemented command" << funcString[func];
+        qDebug(logRadio()).noquote() << "CachingQueue(): unimplemented command" << funcString[func];
         queue->del(func, receiver);
     }
 }

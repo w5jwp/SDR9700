@@ -757,11 +757,10 @@ void SpectrumScopeCanvas::wheelEvent(QWheelEvent* ev)
     }
 
     m_wheelStepAccumulator -= acceptedSteps;
-    qDebug(logSpectrumScope()).nospace() << "Spectrum scope wheel angle=" << angle << " pixel=" << ev->pixelDelta()
-                                         << " qtInverted=" << ev->inverted() << " physicalSteps=" << physicalSteps
-                                         << " reversePreference=" << m_invertMouseWheel
-                                         << " acceptedSteps=" << acceptedSteps
-                                         << " accumulator=" << m_wheelStepAccumulator;
+    qDebug(logSpectrumScope()).noquote().nospace()
+        << "Spectrum scope wheel angle=" << angle << " pixel=" << ev->pixelDelta() << " qtInverted=" << ev->inverted()
+        << " physicalSteps=" << physicalSteps << " reversePreference=" << m_invertMouseWheel
+        << " acceptedSteps=" << acceptedSteps << " accumulator=" << m_wheelStepAccumulator;
 
     Q_EMIT wheelStepRequested(acceptedSteps);
     ev->accept();

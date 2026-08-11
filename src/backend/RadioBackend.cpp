@@ -273,7 +273,8 @@ RadioBackend::RadioBackend(QObject* parent)
                 if (!m_originalDataOffMod.has_value())
                 {
                     m_originalDataOffMod = input.reg;
-                    qInfo(logRadio()) << "Captured original DATA OFF MOD source register" << *m_originalDataOffMod;
+                    qInfo(logRadio()).noquote()
+                        << "Captured original DATA OFF MOD source register" << *m_originalDataOffMod;
                 }
             });
     connect(m_radioRouter, &RadioRouter::data1ModChanged, this,
@@ -282,7 +283,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 if (!m_originalData1Mod.has_value())
                 {
                     m_originalData1Mod = input.reg;
-                    qInfo(logRadio()) << "Captured original DATA1 MOD source register" << *m_originalData1Mod;
+                    qInfo(logRadio()).noquote() << "Captured original DATA1 MOD source register" << *m_originalData1Mod;
                 }
             });
     connect(m_radioRouter, &RadioRouter::pttChanged, this,
@@ -391,13 +392,15 @@ RadioBackend::~RadioBackend()
         m_radioDataThread->quit();
         if (!m_radioDataThread->wait(3000))
         {
-            qWarning(logRadio()) << "[SHUTDOWN] radio-data did not stop within 3000 ms; requesting interruption";
+            qWarning(logRadio()).noquote()
+                << "[SHUTDOWN] radio-data did not stop within 3000 ms; requesting interruption";
             m_radioDataThread->requestInterruption();
             m_radioDataThread->quit();
             if (!m_radioDataThread->wait(1000))
             {
-                qCritical(logRadio()) << "[SHUTDOWN] radio-data did not stop after bounded shutdown; leaving thread "
-                                         "detached to avoid blocking the UI";
+                qCritical(logRadio()).noquote()
+                    << "[SHUTDOWN] radio-data did not stop after bounded shutdown; leaving thread "
+                       "detached to avoid blocking the UI";
                 m_radioDataThread->setParent(nullptr);
                 connect(m_radioDataThread, &QThread::finished, m_radioDataThread, &QObject::deleteLater,
                         Qt::DirectConnection);
@@ -408,13 +411,15 @@ RadioBackend::~RadioBackend()
     m_workerThread->quit();
     if (!m_workerThread->wait(3000))
     {
-        qWarning(logRadio()) << "[SHUTDOWN] radio-worker did not stop within 3000 ms; requesting interruption";
+        qWarning(logRadio()).noquote()
+            << "[SHUTDOWN] radio-worker did not stop within 3000 ms; requesting interruption";
         m_workerThread->requestInterruption();
         m_workerThread->quit();
         if (!m_workerThread->wait(1000))
         {
-            qCritical(logRadio()) << "[SHUTDOWN] radio-worker did not stop after bounded shutdown; leaving thread "
-                                     "detached to avoid blocking the UI";
+            qCritical(logRadio()).noquote()
+                << "[SHUTDOWN] radio-worker did not stop after bounded shutdown; leaving thread "
+                   "detached to avoid blocking the UI";
             m_workerThread->setParent(nullptr);
             connect(m_workerThread, &QThread::finished, m_workerThread, &QObject::deleteLater, Qt::DirectConnection);
             m_workerThread = nullptr;
@@ -707,10 +712,10 @@ void RadioBackend::stopLocalAudio()
         Qt::QueuedConnection);
     if (!queued || !stopDone->tryAcquire(1, 3000))
     {
-        qWarning(logAudio()) << "Timed out waiting for local audio playback to stop";
+        qWarning(logAudio()).noquote() << "Timed out waiting for local audio playback to stop";
         return;
     }
-    qInfo(logAudio()) << "[SHUTDOWN] local playback stopped";
+    qInfo(logAudio()).noquote() << "[SHUTDOWN] local playback stopped";
 }
 
 void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisconnectedStage)
@@ -791,7 +796,8 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
             Qt::QueuedConnection);
         if (!queued || !closeDone->tryAcquire(1, 14000))
         {
-            qWarning(logRadio()) << "[SHUTDOWN] closeComm() did not finish within 14000 ms; continuing disconnect";
+            qWarning(logRadio()).noquote()
+                << "[SHUTDOWN] closeComm() did not finish within 14000 ms; continuing disconnect";
         }
     }
     commandSession->deleteLater();
@@ -865,7 +871,7 @@ void RadioBackend::setMode(const QString& mode)
     ModeInfo mi;
     if (!populateModeInfo(mode, &mi))
     {
-        qWarning(logRadio()) << "Ignoring unsupported mode selection:" << mode;
+        qWarning(logRadio()).noquote() << "Ignoring unsupported mode selection:" << mode;
         return;
     }
     mi.filter = static_cast<quint8>(qBound(1, m_currentMainFilter, 3));
@@ -1143,7 +1149,7 @@ void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16
     const quint64 hz = memoryGroupDefaultFrequencyHz(group);
     if (hz == 0)
     {
-        qWarning(logRadio()) << "Ignoring memory band selection for unsupported group" << group;
+        qWarning(logRadio()).noquote() << "Ignoring memory band selection for unsupported group" << group;
         return;
     }
 
@@ -1168,7 +1174,7 @@ void RadioBackend::selectMemoryForCommand(Commander* commandSession, quint16 gro
     }
     if (memoryGroupDefaultFrequencyHz(group) == 0)
     {
-        qWarning(logRadio()) << "Ignoring memory channel selection for unsupported group" << group;
+        qWarning(logRadio()).noquote() << "Ignoring memory channel selection for unsupported group" << group;
         return;
     }
 
@@ -1557,8 +1563,9 @@ void RadioBackend::requestInitialRadioState()
         return;
     }
 
-    qDebug(logRadio()).nospace() << "Retrying initial MAIN VFO state frequencyReceived="
-                                 << m_initialMainFrequencyReceived << " modeReceived=" << m_initialMainModeReceived;
+    qDebug(logRadio()).noquote().nospace()
+        << "Retrying initial MAIN VFO state frequencyReceived=" << m_initialMainFrequencyReceived
+        << " modeReceived=" << m_initialMainModeReceived;
     requestMainVfoState();
 }
 
@@ -1586,9 +1593,10 @@ void RadioBackend::requestPostReadyRadioState()
             commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
             commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcTimeOutTimer, QVariant::fromValue<uchar>(kHardwareTxTimeoutTimer), 0);
-            qInfo(logRadio()) << "Configured IC-9700 transmit modulation source for LAN audio and single MAIN VFO "
-                                 "operation";
-            qInfo(logRadio()) << "Setting hardware TX timeout timer to 3 minutes";
+            qInfo(logRadio()).noquote()
+                << "Configured IC-9700 transmit modulation source for LAN audio and single MAIN VFO "
+                   "operation";
+            qInfo(logRadio()).noquote() << "Setting hardware TX timeout timer to 3 minutes";
 
             const Funcs statusCommands[] = {
                 funcTransceiverStatus,
@@ -1646,10 +1654,11 @@ void RadioBackend::updateReadyState()
     }
 
     m_radioReady = ready;
-    qInfo(logRadio()).nospace() << "Radio backend readiness changed ready=" << ready
-                                << " mainFrequencyReceived=" << m_initialMainFrequencyReceived
-                                << " mainModeReceived=" << m_initialMainModeReceived
-                                << " scopeReceived=" << m_scopeDataReceived << " scopeDegraded=" << m_scopeSyncDegraded;
+    qInfo(logRadio()).noquote().nospace()
+        << "Radio backend readiness changed ready=" << ready
+        << " mainFrequencyReceived=" << m_initialMainFrequencyReceived
+        << " mainModeReceived=" << m_initialMainModeReceived << " scopeReceived=" << m_scopeDataReceived
+        << " scopeDegraded=" << m_scopeSyncDegraded;
     emit readyChanged(ready);
     if (ready)
     {
@@ -1712,14 +1721,14 @@ void RadioBackend::restartAfterSyncTimeout()
         // reaching this branch means a queued readiness update was delayed. Keep
         // it as a defensive fallback instead of reconnecting a usable radio.
         setScopeSyncDegraded(true);
-        qWarning(logRadio()) << "Radio control sync completed but Spectrum Scope data did not arrive within"
-                             << kSyncWatchdogTimeoutMs << "ms; enabling controls while scope retry continues";
+        qWarning(logRadio()).noquote() << "Radio control sync completed but Spectrum Scope data did not arrive within"
+                                       << kSyncWatchdogTimeoutMs << "ms; enabling controls while scope retry continues";
         updateReadyState();
         return;
     }
     if (m_connectionHost.isEmpty() || m_connectionPort == 0)
     {
-        qWarning(logRadio()) << "Radio sync timed out, but no saved connection target is available";
+        qWarning(logRadio()).noquote() << "Radio sync timed out, but no saved connection target is available";
         return;
     }
 
@@ -1728,17 +1737,17 @@ void RadioBackend::restartAfterSyncTimeout()
     const QString user = m_connectionUser;
     const QString pass = m_connectionPass;
 
-    qWarning(logRadio()).nospace() << "Radio sync did not complete timeoutMs=" << kSyncWatchdogTimeoutMs
-                                   << " scopeReceived=" << m_scopeDataReceived
-                                   << " mainFrequencyReceived=" << m_initialMainFrequencyReceived
-                                   << " mainModeReceived=" << m_initialMainModeReceived;
+    qWarning(logRadio()).noquote().nospace()
+        << "Radio sync did not complete timeoutMs=" << kSyncWatchdogTimeoutMs
+        << " scopeReceived=" << m_scopeDataReceived << " mainFrequencyReceived=" << m_initialMainFrequencyReceived
+        << " mainModeReceived=" << m_initialMainModeReceived;
     if (m_syncReconnectAttempts >= kMaxSyncReconnectAttempts)
     {
         // A repeated failure here means LAN control authenticated but the CI-V
         // stream never produced frequency/mode readback. Reconnecting forever
         // hammers the IC-9700 LAN server and leaves the GUI stuck in Syncing,
         // so stop cleanly and let the operator choose when to retry or reboot.
-        qWarning(logRadio()) << "Radio sync retry limit reached; stopping automatic reconnect loop";
+        qWarning(logRadio()).noquote() << "Radio sync retry limit reached; stopping automatic reconnect loop";
         const QString message = QStringLiteral("Radio sync timed out; reconnect or restart the radio");
         shutdownConnection(true, false);
         emit connectionStageChanged(ConnectionStage::Failed, message);
@@ -1816,7 +1825,7 @@ void RadioBackend::handleReportedFrequency(quint64 hz)
         return;
     }
 
-    qInfo(logRadio()) << "Detected IC-9700 band change; scheduling radio state refresh";
+    qInfo(logRadio()).noquote() << "Detected IC-9700 band change; scheduling radio state refresh";
     m_bandStateRefreshTimer->start();
 }
 

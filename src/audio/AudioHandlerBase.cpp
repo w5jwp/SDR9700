@@ -66,7 +66,7 @@ void AudioHandlerBase::dispose()
     // Run disposal on this object's thread to avoid races with audio callbacks.
     if (QThread::currentThread() != thread())
     {
-        qDebug(logAudio()) << "[SHUTDOWN] dispose() marshaling to audio thread";
+        qDebug(logAudio()).noquote() << "[SHUTDOWN] dispose() marshaling to audio thread";
         auto disposeDone = std::make_shared<QSemaphore>();
         const bool queued = QMetaObject::invokeMethod(
             this,
@@ -87,7 +87,7 @@ void AudioHandlerBase::dispose()
     bool expected = false;
     if (!disposed.compare_exchange_strong(expected, true))
     {
-        qDebug(logAudio()) << "[SHUTDOWN] dispose() already disposed, returning";
+        qDebug(logAudio()).noquote() << "[SHUTDOWN] dispose() already disposed, returning";
         return;
     }
 
@@ -297,7 +297,7 @@ bool AudioHandlerBase::init(const audioSetup& setup)
     }
 
     initialized = true;
-    qInfo(logAudio()) << role() << "thread id" << QThread::currentThreadId();
+    qInfo(logAudio()).noquote() << role() << "thread id" << QThread::currentThreadId();
     return true;
 }
 

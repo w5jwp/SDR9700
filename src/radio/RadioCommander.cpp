@@ -8,21 +8,21 @@
 
 RadioCommander::RadioCommander(QObject* parent) : QObject(parent)
 {
-    qInfo(logRadio()) << "creating instance of RadioCommander()";
+    qInfo(logRadio()).noquote() << "creating instance of RadioCommander()";
     queue = CachingQueue::getInstance();
 }
 
 RadioCommander::RadioCommander(quint8 guid[GUIDLEN], QObject* parent) : QObject(parent)
 {
 
-    qInfo(logRadio()) << "creating instance of RadioCommander(guid)";
+    qInfo(logRadio()).noquote() << "creating instance of RadioCommander(guid)";
     memcpy(this->guid, guid, GUIDLEN);
     queue = CachingQueue::getInstance();
 }
 
 RadioCommander::~RadioCommander()
 {
-    qInfo(logRadio()) << "closing instance of RadioCommander()";
+    qInfo(logRadio()).noquote() << "closing instance of RadioCommander()";
 }
 
 void RadioCommander::commSetup(quint16 radioCivAddr, UdpConnectionSettings connectionSettings, audioSetup rxAudioSetup,
@@ -34,38 +34,38 @@ void RadioCommander::commSetup(quint16 radioCivAddr, UdpConnectionSettings conne
     Q_UNUSED(txAudioSetup)
     Q_UNUSED(vsp)
     Q_UNUSED(tcp)
-    qWarning(logRadio()) << "commSetup() (network) not implemented";
+    qWarning(logRadio()).noquote() << "commSetup() (network) not implemented";
 }
 
 void RadioCommander::closeComm()
 {
-    qWarning(logRadio()) << "closeComm() not implemented";
+    qWarning(logRadio()).noquote() << "closeComm() not implemented";
 }
 
 void RadioCommander::process()
 {
-    qWarning(logRadio()) << "process() not implemented";
+    qWarning(logRadio()).noquote() << "process() not implemented";
 }
 
 void RadioCommander::setRadioID(quint16 radioID)
 {
     Q_UNUSED(radioID)
 
-    qWarning(logRadio()) << "setRadioID() not implemented";
+    qWarning(logRadio()).noquote() << "setRadioID() not implemented";
 }
 
 void RadioCommander::receiveBaudRate(quint32 baudrate)
 {
     Q_UNUSED(baudrate)
 
-    qWarning(logRadio()) << "receiveBaudRate() not implemented";
+    qWarning(logRadio()).noquote() << "receiveBaudRate() not implemented";
 }
 
 void RadioCommander::setCIVAddr(quint16 civAddr)
 {
     Q_UNUSED(civAddr)
 
-    qWarning(logRadio()) << "setCIVAddr() not implemented";
+    qWarning(logRadio()).noquote() << "setCIVAddr() not implemented";
 }
 
 void RadioCommander::receiveCommand(Funcs func, QVariant value, uchar receiver)
@@ -74,7 +74,7 @@ void RadioCommander::receiveCommand(Funcs func, QVariant value, uchar receiver)
     Q_UNUSED(value)
     Q_UNUSED(receiver)
 
-    qWarning(logRadio()) << "receiveCommand() not implemented";
+    qWarning(logRadio()).noquote() << "receiveCommand() not implemented";
 }
 
 void RadioCommander::handlePortError(errorType err)

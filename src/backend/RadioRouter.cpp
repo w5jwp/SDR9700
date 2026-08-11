@@ -51,8 +51,8 @@ QString RadioRouter::modeInfoToString(const ModeInfo& mi) const
     case modeDD:
         return QStringLiteral("DD");
     default:
-        qWarning(logRadio()) << "modeInfoToString: unrecognised mode" << mode << "reg" << mi.reg
-                             << "- defaulting to FM";
+        qWarning(logRadio()).noquote() << "modeInfoToString: unrecognised mode" << mode << "reg" << mi.reg
+                                       << "- defaulting to FM";
         return QStringLiteral("FM");
     }
 }
@@ -140,7 +140,7 @@ void RadioRouter::route(const CacheItem& item)
     case funcSMeter:
     {
         const int rawValue = qBound(0, item.value.toInt(), 255);
-        qDebug(logRadioTraffic()).nospace() << "S meter raw=" << rawValue;
+        qDebug(logRadioTraffic()).noquote().nospace() << "S meter raw=" << rawValue;
         if (item.receiver == kMainReceiver)
         {
             emit radioValueUpdated(item.command, QVariant(rawValue), kMainReceiver);
