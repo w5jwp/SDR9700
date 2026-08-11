@@ -276,12 +276,13 @@ void VfoModel::setDtcsCode(ushort code)
     }
 }
 
-void VfoModel::setPtt(bool on)
+bool VfoModel::setPtt(bool on)
 {
     if (m_backend)
     {
-        m_backend->setPtt(on);
+        return m_backend->setPtt(on);
     }
+    return false;
 }
 
 void VfoModel::sendDtmf(const QString& digits)

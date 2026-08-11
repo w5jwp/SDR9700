@@ -132,6 +132,7 @@ inline constexpr RadioCommandDef kRadioCommands[] = {
     {funcVFOSubSelect, "07d1", 0, 0, false, false, true, false, 0, false},
     {funcVFOBandMS, "07d2", 0, 1, false, false, true, true, 0, false},
     {funcMemoryMode, "08", 1, 107, false, false, true, true, 0, false},
+    {funcMemoryToVFO, "0a", 0, 0, false, false, true, false, 0, false},
     {funcReadFreqOffset, "0c", 0, 0, false, false, true, false, 0, false},
     {funcSendFreqOffset, "0d", 0, 9999, false, false, false, true, 0, false},
     {funcScanning, "0e", 0, 0, false, false, true, true, 0, false},

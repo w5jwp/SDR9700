@@ -62,13 +62,18 @@ void MeterController::setPowerMeter(double watts)
 {
     m_snapshot.powerWatts = qBound(0.0, watts, 120.0);
     m_snapshot.powerValid = true;
+    if (m_snapshot.powerWatts == 0.0)
+    {
+        m_snapshot.swr = 1.0;
+        m_snapshot.swrValid = false;
+    }
     scheduleFlush();
 }
 
 void MeterController::setSwr(double swr)
 {
     m_snapshot.swr = qBound(1.0, swr, 6.0);
-    m_snapshot.swrValid = true;
+    m_snapshot.swrValid = m_snapshot.powerValid && m_snapshot.powerWatts > 0.0;
     scheduleFlush();
 }
 

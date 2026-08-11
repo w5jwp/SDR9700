@@ -68,7 +68,7 @@ class VfoModel : public QObject
     void setToneAccessMode(rptAccessTxRx_t toneAccessMode);
     void setToneFrequency(ushort tone);
     void setDtcsCode(ushort code);
-    void setPtt(bool on);
+    bool setPtt(bool on);
     void sendDtmf(const QString& digits);
 
     void applyFrequency(quint64 hz);

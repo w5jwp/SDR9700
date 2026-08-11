@@ -1842,6 +1842,10 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
             {
                 m_metersDialog->setSwr(m_meterSnapshot.swr);
             }
+            else
+            {
+                m_metersDialog->clearSwr();
+            }
             if (m_meterSnapshot.alcValid)
             {
                 m_metersDialog->setAlc(m_meterSnapshot.alc);
@@ -1876,8 +1880,14 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
         }
     }
 
-    if (!m_meterSnapshot.swrValid || !m_txActive || !m_txSwrLabel)
+    if (!m_txActive || !m_txSwrLabel)
     {
+        return;
+    }
+    if (!m_meterSnapshot.swrValid)
+    {
+        m_txSwrLabel->setText(
+            QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusSecondary));
         return;
     }
 
@@ -2192,14 +2202,16 @@ void MainWindow::onDtmfSendRequested(const QString& digits)
         return;
     }
 
+    if (!m_vfo->setPtt(true))
+    {
+        return;
+    }
+    beginMemoryPttFrequencyTransition();
     m_dtmfSendActive = true;
     if (m_dtmfDialog)
     {
         m_dtmfDialog->setSendInProgress(true);
     }
-
-    beginMemoryPttFrequencyTransition();
-    m_vfo->setPtt(true);
 
     // The DTMF PCM buffer queued to UdpAudio is consumed only after the 1000 ms
     // TX gate expires. kTrailMs must cover the remaining gate window after the
@@ -2227,8 +2239,10 @@ void MainWindow::onPttPressed()
         return;
     }
 
-    beginMemoryPttFrequencyTransition();
-    m_vfo->setPtt(true);
+    if (m_vfo->setPtt(true))
+    {
+        beginMemoryPttFrequencyTransition();
+    }
 }
 
 void MainWindow::onPttReleased()

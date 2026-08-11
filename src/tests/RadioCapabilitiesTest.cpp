@@ -103,6 +103,12 @@ void RadioCapabilitiesTest::commandMappingsRoundTrip()
     QVERIFY(frequencySet.setCmd);
     QCOMPARE(capabilities.commandsReverse.value(frequencySet.data), funcFreqSet);
 
+    const FuncType memoryToVfo = capabilities.commands.value(funcMemoryToVFO);
+    QCOMPARE(memoryToVfo.data, QByteArray::fromHex("0a"));
+    QVERIFY(memoryToVfo.getCmd);
+    QVERIFY(!memoryToVfo.setCmd);
+    QCOMPARE(capabilities.commandsReverse.value(memoryToVfo.data), funcMemoryToVFO);
+
     for (auto it = capabilities.commands.cbegin(); it != capabilities.commands.cend(); ++it)
     {
         QCOMPARE(capabilities.commandsReverse.value(it.value().data, funcNone), it.key());

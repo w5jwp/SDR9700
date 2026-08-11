@@ -56,7 +56,11 @@ class FakeRadioBackend : public IRadioBackend
     void setScopeSpanHz(quint64) override {}
     void setScopeMode(int) override {}
     void setScopeFixedRangeHz(quint64, quint64) override {}
-    void setPtt(bool value) override { ptt = value; }
+    bool setPtt(bool value) override
+    {
+        ptt = value;
+        return pttAccepted;
+    }
     void setTxPower(int value) override { txPower = value; }
     void setTuningStep(int) override {}
     void pollFrequency() override {}
@@ -78,6 +82,7 @@ class FakeRadioBackend : public IRadioBackend
     int squelchLevel{-1};
     short ritOffset{0};
     bool ptt{false};
+    bool pttAccepted{true};
     int txPower{-1};
     int frequencyCalls{0};
     int modeCalls{0};
@@ -91,6 +96,7 @@ class VfoBackendTest : public QObject
     void radioBackedRequestsWaitForConfirmation();
     void localControlsUpdateAndForward();
     void boundedRequestsAreClampedBeforeForwarding();
+    void reportsRejectedPttRequest();
 };
 
 void VfoBackendTest::radioBackedRequestsWaitForConfirmation()
@@ -157,6 +163,16 @@ void VfoBackendTest::boundedRequestsAreClampedBeforeForwarding()
     QVERIFY(backend.squelchOn);
     QCOMPARE(backend.squelchLevel, 255);
     QCOMPARE(backend.txPower, 255);
+}
+
+void VfoBackendTest::reportsRejectedPttRequest()
+{
+    FakeRadioBackend backend;
+    VfoModel model(&backend);
+    backend.pttAccepted = false;
+
+    QVERIFY(!model.setPtt(true));
+    QVERIFY(backend.ptt);
 }
 
 QTEST_GUILESS_MAIN(VfoBackendTest)

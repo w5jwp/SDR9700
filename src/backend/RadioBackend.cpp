@@ -10,6 +10,7 @@
 #include "LogCategories.h"
 #include "RadioCapabilities.h"
 #include "RadioIdentities.h"
+#include "TransmitFrequencyPolicy.h"
 
 #include <QMediaDevices>
 #include <QHostAddress>
@@ -196,6 +197,8 @@ RadioBackend::RadioBackend(QObject* parent)
             {
                 m_initialMainFrequencyReceived = true;
                 m_initialFrequencyReceived = true;
+                m_currentMainFrequencyHz = hz;
+                m_transmitConfiguration.confirmFrequency(hz);
                 handleReportedFrequency(hz);
                 emit frequencyChanged(hz);
                 updateReadyState();
@@ -222,7 +225,13 @@ RadioBackend::RadioBackend(QObject* parent)
                         commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
                     });
             });
-    connect(m_radioRouter, &RadioRouter::repeaterOffsetChanged, this, &IRadioBackend::repeaterOffsetChanged);
+    connect(m_radioRouter, &RadioRouter::repeaterOffsetChanged, this,
+            [this](quint64 hz)
+            {
+                m_currentRepeaterOffsetHz = hz;
+                m_transmitConfiguration.confirmOffset(hz);
+                emit repeaterOffsetChanged(hz);
+            });
     connect(m_radioRouter, &RadioRouter::toneAccessModeChanged, this, &IRadioBackend::toneAccessModeChanged);
     connect(m_radioRouter, &RadioRouter::toneFrequencyChanged, this, &IRadioBackend::toneFrequencyChanged);
     connect(m_radioRouter, &RadioRouter::dtcsCodeChanged, this, &IRadioBackend::dtcsCodeChanged);
@@ -250,7 +259,13 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_radioRouter, &RadioRouter::compressionMeterChanged, this, &IRadioBackend::compressionMeterChanged);
     connect(m_radioRouter, &RadioRouter::voltageMeterChanged, this, &IRadioBackend::voltageMeterChanged);
     connect(m_radioRouter, &RadioRouter::currentMeterChanged, this, &IRadioBackend::currentMeterChanged);
-    connect(m_radioRouter, &RadioRouter::duplexModeChanged, this, &IRadioBackend::duplexModeChanged);
+    connect(m_radioRouter, &RadioRouter::duplexModeChanged, this,
+            [this](duplexMode_t mode)
+            {
+                m_currentDuplexMode = mode;
+                m_transmitConfiguration.confirmDuplexMode(mode);
+                emit duplexModeChanged(mode);
+            });
     connect(m_radioRouter, &RadioRouter::radioMemoryReceived, this, &IRadioBackend::radioMemoryReceived);
     connect(m_radioRouter, &RadioRouter::dataOffModChanged, this,
             [this](const radioInput& input)
@@ -791,6 +806,10 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_initialMainModeReceived = false;
     m_initialStateRequested = false;
     m_currentBandKey = -1;
+    m_currentMainFrequencyHz = 0;
+    m_currentDuplexMode = dmSimplex;
+    m_currentRepeaterOffsetHz = 0;
+    m_transmitConfiguration.reset();
     m_txMeterPollTick = 0;
     m_originalDataOffMod.reset();
     m_originalData1Mod.reset();
@@ -808,6 +827,8 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
 
 void RadioBackend::setFrequencyHz(quint64 hz)
 {
+    m_transmitConfiguration.requestFrequency(hz);
+    const bool transferSelectedMemory = m_selectedRadioMemory.has_value();
     m_selectedRadioMemory.reset();
 
     Frequency f;
@@ -815,16 +836,25 @@ void RadioBackend::setFrequencyHz(quint64 hz)
     f.MHzDouble = hz / 1e6;
     f.VFO = activeVFO;
     invokeOnCurrentCommander(
-        [f](Commander* commandSession)
+        [f, transferSelectedMemory](Commander* commandSession)
         {
-            selectMainVfoForCommand(commandSession);
+            if (transferSelectedMemory)
+            {
+                commandSession->receiveCommand(funcMemoryToVFO, QVariant(), 0);
+            }
+            else
+            {
+                selectMainVfoForCommand(commandSession);
+            }
             commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(f), 0);
-            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
         });
 }
 
 void RadioBackend::setMode(const QString& mode)
 {
+    const bool transferSelectedMemory = m_selectedRadioMemory.has_value();
     m_selectedRadioMemory.reset();
 
     if (!m_commander)
@@ -841,11 +871,19 @@ void RadioBackend::setMode(const QString& mode)
     mi.filter = static_cast<quint8>(qBound(1, m_currentMainFilter, 3));
 
     invokeOnCurrentCommander(
-        [mi](Commander* commandSession)
+        [mi, transferSelectedMemory](Commander* commandSession)
         {
-            selectMainVfoForCommand(commandSession);
+            if (transferSelectedMemory)
+            {
+                commandSession->receiveCommand(funcMemoryToVFO, QVariant(), 0);
+            }
+            else
+            {
+                selectMainVfoForCommand(commandSession);
+            }
             commandSession->receiveCommandNoReadback(funcModeSet, QVariant::fromValue(mi), 0);
-            commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
         });
 }
 
@@ -1011,6 +1049,7 @@ void RadioBackend::setXfcEnabled(bool on)
 
 void RadioBackend::setDuplexMode(duplexMode_t mode)
 {
+    m_transmitConfiguration.requestDuplexMode(mode);
     invokeOnCurrentCommander(
         [=](Commander* commandSession)
         {
@@ -1021,6 +1060,7 @@ void RadioBackend::setDuplexMode(duplexMode_t mode)
 
 void RadioBackend::setRepeaterOffsetHz(quint64 hz)
 {
+    m_transmitConfiguration.requestOffset(hz);
     Frequency offset;
     offset.Hz = hz;
     offset.MHzDouble = hz / 1e6;
@@ -1201,22 +1241,35 @@ void RadioBackend::setScopeFixedRangeHz(quint64 startHz, quint64 endHz)
         });
 }
 
-void RadioBackend::setPtt(bool on)
+bool RadioBackend::setPtt(bool on)
 {
     if (!m_commander)
     {
-        return;
+        return false;
     }
 
     if (on)
     {
+        if (m_transmitConfiguration.confirmationPending())
+        {
+            emit statusMessage(QStringLiteral("PTT blocked: waiting for radio settings confirmation"),
+                               MessageSeverity::Error);
+            return false;
+        }
+        if (!m_transmitConfiguration.transmitFrequencyAllowed())
+        {
+            emit statusMessage(QStringLiteral("PTT blocked: transmit frequency outside band limits"),
+                               MessageSeverity::Error);
+            return false;
+        }
+
         if (m_pttReleaseDelayTimer)
         {
             m_pttReleaseDelayTimer->stop();
         }
         if (!m_pttState.requestOn())
         {
-            return;
+            return true;
         }
 
         armTransmitSafety();
@@ -1243,18 +1296,19 @@ void RadioBackend::setPtt(bool on)
                     commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
                 }
             });
+        return true;
     }
     else
     {
         if (m_pttReleaseDelayTimer && m_pttReleaseDelayTimer->isActive())
         {
-            return;
+            return true;
         }
 
         if (!m_pttState.confirmedActive() && !m_pttState.desiredActive())
         {
             sendPttOffNow();
-            return;
+            return true;
         }
 
         // Keep the radio keyed briefly so the final TX audio frames already
@@ -1267,6 +1321,7 @@ void RadioBackend::setPtt(bool on)
         {
             sendPttOffNow();
         }
+        return true;
     }
 }
 
@@ -1396,9 +1451,13 @@ void RadioBackend::pollFrequency()
 
 void RadioBackend::selectVfoMode()
 {
+    const bool transferSelectedMemory = m_selectedRadioMemory.has_value();
     m_selectedRadioMemory.reset();
-    invokeOnCurrentCommander([](Commander* commandSession)
-                             { commandSession->receiveCommand(funcVFOModeSelect, QVariant(), 0); });
+    invokeOnCurrentCommander(
+        [transferSelectedMemory](Commander* commandSession)
+        {
+            commandSession->receiveCommand(transferSelectedMemory ? funcMemoryToVFO : funcVFOModeSelect, QVariant(), 0);
+        });
 }
 
 void RadioBackend::selectRadioMemory(quint16 group, quint16 channel)

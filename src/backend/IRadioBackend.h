@@ -52,7 +52,7 @@ class IRadioBackend : public QObject
     virtual void setScopeMode(int mode) = 0; // 0=center, 1=fixed
     virtual void setScopeFixedRangeHz(quint64 startHz, quint64 endHz) = 0;
 
-    virtual void setPtt(bool on) = 0;
+    virtual bool setPtt(bool on) = 0;
     virtual void setTxPower(int level) = 0; // 0-255
     virtual void setTuningStep(int step) = 0;
 

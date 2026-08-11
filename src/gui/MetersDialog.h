@@ -20,6 +20,7 @@ class MetersDialog : public sdr9700::ui::UtilityWindow
     void setSMeter(int value);
     void setPowerMeter(double watts);
     void setSwr(double swr);
+    void clearSwr();
     void setAlc(double alc);
     void setCompressionMeter(double db);
     void setVoltageMeter(double volts);

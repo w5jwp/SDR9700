@@ -3,8 +3,11 @@
 #include "PttConfirmationPolicy.h"
 #include "SpectrumTuningPolicy.h"
 #include "TransmitSafetyPolicy.h"
+#include "TransmitFrequencyPolicy.h"
+#include "TransmitConfigurationPolicy.h"
 
 #include <QTest>
+#include <array>
 #include <limits>
 
 class OfflinePoliciesTest : public QObject
@@ -23,6 +26,8 @@ class OfflinePoliciesTest : public QObject
     void requiresConsecutiveHighSwrReadings();
     void resetsTransmitSafetyWhenNotTransmitting();
     void keepsPttActiveUntilRadioConfirmsUnkey();
+    void validatesDuplexTransmitFrequency();
+    void blocksPttUntilTransmitConfigurationIsConfirmed();
 };
 
 void OfflinePoliciesTest::clampsMemoryPollingInterval()
@@ -163,6 +168,55 @@ void OfflinePoliciesTest::keepsPttActiveUntilRadioConfirmsUnkey()
     QVERIFY(!policy.confirmedActive());
     QVERIFY(!policy.offPending());
     QVERIFY(!policy.safetyActive());
+}
+
+void OfflinePoliciesTest::validatesDuplexTransmitFrequency()
+{
+    QCOMPARE(sdr9700::duplexTransmitFrequency(446500000, dmSimplex, 5000000).value(), quint64(446500000));
+    QCOMPARE(sdr9700::duplexTransmitFrequency(446500000, dmDupMinus, 5000000).value(), quint64(441500000));
+    QCOMPARE(sdr9700::duplexTransmitFrequency(446500000, dmDupPlus, 5000000).value(), quint64(451500000));
+    QVERIFY(!sdr9700::duplexTransmitFrequency(100, dmDupMinus, 200).has_value());
+
+    // Every compiled IC-9700 band accepts its exact edges and rejects one hertz beyond them.
+    const std::array<std::pair<quint64, quint64>, 3> bands = {
+        std::pair<quint64, quint64>{144000000, 148000000},
+        std::pair<quint64, quint64>{430000000, 450000000},
+        std::pair<quint64, quint64>{1240000000, 1300000000},
+    };
+    for (const auto& [start, end] : bands)
+    {
+        const quint64 receiveHz = start + (end - start) / 2;
+        QVERIFY(sdr9700::transmitFrequencyAllowed(receiveHz, start));
+        QVERIFY(sdr9700::transmitFrequencyAllowed(receiveHz, end));
+        QVERIFY(!sdr9700::transmitFrequencyAllowed(receiveHz, start - 1));
+        QVERIFY(!sdr9700::transmitFrequencyAllowed(receiveHz, end + 1));
+    }
+}
+
+void OfflinePoliciesTest::blocksPttUntilTransmitConfigurationIsConfirmed()
+{
+    sdr9700::TransmitConfigurationPolicy policy;
+    policy.confirmFrequency(446500000);
+    policy.confirmDuplexMode(dmSimplex);
+    policy.confirmOffset(0);
+    QVERIFY(policy.transmitFrequencyAllowed());
+
+    policy.requestOffset(5000000);
+    policy.requestDuplexMode(dmDupPlus);
+    QVERIFY(policy.confirmationPending());
+    QVERIFY(!policy.transmitFrequencyAllowed());
+
+    policy.confirmOffset(5000000);
+    QVERIFY(policy.confirmationPending());
+    policy.confirmDuplexMode(dmDupPlus);
+    QVERIFY(!policy.confirmationPending());
+    QVERIFY(!policy.transmitFrequencyAllowed());
+
+    policy.requestDuplexMode(dmDupMinus);
+    policy.confirmDuplexMode(dmSimplex);
+    QVERIFY(policy.confirmationPending());
+    policy.confirmDuplexMode(dmDupMinus);
+    QVERIFY(policy.transmitFrequencyAllowed());
 }
 
 QTEST_GUILESS_MAIN(OfflinePoliciesTest)

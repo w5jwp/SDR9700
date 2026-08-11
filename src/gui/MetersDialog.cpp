@@ -216,6 +216,11 @@ void MetersDialog::setSwr(double swr)
                 QStringLiteral("%1").arg(bounded, 0, 'f', 2));
 }
 
+void MetersDialog::clearSwr()
+{
+    setMeterRow(m_swrMeter, 0, QStringLiteral("--"));
+}
+
 void MetersDialog::setAlc(double alc)
 {
     const double bounded = qBound(0.0, alc, kAlcMeterMax);

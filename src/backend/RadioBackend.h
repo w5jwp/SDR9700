@@ -11,6 +11,7 @@
 #include <QVector>
 #include "TransmitSafetyPolicy.h"
 #include "PttConfirmationPolicy.h"
+#include "TransmitConfigurationPolicy.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -65,7 +66,7 @@ class RadioBackend : public IRadioBackend
     void setScopeMode(int mode) override;
     void setScopeFixedRangeHz(quint64 startHz, quint64 endHz) override;
 
-    void setPtt(bool on) override;
+    bool setPtt(bool on) override;
     void setTxPower(int level) override;
     void setTuningStep(int step) override;
     void pollFrequency() override;
@@ -154,6 +155,10 @@ class RadioBackend : public IRadioBackend
     QTimer* m_smeterPollTimer{nullptr};
     QTimer* m_bandStateRefreshTimer{nullptr};
     int m_currentBandKey{-1};
+    quint64 m_currentMainFrequencyHz{0};
+    duplexMode_t m_currentDuplexMode{dmSimplex};
+    quint64 m_currentRepeaterOffsetHz{0};
+    sdr9700::TransmitConfigurationPolicy m_transmitConfiguration;
     int m_currentMainFilter{1};
     sdr9700::TransmitSafetyPolicy m_transmitSafetyPolicy;
     int m_txMeterPollTick{0};
