@@ -105,26 +105,15 @@ void IcomRC28Controller::dispatchIcomRC28Action(const QString& action)
         return;
     }
 
-    if (action == QLatin1String("CycleStep"))
+    if (action == QLatin1String("CycleStep") || action == QLatin1String("StepUp") ||
+        action == QLatin1String("StepDown"))
     {
         const int current = m_window->tuningStepHz();
-        constexpr int nPresets = static_cast<int>(std::size(kStepPresets));
-        int nextIdx = 0;
-        for (int i = 0; i < nPresets; ++i)
-        {
-            if (kStepPresets[i].hz == current)
-            {
-                nextIdx = (i + 1) % nPresets;
-                break;
-            }
-        }
-        AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHZSettingsKey), kStepPresets[nextIdx].hz);
+        const int direction = action == QLatin1String("StepDown") ? -1 : 1;
+        AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHZSettingsKey),
+                                         adjacentTuningStepHz(current, direction));
         m_window->updateStepButton();
         m_window->applyRadioTuningStep();
-    }
-    else if (action == QLatin1String("ToggleRit"))
-    {
-        m_window->toggleRit();
     }
     else if (action == QLatin1String("CycleMode"))
     {
@@ -176,10 +165,6 @@ void IcomRC28Controller::updateIcomRC28Leds()
         if (actionId == QLatin1String("ToggleLock"))
         {
             return m_window->m_controlsLocked;
-        }
-        if (actionId == QLatin1String("ToggleRit"))
-        {
-            return m_window->m_vfo && m_window->m_vfo->ritOn();
         }
         return false;
     };

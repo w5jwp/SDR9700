@@ -27,12 +27,8 @@ struct ActionItem
 };
 
 constexpr ActionItem kActions[] = {
-    {"None", "None"},
-    {"CycleStep", "Cycle step"},
-    {"ToggleMute", "Toggle mute"},
-    {"ToggleLock", "Toggle lock"},
-    {"ToggleRit", "Toggle RIT"},
-    {"CycleMode", "Cycle mode"},
+    {"None", "None"},      {"ToggleLock", "Lock"},    {"CycleMode", "Mode"}, {"ToggleMute", "Mute"},
+    {"CycleStep", "Step"}, {"StepDown", "Step Down"}, {"StepUp", "Step Up"},
 };
 
 void populateActionCombo(QComboBox* combo, const QString& current)
@@ -114,6 +110,7 @@ void IcomRC28SettingsPanel::buildUi()
     m_f2PressCombo = new QComboBox(mapGroup);
     m_f2HoldCombo = new QComboBox(mapGroup);
     m_pttModeCombo = new QComboBox(mapGroup);
+    m_f1PressCombo->setObjectName(QStringLiteral("icomRC28F1PressAction"));
     for (auto* combo : {m_f1PressCombo, m_f1HoldCombo, m_f2PressCombo, m_f2HoldCombo, m_pttModeCombo})
     {
         combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);

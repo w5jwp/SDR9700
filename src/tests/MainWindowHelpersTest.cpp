@@ -17,6 +17,7 @@ class MainWindowHelpersTest : public QObject
     void formatsRadioValues();
     void mapsTuningSteps_data();
     void mapsTuningSteps();
+    void movesBetweenTuningSteps();
     void providesBandSpecificOffsets();
     void identifiesModesWithSelectableAgcPresets();
     void preservesMemorySelectionAcrossPttFrequencyTransitions();
@@ -97,6 +98,16 @@ void MainWindowHelpersTest::mapsTuningSteps()
     QFETCH(int, radioStep);
 
     QCOMPARE(radioTuningStepForHz(hz), radioStep);
+}
+
+void MainWindowHelpersTest::movesBetweenTuningSteps()
+{
+    QCOMPARE(adjacentTuningStepHz(100, 1), 500);
+    QCOMPARE(adjacentTuningStepHz(100, -1), 10);
+    QCOMPARE(adjacentTuningStepHz(kStepPresets[std::size(kStepPresets) - 1].hz, 1), kStepPresets[0].hz);
+    QCOMPARE(adjacentTuningStepHz(kStepPresets[0].hz, -1), kStepPresets[std::size(kStepPresets) - 1].hz);
+    QCOMPARE(adjacentTuningStepHz(250, 1), kStepPresets[0].hz);
+    QCOMPARE(adjacentTuningStepHz(250, -1), kStepPresets[std::size(kStepPresets) - 1].hz);
 }
 
 void MainWindowHelpersTest::providesBandSpecificOffsets()

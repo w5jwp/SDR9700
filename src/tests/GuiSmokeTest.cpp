@@ -20,6 +20,9 @@ class GuiSmokeTest : public QObject
     void settingsDialogOpensSearchesAndCloses();
     void settingsFindShortcutFocusesSearch();
     void audioSettingsChangesAreForwarded();
+#ifdef HAVE_HIDAPI
+    void rc28ButtonActionsAreOrderedAndSupported();
+#endif
     void confirmationDialogsUseSafeSemanticButtons();
 };
 
@@ -101,6 +104,30 @@ void GuiSmokeTest::audioSettingsChangesAreForwarded()
     channels->setCurrentIndex(channels->currentIndex() == 0 ? 1 : 0);
     QCOMPARE(changedSpy.count(), 1);
 }
+
+#ifdef HAVE_HIDAPI
+void GuiSmokeTest::rc28ButtonActionsAreOrderedAndSupported()
+{
+    SettingsDialog dialog(SettingsDialog::Page::IcomRC28);
+    auto* actions = dialog.findChild<QComboBox*>(QStringLiteral("icomRC28F1PressAction"));
+    QVERIFY(actions != nullptr);
+
+    const QStringList expectedLabels = {QStringLiteral("None"),   QStringLiteral("Lock"), QStringLiteral("Mode"),
+                                        QStringLiteral("Mute"),   QStringLiteral("Step"), QStringLiteral("Step Down"),
+                                        QStringLiteral("Step Up")};
+    const QStringList expectedIds = {QStringLiteral("None"),      QStringLiteral("ToggleLock"),
+                                     QStringLiteral("CycleMode"), QStringLiteral("ToggleMute"),
+                                     QStringLiteral("CycleStep"), QStringLiteral("StepDown"),
+                                     QStringLiteral("StepUp")};
+    QCOMPARE(actions->count(), expectedLabels.size());
+    for (int i = 0; i < actions->count(); ++i)
+    {
+        QCOMPARE(actions->itemText(i), expectedLabels.at(i));
+        QCOMPARE(actions->itemData(i).toString(), expectedIds.at(i));
+    }
+    QCOMPARE(actions->findData(QStringLiteral("ToggleRit")), -1);
+}
+#endif
 
 void GuiSmokeTest::confirmationDialogsUseSafeSemanticButtons()
 {

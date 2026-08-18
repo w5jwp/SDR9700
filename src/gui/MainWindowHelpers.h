@@ -47,6 +47,21 @@ inline constexpr StepPreset kStepPresets[] = {
     {5000, "5 kHz", 4}, {10000, "10 kHz", 6}, {25000, "25 kHz", 9}, {50000, "50 kHz", 10}, {100000, "100 kHz", 11},
 };
 
+inline int adjacentTuningStepHz(int currentHz, int direction)
+{
+    constexpr int presetCount = static_cast<int>(std::size(kStepPresets));
+    const auto current = std::find_if(std::begin(kStepPresets), std::end(kStepPresets),
+                                      [currentHz](const StepPreset& preset) { return preset.hz == currentHz; });
+    if (current == std::end(kStepPresets))
+    {
+        return direction < 0 ? kStepPresets[presetCount - 1].hz : kStepPresets[0].hz;
+    }
+
+    const int currentIndex = static_cast<int>(std::distance(std::begin(kStepPresets), current));
+    const int offset = direction < 0 ? presetCount - 1 : 1;
+    return kStepPresets[(currentIndex + offset) % presetCount].hz;
+}
+
 struct SpectrumScopeSpanPreset
 {
     quint64 hz;
