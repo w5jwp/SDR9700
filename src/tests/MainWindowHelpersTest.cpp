@@ -20,6 +20,7 @@ class MainWindowHelpersTest : public QObject
     void providesBandSpecificOffsets();
     void identifiesModesWithSelectableAgcPresets();
     void preservesMemorySelectionAcrossPttFrequencyTransitions();
+    void allowsRc28PttWhileControlsAreLocked();
 };
 
 void MainWindowHelpersTest::parsesFrequencyText_data()
@@ -144,6 +145,14 @@ void MainWindowHelpersTest::preservesMemorySelectionAcrossPttFrequencyTransition
     // has returned to the memory's receive frequency.
     QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, transmitHz, true, true));
     QVERIFY(preserveMemorySelectionForReportedFrequency(receiveHz, receiveHz, false, true));
+}
+
+void MainWindowHelpersTest::allowsRc28PttWhileControlsAreLocked()
+{
+    QVERIFY(rc28PttAllowed(true, true, false));
+    QVERIFY(rc28PttAllowed(true, true, true));
+    QVERIFY(!rc28PttAllowed(false, true, true));
+    QVERIFY(!rc28PttAllowed(true, false, true));
 }
 
 QTEST_GUILESS_MAIN(MainWindowHelpersTest)

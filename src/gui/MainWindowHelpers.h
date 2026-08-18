@@ -81,6 +81,14 @@ inline bool preserveMemorySelectionForReportedFrequency(quint64 receiveHz, quint
 {
     return reportedHz == receiveHz || pttActive || awaitingReceiveFrequency;
 }
+
+inline bool rc28PttAllowed(bool hasVfo, bool radioReady, bool controlsLocked)
+{
+    // Lock protects tuning and configuration controls, but PTT remains an
+    // operational control. Keep lock explicit so this exception is deliberate.
+    (void)controlsLocked;
+    return hasVfo && radioReady;
+}
 constexpr QSize kMemoryWindowSize(980, 620);
 constexpr int kMemoryChannelColumnWidth = 110;
 constexpr int kMemoryNameColumnWidth = 180;

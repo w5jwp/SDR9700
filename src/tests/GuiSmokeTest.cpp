@@ -41,14 +41,19 @@ void GuiSmokeTest::settingsDialogOpensSearchesAndCloses()
     QVERIFY(search != nullptr);
     QVERIFY(navigation != nullptr);
     QVERIFY(navigation->topLevelItemCount() > 0);
-    QVERIFY(navigation->itemsExpandable());
+    QVERIFY(!navigation->itemsExpandable());
+    QVERIFY(!navigation->expandsOnDoubleClick());
     QTreeWidgetItem* category = navigation->topLevelItem(0);
     QVERIFY(category != nullptr);
     QVERIFY(category->childCount() > 0);
-    category->setExpanded(false);
-    QVERIFY(!category->isExpanded());
-    category->setExpanded(true);
+    QVERIFY(!category->flags().testFlag(Qt::ItemIsSelectable));
     QVERIFY(category->isExpanded());
+    QTreeWidgetItem* selectedPage = navigation->currentItem();
+    QVERIFY(selectedPage != nullptr);
+    QVERIFY(selectedPage->parent() != nullptr);
+    QTest::mouseClick(navigation->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      navigation->visualItemRect(category).center());
+    QCOMPARE(navigation->currentItem(), selectedPage);
     QTreeWidgetItemIterator itemIterator(navigation);
     while (*itemIterator)
     {

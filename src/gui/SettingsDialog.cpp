@@ -15,6 +15,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
@@ -61,6 +62,26 @@ class SettingsNavigationTree : public QTreeWidget
     using QTreeWidget::QTreeWidget;
 
   protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        QTreeWidgetItem* item = itemAt(event->position().toPoint());
+        if (item && !item->parent())
+        {
+            return;
+        }
+        QTreeWidget::mousePressEvent(event);
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent* event) override
+    {
+        QTreeWidgetItem* item = itemAt(event->position().toPoint());
+        if (item && !item->parent())
+        {
+            return;
+        }
+        QTreeWidget::mouseDoubleClickEvent(event);
+    }
+
     void drawBranches(QPainter* painter, const QRect& rect, const QModelIndex& index) const override
     {
         if (!index.isValid())
@@ -104,7 +125,7 @@ class SettingsNavigationTree : public QTreeWidget
             }
         }
 
-        if (model()->hasChildren(index))
+        if (model()->hasChildren(index) && itemsExpandable())
         {
             painter->setRenderHint(QPainter::Antialiasing, true);
             painter->setPen(Qt::NoPen);
@@ -137,23 +158,18 @@ class SettingsNavigationDelegate : public QStyledItemDelegate
     {
         QStyleOptionViewItem itemOption(option);
         const bool selected = itemOption.state.testFlag(QStyle::State_Selected);
-        const bool hovered = itemOption.state.testFlag(QStyle::State_MouseOver);
-        if (selected || hovered)
+        if (selected)
         {
             const QString text = index.data(Qt::DisplayRole).toString();
             const int highlightWidth = itemOption.fontMetrics.horizontalAdvance(text) + 6;
             const QRect highlightRect(itemOption.rect.left(), itemOption.rect.top(),
                                       qMin(highlightWidth, itemOption.rect.width()), itemOption.rect.height());
-            painter->fillRect(highlightRect,
-                              QColor(selected ? UiTheme::Color::AccentDark : UiTheme::Color::ButtonHover));
+            painter->fillRect(highlightRect, QColor(UiTheme::Color::AccentDark));
             itemOption.state.setFlag(QStyle::State_Selected, false);
-            itemOption.state.setFlag(QStyle::State_MouseOver, false);
             itemOption.state.setFlag(QStyle::State_HasFocus, false);
-            if (selected)
-            {
-                itemOption.palette.setColor(QPalette::Text, QColor(UiTheme::Color::TextBright));
-            }
+            itemOption.palette.setColor(QPalette::Text, QColor(UiTheme::Color::TextBright));
         }
+        itemOption.state.setFlag(QStyle::State_MouseOver, false);
         QStyledItemDelegate::paint(painter, itemOption, index);
     }
 };
@@ -210,9 +226,8 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
     m_navigation->setObjectName(QStringLiteral("settingsNavigation"));
     m_navigation->setHeaderHidden(true);
     m_navigation->setRootIsDecorated(true);
-    m_navigation->setItemsExpandable(true);
-    m_navigation->setExpandsOnDoubleClick(true);
-    m_navigation->setAnimated(true);
+    m_navigation->setItemsExpandable(false);
+    m_navigation->setExpandsOnDoubleClick(false);
     m_navigation->setIndentation(20);
     m_navigation->setMinimumWidth(190);
     m_navigation->setMaximumWidth(245);
@@ -397,6 +412,7 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
 QTreeWidgetItem* SettingsDialog::addCategory(const QString& title, const QString& tooltip, const QString& keywords)
 {
     auto* item = new QTreeWidgetItem(m_navigation, {title});
+    item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
     item->setData(0, Qt::UserRole + 1, keywords);
     item->setToolTip(0, tooltip);
     QFont font = item->font(0);

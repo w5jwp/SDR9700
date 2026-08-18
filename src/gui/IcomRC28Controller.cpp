@@ -340,7 +340,7 @@ void IcomRC28Controller::handleIcomRC28Button(int button, int action)
         return;
     }
 
-    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!rc28PttAllowed(m_window->m_vfo != nullptr, m_window->m_model->isReady(), m_window->m_controlsLocked))
     {
         return;
     }
