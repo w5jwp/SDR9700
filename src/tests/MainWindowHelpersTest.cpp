@@ -70,6 +70,9 @@ void MainWindowHelpersTest::rejectsInvalidFrequencyText()
 void MainWindowHelpersTest::formatsRadioValues()
 {
     QCOMPARE(formatFrequency(146520000), QStringLiteral("146.520.000"));
+    QCOMPARE(formatFrequency(432100000), QStringLiteral("432.100.000"));
+    QCOMPARE(formatFrequency(999999999), QStringLiteral("999.999.999"));
+    QCOMPARE(formatFrequency(1294713546), QStringLiteral("1294.713.546"));
     QCOMPARE(memoryFrequencyLabel(1296100000), QStringLiteral("1296.100.000"));
     QCOMPARE(formatOffsetMhz(600000), QStringLiteral("0.600"));
     QCOMPARE(offsetModeLabel(dmSimplex, 0), QStringLiteral("SIMPLEX"));

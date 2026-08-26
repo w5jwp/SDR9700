@@ -28,7 +28,7 @@ constexpr QSize kVfoFieldSize(220, 48);
 constexpr int kVfoFieldSideMargin = 6;
 constexpr int kVfoFieldTopMargin = 4;
 constexpr int kVfoFieldBottomMargin = 4;
-constexpr int kFrequencyFontPixelSize = 28;
+constexpr int kFrequencyFontPixelSize = 26;
 constexpr int kFrequencyEditHeight = 40;
 constexpr int kSignalMeterWidth = 220;
 constexpr int kSignalMeterHeight = 10;
