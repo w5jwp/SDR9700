@@ -246,6 +246,7 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_radioRouter, &RadioRouter::autoNotchChanged, this, &IRadioBackend::autoNotchChanged);
     connect(m_radioRouter, &RadioRouter::manualNotchChanged, this, &IRadioBackend::manualNotchChanged);
     connect(m_radioRouter, &RadioRouter::compressorChanged, this, &IRadioBackend::compressorChanged);
+    connect(m_radioRouter, &RadioRouter::compressorLevelChanged, this, &IRadioBackend::compressorLevelChanged);
     connect(m_radioRouter, &RadioRouter::xfcChanged, this, &IRadioBackend::xfcChanged);
     connect(m_radioRouter, &RadioRouter::ritEnabledChanged, this, &IRadioBackend::ritEnabledChanged);
     connect(m_radioRouter, &RadioRouter::ritOffsetChanged, this, &IRadioBackend::ritOffsetChanged);
@@ -1047,6 +1048,13 @@ void RadioBackend::setCompressor(bool on)
                              { commandSession->receiveCommand(funcCompressor, QVariant::fromValue<bool>(on), 0); });
 }
 
+void RadioBackend::setCompressorLevel(int level)
+{
+    const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
+    invokeOnCurrentCommander([=](Commander* commandSession)
+                             { commandSession->receiveCommand(funcCompressorLevel, QVariant::fromValue(bounded), 0); });
+}
+
 void RadioBackend::setXfcEnabled(bool on)
 {
     invokeOnCurrentCommander([=](Commander* commandSession)
@@ -1618,6 +1626,7 @@ void RadioBackend::requestPostReadyRadioState()
                 funcTSQLFreq,
                 funcDTCSCode,
                 funcCompressor,
+                funcCompressorLevel,
                 funcXFCStatus,
                 funcAutoNotch,
                 funcManualNotch,

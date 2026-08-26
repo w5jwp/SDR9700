@@ -44,6 +44,7 @@ class FakeRadioBackend : public IRadioBackend
     void setAutoNotch(bool) override {}
     void setManualNotch(bool) override {}
     void setCompressor(bool) override {}
+    void setCompressorLevel(int value) override { compressorLevel = value; }
     void setXfcEnabled(bool) override {}
     void setRitEnabled(bool) override {}
     void setRitOffset(short value) override { ritOffset = value; }
@@ -73,6 +74,7 @@ class FakeRadioBackend : public IRadioBackend
     QString mode;
     int filterLow{0};
     int filterHigh{0};
+    int compressorLevel{0};
     int preampLevel{-1};
     int nrLevel{-1};
     int nbLevel{-1};
@@ -149,6 +151,7 @@ void VfoBackendTest::boundedRequestsAreClampedBeforeForwarding()
     model.setRitOffset(1200);
     model.setNrLevel(300);
     model.setNbLevel(300);
+    model.setCompressorLevel(300);
     model.setRfGain(300);
     model.setSquelch(true, 300);
     model.setTxPower(300);
@@ -156,6 +159,7 @@ void VfoBackendTest::boundedRequestsAreClampedBeforeForwarding()
     QCOMPARE(backend.preampLevel, 3);
     QCOMPARE(backend.nrLevel, 15);
     QCOMPARE(backend.nbLevel, 10);
+    QCOMPARE(backend.compressorLevel, 255);
     QCOMPARE(model.preampLevel(), 0);
     QCOMPARE(backend.ritOffset, short(999));
     QCOMPARE(model.ritHz(), short(0));

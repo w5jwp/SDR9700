@@ -15,6 +15,7 @@ class VfoModelTest : public QObject
     void ritOffsetIsClamped();
     void filterAndPttSignalsAreDeduplicated();
     void radioRequestsDoNotPublishUnconfirmedState();
+    void compressorLevelTracksConfirmationValidity();
 };
 
 void VfoModelTest::startsWithDocumentedDefaults()
@@ -26,7 +27,31 @@ void VfoModelTest::startsWithDocumentedDefaults()
     QCOMPARE(model.filterLow(), -8000);
     QCOMPARE(model.filterHigh(), 8000);
     QVERIFY(!model.txActive());
+    QVERIFY(!model.compressorLevelKnown());
     QCOMPARE(VfoModel::availableModes(), QStringList({"FM", "USB", "LSB", "AM", "CW", "CW-R", "RTTY", "DV", "DD"}));
+}
+
+void VfoModelTest::compressorLevelTracksConfirmationValidity()
+{
+    VfoModel model(nullptr);
+    QSignalSpy levelSpy(&model, &VfoModel::compressorLevelChanged);
+    QSignalSpy knownSpy(&model, &VfoModel::compressorLevelKnownChanged);
+
+    model.applyCompressorLevel(192);
+    QVERIFY(model.compressorLevelKnown());
+    QCOMPARE(model.compressorLevel(), 192);
+    QCOMPARE(levelSpy.count(), 1);
+    QCOMPARE(knownSpy.count(), 1);
+    QVERIFY(knownSpy.takeFirst().at(0).toBool());
+
+    model.applyCompressorLevel(192);
+    QCOMPARE(levelSpy.count(), 1);
+    QCOMPARE(knownSpy.count(), 0);
+
+    model.clearCompressorLevel();
+    QVERIFY(!model.compressorLevelKnown());
+    QCOMPARE(knownSpy.count(), 1);
+    QVERIFY(!knownSpy.takeFirst().at(0).toBool());
 }
 
 void VfoModelTest::confirmedFrequencyAndModeAreDeduplicated()
@@ -135,6 +160,7 @@ void VfoModelTest::radioRequestsDoNotPublishUnconfirmedState()
     QSignalSpy notchSpy(&model, &VfoModel::autoNotchChanged);
     QSignalSpy manualNotchSpy(&model, &VfoModel::manualNotchChanged);
     QSignalSpy compressorSpy(&model, &VfoModel::compressorChanged);
+    QSignalSpy compressorLevelSpy(&model, &VfoModel::compressorLevelChanged);
     QSignalSpy ritSpy(&model, &VfoModel::ritChanged);
     QSignalSpy rfGainSpy(&model, &VfoModel::rfGainChanged);
     QSignalSpy duplexSpy(&model, &VfoModel::duplexModeChanged);
@@ -150,6 +176,7 @@ void VfoModelTest::radioRequestsDoNotPublishUnconfirmedState()
     model.setAutoNotch(true);
     model.setManualNotch(true);
     model.setCompressor(true);
+    model.setCompressorLevel(192);
     model.setRitEnabled(true);
     model.setRitOffset(500);
     model.setRfGain(200);
@@ -166,6 +193,7 @@ void VfoModelTest::radioRequestsDoNotPublishUnconfirmedState()
     QCOMPARE(notchSpy.count(), 0);
     QCOMPARE(manualNotchSpy.count(), 0);
     QCOMPARE(compressorSpy.count(), 0);
+    QCOMPARE(compressorLevelSpy.count(), 0);
     QCOMPARE(ritSpy.count(), 0);
     QCOMPARE(rfGainSpy.count(), 0);
     QCOMPARE(duplexSpy.count(), 0);

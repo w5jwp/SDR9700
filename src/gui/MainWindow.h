@@ -126,6 +126,7 @@ class MainWindow : public QMainWindow
     void showPreampMenu();
     void updatePreampButton();
     void showNotchMenu();
+    void showCompressorMenu();
     void updateNotchButton();
     void showRitMenu();
     void showCustomRitDialog();

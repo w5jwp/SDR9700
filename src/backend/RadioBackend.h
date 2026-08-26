@@ -52,6 +52,7 @@ class RadioBackend : public IRadioBackend
     void setAutoNotch(bool on) override;
     void setManualNotch(bool on) override;
     void setCompressor(bool on) override;
+    void setCompressorLevel(int level) override;
     void setXfcEnabled(bool on) override;
     void setRitEnabled(bool on) override;
     void setRitOffset(short hz) override;

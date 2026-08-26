@@ -6,11 +6,13 @@
 #include "MemoryPanel.h"
 #include "MemoryEditorPolicy.h"
 #include "RadioChooserDialog.h"
+#include "RadioCommandController.h"
 #include "RadioProfile.h"
 #include "StatusBarController.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
 #include "models/RadioModel.h"
+#include "models/VfoModel.h"
 
 #include <QAction>
 #include <QComboBox>
@@ -25,7 +27,9 @@
 #include <QLabel>
 #include <QPointer>
 #include <QPushButton>
+#include <QMenu>
 #include <QScrollBar>
+#include <QSlider>
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QTimer>
@@ -45,6 +49,7 @@ class MemoryManagerSmokeTest : public QObject
     void mainWindowRetainsFixedFramelessDesign();
     void fileMenuTracksRadioConnection();
     void selectorButtonsAvoidDynamicStyleSheets();
+    void compressorMenuReflectsConfirmedLevel();
     void utilityWindowIsDestroyedWithHost();
     void quitActionDefersWindowClose();
     void persistentToastCanBeClearedByOwner();
@@ -277,6 +282,7 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
 
     int selectorCount = 0;
+    QPushButton* compressorButton = nullptr;
     for (QPushButton* button : window.findChildren<QPushButton*>())
     {
         if (dynamic_cast<sdr9700::ui::main_window::TwoLineButton*>(button))
@@ -286,9 +292,15 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
             sdr9700::ui::main_window::setCommandButtonActive(button, true);
             sdr9700::ui::main_window::setCommandButtonActive(button, false);
             QVERIFY(button->styleSheet().isEmpty());
+            if (button->accessibleName() == QStringLiteral("Compressor"))
+            {
+                compressorButton = button;
+            }
         }
     }
     QVERIFY(selectorCount > 0);
+    QVERIFY(compressorButton != nullptr);
+    QVERIFY(!compressorButton->isCheckable());
     auto* rfGainButton = window.findChild<QPushButton*>(QStringLiteral("rfGainButton"));
     auto* frequencyField = window.findChild<QWidget*>(QStringLiteral("vfoFrequencyField"));
     auto* frequencyEdit = window.findChild<QLineEdit*>(QStringLiteral("vfoFrequencyEdit"));
@@ -313,6 +325,71 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     const QFontMetrics frequencyMetrics(frequencyEdit->font());
     QCOMPARE(frequencyMetrics.horizontalAdvance(QStringLiteral("000.000.000")),
              frequencyMetrics.horizontalAdvance(QStringLiteral("111.111.111")));
+}
+
+void MemoryManagerSmokeTest::compressorMenuReflectsConfirmedLevel()
+{
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+    QVERIFY(QMetaObject::invokeMethod(&model, "onBackendReadyChanged", Q_ARG(bool, true)));
+    int requestedLevel = -1;
+    RadioCommandController controller(&window, [&requestedLevel](int value) { requestedLevel = value; });
+
+    bool inspectedUnknown = false;
+    QTimer::singleShot(0, &window,
+                       [&]()
+                       {
+                           auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+                           QVERIFY(menu != nullptr);
+                           auto* slider = menu->findChild<QSlider*>();
+                           QVERIFY(slider != nullptr);
+                           QVERIFY(!slider->isEnabled());
+                           const QList<QLabel*> labels = menu->findChildren<QLabel*>();
+                           QVERIFY(std::any_of(labels.cbegin(), labels.cend(), [](const QLabel* label)
+                                               { return label->text() == QStringLiteral("Level --"); }));
+                           model.vfo()->applyCompressorLevel(64);
+                           QVERIFY(slider->isEnabled());
+                           QCOMPARE(slider->value(), 64);
+                           model.vfo()->clearCompressorLevel();
+                           QVERIFY(!slider->isEnabled());
+                           inspectedUnknown = true;
+                           menu->close();
+                       });
+    controller.showCompressorMenu();
+    QVERIFY(inspectedUnknown);
+
+    model.vfo()->applyCompressorLevel(192);
+    bool inspectedConfirmed = false;
+    QTimer::singleShot(0, &window,
+                       [&]()
+                       {
+                           auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+                           QVERIFY(menu != nullptr);
+                           auto* slider = menu->findChild<QSlider*>();
+                           QVERIFY(slider != nullptr);
+                           QVERIFY(slider->isEnabled());
+                           QCOMPARE(slider->value(), 192);
+                           const QList<QAction*> actions = menu->actions();
+                           const auto enabledAction =
+                               std::find_if(actions.cbegin(), actions.cend(), [](const QAction* action)
+                                            { return action->text() == QStringLiteral("Enabled"); });
+                           QVERIFY(enabledAction != actions.cend());
+                           QVERIFY(!(*enabledAction)->isChecked());
+                           model.vfo()->applyCompressor(true);
+                           QVERIFY((*enabledAction)->isChecked());
+                           model.vfo()->applyCompressor(false);
+                           QVERIFY(!(*enabledAction)->isChecked());
+                           slider->setValue(200);
+                           inspectedConfirmed = true;
+                           menu->close();
+                       });
+    controller.showCompressorMenu();
+    QVERIFY(inspectedConfirmed);
+    QCOMPARE(requestedLevel, 200);
+
+    QVERIFY(QMetaObject::invokeMethod(&model, "onBackendDisconnected"));
+    QVERIFY(!model.vfo()->compressorLevelKnown());
 }
 
 void MemoryManagerSmokeTest::utilityWindowIsDestroyedWithHost()

@@ -39,6 +39,7 @@ class RadioRouter : public QObject
     void autoNotchChanged(bool on);
     void manualNotchChanged(bool on);
     void compressorChanged(bool on);
+    void compressorLevelChanged(int level);
     void xfcChanged(bool on);
     void ritEnabledChanged(bool on);
     void ritOffsetChanged(short hz);

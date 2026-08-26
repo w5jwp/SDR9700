@@ -40,6 +40,7 @@ RadioModel::RadioModel(QObject* parent) : QObject(parent)
     connect(m_backend, &IRadioBackend::autoNotchChanged, m_vfo, &VfoModel::applyAutoNotch);
     connect(m_backend, &IRadioBackend::manualNotchChanged, m_vfo, &VfoModel::applyManualNotch);
     connect(m_backend, &IRadioBackend::compressorChanged, m_vfo, &VfoModel::applyCompressor);
+    connect(m_backend, &IRadioBackend::compressorLevelChanged, m_vfo, &VfoModel::applyCompressorLevel);
     connect(m_backend, &IRadioBackend::xfcChanged, m_vfo, &VfoModel::applyXfcEnabled);
     connect(m_backend, &IRadioBackend::ritEnabledChanged, m_vfo, &VfoModel::applyRitEnabled);
     connect(m_backend, &IRadioBackend::ritOffsetChanged, m_vfo, &VfoModel::applyRitOffset);
@@ -139,6 +140,7 @@ void RadioModel::onBackendDisconnected()
     m_connected = false;
     m_ready = false;
     m_meterController->reset();
+    m_vfo->clearCompressorLevel();
     emit connectionChanged(false);
     emit readyChanged(false);
     onPttChanged(false);
@@ -152,6 +154,7 @@ void RadioModel::onBackendError(ErrorCode code, const QString& msg)
         m_connected = false;
         m_ready = false;
         m_meterController->reset();
+        m_vfo->clearCompressorLevel();
         emit connectionChanged(false);
         emit readyChanged(false);
     }

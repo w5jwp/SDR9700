@@ -156,6 +156,14 @@ void VfoModel::setCompressor(bool on)
     }
 }
 
+void VfoModel::setCompressorLevel(int level)
+{
+    if (m_backend)
+    {
+        m_backend->setCompressorLevel(qBound(0, level, 255));
+    }
+}
+
 void VfoModel::setXfcEnabled(bool on)
 {
     if (m_backend)
@@ -218,6 +226,32 @@ void VfoModel::applyCompressor(bool on)
 {
     m_compressorOn = on;
     emit compressorChanged(on);
+}
+
+void VfoModel::applyCompressorLevel(int level)
+{
+    level = qBound(0, level, 255);
+    const bool wasKnown = m_compressorLevel.has_value();
+    if (wasKnown && *m_compressorLevel == level)
+    {
+        return;
+    }
+    m_compressorLevel = level;
+    if (!wasKnown)
+    {
+        emit compressorLevelKnownChanged(true);
+    }
+    emit compressorLevelChanged(level);
+}
+
+void VfoModel::clearCompressorLevel()
+{
+    if (!m_compressorLevel.has_value())
+    {
+        return;
+    }
+    m_compressorLevel.reset();
+    emit compressorLevelKnownChanged(false);
 }
 
 void VfoModel::applyXfcEnabled(bool on)

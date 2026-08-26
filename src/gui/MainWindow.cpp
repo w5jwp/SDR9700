@@ -697,8 +697,10 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     m_pttBtn = makeSelectorButton("PTT", QStringLiteral("OFF"), "PTT", "Hold to transmit.");
     m_pttBtn->setCheckable(false);
 
-    m_compBtn = makeSelectorButton("COMP", QStringLiteral("OFF"), "Compressor", "Toggle speech compressor.");
-    m_compBtn->setCheckable(true);
+    m_compBtn = makeSelectorButton("COMP", QStringLiteral("OFF"), "Compressor", "Open speech compressor settings.");
+    // COMP opens a settings menu. Its active appearance is driven exclusively
+    // by confirmed radio state, not by QAbstractButton's local click toggle.
+    m_compBtn->setCheckable(false);
     m_compBtn->setProperty("toggleLabel", "COMP");
     m_offsetBtn =
         makeSelectorButton("OFFSET", QStringLiteral("SIMPLEX"), "Repeater offset", "Select repeater duplex offset.");
@@ -730,15 +732,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     receiveStackLayout->addLayout(receiveTopRow);
 
     connect(m_agcBtn, &QPushButton::clicked, this, &MainWindow::showAgcMenu);
-    connect(m_compBtn, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (m_vfo)
-                {
-                    m_vfo->setCompressor(!m_vfo->compressorOn());
-                    setCommandButtonActive(m_compBtn, m_vfo->compressorOn());
-                }
-            });
+    connect(m_compBtn, &QPushButton::clicked, this, &MainWindow::showCompressorMenu);
     connect(m_notchBtn, &QPushButton::clicked, this, &MainWindow::showNotchMenu);
     connect(m_ritBtn, &QPushButton::clicked, this, &MainWindow::showRitMenu);
     connect(m_offsetBtn, &QPushButton::clicked, this, &MainWindow::showOffsetMenu);
@@ -2459,6 +2453,11 @@ void MainWindow::updatePreampButton()
 void MainWindow::showNotchMenu()
 {
     m_radioCommandController->showNotchMenu();
+}
+
+void MainWindow::showCompressorMenu()
+{
+    m_radioCommandController->showCompressorMenu();
 }
 
 void MainWindow::updateNotchButton()

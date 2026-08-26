@@ -22,16 +22,25 @@
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
 #include <QVBoxLayout>
 #include <QWidgetAction>
 #include <algorithm>
+#include <utility>
 
 using namespace sdr9700::ui::main_window;
 
 
-RadioCommandController::RadioCommandController(MainWindow* window) : QObject(window), m_window(window) {}
+RadioCommandController::RadioCommandController(MainWindow* window, CompressorLevelSetter compressorLevelSetter)
+    : QObject(window), m_window(window), m_compressorLevelSetter(std::move(compressorLevelSetter))
+{
+    if (!m_compressorLevelSetter)
+    {
+        m_compressorLevelSetter = [window](int value) { window->m_vfo->setCompressorLevel(value); };
+    }
+}
 
 void RadioCommandController::toggleMute()
 {
@@ -683,6 +692,81 @@ void RadioCommandController::showRfGainMenu()
     menu.addAction(panelAction);
 
     menu.exec(m_window->m_rfGainBtn->mapToGlobal(QPoint(0, m_window->m_rfGainBtn->height())));
+}
+
+void RadioCommandController::showCompressorMenu()
+{
+    if (!m_window->m_compBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    {
+        return;
+    }
+
+    QMenu menu(m_window);
+    styleCompactMenu(&menu);
+
+    auto* enabledAction = menu.addAction(QStringLiteral("Enabled"));
+    enabledAction->setCheckable(true);
+    enabledAction->setChecked(m_window->m_vfo->compressorOn());
+    connect(enabledAction, &QAction::toggled, this, [this](bool enabled) { m_window->m_vfo->setCompressor(enabled); });
+    connect(m_window->m_vfo, &VfoModel::compressorChanged, enabledAction,
+            [enabledAction](bool enabled)
+            {
+                const QSignalBlocker block(enabledAction);
+                enabledAction->setChecked(enabled);
+            });
+
+    auto* panel = new QWidget(&menu);
+    panel->setFixedWidth(190);
+    auto* panelLayout = new QVBoxLayout(panel);
+    panelLayout->setContentsMargins(8, 6, 8, 6);
+    panelLayout->setSpacing(4);
+
+    auto levelText = [](int value)
+    { return QStringLiteral("Level %1%").arg(qRound(qBound(0, value, 255) * 100.0 / 255.0)); };
+
+    const bool levelKnown = m_window->m_vfo->compressorLevelKnown();
+    auto* valueLabel =
+        new QLabel(levelKnown ? levelText(m_window->m_vfo->compressorLevel()) : QStringLiteral("Level --"), panel);
+    valueLabel->setAlignment(Qt::AlignCenter);
+    valueLabel->setStyleSheet(
+        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; }").arg(UiTheme::Color::TextMuted));
+
+    auto* slider = new QSlider(Qt::Horizontal, panel);
+    slider->setRange(0, 255);
+    slider->setValue(m_window->m_vfo->compressorLevel());
+    slider->setEnabled(levelKnown);
+    slider->setAccessibleName(QStringLiteral("Speech compressor level"));
+    slider->setAccessibleDescription(QStringLiteral("Adjusts the IC-9700 speech compression level."));
+    connect(slider, &QSlider::valueChanged, this,
+            [this, valueLabel, levelText](int value)
+            {
+                valueLabel->setText(levelText(value));
+                m_compressorLevelSetter(value);
+            });
+    connect(m_window->m_vfo, &VfoModel::compressorLevelChanged, slider,
+            [slider, valueLabel, levelText](int value)
+            {
+                const QSignalBlocker block(slider);
+                slider->setValue(value);
+                valueLabel->setText(levelText(value));
+            });
+    connect(m_window->m_vfo, &VfoModel::compressorLevelKnownChanged, slider,
+            [slider, valueLabel](bool known)
+            {
+                slider->setEnabled(known);
+                if (!known)
+                {
+                    valueLabel->setText(QStringLiteral("Level --"));
+                }
+            });
+
+    panelLayout->addWidget(valueLabel);
+    panelLayout->addWidget(slider);
+
+    auto* panelAction = new QWidgetAction(&menu);
+    panelAction->setDefaultWidget(panel);
+    menu.addAction(panelAction);
+    menu.exec(m_window->m_compBtn->mapToGlobal(QPoint(0, m_window->m_compBtn->height())));
 }
 
 int RadioCommandController::tuningStepHz() const

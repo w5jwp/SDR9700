@@ -154,6 +154,10 @@ void CommanderCodecTest::parsesLevelAndMeterReplyFamily()
     QCOMPARE(m_commander.parseLevelMeterReply(funcAfGain, value), Commander::ReplyParseResult::Parsed);
     QCOMPARE(value.toUInt(), 123U);
 
+    m_commander.payloadIn = QByteArray::fromHex("0192");
+    QCOMPARE(m_commander.parseLevelMeterReply(funcCompressorLevel, value), Commander::ReplyParseResult::Parsed);
+    QCOMPARE(value.toUInt(), 192U);
+
     m_commander.payloadIn = QByteArray::fromHex("01230000");
     QCOMPARE(m_commander.parseLevelMeterReply(funcAbsoluteMeter, value), Commander::ReplyParseResult::Parsed);
     const MeterKind meter = value.value<MeterKind>();
@@ -235,6 +239,12 @@ void CommanderCodecTest::serializesOutboundCommandValues()
     QVERIFY(
         m_commander.appendSetCommandValue(funcAGCTimeConstant, QVariant::fromValue<uchar>(3), 0, agcCommand, payload));
     QCOMPARE(payload, QByteArray(1, '\x03'));
+
+    payload.clear();
+    const FuncType compressorLevelCommand = m_commander.radioCaps.commands.value(funcCompressorLevel);
+    QVERIFY(m_commander.appendSetCommandValue(funcCompressorLevel, QVariant::fromValue<ushort>(192), 0,
+                                              compressorLevelCommand, payload));
+    QCOMPARE(payload, QByteArray::fromHex("0192"));
 
     Frequency frequency;
     frequency.Hz = 145825000;

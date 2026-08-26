@@ -3,13 +3,16 @@
 #include "Types.h"
 
 #include <QObject>
+#include <functional>
 
 class MainWindow;
 
 class RadioCommandController : public QObject
 {
   public:
-    explicit RadioCommandController(MainWindow* window);
+    using CompressorLevelSetter = std::function<void(int)>;
+
+    explicit RadioCommandController(MainWindow* window, CompressorLevelSetter compressorLevelSetter = {});
 
     void toggleMute();
     void cycleMode();
@@ -33,10 +36,12 @@ class RadioCommandController : public QObject
     void updateTxPowerButton();
     void updateRfGainButton();
     void showRfGainMenu();
+    void showCompressorMenu();
     int tuningStepHz() const;
     void applyRadioTuningStep();
     void updateStepButton();
 
   private:
     MainWindow* m_window{nullptr};
+    CompressorLevelSetter m_compressorLevelSetter;
 };

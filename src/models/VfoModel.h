@@ -36,6 +36,8 @@ class VfoModel : public QObject
     bool autoNotchOn() const { return m_autoNotchOn; }
     bool manualNotchOn() const { return m_manualNotchOn; }
     bool compressorOn() const { return m_compressorOn; }
+    int compressorLevel() const { return m_compressorLevel.value_or(0); }
+    bool compressorLevelKnown() const { return m_compressorLevel.has_value(); }
     bool xfcOn() const { return m_xfcOn; }
     const QString& agcMode() const { return m_agcMode; }
     bool ritOn() const { return m_ritOn; }
@@ -60,6 +62,7 @@ class VfoModel : public QObject
     void setAutoNotch(bool on);
     void setManualNotch(bool on);
     void setCompressor(bool on);
+    void setCompressorLevel(int level);
     void setXfcEnabled(bool on);
     void setRitEnabled(bool on);
     void setRitOffset(short hz);
@@ -87,6 +90,8 @@ class VfoModel : public QObject
     void applyAutoNotch(bool on);
     void applyManualNotch(bool on);
     void applyCompressor(bool on);
+    void applyCompressorLevel(int level);
+    void clearCompressorLevel();
     void applyXfcEnabled(bool on);
     void applyAgcMode(const QString& modeName);
     void applyRitEnabled(bool on);
@@ -115,6 +120,8 @@ class VfoModel : public QObject
     void autoNotchChanged(bool on);
     void manualNotchChanged(bool on);
     void compressorChanged(bool on);
+    void compressorLevelChanged(int level);
+    void compressorLevelKnownChanged(bool known);
     void xfcChanged(bool on);
     void ritChanged(bool on, short hz);
     void duplexModeChanged(duplexMode_t mode);
@@ -153,6 +160,7 @@ class VfoModel : public QObject
     bool m_autoNotchOn{false};
     bool m_manualNotchOn{false};
     bool m_compressorOn{false};
+    std::optional<int> m_compressorLevel;
     bool m_xfcOn{false};
     QString m_agcMode{"mid"};
     bool m_ritOn{false};

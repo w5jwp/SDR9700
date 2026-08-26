@@ -179,6 +179,9 @@ void RadioRouter::route(const CacheItem& item)
     case funcCompressor:
         emit compressorChanged(item.value.toBool());
         break;
+    case funcCompressorLevel:
+        emit compressorLevelChanged(qBound(0, item.value.toInt(), 255));
+        break;
     case funcXFCStatus:
         emit xfcChanged(item.value.toBool());
         break;

@@ -168,6 +168,7 @@ void RadioRouterTest::routesAllSimpleControlBranches()
     QSignalSpy autoNotchSpy(&router, &RadioRouter::autoNotchChanged);
     QSignalSpy manualNotchSpy(&router, &RadioRouter::manualNotchChanged);
     QSignalSpy compressorSpy(&router, &RadioRouter::compressorChanged);
+    QSignalSpy compressorLevelSpy(&router, &RadioRouter::compressorLevelChanged);
     QSignalSpy xfcSpy(&router, &RadioRouter::xfcChanged);
     QSignalSpy ritSpy(&router, &RadioRouter::ritEnabledChanged);
     QSignalSpy duplexSpy(&router, &RadioRouter::duplexModeChanged);
@@ -179,6 +180,7 @@ void RadioRouterTest::routesAllSimpleControlBranches()
         CacheItem(funcAutoNotch, true),
         CacheItem(funcManualNotch, true),
         CacheItem(funcCompressor, true),
+        CacheItem(funcCompressorLevel, 192),
         CacheItem(funcXFCStatus, true),
         CacheItem(funcRitStatus, true),
         CacheItem(funcSplitStatus, QVariant::fromValue(dmDupPlus)),
@@ -189,6 +191,7 @@ void RadioRouterTest::routesAllSimpleControlBranches()
     QCOMPARE(autoNotchSpy.count(), 1);
     QCOMPARE(manualNotchSpy.count(), 1);
     QCOMPARE(compressorSpy.count(), 1);
+    QCOMPARE(compressorLevelSpy.takeFirst().at(0).toInt(), 192);
     QCOMPARE(xfcSpy.count(), 1);
     QCOMPARE(ritSpy.count(), 1);
     QCOMPARE(duplexSpy.takeFirst().at(0).value<duplexMode_t>(), dmDupPlus);
