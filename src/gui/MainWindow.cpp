@@ -18,6 +18,8 @@
 #include "ReceivePanel.h"
 #include "StatusBarController.h"
 #include "VfoPanel.h"
+#include "VfoController.h"
+#include "VfoSelectionController.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
 #include "ConfigurationManager.h"
@@ -1175,6 +1177,10 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     {
         m_memoryPanel->setEnabled(controlsEnabled);
     }
+    if (m_vfoSelectionController)
+    {
+        m_vfoSelectionController->setControlsEnabled(controlsEnabled);
+    }
     if (m_titleBar)
     {
         m_titleBar->setVolumeEnabled(enabled);
@@ -1194,7 +1200,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     }
     if (m_pttBtn)
     {
-        m_pttBtn->setEnabled(enabled);
+        m_pttBtn->setEnabled(enabled && m_vfoPttReady);
     }
     if (m_rfGainBtn)
     {
@@ -1240,6 +1246,14 @@ void MainWindow::resetRadioOwnedControlsForSync()
         m_vfoPanel->setTxPower(0);
         m_vfoPanel->setLanMod(m_lanModValue);
         m_vfoPanel->setSquelch(0);
+    }
+    if (m_mainVfoController)
+    {
+        m_mainVfoController->clearFrequency();
+    }
+    if (m_subVfoController)
+    {
+        m_subVfoController->clearFrequency();
     }
 
     setCommandButtonActive(m_nrBtn, false);
@@ -1776,6 +1790,10 @@ void MainWindow::onFrequencyChanged(quint64 hz)
     {
         m_vfoPanel->setFrequencyText(formatFrequency(hz));
     }
+    if (m_mainVfoController)
+    {
+        m_mainVfoController->setFrequencyHz(hz);
+    }
     if (m_vfoPanel)
     {
         m_vfoPanel->setBandText(bandLabelForHz(hz));
@@ -2247,6 +2265,10 @@ void MainWindow::onPttReleased()
     }
     m_pttActive = false;
     m_vfo->setPtt(false);
+    if (m_pttBtn && !m_vfoPttReady)
+    {
+        m_pttBtn->setEnabled(false);
+    }
 }
 
 void MainWindow::beginMemoryPttFrequencyTransition()

@@ -56,6 +56,7 @@ class FakeRadioBackend : public IRadioBackend
     void setScopeEnabled(bool) override {}
     void setScopeSpanHz(quint64) override {}
     void setScopeMode(int) override {}
+    void setScopeVfo(Vfo) override {}
     void setScopeFixedRangeHz(quint64, quint64) override {}
     bool setPtt(bool value) override
     {
@@ -64,6 +65,20 @@ class FakeRadioBackend : public IRadioBackend
     }
     void setTxPower(int value) override { txPower = value; }
     void setTuningStep(int) override {}
+    void selectVfo(Vfo value) override { selectedVfo = value; }
+    void exchangeMainSub() override { ++exchangeCalls; }
+    void setVfoFrequencyHz(Vfo, quint64) override {}
+    void setVfoMode(Vfo, const QString&) override {}
+    void requestVfoState(Vfo value) override { requestedVfoState = value; }
+    void setVfoAgcMode(Vfo, const QString&) override {}
+    void setVfoAttenuatorEnabled(Vfo, bool) override {}
+    void setVfoNbEnabled(Vfo, bool) override {}
+    void setVfoNotch(Vfo, VfoNotch) override {}
+    void setVfoNrEnabled(Vfo, bool) override {}
+    void setVfoPreampLevel(Vfo, int) override {}
+    void setVfoRfGain(Vfo, int) override {}
+    void setVfoSquelch(Vfo, int) override {}
+    void setDualWatchEnabled(bool enabled) override { dualWatchEnabled = enabled; }
     void pollFrequency() override {}
     void selectVfoMode() override {}
     void selectRadioMemory(quint16, quint16) override {}
@@ -88,6 +103,10 @@ class FakeRadioBackend : public IRadioBackend
     int txPower{-1};
     int frequencyCalls{0};
     int modeCalls{0};
+    Vfo selectedVfo{Vfo::Main};
+    Vfo requestedVfoState{Vfo::Main};
+    bool dualWatchEnabled{false};
+    int exchangeCalls{0};
 };
 
 class VfoBackendTest : public QObject

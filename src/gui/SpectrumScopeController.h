@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Vfo.h"
+
 #include <QObject>
 #include <QVector>
 
@@ -25,6 +27,9 @@ class SpectrumScopeController : public QObject
     void onWheelStepRequested(int steps);
 
   private:
+    quint64 activeVfoFrequencyHz() const;
+    void followActiveVfo();
+    void tuneActiveVfo(quint64 hz);
     void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay);
 
     MainWindow* m_window{nullptr};

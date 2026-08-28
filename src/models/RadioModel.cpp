@@ -9,7 +9,6 @@
 
 namespace
 {
-constexpr double kSpectrumScopeCenterMarginFraction = 0.25;
 }
 
 RadioModel::RadioModel(QObject* parent) : QObject(parent)
@@ -176,14 +175,6 @@ void RadioModel::onBackendReadyChanged(bool ready)
 void RadioModel::onFrequencyChanged(quint64 hz)
 {
     m_vfo->applyFrequency(hz);
-    double freqMhz = hz / 1e6;
-    double start = m_spectrumScope->startMhz();
-    double end = m_spectrumScope->endMhz();
-    double margin = m_spectrumScope->bandwidthMhz() * kSpectrumScopeCenterMarginFraction;
-    if (freqMhz < start + margin || freqMhz > end - margin)
-    {
-        m_spectrumScope->centerOnFrequency(freqMhz);
-    }
 }
 
 void RadioModel::onModeChanged(const QString& mode)

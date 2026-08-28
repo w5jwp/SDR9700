@@ -39,6 +39,7 @@ unusedFunction:src/tests/WaterfallScopeTest.cpp
 unusedFunction:src/tests/OfflinePoliciesTest.cpp
 functionConst:src/tests/OfflinePoliciesTest.cpp
 unusedFunction:src/tests/VfoBackendTest.cpp
+unusedFunction:src/tests/VfoDisplayTest.cpp
 unusedFunction:src/tests/VfoModelTest.cpp
 functionConst:src/tests/SystemStatsTest.cpp
 // shadowFunction FP: Q_EMIT/emit macros expand to the signal function name,

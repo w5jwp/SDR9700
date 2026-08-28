@@ -15,6 +15,8 @@ class SpectrumScopeModel;
 class SpectrumScopeController;
 class SpectrumScopeDisplay;
 class ControlPanelController;
+class VfoController;
+class VfoSelectionController;
 class VfoPanel;
 class MemoryPanel;
 class QLabel;
@@ -189,6 +191,9 @@ class MainWindow : public QMainWindow
     SpectrumScopeModel* m_spectrumScope{nullptr};
 
     SpectrumScopeDisplay* m_spectrumScopeDisplay{nullptr};
+    VfoController* m_mainVfoController{nullptr};
+    VfoController* m_subVfoController{nullptr};
+    VfoSelectionController* m_vfoSelectionController{nullptr};
 
     VfoPanel* m_vfoPanel{nullptr};
     MemoryPanel* m_memoryPanel{nullptr};
@@ -214,6 +219,7 @@ class MainWindow : public QMainWindow
     QPushButton* m_toneBtn{nullptr};
     QPushButton* m_xfcBtn{nullptr};
     QPushButton* m_pttBtn{nullptr};
+    bool m_vfoPttReady{true};
     DtmfDialog* m_dtmfDialog{nullptr};
     MetersDialog* m_metersDialog{nullptr};
     QPointer<SettingsDialog> m_settingsDialog;

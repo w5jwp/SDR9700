@@ -237,9 +237,21 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
     }
 
     discardExpiredPendingReplies();
+    const auto repliesMatch = [](Funcs pending, Funcs incoming)
+    {
+        const bool pendingFrequency =
+            pending == funcFreq || pending == funcFreqTR || pending == funcFreqGet || pending == funcSelectedFreq;
+        const bool incomingFrequency =
+            incoming == funcFreq || incoming == funcFreqTR || incoming == funcFreqGet || incoming == funcSelectedFreq;
+        const bool pendingMode =
+            pending == funcMode || pending == funcModeTR || pending == funcModeGet || pending == funcSelectedMode;
+        const bool incomingMode =
+            incoming == funcMode || incoming == funcModeTR || incoming == funcModeGet || incoming == funcSelectedMode;
+        return pending == incoming || (pendingFrequency && incomingFrequency) || (pendingMode && incomingMode);
+    };
     for (int i = 0; i < m_pendingReplies.size(); ++i)
     {
-        if (m_pendingReplies.at(i).func == func)
+        if (repliesMatch(m_pendingReplies.at(i).func, func))
         {
             *receiver = m_pendingReplies.at(i).receiver;
             m_pendingReplies.removeAt(i);
@@ -1892,6 +1904,7 @@ void Commander::parseCommand()
 
     if (value.isValid() && queue != nullptr)
     {
+        emit radioReplyReceived(func, value, receiver);
         queue->receiveValue(func, value, receiver);
     }
 }

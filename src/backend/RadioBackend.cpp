@@ -191,7 +191,15 @@ RadioBackend::RadioBackend(QObject* parent)
             });
     connect(m_scopeController, &ScopeController::spectrumDataReady, this, &IRadioBackend::spectrumDataReady);
 
-    connect(m_radioRouter, &RadioRouter::radioValueUpdated, this, &IRadioBackend::radioValueUpdated);
+    connect(m_radioRouter, &RadioRouter::radioValueUpdated, this,
+            [this](Funcs func, const QVariant& value, uchar receiver)
+            {
+                if (func == funcVFOBandMS && receiver == 0)
+                {
+                    m_activeVfo = value.toBool() ? Vfo::Sub : Vfo::Main;
+                }
+                emit radioValueUpdated(func, value, receiver);
+            });
     connect(m_radioRouter, &RadioRouter::frequencyReported, this,
             [this](quint64 hz)
             {
@@ -202,6 +210,33 @@ RadioBackend::RadioBackend(QObject* parent)
                 handleReportedFrequency(hz);
                 emit frequencyChanged(hz);
                 updateReadyState();
+            });
+
+    m_mainSubExchangeRetryTimer = new QTimer(this);
+    m_mainSubExchangeRetryTimer->setSingleShot(true);
+    m_mainSubExchangeRetryTimer->setInterval(150);
+    connect(m_mainSubExchangeRetryTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (!m_mainSubExchangePending)
+                {
+                    return;
+                }
+                const quint8 missing = static_cast<quint8>(0x03 & ~m_mainSubExchangeConfirmations);
+                qInfo(logRadio()).noquote() << "Retrying missing MAIN/SUB exchange confirmations mask=" << missing;
+                invokeOnCurrentCommander(
+                    [missing](Commander* commandSession)
+                    {
+                        if (missing & 0x01)
+                        {
+                            commandSession->receiveCommand(funcVFOBandMS, QVariant(), 0);
+                        }
+                        if (missing & 0x02)
+                        {
+                            commandSession->receiveCommand(funcScopeMainSub, QVariant(), 0);
+                        }
+                    });
+                m_mainSubExchangeRetryTimer->start();
             });
     connect(m_radioRouter, &RadioRouter::modeReported, this,
             [this](const QString& mode, int filter)
@@ -214,16 +249,6 @@ RadioBackend::RadioBackend(QObject* parent)
                 m_initialModeReceived = true;
                 emit modeChanged(mode);
                 updateReadyState();
-            });
-    connect(m_radioRouter, &RadioRouter::vfoBandMSRequested, this,
-            [this]()
-            {
-                invokeOnCurrentCommander(
-                    [](Commander* commandSession)
-                    {
-                        commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-                        commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-                    });
             });
     connect(m_radioRouter, &RadioRouter::repeaterOffsetChanged, this,
             [this](quint64 hz)
@@ -515,6 +540,30 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                     emit sessionHeartbeat();
                 }
             });
+    connect(m_commander, &RadioCommander::radioReplyReceived, this,
+            [this, session, commandSession](Funcs func, const QVariant& value, uchar receiver)
+            {
+                if (!isCurrentSession(session, commandSession) || !m_mainSubExchangePending)
+                {
+                    return;
+                }
+                Q_UNUSED(receiver)
+                if (func == funcVFOBandMS && !value.toBool())
+                {
+                    m_mainSubExchangeConfirmations |= 0x01;
+                }
+                else if (func == funcScopeMainSub && !value.toBool())
+                {
+                    m_mainSubExchangeConfirmations |= 0x02;
+                }
+                if (m_mainSubExchangeConfirmations == 0x03)
+                {
+                    m_mainSubExchangePending = false;
+                    m_mainSubExchangeRetryTimer->stop();
+                    qInfo(logRadio()).noquote() << "MAIN/SUB exchange confirmed on physical MAIN";
+                    emit mainSubExchangeCompleted();
+                }
+            });
     connect(m_commander, &RadioCommander::haveAudioData, this,
             [this, session, commandSession](audioPacket pkt)
             {
@@ -750,6 +799,13 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
         m_syncWatchdogTimer->stop();
     }
     m_pttState.reset();
+    m_activeVfo = Vfo::Main;
+    m_mainSubExchangePending = false;
+    m_mainSubExchangeConfirmations = 0;
+    if (m_mainSubExchangeRetryTimer)
+    {
+        m_mainSubExchangeRetryTimer->stop();
+    }
 
     if (m_smeterPollTimer)
     {
@@ -979,6 +1035,236 @@ void RadioBackend::setTuningStep(int step)
                              { commandSession->receiveCommand(funcTuningStep, QVariant::fromValue<uchar>(val), 0); });
 }
 
+void RadioBackend::selectVfo(Vfo vfo)
+{
+    invokeOnCurrentCommander(
+        [vfo](Commander* commandSession)
+        { commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(vfo == Vfo::Sub), 0); });
+}
+
+void RadioBackend::exchangeMainSub()
+{
+    m_mainSubExchangePending = true;
+    m_mainSubExchangeConfirmations = 0;
+    m_mainSubExchangeRetryTimer->start();
+    invokeOnCurrentCommander(
+        [](Commander* commandSession)
+        {
+            // IC-9700 native MAIN/SUB exchange moves the VFO operating
+            // context, but RF gain remains attached to the physical MAIN and
+            // SUB receivers. Preserve that radio-authoritative behavior. If a
+            // future design wants RF gain to follow the logical VFO boxes, it
+            // must explicitly snapshot and restore both receiver values after
+            // this command rather than assuming 07 B0 exchanges them.
+            commandSession->receiveCommand(funcVFOSwapMS, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+            commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+            requestSubVfoStateForCommand(commandSession);
+            commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+            commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
+            // This final readback is deliberately last: it proves that the
+            // exchange, both receiver snapshots, and restoration to physical
+            // MAIN have all completed before PTT is unlocked.
+            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+        });
+}
+
+void RadioBackend::setVfoFrequencyHz(Vfo vfo, quint64 hz)
+{
+    if (vfo == Vfo::Main)
+    {
+        setFrequencyHz(hz);
+        return;
+    }
+
+    Frequency frequency;
+    frequency.Hz = hz;
+    frequency.MHzDouble = hz / 1e6;
+    frequency.VFO = activeVFO;
+    invokeOnCurrentCommander(
+        [frequency](Commander* commandSession)
+        {
+            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
+            commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency), 1);
+            commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
+            commandSession->receiveCommand(funcModeGet, QVariant(), 1);
+            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+            commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+        });
+}
+
+void RadioBackend::requestVfoState(Vfo vfo)
+{
+    if (vfo == Vfo::Sub)
+    {
+        invokeOnCurrentCommander(
+            [](Commander* commandSession)
+            {
+                requestSubVfoStateForCommand(commandSession);
+                commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+            });
+        return;
+    }
+
+    invokeOnCurrentCommander(
+        [](Commander* commandSession)
+        {
+            selectMainVfoForCommand(commandSession);
+            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+            commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+        });
+}
+
+void RadioBackend::routeVfoReceiverCommand(Vfo vfo, const std::function<void(Commander*, uchar)>& command)
+{
+    const Vfo restoreVfo = m_activeVfo;
+    const uchar receiver = vfo == Vfo::Main ? 0 : 1;
+    invokeOnCurrentCommander(
+        [vfo, restoreVfo, receiver, command](Commander* commandSession)
+        {
+            commandSession->receiveCommand(funcSelectVFO,
+                                           QVariant::fromValue<vfo_t>(vfo == Vfo::Sub ? vfoSub : vfoMain), 0);
+            command(commandSession, receiver);
+            commandSession->receiveCommand(funcSelectVFO,
+                                           QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain), 0);
+        });
+}
+
+void RadioBackend::setVfoMode(Vfo vfo, const QString& mode)
+{
+    ModeInfo modeInfo;
+    if (!populateModeInfo(mode, &modeInfo))
+    {
+        qWarning(logRadio()).noquote() << "Ignoring unsupported VFO mode selection:" << mode;
+        return;
+    }
+    modeInfo.filter = static_cast<quint8>(qBound(1, m_currentMainFilter, 3));
+    routeVfoReceiverCommand(vfo,
+                            [modeInfo](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcModeSet, QVariant::fromValue(modeInfo),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoAgcMode(Vfo vfo, const QString& mode)
+{
+    uchar agc = mode == QStringLiteral("fast") ? 1 : mode == QStringLiteral("slow") ? 3 : 2;
+    routeVfoReceiverCommand(vfo,
+                            [agc](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcAGCTimeConstant, QVariant::fromValue(agc),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcAGCTimeConstant, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoAttenuatorEnabled(Vfo vfo, bool on)
+{
+    const uchar value = on ? 10 : 0;
+    routeVfoReceiverCommand(vfo,
+                            [value](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcAttenuator, QVariant::fromValue(value),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcAttenuator, QVariant(), receiver);
+                                commandSession->receiveCommand(funcPreamp, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoNbEnabled(Vfo vfo, bool on)
+{
+    routeVfoReceiverCommand(vfo,
+                            [on](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcNoiseBlanker, QVariant::fromValue(on),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcNoiseBlanker, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoNotch(Vfo vfo, VfoNotch notch)
+{
+    routeVfoReceiverCommand(vfo,
+                            [notch](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(
+                                    funcAutoNotch, QVariant::fromValue(notch == VfoNotch::Auto), receiver);
+                                commandSession->receiveCommandNoReadback(
+                                    funcManualNotch, QVariant::fromValue(notch == VfoNotch::Manual), receiver);
+                                commandSession->receiveCommand(funcAutoNotch, QVariant(), receiver);
+                                commandSession->receiveCommand(funcManualNotch, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoNrEnabled(Vfo vfo, bool on)
+{
+    routeVfoReceiverCommand(vfo,
+                            [on](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcNoiseReduction, QVariant::fromValue(on),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcNoiseReduction, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoPreampLevel(Vfo vfo, int level)
+{
+    const uchar value = static_cast<uchar>(qBound(0, level, 3));
+    routeVfoReceiverCommand(vfo,
+                            [value](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcPreamp, QVariant::fromValue(value),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcPreamp, QVariant(), receiver);
+                                commandSession->receiveCommand(funcAttenuator, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoRfGain(Vfo vfo, int level)
+{
+    const ushort value = static_cast<ushort>(qBound(0, level, 255));
+    routeVfoReceiverCommand(vfo,
+                            [value](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcRfGain, QVariant::fromValue(value),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcRfGain, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoSquelch(Vfo vfo, int level)
+{
+    const ushort value = static_cast<ushort>(qBound(0, level, 255));
+    routeVfoReceiverCommand(vfo,
+                            [value](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcSquelch, QVariant::fromValue(value),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcSquelch, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setDualWatchEnabled(bool on)
+{
+    invokeOnCurrentCommander(
+        [on](Commander* commandSession)
+        {
+            commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(on), 0);
+            if (on)
+            {
+                requestSubVfoStateForCommand(commandSession);
+                commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+            }
+            else
+            {
+                selectMainVfoForCommand(commandSession);
+            }
+        });
+}
+
 void RadioBackend::setSquelch(bool on, int level)
 {
     if (!m_commander)
@@ -1147,6 +1433,26 @@ void RadioBackend::selectMainVfoForCommand(Commander* commandSession)
     commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
 }
 
+void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
+{
+    if (!commandSession)
+    {
+        return;
+    }
+    // IC-9700 CI-V has no direct MAIN/SUB receiver prefix. Select SUB,
+    // correlate the current-frequency/mode replies as receiver 1, and restore
+    // MAIN before other application commands continue.
+    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
+    commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
+    commandSession->receiveCommand(funcModeGet, QVariant(), 1);
+    for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
+                             funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch})
+    {
+        commandSession->receiveCommand(func, QVariant(), 1);
+    }
+    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+}
+
 void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16 group)
 {
     if (!commandSession)
@@ -1237,6 +1543,13 @@ void RadioBackend::setScopeMode(int mode)
         { commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(bounded), 0); });
 }
 
+void RadioBackend::setScopeVfo(Vfo vfo)
+{
+    const bool sub = vfo == Vfo::Sub;
+    invokeOnCurrentCommander([sub](Commander* commandSession)
+                             { commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(sub), 0); });
+}
+
 void RadioBackend::setScopeFixedRangeHz(quint64 startHz, quint64 endHz)
 {
     if (endHz <= startHz)
@@ -1288,6 +1601,7 @@ bool RadioBackend::setPtt(bool on)
 
         armTransmitSafety();
         const auto selectedMemory = m_selectedRadioMemory;
+        qInfo(logRadio()).noquote() << "PTT route target= MAIN memory=" << (selectedMemory.has_value() ? "yes" : "no");
         invokeOnCurrentCommander(
             [selectedMemory](Commander* commandSession)
             {
@@ -1299,6 +1613,10 @@ bool RadioBackend::setPtt(bool on)
                     // enters VFO mode and publishes a band-default frequency
                     // before returning to memory mode.
                     selectMemoryForCommand(commandSession, group, channel, false);
+                }
+                else
+                {
+                    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
                 }
                 commandSession->setPttActive(true);
                 commandSession->receiveCommand(funcTransceiverStatus, QVariant::fromValue<bool>(true), 0);
@@ -1350,7 +1668,6 @@ void RadioBackend::sendPttOffNow()
     {
         m_pttReleaseDelayTimer->stop();
     }
-
     // Always send an unkey request. If local state ever gets stale, suppressing
     // this command can leave the radio transmitting until disconnect.
     m_pttState.requestOff();
@@ -1595,15 +1912,18 @@ void RadioBackend::requestPostReadyRadioState()
             commandSession->receiveCommandNoReadback(funcDATA1Mod, QVariant::fromValue(lanInput), 0);
 
             commandSession->receiveCommand(funcLANModLevel, QVariant::fromValue(lanModLevel), 0);
-            commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcSatelliteMode, QVariant::fromValue<bool>(false), 0);
+            // Keep both operating sides active for the independent MAIN and SUB
+            // VFO controllers. MAIN remains selected for the existing control,
+            // memory, and Spectrum Scope paths after the targeted SUB readback.
+            commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(true), 0);
+            requestSubVfoStateForCommand(commandSession);
             commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
             commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcTimeOutTimer, QVariant::fromValue<uchar>(kHardwareTxTimeoutTimer), 0);
             qInfo(logRadio()).noquote()
-                << "Configured IC-9700 transmit modulation source for LAN audio and single MAIN VFO "
-                   "operation";
+                << "Configured IC-9700 transmit modulation source for LAN audio and MAIN/SUB dual-watch operation";
             qInfo(logRadio()).noquote() << "Setting hardware TX timeout timer to 3 minutes";
 
             const Funcs statusCommands[] = {

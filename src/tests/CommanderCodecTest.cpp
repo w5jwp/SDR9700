@@ -28,6 +28,7 @@ class CommanderCodecTest : public QObject
     void serializesOutboundCommandValues();
     void rejectsUnknownOutboundValueTypes();
     void pttAcknowledgementDoesNotSynthesizeTransmitState();
+    void correlatesEquivalentFrequencyAndModeReplyCommands();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
     void parserToleratesDeterministicArbitraryInput();
@@ -41,6 +42,19 @@ void CommanderCodecTest::init()
     sdr9700::populateRadioCapabilities(m_commander.radioCaps);
     m_commander.haveRadioCaps = true;
     m_commander.setCIVAddr(0xA2);
+}
+
+void CommanderCodecTest::correlatesEquivalentFrequencyAndModeReplyCommands()
+{
+    m_commander.rememberPendingReply(funcFreqGet, 1);
+    m_commander.rememberPendingReply(funcModeGet, 1);
+
+    uchar receiver = 0;
+    QVERIFY(m_commander.takePendingReplyReceiver(funcSelectedFreq, &receiver));
+    QCOMPARE(receiver, uchar(1));
+    receiver = 0;
+    QVERIFY(m_commander.takePendingReplyReceiver(funcSelectedMode, &receiver));
+    QCOMPARE(receiver, uchar(1));
 }
 
 void CommanderCodecTest::encodesAndDecodesPackedBcd()

@@ -77,14 +77,14 @@ void RadioRouter::route(const CacheItem& item)
     case funcSelectedFreq:
     case funcUnselectedFreq:
     {
-        if (item.command == funcUnselectedFreq || item.receiver != kMainReceiver)
+        if (item.command == funcUnselectedFreq)
         {
             break;
         }
 
-        emit radioValueUpdated(item.command, item.value, kMainReceiver);
+        emit radioValueUpdated(item.command, item.value, item.receiver);
         const auto frequency = item.value.value<Frequency>();
-        if (frequency.Hz > 0)
+        if (item.receiver == kMainReceiver && frequency.Hz > 0)
         {
             emit frequencyReported(frequency.Hz);
         }
@@ -95,12 +95,16 @@ void RadioRouter::route(const CacheItem& item)
     case funcSelectedMode:
     case funcUnselectedMode:
     {
-        if (item.command == funcUnselectedMode || item.receiver != kMainReceiver)
+        if (item.command == funcUnselectedMode)
         {
             break;
         }
 
-        emit radioValueUpdated(item.command, item.value, kMainReceiver);
+        emit radioValueUpdated(item.command, item.value, item.receiver);
+        if (item.receiver != kMainReceiver)
+        {
+            break;
+        }
         const auto mode = item.value.value<ModeInfo>();
         emit modeReported(modeInfoToString(mode), mode.filter);
         break;
@@ -109,11 +113,10 @@ void RadioRouter::route(const CacheItem& item)
         emit duplexModeChanged(item.value.value<duplexMode_t>());
         break;
     case funcVFOBandMS:
-        emit radioValueUpdated(item.command, QVariant::fromValue<bool>(false), kMainReceiver);
-        if (item.value.toBool())
-        {
-            emit vfoBandMSRequested();
-        }
+        emit radioValueUpdated(item.command, item.value, kMainReceiver);
+        break;
+    case funcVFODualWatch:
+        emit radioValueUpdated(item.command, item.value, kMainReceiver);
         break;
     case funcReadFreqOffset:
         emit repeaterOffsetChanged(item.value.value<Frequency>().Hz);
@@ -149,13 +152,17 @@ void RadioRouter::route(const CacheItem& item)
         break;
     }
     case funcNoiseReduction:
-        emit nrChanged(item.value.toBool());
+        emit radioValueUpdated(item.command, item.value, item.receiver);
+        if (item.receiver == kMainReceiver)
+            emit nrChanged(item.value.toBool());
         break;
     case funcNRLevel:
         emit nrLevelChanged(qBound(0, item.value.toInt(), 15));
         break;
     case funcNoiseBlanker:
-        emit nbChanged(item.value.toBool());
+        emit radioValueUpdated(item.command, item.value, item.receiver);
+        if (item.receiver == kMainReceiver)
+            emit nbChanged(item.value.toBool());
         break;
     case funcNBLevel:
         emit nbLevelChanged(qBound(0, item.value.toInt(), 10));
@@ -163,18 +170,28 @@ void RadioRouter::route(const CacheItem& item)
     case funcPreamp:
     {
         const int level = qBound(0, item.value.toInt(), 3);
-        emit preampLevelChanged(level);
-        emit preampChanged(level != 0);
+        emit radioValueUpdated(item.command, QVariant(level), item.receiver);
+        if (item.receiver == kMainReceiver)
+        {
+            emit preampLevelChanged(level);
+            emit preampChanged(level != 0);
+        }
         break;
     }
     case funcAttenuator:
-        emit attenuatorChanged(item.value.toInt() != 0);
+        emit radioValueUpdated(item.command, item.value, item.receiver);
+        if (item.receiver == kMainReceiver)
+            emit attenuatorChanged(item.value.toInt() != 0);
         break;
     case funcAutoNotch:
-        emit autoNotchChanged(item.value.toBool());
+        emit radioValueUpdated(item.command, item.value, item.receiver);
+        if (item.receiver == kMainReceiver)
+            emit autoNotchChanged(item.value.toBool());
         break;
     case funcManualNotch:
-        emit manualNotchChanged(item.value.toBool());
+        emit radioValueUpdated(item.command, item.value, item.receiver);
+        if (item.receiver == kMainReceiver)
+            emit manualNotchChanged(item.value.toBool());
         break;
     case funcCompressor:
         emit compressorChanged(item.value.toBool());
@@ -195,12 +212,15 @@ void RadioRouter::route(const CacheItem& item)
     {
         static const char* const kAgcModes[] = {"off", "fast", "mid", "slow"};
         const int idx = qBound(0, item.value.toInt(), 3);
-        emit agcModeChanged(QString::fromLatin1(kAgcModes[idx]));
+        emit radioValueUpdated(item.command, QVariant(idx), item.receiver);
+        if (item.receiver == kMainReceiver)
+            emit agcModeChanged(QString::fromLatin1(kAgcModes[idx]));
         break;
     }
     case funcRfGain:
         emit radioValueUpdated(item.command, item.value, item.receiver);
-        emit rfGainChanged(qBound(0, item.value.toInt(), 255));
+        if (item.receiver == kMainReceiver)
+            emit rfGainChanged(qBound(0, item.value.toInt(), 255));
         break;
     case funcRFPower:
     {
@@ -231,7 +251,8 @@ void RadioRouter::route(const CacheItem& item)
     {
         const int level = qBound(0, item.value.toInt(), 255);
         emit radioValueUpdated(item.command, QVariant(level), item.receiver);
-        emit squelchChanged(level > 0, level);
+        if (item.receiver == kMainReceiver)
+            emit squelchChanged(level > 0, level);
         break;
     }
     case funcSWRMeter:

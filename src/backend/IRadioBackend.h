@@ -7,6 +7,7 @@
 #include <QAudioDevice>
 #include <QtGlobal>
 #include "Types.h"
+#include "Vfo.h"
 
 class IRadioBackend : public QObject
 {
@@ -51,11 +52,26 @@ class IRadioBackend : public QObject
     virtual void setScopeEnabled(bool on) = 0;
     virtual void setScopeSpanHz(quint64 hz) = 0;
     virtual void setScopeMode(int mode) = 0; // 0=center, 1=fixed
+    virtual void setScopeVfo(Vfo vfo) = 0;
     virtual void setScopeFixedRangeHz(quint64 startHz, quint64 endHz) = 0;
 
     virtual bool setPtt(bool on) = 0;
     virtual void setTxPower(int level) = 0; // 0-255
     virtual void setTuningStep(int step) = 0;
+    virtual void selectVfo(Vfo vfo) = 0;
+    virtual void exchangeMainSub() = 0;
+    virtual void setVfoFrequencyHz(Vfo vfo, quint64 hz) = 0;
+    virtual void setVfoMode(Vfo vfo, const QString& mode) = 0;
+    virtual void requestVfoState(Vfo vfo) = 0;
+    virtual void setVfoAgcMode(Vfo vfo, const QString& mode) = 0;
+    virtual void setVfoAttenuatorEnabled(Vfo vfo, bool on) = 0;
+    virtual void setVfoNbEnabled(Vfo vfo, bool on) = 0;
+    virtual void setVfoNotch(Vfo vfo, VfoNotch notch) = 0;
+    virtual void setVfoNrEnabled(Vfo vfo, bool on) = 0;
+    virtual void setVfoPreampLevel(Vfo vfo, int level) = 0;
+    virtual void setVfoRfGain(Vfo vfo, int level) = 0;
+    virtual void setVfoSquelch(Vfo vfo, int level) = 0;
+    virtual void setDualWatchEnabled(bool on) = 0;
 
     virtual void pollFrequency() = 0;
     virtual void selectVfoMode() = 0;
@@ -114,6 +130,7 @@ class IRadioBackend : public QObject
     void dtcsCodeChanged(ushort code);
     void radioMemoryReceived(MemoryType memory);
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
+    void mainSubExchangeCompleted();
 
     void spectrumDataReady(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange);
 

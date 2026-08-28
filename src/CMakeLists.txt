@@ -64,6 +64,7 @@ set(SDR9700_CORE_SOURCES
     core/LoggingConfiguration.cpp
     core/RadioSessionWatchdog.h
     core/SMeterScale.h
+    core/Vfo.h
     core/AppSettings.cpp
     core/RadioProfile.cpp
     core/SystemStats.cpp
@@ -216,6 +217,14 @@ set(SDR9700_APP_SOURCES
     gui/PttPanel.cpp
     gui/ReceivePanel.h
     gui/ReceivePanel.cpp
+    gui/VfoController.h
+    gui/VfoController.cpp
+    gui/VfoDisplay.h
+    gui/VfoDisplay.cpp
+    gui/VfoSelectionController.h
+    gui/VfoSelectionController.cpp
+    gui/VfoSelectionPanel.h
+    gui/VfoSelectionPanel.cpp
     gui/VfoPanel.h
     gui/VfoPanel.cpp
     gui/MainWindow.h
@@ -503,6 +512,23 @@ if(BUILD_TESTING)
     target_link_libraries(PanelAccessibilityTest PRIVATE SDR9700_dtmf_dialog_test_support Qt6::Test)
     add_test(NAME PanelAccessibilityTest COMMAND PanelAccessibilityTest)
     set_tests_properties(PanelAccessibilityTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(VfoDisplayTest
+        tests/VfoDisplayTest.cpp
+        backend/IRadioBackend.h
+        gui/MainWindowHelpers.cpp
+        gui/VfoController.cpp
+        gui/VfoDisplay.cpp
+        gui/VfoSelectionPanel.cpp
+        models/VfoModel.cpp
+    )
+    target_include_directories(VfoDisplayTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(VfoDisplayTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
+    add_test(NAME VfoDisplayTest COMMAND VfoDisplayTest)
+    set_tests_properties(VfoDisplayTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(VfoBackendTest
         tests/VfoBackendTest.cpp

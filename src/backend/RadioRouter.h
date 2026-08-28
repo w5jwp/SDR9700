@@ -23,7 +23,6 @@ class RadioRouter : public QObject
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
     void frequencyReported(quint64 hz);
     void modeReported(const QString& mode, int filter);
-    void vfoBandMSRequested();
     void repeaterOffsetChanged(quint64 hz);
     void toneAccessModeChanged(rptAccessTxRx_t mode);
     void toneFrequencyChanged(ushort tone);

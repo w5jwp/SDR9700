@@ -13,8 +13,10 @@ class RadioRouterTest : public QObject
     void routesOnlyMainReceiverFrequencyAndMode();
     void clampsMeterAndLevelValues();
     void mapsAgcAndPreampValues();
+    void keepsSubReceiverControlsOutOfLegacyMainSignals();
     void routesToneRegisterForActiveToneMode();
     void routesProtocolPayloadTypes();
+    void routesConfirmedVfoSelectionState();
     void routesAllSimpleControlBranches();
     void routesBatchInOrder();
     void ignoresUnknownCommands();
@@ -28,7 +30,10 @@ void RadioRouterTest::routesOnlyMainReceiverFrequencyAndMode()
 
     Frequency frequency;
     frequency.Hz = 146520000;
+    QSignalSpy valueSpy(&router, &RadioRouter::radioValueUpdated);
     router.route(CacheItem(funcFreqGet, QVariant::fromValue(frequency), 1));
+    QCOMPARE(valueSpy.count(), 1);
+    QCOMPARE(valueSpy.at(0).at(2).toUInt(), uint(1));
     router.route(CacheItem(funcUnselectedFreq, QVariant::fromValue(frequency), 0));
     QCOMPARE(frequencySpy.count(), 0);
     router.route(CacheItem(funcSelectedFreq, QVariant::fromValue(frequency), 0));
@@ -42,6 +47,21 @@ void RadioRouterTest::routesOnlyMainReceiverFrequencyAndMode()
     QCOMPARE(modeSpy.count(), 1);
     QCOMPARE(modeSpy.at(0).at(0).toString(), QStringLiteral("FM"));
     QCOMPARE(modeSpy.at(0).at(1).toInt(), 2);
+}
+
+void RadioRouterTest::routesConfirmedVfoSelectionState()
+{
+    RadioRouter router;
+    QSignalSpy valueSpy(&router, &RadioRouter::radioValueUpdated);
+
+    router.route(CacheItem(funcVFOBandMS, true));
+    router.route(CacheItem(funcVFODualWatch, true));
+
+    QCOMPARE(valueSpy.count(), 2);
+    QCOMPARE(static_cast<Funcs>(valueSpy.at(0).at(0).toInt()), funcVFOBandMS);
+    QCOMPARE(valueSpy.at(0).at(1).toBool(), true);
+    QCOMPARE(static_cast<Funcs>(valueSpy.at(1).at(0).toInt()), funcVFODualWatch);
+    QCOMPARE(valueSpy.at(1).at(1).toBool(), true);
 }
 
 void RadioRouterTest::clampsMeterAndLevelValues()
@@ -101,6 +121,28 @@ void RadioRouterTest::mapsAgcAndPreampValues()
     router.route(CacheItem(funcPreamp, 9));
     QCOMPARE(preampLevelSpy.takeFirst().at(0).toInt(), 3);
     QCOMPARE(preampEnabledSpy.takeFirst().at(0).toBool(), true);
+}
+
+void RadioRouterTest::keepsSubReceiverControlsOutOfLegacyMainSignals()
+{
+    RadioRouter router;
+    QSignalSpy valueSpy(&router, &RadioRouter::radioValueUpdated);
+    QSignalSpy agcSpy(&router, &RadioRouter::agcModeChanged);
+    QSignalSpy nrSpy(&router, &RadioRouter::nrChanged);
+    QSignalSpy rfGainSpy(&router, &RadioRouter::rfGainChanged);
+
+    router.route(CacheItem(funcAGCTimeConstant, 3, 1));
+    router.route(CacheItem(funcNoiseReduction, true, 1));
+    router.route(CacheItem(funcRfGain, 128, 1));
+
+    QCOMPARE(valueSpy.count(), 3);
+    for (const QList<QVariant>& arguments : valueSpy)
+    {
+        QCOMPARE(arguments.at(2).toUInt(), uint(1));
+    }
+    QCOMPARE(agcSpy.count(), 0);
+    QCOMPARE(nrSpy.count(), 0);
+    QCOMPARE(rfGainSpy.count(), 0);
 }
 
 void RadioRouterTest::routesToneRegisterForActiveToneMode()

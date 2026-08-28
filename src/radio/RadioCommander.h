@@ -91,6 +91,7 @@ class RadioCommander : public QObject
     void selectedRadio(quint8 radio);
     void finished();
     void haveReceivedValue(Funcs func, QVariant value);
+    void radioReplyReceived(Funcs func, QVariant value, uchar receiver);
     void sidetone(QString text);
     void stopsidetone();
 
