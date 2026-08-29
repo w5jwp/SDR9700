@@ -1999,6 +1999,8 @@ void RadioBackend::requestPostReadyRadioState()
                 funcNoiseBlanker,
                 funcPreamp,
                 funcAttenuator,
+                funcAutoNotch,
+                funcManualNotch,
                 funcSplitStatus,
                 funcReadFreqOffset,
                 funcToneSquelchType,
@@ -2012,8 +2014,6 @@ void RadioBackend::requestPostReadyRadioState()
                 funcCompressor,
                 funcCompressorLevel,
                 funcXFCStatus,
-                funcAutoNotch,
-                funcManualNotch,
                 funcAGCTimeConstant,
                 funcTuningStep,
                 // RIT remains polled so radio-authoritative state is retained,
@@ -2027,7 +2027,7 @@ void RadioBackend::requestPostReadyRadioState()
 
             for (const Funcs command : statusCommands)
             {
-                commandSession->receiveCommand(command, QVariant(), 0);
+                commandSession->scheduleStartupRead(command, 0);
             }
         });
 }
@@ -2082,7 +2082,10 @@ void RadioBackend::updateReadyState()
         // captures show the IC-9700 handles the full burst without delaying
         // memory replies, this can return to a direct requestPostReadyRadioState()
         // call.
-        QTimer::singleShot(500, this,
+        // The status snapshot is now paced and bounded by Commander, so it no
+        // longer needs the full half-second separation previously used to
+        // protect memory synchronization from an immediate command burst.
+        QTimer::singleShot(200, this,
                            [this]()
                            {
                                if (m_radioReady && m_commander)
@@ -2431,17 +2434,17 @@ void RadioBackend::onLanReady()
                     invokeOnCurrentCommander(
                         [pollTick](Commander* commandSession)
                         {
-                            commandSession->receiveCommand(funcSWRMeter, QVariant(), kMainReceiver);
-                            commandSession->receiveCommand(funcPowerMeter, QVariant(), kMainReceiver);
-                            commandSession->receiveCommand(funcALCMeter, QVariant(), kMainReceiver);
+                            commandSession->scheduleMeterRead(funcSWRMeter, kMainReceiver);
+                            commandSession->scheduleMeterRead(funcPowerMeter, kMainReceiver);
+                            commandSession->scheduleMeterRead(funcALCMeter, kMainReceiver);
                             if (pollTick % 2 == 0)
                             {
-                                commandSession->receiveCommand(funcCompMeter, QVariant(), kMainReceiver);
+                                commandSession->scheduleMeterRead(funcCompMeter, kMainReceiver);
                             }
                             if (pollTick % 5 == 0)
                             {
-                                commandSession->receiveCommand(funcVdMeter, QVariant(), kMainReceiver);
-                                commandSession->receiveCommand(funcIdMeter, QVariant(), kMainReceiver);
+                                commandSession->scheduleMeterRead(funcVdMeter, kMainReceiver);
+                                commandSession->scheduleMeterRead(funcIdMeter, kMainReceiver);
                             }
                         });
                     return;
@@ -2469,7 +2472,7 @@ void RadioBackend::onLanReady()
                 m_smeterPollPendingReceiver = receiver;
                 m_smeterPollPendingTicks = 0;
                 invokeOnCurrentCommander([receiver](Commander* commandSession)
-                                         { commandSession->receiveCommand(funcSMeter, QVariant(), receiver); });
+                                         { commandSession->scheduleMeterRead(funcSMeter, receiver); });
             });
     m_smeterPollTimer->start();
 }

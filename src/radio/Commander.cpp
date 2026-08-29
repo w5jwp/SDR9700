@@ -17,6 +17,12 @@
 namespace
 {
 constexpr qint64 kPendingReplyLifetimeMs = 5000;
+// Startup status reads are already bounded and coalesced, so a 10 ms cadence
+// keeps visible controls responsive without restoring the former unpaced burst.
+constexpr int kScheduledCommandIntervalMs = 10;
+constexpr qsizetype kMaxScheduledCommands = 64;
+constexpr int kMaxConsecutiveMeterDispatches = 3;
+constexpr qint64 kScopeAssemblyLifetimeMs = 250;
 
 Funcs canonicalReplyFunc(Funcs func)
 {
@@ -51,7 +57,10 @@ bool replyIdentifiesReceiver(Funcs func)
 
 Commander::Commander(RadioCommander* parent) : RadioCommander(parent)
 {
-
+    m_scheduledCommandTimer = new QTimer(this);
+    m_scheduledCommandTimer->setSingleShot(true);
+    m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
+    connect(m_scheduledCommandTimer, &QTimer::timeout, this, &Commander::dispatchNextScheduledCommand);
     qInfo(logRadio()).noquote() << "creating instance of Commander()";
 }
 
@@ -60,6 +69,10 @@ Commander::Commander(quint8 guid[GUIDLEN], RadioCommander* parent) : RadioComman
     Q_ASSERT(guid != nullptr);
     qInfo(logRadio()).noquote() << "creating instance of Commander() with GUID";
     memcpy(this->guid, guid, GUIDLEN);
+    m_scheduledCommandTimer = new QTimer(this);
+    m_scheduledCommandTimer->setSingleShot(true);
+    m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
+    connect(m_scheduledCommandTimer, &QTimer::timeout, this, &Commander::dispatchNextScheduledCommand);
 }
 
 Commander::~Commander()
@@ -188,6 +201,9 @@ void Commander::shutdownComm()
         queue->resetSessionState();
     }
     m_pendingReplies.clear();
+    resetScheduledCommands();
+    m_expectedScopeSequences[0] = 0;
+    m_expectedScopeSequences[1] = 0;
     udp = nullptr;
     m_shutdownComplete = true;
 }
@@ -204,6 +220,10 @@ void Commander::commonSetup()
     foundRadio = false;
     m_pendingReplies.clear();
     m_correlationDiagnostics = {};
+    resetScheduledCommands();
+    m_schedulerDiagnostics = {};
+    m_expectedScopeSequences[0] = 0;
+    m_expectedScopeSequences[1] = 0;
     m_pendingCommandClock.start();
 
     // Minimal commands used before the built-in IC-9700 capability table is loaded.
@@ -226,6 +246,96 @@ void Commander::commonSetup()
 }
 
 void Commander::process() {}
+
+CommanderSchedulerDiagnostics Commander::schedulerDiagnostics() const
+{
+    CommanderSchedulerDiagnostics diagnostics = m_schedulerDiagnostics;
+    diagnostics.queuedCommands = m_scheduledCommands.size();
+    return diagnostics;
+}
+
+void Commander::scheduleMeterRead(Funcs func, uchar receiver)
+{
+    enqueueScheduledRead(ScheduledCommandClass::Meter, func, receiver);
+}
+
+void Commander::scheduleStartupRead(Funcs func, uchar receiver)
+{
+    enqueueScheduledRead(ScheduledCommandClass::StartupRead, func, receiver);
+}
+
+void Commander::enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs func, uchar receiver)
+{
+    const Funcs canonicalFunc = canonicalReplyFunc(func);
+    const auto duplicate =
+        std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(),
+                     [canonicalFunc, receiver](const ScheduledCommand& command)
+                     { return canonicalReplyFunc(command.func) == canonicalFunc && command.receiver == receiver; });
+    if (duplicate != m_scheduledCommands.cend())
+    {
+        ++m_schedulerDiagnostics.coalescedCommands;
+        return;
+    }
+
+    if (m_scheduledCommands.size() >= kMaxScheduledCommands)
+    {
+        ++m_schedulerDiagnostics.droppedCommands;
+        qWarning(logRadio()).noquote().nospace() << "CI-V scheduler full depth=" << m_scheduledCommands.size()
+                                                 << " dropping=" << funcString[func] << " receiver=" << receiver;
+        return;
+    }
+
+    m_scheduledCommands.append({commandClass, func, receiver});
+    m_schedulerDiagnostics.highWaterMark = std::max(m_schedulerDiagnostics.highWaterMark, m_scheduledCommands.size());
+    if (!m_scheduledCommandTimer->isActive())
+    {
+        m_scheduledCommandTimer->start();
+    }
+}
+
+void Commander::dispatchNextScheduledCommand()
+{
+    if (m_scheduledCommands.isEmpty() || m_shutdownComplete)
+    {
+        return;
+    }
+
+    qsizetype selected = 0;
+    if (m_consecutiveMeterDispatches >= kMaxConsecutiveMeterDispatches)
+    {
+        const auto startup =
+            std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
+                         { return command.commandClass == ScheduledCommandClass::StartupRead; });
+        if (startup != m_scheduledCommands.cend())
+        {
+            selected = std::distance(m_scheduledCommands.cbegin(), startup);
+        }
+    }
+
+    const ScheduledCommand command = m_scheduledCommands.takeAt(selected);
+    if (command.commandClass == ScheduledCommandClass::Meter)
+    {
+        ++m_consecutiveMeterDispatches;
+    }
+    else
+    {
+        m_consecutiveMeterDispatches = 0;
+    }
+    ++m_schedulerDiagnostics.dispatchedCommands;
+    receiveCommand(command.func, QVariant(), command.receiver);
+
+    if (!m_scheduledCommands.isEmpty())
+    {
+        m_scheduledCommandTimer->start();
+    }
+}
+
+void Commander::resetScheduledCommands()
+{
+    m_scheduledCommandTimer->stop();
+    m_scheduledCommands.clear();
+    m_consecutiveMeterDispatches = 0;
+}
 
 void Commander::receiveBaudRate(quint32 baudrate)
 {
@@ -2130,6 +2240,7 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     {
         return false;
     }
+    const int assemblyIndex = receiver ? 1 : 0;
 
     constexpr int freqLen = 5;
     constexpr int sequenceHeaderBytes = 2;
@@ -2137,6 +2248,7 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
 
     if (sequenceMax <= 1)
     {
+        m_expectedScopeSequences[assemblyIndex] = 0;
         if (payloadIn.size() < waveInfoBytes)
         {
             qWarning(logSpectrumScope()).noquote()
@@ -2222,6 +2334,8 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
         }
 
         d.data.clear();
+        m_scopeAssemblyClocks[assemblyIndex].restart();
+        m_expectedScopeSequences[assemblyIndex] = 2;
 
         // The first two frequency fields are mode-dependent. In fixed/scroll
         // modes they are explicit start/end frequencies; in center mode they
@@ -2252,16 +2366,42 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     }
     else if ((sequence > 1) && (sequence < sequenceMax))
     {
+        if (!m_scopeAssemblyClocks[assemblyIndex].isValid() ||
+            m_scopeAssemblyClocks[assemblyIndex].elapsed() > kScopeAssemblyLifetimeMs ||
+            sequence != m_expectedScopeSequences[assemblyIndex])
+        {
+            qWarning(logSpectrumScope()).noquote().nospace()
+                << "Discarding incomplete scope assembly receiver=" << receiver
+                << " expected=" << m_expectedScopeSequences[assemblyIndex] << " received=" << sequence;
+            m_expectedScopeSequences[assemblyIndex] = 0;
+            d.data.clear();
+            d.valid = false;
+            return false;
+        }
         // Intermediate scope chunks carry 50 pixels each.
         d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
+        m_expectedScopeSequences[assemblyIndex] = sequence + 1;
         ret = false;
         qInfo(logSpectrumScope()).noquote() << "Spectrum seq" << sequence << "/" << sequenceMax
                                             << "dataAccum:" << d.data.size() << "payloadLen:" << payloadIn.length();
     }
     else if (sequence == sequenceMax)
     {
+        if (!m_scopeAssemblyClocks[assemblyIndex].isValid() ||
+            m_scopeAssemblyClocks[assemblyIndex].elapsed() > kScopeAssemblyLifetimeMs ||
+            sequence != m_expectedScopeSequences[assemblyIndex])
+        {
+            qWarning(logSpectrumScope()).noquote().nospace()
+                << "Discarding incomplete scope assembly receiver=" << receiver
+                << " expected=" << m_expectedScopeSequences[assemblyIndex] << " received=" << sequence;
+            m_expectedScopeSequences[assemblyIndex] = 0;
+            d.data.clear();
+            d.valid = false;
+            return false;
+        }
         // Final IC-9700 scope chunk carries the remaining waveform pixels.
         d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
+        m_expectedScopeSequences[assemblyIndex] = 0;
         ret = true;
         qInfo(logSpectrumScope()).noquote()
             << "Spectrum seq" << sequence << "/" << sequenceMax << "(LAST) totalData:" << d.data.size()

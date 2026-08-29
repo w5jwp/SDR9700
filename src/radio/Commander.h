@@ -3,6 +3,7 @@
 #include "RadioCommander.h"
 
 #include <QElapsedTimer>
+#include <QTimer>
 #include <QVector>
 
 struct CommanderCorrelationDiagnostics
@@ -17,6 +18,15 @@ struct CommanderCorrelationDiagnostics
     quint64 rejectedAcknowledgements{0};
 };
 
+struct CommanderSchedulerDiagnostics
+{
+    qsizetype queuedCommands{0};
+    qsizetype highWaterMark{0};
+    quint64 coalescedCommands{0};
+    quint64 droppedCommands{0};
+    quint64 dispatchedCommands{0};
+};
+
 class Commander : public RadioCommander
 {
     Q_OBJECT
@@ -27,6 +37,7 @@ class Commander : public RadioCommander
     explicit Commander(quint8 guid[GUIDLEN], RadioCommander* parent = nullptr);
     ~Commander();
     CommanderCorrelationDiagnostics correlationDiagnostics() const;
+    CommanderSchedulerDiagnostics schedulerDiagnostics() const;
 
   public slots:
     void process() override;
@@ -42,6 +53,8 @@ class Commander : public RadioCommander
 
     void receiveCommand(Funcs func, QVariant value, uchar receiver) override;
     void receiveCommandNoReadback(Funcs func, QVariant value, uchar receiver);
+    void scheduleMeterRead(Funcs func, uchar receiver);
+    void scheduleStartupRead(Funcs func, uchar receiver);
     void discardPendingReplies(Funcs func);
     void readCurrentFrequencyAndMode();
     void setPttActive(bool active);
@@ -67,6 +80,23 @@ class Commander : public RadioCommander
 
     void commonSetup();
     void shutdownComm();
+
+    enum class ScheduledCommandClass
+    {
+        Meter,
+        StartupRead
+    };
+
+    struct ScheduledCommand
+    {
+        ScheduledCommandClass commandClass{ScheduledCommandClass::StartupRead};
+        Funcs func{funcNone};
+        uchar receiver{0};
+    };
+
+    void enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs func, uchar receiver);
+    void dispatchNextScheduledCommand();
+    void resetScheduledCommands();
 
     void parseData(const QByteArray& dataInput);
     void parseCommand(FrameOrigin origin);
@@ -161,11 +191,17 @@ class Commander : public RadioCommander
     QVector<PendingReply> m_pendingReplies;
     QElapsedTimer m_pendingCommandClock;
     CommanderCorrelationDiagnostics m_correlationDiagnostics;
+    QVector<ScheduledCommand> m_scheduledCommands;
+    QTimer* m_scheduledCommandTimer{nullptr};
+    CommanderSchedulerDiagnostics m_schedulerDiagnostics;
+    int m_consecutiveMeterDispatches{0};
     bool m_suppressReadbackForCurrentCommand{false};
     bool m_shutdownComplete{false};
 
     ScopeData mainScopeData;
     ScopeData subScopeData;
+    QElapsedTimer m_scopeAssemblyClocks[2];
+    quint8 m_expectedScopeSequences[2]{0, 0};
 
     QString ip;
     int cport{0};

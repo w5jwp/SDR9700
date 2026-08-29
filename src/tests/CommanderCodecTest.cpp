@@ -35,7 +35,10 @@ class CommanderCodecTest : public QObject
     void discardsPendingRepliesByCanonicalFamily();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
+    void rejectsBrokenAndExpiredSpectrumAssemblies();
     void parserToleratesDeterministicArbitraryInput();
+    void schedulerCoalescesAndBoundsReads();
+    void schedulerMakesStartupProgressUnderMeterPressure();
 
   private:
     Commander m_commander;
@@ -45,9 +48,47 @@ void CommanderCodecTest::init()
 {
     m_commander.m_pendingReplies.clear();
     m_commander.m_correlationDiagnostics = {};
+    m_commander.resetScheduledCommands();
+    m_commander.m_schedulerDiagnostics = {};
+    m_commander.m_shutdownComplete = false;
     sdr9700::populateRadioCapabilities(m_commander.radioCaps);
     m_commander.haveRadioCaps = true;
     m_commander.setCIVAddr(0xA2);
+}
+
+void CommanderCodecTest::schedulerCoalescesAndBoundsReads()
+{
+    for (int i = 0; i < 100; ++i)
+    {
+        m_commander.scheduleMeterRead(funcSMeter, 0);
+    }
+    QCOMPARE(m_commander.m_scheduledCommands.size(), 1);
+    QCOMPARE(m_commander.schedulerDiagnostics().coalescedCommands, quint64(99));
+
+    for (int i = 0; i < 100; ++i)
+    {
+        m_commander.scheduleStartupRead(funcRfGain, static_cast<uchar>(i));
+    }
+    QCOMPARE(m_commander.m_scheduledCommands.size(), qsizetype(64));
+    QVERIFY(m_commander.schedulerDiagnostics().droppedCommands > 0);
+    QCOMPARE(m_commander.schedulerDiagnostics().highWaterMark, qsizetype(64));
+}
+
+void CommanderCodecTest::schedulerMakesStartupProgressUnderMeterPressure()
+{
+    m_commander.scheduleMeterRead(funcSMeter, 0);
+    m_commander.scheduleMeterRead(funcSWRMeter, 0);
+    m_commander.scheduleMeterRead(funcPowerMeter, 0);
+    m_commander.scheduleMeterRead(funcALCMeter, 0);
+    m_commander.scheduleStartupRead(funcRfGain, 0);
+
+    m_commander.m_consecutiveMeterDispatches = 3;
+    m_commander.dispatchNextScheduledCommand();
+
+    QCOMPARE(m_commander.m_scheduledCommands.size(), 4);
+    QVERIFY(std::none_of(m_commander.m_scheduledCommands.cbegin(), m_commander.m_scheduledCommands.cend(),
+                         [](const Commander::ScheduledCommand& command) { return command.func == funcRfGain; }));
+    QCOMPARE(m_commander.m_consecutiveMeterDispatches, 0);
 }
 
 void CommanderCodecTest::correlatesEquivalentFrequencyAndModeReplyCommands()
@@ -403,6 +444,33 @@ void CommanderCodecTest::assemblesMultiPacketSpectrum()
     QCOMPARE(scope.endFreq, 148.0);
     QCOMPARE(scope.data, QByteArray::fromHex("aabbccdd"));
     QVERIFY(scope.valid);
+}
+
+void CommanderCodecTest::rejectsBrokenAndExpiredSpectrumAssemblies()
+{
+    m_commander.radioCaps.spectSeqMax = 3;
+    m_commander.radioCaps.spectLenMax = 8;
+
+    Frequency start;
+    start.Hz = 144000000;
+    Frequency end;
+    end.Hz = 148000000;
+    const QByteArray first = QByteArray::fromHex("010301") + m_commander.makeFreqPayload(start) +
+                             m_commander.makeFreqPayload(end) + QByteArray::fromHex("0011");
+
+    ScopeData scope;
+    m_commander.payloadIn = first;
+    QVERIFY(!m_commander.parseSpectrum(scope, 0));
+    m_commander.payloadIn = QByteArray::fromHex("0303ccdd");
+    QVERIFY(!m_commander.parseSpectrum(scope, 0));
+    QVERIFY(scope.data.isEmpty());
+
+    m_commander.payloadIn = first;
+    QVERIFY(!m_commander.parseSpectrum(scope, 0));
+    QTest::qWait(275);
+    m_commander.payloadIn = QByteArray::fromHex("0203aabb");
+    QVERIFY(!m_commander.parseSpectrum(scope, 0));
+    QVERIFY(scope.data.isEmpty());
 }
 
 void CommanderCodecTest::parserToleratesDeterministicArbitraryInput()
