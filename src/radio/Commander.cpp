@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "RadioCapabilities.h"
 #include "RadioIdentities.h"
@@ -17,6 +18,9 @@
 namespace
 {
 constexpr qint64 kPendingReplyLifetimeMs = 5000;
+constexpr qint64 kResolvedReplyDrainMs = 50;
+constexpr qint64 kAbandonedReplyDrainMs = 500;
+constexpr qsizetype kMaxDeferredReplyReads = 64;
 // Startup status reads are already bounded and coalesced, so a 10 ms cadence
 // keeps visible controls responsive without restoring the former unpaced burst.
 constexpr int kScheduledCommandIntervalMs = 10;
@@ -53,6 +57,23 @@ bool replyIdentifiesReceiver(Funcs func)
     return func == funcSelectedFreq || func == funcSelectedMode || func == funcUnselectedFreq ||
            func == funcUnselectedMode;
 }
+
+bool commandExpectsCorrelatedReply(Funcs func)
+{
+    switch (func)
+    {
+    case funcVFOASelect:
+    case funcVFOBSelect:
+    case funcVFOMainSelect:
+    case funcVFOSubSelect:
+        // The IC-9700 does not provide a useful value reply for VFO-select.
+        // These commands update local routing state and must not occupy the
+        // receiver-less reply gate until an unrelated frame expires them.
+        return false;
+    default:
+        return true;
+    }
+}
 } // namespace
 
 Commander::Commander(RadioCommander* parent) : RadioCommander(parent)
@@ -61,6 +82,9 @@ Commander::Commander(RadioCommander* parent) : RadioCommander(parent)
     m_scheduledCommandTimer->setSingleShot(true);
     m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
     connect(m_scheduledCommandTimer, &QTimer::timeout, this, &Commander::dispatchNextScheduledCommand);
+    m_replyDrainTimer = new QTimer(this);
+    m_replyDrainTimer->setSingleShot(true);
+    connect(m_replyDrainTimer, &QTimer::timeout, this, &Commander::dispatchDeferredReplyReads);
     qInfo(logRadio()).noquote() << "creating instance of Commander()";
 }
 
@@ -73,6 +97,9 @@ Commander::Commander(quint8 guid[GUIDLEN], RadioCommander* parent) : RadioComman
     m_scheduledCommandTimer->setSingleShot(true);
     m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
     connect(m_scheduledCommandTimer, &QTimer::timeout, this, &Commander::dispatchNextScheduledCommand);
+    m_replyDrainTimer = new QTimer(this);
+    m_replyDrainTimer->setSingleShot(true);
+    connect(m_replyDrainTimer, &QTimer::timeout, this, &Commander::dispatchDeferredReplyReads);
 }
 
 Commander::~Commander()
@@ -201,6 +228,9 @@ void Commander::shutdownComm()
         queue->resetSessionState();
     }
     m_pendingReplies.clear();
+    m_deferredReplyReads.clear();
+    m_replyFamilyDrains.clear();
+    m_replyDrainTimer->stop();
     resetScheduledCommands();
     m_expectedScopeSequences[0] = 0;
     m_expectedScopeSequences[1] = 0;
@@ -219,6 +249,9 @@ void Commander::commonSetup()
     lookingForRadio = true;
     foundRadio = false;
     m_pendingReplies.clear();
+    m_deferredReplyReads.clear();
+    m_replyFamilyDrains.clear();
+    m_replyDrainTimer->stop();
     m_correlationDiagnostics = {};
     resetScheduledCommands();
     m_schedulerDiagnostics = {};
@@ -418,6 +451,7 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
             *receiver = m_pendingReplies.at(i).receiver;
             m_pendingReplies.removeAt(i);
             m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
+            beginReplyFamilyDrain(func, kResolvedReplyDrainMs);
             return true;
         }
     }
@@ -428,10 +462,15 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
 
 void Commander::discardPendingReplies(Funcs func)
 {
+    const qsizetype previousSize = m_pendingReplies.size();
     m_pendingReplies.erase(std::remove_if(m_pendingReplies.begin(), m_pendingReplies.end(),
                                           [func](const PendingReply& reply) { return repliesMatch(reply.func, func); }),
                            m_pendingReplies.end());
     m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
+    if (m_pendingReplies.size() != previousSize)
+    {
+        beginReplyFamilyDrain(func, kAbandonedReplyDrainMs);
+    }
 }
 
 void Commander::discardExpiredPendingReplies()
@@ -442,13 +481,126 @@ void Commander::discardExpiredPendingReplies()
     // confidently to MAIN or SUB. Discarding stale hints is safer than applying
     // an unsolicited update to a receiver selected several seconds earlier.
     const qsizetype previousSize = m_pendingReplies.size();
+    QVector<Funcs> expiredFamilies;
     m_pendingReplies.erase(std::remove_if(m_pendingReplies.begin(), m_pendingReplies.end(),
-                                          [oldestAllowed](const PendingReply& reply)
-                                          { return reply.createdAtMs < oldestAllowed; }),
+                                          [oldestAllowed, &expiredFamilies](const PendingReply& reply)
+                                          {
+                                              if (reply.createdAtMs >= oldestAllowed)
+                                              {
+                                                  return false;
+                                              }
+                                              expiredFamilies.append(reply.func);
+                                              return true;
+                                          }),
                            m_pendingReplies.end());
     const qsizetype expired = previousSize - m_pendingReplies.size();
     m_correlationDiagnostics.pendingReplyExpirations += expired;
     m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
+    for (const Funcs func : std::as_const(expiredFamilies))
+    {
+        beginReplyFamilyDrain(func, kAbandonedReplyDrainMs);
+    }
+}
+
+bool Commander::replyFamilyBlocked(Funcs func) const
+{
+    const Funcs canonical = canonicalReplyFunc(func);
+    const bool live =
+        std::any_of(m_pendingReplies.cbegin(), m_pendingReplies.cend(),
+                    [canonical](const PendingReply& reply) { return canonicalReplyFunc(reply.func) == canonical; });
+    if (live)
+    {
+        return true;
+    }
+    const qint64 now = m_pendingCommandClock.elapsed();
+    return std::any_of(m_replyFamilyDrains.cbegin(), m_replyFamilyDrains.cend(),
+                       [canonical, now](const ReplyFamilyDrain& drain)
+                       { return canonicalReplyFunc(drain.func) == canonical && drain.untilMs > now; });
+}
+
+bool Commander::replyFamilyDraining(Funcs func) const
+{
+    const Funcs canonical = canonicalReplyFunc(func);
+    const qint64 now = m_pendingCommandClock.elapsed();
+    return std::any_of(m_replyFamilyDrains.cbegin(), m_replyFamilyDrains.cend(),
+                       [canonical, now](const ReplyFamilyDrain& drain)
+                       { return canonicalReplyFunc(drain.func) == canonical && drain.untilMs > now; });
+}
+
+bool Commander::deferReplyReadIfBlocked(Funcs func, uchar receiver)
+{
+    if (!replyFamilyBlocked(func))
+    {
+        return false;
+    }
+    const auto duplicate = std::find_if(m_deferredReplyReads.cbegin(), m_deferredReplyReads.cend(),
+                                        [func, receiver](const DeferredReplyRead& read)
+                                        { return read.func == func && read.receiver == receiver; });
+    if (duplicate != m_deferredReplyReads.cend())
+    {
+        ++m_correlationDiagnostics.coalescedReplyReads;
+        return true;
+    }
+    if (m_deferredReplyReads.size() >= kMaxDeferredReplyReads)
+    {
+        ++m_correlationDiagnostics.droppedReplyReads;
+        qWarning(logRadio()).noquote().nospace()
+            << "CI-V deferred reply-read queue full depth=" << m_deferredReplyReads.size()
+            << " dropping=" << funcString[func] << " receiver=" << receiver;
+        return true;
+    }
+    m_deferredReplyReads.append({func, receiver});
+    ++m_correlationDiagnostics.deferredReplyReads;
+    return true;
+}
+
+void Commander::beginReplyFamilyDrain(Funcs func, qint64 durationMs)
+{
+    const Funcs canonical = canonicalReplyFunc(func);
+    const qint64 deadline = m_pendingCommandClock.elapsed() + durationMs;
+    auto drain =
+        std::find_if(m_replyFamilyDrains.begin(), m_replyFamilyDrains.end(),
+                     [canonical](const ReplyFamilyDrain& item) { return canonicalReplyFunc(item.func) == canonical; });
+    if (drain == m_replyFamilyDrains.end())
+    {
+        m_replyFamilyDrains.append({canonical, deadline});
+    }
+    else
+    {
+        drain->untilMs = std::max(drain->untilMs, deadline);
+    }
+    m_replyDrainTimer->start(static_cast<int>(durationMs));
+}
+
+void Commander::dispatchDeferredReplyReads()
+{
+    const qint64 now = m_pendingCommandClock.elapsed();
+    m_replyFamilyDrains.erase(std::remove_if(m_replyFamilyDrains.begin(), m_replyFamilyDrains.end(),
+                                             [now](const ReplyFamilyDrain& drain) { return drain.untilMs <= now; }),
+                              m_replyFamilyDrains.end());
+
+    for (qsizetype index = 0; index < m_deferredReplyReads.size(); ++index)
+    {
+        const DeferredReplyRead read = m_deferredReplyReads.at(index);
+        if (replyFamilyBlocked(read.func))
+        {
+            continue;
+        }
+        m_deferredReplyReads.removeAt(index);
+        const vfo_t targetVfo = read.receiver == 1 ? vfoSub : vfoMain;
+        receiveCommand(funcSelectVFO, QVariant::fromValue(targetVfo), 0);
+        receiveCommand(read.func, QVariant(), read.receiver);
+        if (targetVfo == vfoSub)
+        {
+            receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+        }
+        break;
+    }
+
+    if (!m_deferredReplyReads.isEmpty())
+    {
+        m_replyDrainTimer->start(static_cast<int>(kResolvedReplyDrainMs));
+    }
 }
 
 CommanderCorrelationDiagnostics Commander::correlationDiagnostics() const
@@ -2080,6 +2232,13 @@ void Commander::parseCommand(FrameOrigin origin)
         value.isValid())
     {
         ++m_correlationDiagnostics.unmatchedReplyFrames;
+        if (replyFamilyDraining(correlationFunc))
+        {
+            ++m_correlationDiagnostics.drainedReplyFrames;
+            qWarning(logRadio()).noquote().nospace()
+                << "Discarding unattributed receiver-less CI-V reply func=" << funcString[correlationFunc];
+            return;
+        }
     }
 
     if (value.isValid() && queue != nullptr)
@@ -3896,6 +4055,15 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
     cmd = getCommand(func, payload, val, receiver);
     if (cmd.cmd != funcNone)
     {
+        if (!value.isValid() && cmd.getCmd && commandExpectsCorrelatedReply(func) && !radioCaps.hasCommand29 &&
+            !replyIdentifiesReceiver(func))
+        {
+            discardExpiredPendingReplies();
+            if (deferReplyReadIfBlocked(func, receiver))
+            {
+                return;
+            }
+        }
         // Receiver-scoped commands carry the receiver byte before command data.
         switch (cmd.cmd)
         {
@@ -3933,7 +4101,8 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
                 return;
             }
         }
-        if (!value.isValid() && cmd.getCmd && !radioCaps.hasCommand29 && !replyIdentifiesReceiver(func))
+        if (!value.isValid() && cmd.getCmd && commandExpectsCorrelatedReply(func) && !radioCaps.hasCommand29 &&
+            !replyIdentifiesReceiver(func))
         {
             rememberPendingReply(func, receiver);
         }

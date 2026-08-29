@@ -33,6 +33,8 @@ class CommanderCodecTest : public QObject
     void malformedReplyDoesNotConsumePendingReply();
     void correlatesEquivalentFrequencyAndModeReplyCommands();
     void discardsPendingRepliesByCanonicalFamily();
+    void serializesReceiverlessReadsByCanonicalFamily();
+    void discardsLateReplyDuringFamilyDrain();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
     void rejectsBrokenAndExpiredSpectrumAssemblies();
@@ -47,6 +49,9 @@ class CommanderCodecTest : public QObject
 void CommanderCodecTest::init()
 {
     m_commander.m_pendingReplies.clear();
+    m_commander.m_deferredReplyReads.clear();
+    m_commander.m_replyFamilyDrains.clear();
+    m_commander.m_replyDrainTimer->stop();
     m_commander.m_correlationDiagnostics = {};
     m_commander.resetScheduledCommands();
     m_commander.m_schedulerDiagnostics = {};
@@ -113,8 +118,67 @@ void CommanderCodecTest::discardsPendingRepliesByCanonicalFamily()
 
     uchar receiver = 0;
     QVERIFY(!m_commander.takePendingReplyReceiver(funcFreqTR, &receiver));
+    QVERIFY(m_commander.replyFamilyDraining(funcFreqGet));
     QVERIFY(m_commander.takePendingReplyReceiver(funcSelectedMode, &receiver));
     QCOMPARE(receiver, uchar(0));
+}
+
+void CommanderCodecTest::serializesReceiverlessReadsByCanonicalFamily()
+{
+    m_commander.m_pendingCommandClock.restart();
+    m_commander.rememberPendingReply(funcFreqGet, 0);
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+
+    QVERIFY(m_commander.deferReplyReadIfBlocked(funcFreqGet, 1));
+    QVERIFY(m_commander.deferReplyReadIfBlocked(funcFreqGet, 1));
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), 1);
+    QCOMPARE(m_commander.correlationDiagnostics().deferredReplyReads, quint64(1));
+    QCOMPARE(m_commander.correlationDiagnostics().coalescedReplyReads, quint64(1));
+
+    uchar receiver = 0xff;
+    QVERIFY(m_commander.takePendingReplyReceiver(funcSelectedFreq, &receiver));
+    QCOMPARE(receiver, uchar(0));
+    QVERIFY(m_commander.replyFamilyBlocked(funcFreq));
+
+    QTRY_COMPARE_WITH_TIMEOUT(m_commander.m_pendingReplies.size(), 1, 250);
+    QCOMPARE(m_commander.m_pendingReplies.constFirst().receiver, uchar(1));
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), 0);
+    QCOMPARE(wireSpy.count(), 3);
+    QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07d1")));
+    QVERIFY(wireSpy.at(1).at(0).toByteArray().contains(QByteArray::fromHex("03")));
+    QVERIFY(wireSpy.at(2).at(0).toByteArray().contains(QByteArray::fromHex("07d0")));
+
+    m_commander.m_pendingReplies.clear();
+    m_commander.m_replyFamilyDrains.clear();
+    m_commander.rememberPendingReply(funcModeGet, 0);
+    for (int receiverIndex = 0; receiverIndex < 70; ++receiverIndex)
+    {
+        if (receiverIndex >= 64)
+        {
+            QTest::ignoreMessage(QtWarningMsg,
+                                 QRegularExpression(QStringLiteral("CI-V deferred reply-read queue full.*")));
+        }
+        m_commander.deferReplyReadIfBlocked(funcModeGet, static_cast<uchar>(receiverIndex));
+    }
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), qsizetype(64));
+    QCOMPARE(m_commander.correlationDiagnostics().droppedReplyReads, quint64(6));
+}
+
+void CommanderCodecTest::discardsLateReplyDuringFamilyDrain()
+{
+    m_commander.m_pendingCommandClock.restart();
+    m_commander.queue->resetSessionState();
+    m_commander.rememberPendingReply(funcFreqGet, 0);
+
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a2030052140600fd"));
+    QCOMPARE(m_commander.correlationDiagnostics().pendingReplies, qsizetype(0));
+
+    QSignalSpy cacheSpy(m_commander.queue, &CachingQueue::cacheUpdated);
+    QTest::ignoreMessage(QtWarningMsg,
+                         QRegularExpression(QStringLiteral("Discarding unattributed receiver-less CI-V reply.*")));
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a2030052140600fd"));
+    QCOMPARE(cacheSpy.count(), 0);
+    QCOMPARE(m_commander.correlationDiagnostics().drainedReplyFrames, quint64(1));
 }
 
 void CommanderCodecTest::encodesAndDecodesPackedBcd()

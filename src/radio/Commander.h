@@ -16,6 +16,10 @@ struct CommanderCorrelationDiagnostics
     quint64 ambiguousUnsolicitedFrames{0};
     quint64 acceptedAcknowledgements{0};
     quint64 rejectedAcknowledgements{0};
+    quint64 deferredReplyReads{0};
+    quint64 coalescedReplyReads{0};
+    quint64 droppedReplyReads{0};
+    quint64 drainedReplyFrames{0};
 };
 
 struct CommanderSchedulerDiagnostics
@@ -145,6 +149,11 @@ class Commander : public RadioCommander
     bool pendingReplyReceiver(Funcs func, uchar* receiver);
     bool takePendingReplyReceiver(Funcs func, uchar* receiver);
     void discardExpiredPendingReplies();
+    bool deferReplyReadIfBlocked(Funcs func, uchar receiver);
+    void beginReplyFamilyDrain(Funcs func, qint64 durationMs);
+    void dispatchDeferredReplyReads();
+    bool replyFamilyBlocked(Funcs func) const;
+    bool replyFamilyDraining(Funcs func) const;
 
     QByteArray getLANAddr();
     QByteArray getACCAddr(quint8 ab);
@@ -189,6 +198,19 @@ class Commander : public RadioCommander
         qint64 createdAtMs{0};
     };
     QVector<PendingReply> m_pendingReplies;
+    struct DeferredReplyRead
+    {
+        Funcs func{funcNone};
+        uchar receiver{0};
+    };
+    struct ReplyFamilyDrain
+    {
+        Funcs func{funcNone};
+        qint64 untilMs{0};
+    };
+    QVector<DeferredReplyRead> m_deferredReplyReads;
+    QVector<ReplyFamilyDrain> m_replyFamilyDrains;
+    QTimer* m_replyDrainTimer{nullptr};
     QElapsedTimer m_pendingCommandClock;
     CommanderCorrelationDiagnostics m_correlationDiagnostics;
     QVector<ScheduledCommand> m_scheduledCommands;
