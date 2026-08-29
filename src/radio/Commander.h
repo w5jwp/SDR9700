@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RadioCommander.h"
+#include "CivRttEstimator.h"
 
 #include <QElapsedTimer>
 #include <QTimer>
@@ -20,6 +21,9 @@ struct CommanderCorrelationDiagnostics
     quint64 coalescedReplyReads{0};
     quint64 droppedReplyReads{0};
     quint64 drainedReplyFrames{0};
+    qint64 resolvedReplyDrainMs{0};
+    qint64 abandonedReplyDrainMs{0};
+    quint64 rttSampleCount{0};
 };
 
 struct CommanderSchedulerDiagnostics
@@ -211,6 +215,7 @@ class Commander : public RadioCommander
     QVector<DeferredReplyRead> m_deferredReplyReads;
     QVector<ReplyFamilyDrain> m_replyFamilyDrains;
     QTimer* m_replyDrainTimer{nullptr};
+    CivRttEstimator m_rttEstimator;
     QElapsedTimer m_pendingCommandClock;
     CommanderCorrelationDiagnostics m_correlationDiagnostics;
     QVector<ScheduledCommand> m_scheduledCommands;

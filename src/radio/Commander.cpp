@@ -18,8 +18,6 @@
 namespace
 {
 constexpr qint64 kPendingReplyLifetimeMs = 5000;
-constexpr qint64 kResolvedReplyDrainMs = 50;
-constexpr qint64 kAbandonedReplyDrainMs = 500;
 constexpr qsizetype kMaxDeferredReplyReads = 64;
 // Startup status reads are already bounded and coalesced, so a 10 ms cadence
 // keeps visible controls responsive without restoring the former unpaced burst.
@@ -150,6 +148,8 @@ void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, 
     connect(udp, &UdpHandler::haveBaudRate, this, &Commander::receiveBaudRate);
     connect(udp, &UdpHandler::haveNetworkError, this, &Commander::handlePortError);
     connect(udp, &UdpHandler::haveNetworkStatus, this, &Commander::handleStatusUpdate);
+    connect(udp, &UdpHandler::haveNetworkStatus, this,
+            [this](const networkStatus& status) { m_rttEstimator.observe(status.networkLatency); });
     connect(udp, &UdpHandler::sessionHeartbeat, this, &RadioCommander::haveSessionHeartbeat);
     connect(udp, &UdpHandler::haveNetworkAudioLevels, this, &Commander::handleNetworkAudioLevels);
     connect(udp, &UdpHandler::requestRadioSelection, this, &Commander::radioSelection);
@@ -231,6 +231,7 @@ void Commander::shutdownComm()
     m_deferredReplyReads.clear();
     m_replyFamilyDrains.clear();
     m_replyDrainTimer->stop();
+    m_rttEstimator.reset();
     resetScheduledCommands();
     m_expectedScopeSequences[0] = 0;
     m_expectedScopeSequences[1] = 0;
@@ -252,6 +253,7 @@ void Commander::commonSetup()
     m_deferredReplyReads.clear();
     m_replyFamilyDrains.clear();
     m_replyDrainTimer->stop();
+    m_rttEstimator.reset();
     m_correlationDiagnostics = {};
     resetScheduledCommands();
     m_schedulerDiagnostics = {};
@@ -451,7 +453,7 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
             *receiver = m_pendingReplies.at(i).receiver;
             m_pendingReplies.removeAt(i);
             m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
-            beginReplyFamilyDrain(func, kResolvedReplyDrainMs);
+            beginReplyFamilyDrain(func, m_rttEstimator.resolvedDrainMs());
             return true;
         }
     }
@@ -469,7 +471,7 @@ void Commander::discardPendingReplies(Funcs func)
     m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
     if (m_pendingReplies.size() != previousSize)
     {
-        beginReplyFamilyDrain(func, kAbandonedReplyDrainMs);
+        beginReplyFamilyDrain(func, m_rttEstimator.abandonedDrainMs());
     }
 }
 
@@ -498,7 +500,7 @@ void Commander::discardExpiredPendingReplies()
     m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
     for (const Funcs func : std::as_const(expiredFamilies))
     {
-        beginReplyFamilyDrain(func, kAbandonedReplyDrainMs);
+        beginReplyFamilyDrain(func, m_rttEstimator.abandonedDrainMs());
     }
 }
 
@@ -599,7 +601,7 @@ void Commander::dispatchDeferredReplyReads()
 
     if (!m_deferredReplyReads.isEmpty())
     {
-        m_replyDrainTimer->start(static_cast<int>(kResolvedReplyDrainMs));
+        m_replyDrainTimer->start(static_cast<int>(m_rttEstimator.resolvedDrainMs()));
     }
 }
 
@@ -607,6 +609,9 @@ CommanderCorrelationDiagnostics Commander::correlationDiagnostics() const
 {
     CommanderCorrelationDiagnostics diagnostics = m_correlationDiagnostics;
     diagnostics.pendingReplies = m_pendingReplies.size();
+    diagnostics.resolvedReplyDrainMs = m_rttEstimator.resolvedDrainMs();
+    diagnostics.abandonedReplyDrainMs = m_rttEstimator.abandonedDrainMs();
+    diagnostics.rttSampleCount = m_rttEstimator.sampleCount();
     return diagnostics;
 }
 

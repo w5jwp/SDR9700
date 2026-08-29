@@ -35,6 +35,7 @@ class CommanderCodecTest : public QObject
     void discardsPendingRepliesByCanonicalFamily();
     void serializesReceiverlessReadsByCanonicalFamily();
     void discardsLateReplyDuringFamilyDrain();
+    void adaptsReplyDrainWindowsToMeasuredRtt();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
     void rejectsBrokenAndExpiredSpectrumAssemblies();
@@ -179,6 +180,39 @@ void CommanderCodecTest::discardsLateReplyDuringFamilyDrain()
     m_commander.handleNewData(QByteArray::fromHex("fefee1a2030052140600fd"));
     QCOMPARE(cacheSpy.count(), 0);
     QCOMPARE(m_commander.correlationDiagnostics().drainedReplyFrames, quint64(1));
+}
+
+void CommanderCodecTest::adaptsReplyDrainWindowsToMeasuredRtt()
+{
+    CivRttEstimator estimator;
+    QCOMPARE(estimator.resolvedDrainMs(), qint64(50));
+    QCOMPARE(estimator.abandonedDrainMs(), qint64(500));
+
+    estimator.observe(40);
+    QCOMPARE(estimator.sampleCount(), quint64(1));
+    QCOMPARE(estimator.resolvedDrainMs(), qint64(60));
+    QCOMPARE(estimator.abandonedDrainMs(), qint64(120));
+
+    for (int sample = 0; sample < 20; ++sample)
+    {
+        estimator.observe(40);
+    }
+    const qint64 settledResolved = estimator.resolvedDrainMs();
+    const qint64 settledAbandoned = estimator.abandonedDrainMs();
+    QVERIFY(settledResolved < 60);
+    QCOMPARE(settledAbandoned, qint64(100));
+
+    estimator.observe(400);
+    QVERIFY(estimator.resolvedDrainMs() > settledResolved);
+    QVERIFY(estimator.abandonedDrainMs() > settledAbandoned);
+    QVERIFY(estimator.resolvedDrainMs() <= 250);
+    QVERIFY(estimator.abandonedDrainMs() <= 2000);
+
+    m_commander.m_rttEstimator = estimator;
+    const CommanderCorrelationDiagnostics diagnostics = m_commander.correlationDiagnostics();
+    QCOMPARE(diagnostics.rttSampleCount, estimator.sampleCount());
+    QCOMPARE(diagnostics.resolvedReplyDrainMs, estimator.resolvedDrainMs());
+    QCOMPARE(diagnostics.abandonedReplyDrainMs, estimator.abandonedDrainMs());
 }
 
 void CommanderCodecTest::encodesAndDecodesPackedBcd()
