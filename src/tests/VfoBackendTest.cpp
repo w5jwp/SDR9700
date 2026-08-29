@@ -212,6 +212,12 @@ void VfoBackendTest::receiverCommandRouteSelectsCommandsAndRestoresInOrder()
 
     events.clear();
     sdr9700::backend::routeVfoReceiverCommand(
+        Vfo::Sub, Vfo::Sub, [&events](Vfo) { events.append(QStringLiteral("select-sub")); },
+        [&events](uchar receiver) { events.append(QStringLiteral("command-%1").arg(receiver)); });
+    QCOMPARE(events, QStringList({QStringLiteral("select-sub"), QStringLiteral("command-1")}));
+
+    events.clear();
+    sdr9700::backend::routeVfoReceiverCommand(
         Vfo::Main, Vfo::Main, [&events](Vfo) { events.append(QStringLiteral("select-main")); },
         [&events](uchar receiver) { events.append(QStringLiteral("command-%1").arg(receiver)); });
     QCOMPARE(events, QStringList({QStringLiteral("select-main"), QStringLiteral("command-0")}));

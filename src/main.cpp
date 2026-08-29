@@ -524,6 +524,13 @@ int main(int argc, char* argv[])
     window.reset();
     model.reset();
     CachingQueue::shutdownInstance();
+    flushLogOutput();
+
+    // Qt can emit messages while QApplication and its plugin loaders are
+    // destroyed. Stop routing those late messages through application-owned
+    // logging state, whose static destruction order relative to Qt is not
+    // defined.
+    qInstallMessageHandler(nullptr);
 
     return exitCode;
 }

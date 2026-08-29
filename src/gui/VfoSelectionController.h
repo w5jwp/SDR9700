@@ -22,6 +22,7 @@ class VfoSelectionController : public QObject
     VfoSelectionPanel* panel() const { return m_panel; }
     Vfo selectedVfo() const { return m_selectedVfo; }
     void setControlsEnabled(bool enabled);
+    void setReceiverContextReady(bool ready);
     void runWhenSelected(Vfo vfo, std::function<void()> action);
     void completeExchangeScopeSync();
 

@@ -20,8 +20,96 @@ class RadioRouterTest : public QObject
     void routesConfirmedVfoSelectionState();
     void routesAllSimpleControlBranches();
     void routesBatchInOrder();
+    void coalescesReplaceableBacklogAcrossOneQueuedDrain();
+    void preservesOrderingAcrossLosslessBarriers();
+    void rejectsBatchesFromCancelledSessions();
+    void routesOnlyConfirmedScopeReceiver();
     void ignoresUnknownCommands();
 };
+
+void RadioRouterTest::coalescesReplaceableBacklogAcrossOneQueuedDrain()
+{
+    RadioRouter router;
+    QSignalSpy meterSpy(&router, &RadioRouter::smeterChanged);
+
+    for (int value = 0; value < 100; ++value)
+    {
+        router.enqueueBatch({CacheItem(funcSMeter, value, 0)});
+    }
+
+    QCOMPARE(router.queueDiagnostics().pendingItems, qsizetype(1));
+    QCOMPARE(router.queueDiagnostics().coalescedItems, quint64(99));
+    QTRY_COMPARE(meterSpy.size(), 1);
+    QCOMPARE(meterSpy.at(0).at(0).toInt(), 99);
+    QCOMPARE(router.queueDiagnostics().drainEvents, quint64(1));
+}
+
+void RadioRouterTest::preservesOrderingAcrossLosslessBarriers()
+{
+    RadioRouter router;
+    QVector<QString> order;
+    connect(&router, &RadioRouter::smeterChanged, this,
+            [&order](int value) { order.append(QStringLiteral("meter:%1").arg(value)); });
+    connect(&router, &RadioRouter::radioMemoryReceived, this,
+            [&order](const MemoryType&) { order.append(QStringLiteral("memory")); });
+
+    MemoryType memory;
+    router.enqueueBatch({CacheItem(funcSMeter, 10, 0), CacheItem(funcSMeter, 20, 0),
+                         CacheItem(funcMemoryContents, QVariant::fromValue(memory), 0), CacheItem(funcSMeter, 30, 0),
+                         CacheItem(funcSMeter, 40, 0)});
+
+    QTRY_COMPARE(order.size(), 3);
+    QCOMPARE(order,
+             QVector<QString>({QStringLiteral("meter:20"), QStringLiteral("memory"), QStringLiteral("meter:40")}));
+}
+
+void RadioRouterTest::rejectsBatchesFromCancelledSessions()
+{
+    RadioRouter router;
+    QSignalSpy meterSpy(&router, &RadioRouter::smeterChanged);
+    const quint64 oldSession = router.beginQueueSession();
+    router.enqueueBatch({CacheItem(funcSMeter, 10, 0)}, oldSession);
+    router.cancelQueueSession(oldSession);
+
+    const quint64 newSession = router.beginQueueSession();
+    router.enqueueBatch({CacheItem(funcSMeter, 20, 0)}, oldSession);
+    router.enqueueBatch({CacheItem(funcSMeter, 30, 0)}, newSession);
+
+    QTRY_COMPARE(meterSpy.size(), 1);
+    QCOMPARE(meterSpy.at(0).at(0).toInt(), 30);
+}
+
+void RadioRouterTest::routesOnlyConfirmedScopeReceiver()
+{
+    RadioRouter router;
+    QSignalSpy scopeSpy(&router, &RadioRouter::scopeDataReady);
+    ScopeData mainFrame;
+    mainFrame.valid = true;
+    mainFrame.receiver = 0;
+    mainFrame.data = QByteArrayLiteral("main");
+    ScopeData subFrame = mainFrame;
+    subFrame.receiver = 1;
+    subFrame.data = QByteArrayLiteral("sub");
+
+    router.route(CacheItem(funcScopeWaveData, QVariant::fromValue(subFrame), 1));
+    router.route(CacheItem(funcScopeWaveData, QVariant::fromValue(mainFrame), 0));
+    QCOMPARE(scopeSpy.size(), 1);
+    QCOMPARE(scopeSpy.at(0).at(0).value<ScopeData>().receiver, uchar(0));
+
+    router.route(CacheItem(funcScopeMainSub, true, 0));
+    router.route(CacheItem(funcScopeWaveData, QVariant::fromValue(mainFrame), 0));
+    router.route(CacheItem(funcScopeWaveData, QVariant::fromValue(subFrame), 1));
+    QCOMPARE(scopeSpy.size(), 2);
+    QCOMPARE(scopeSpy.at(1).at(0).value<ScopeData>().receiver, uchar(1));
+
+    RadioRouter queuedRouter;
+    QSignalSpy queuedScopeSpy(&queuedRouter, &RadioRouter::scopeDataReady);
+    queuedRouter.enqueueBatch({CacheItem(funcScopeWaveData, QVariant::fromValue(subFrame), 1)});
+    queuedRouter.enqueueBatch({CacheItem(funcScopeWaveData, QVariant::fromValue(mainFrame), 0)});
+    QCOMPARE(queuedRouter.queueDiagnostics().pendingItems, qsizetype(1));
+    QTRY_COMPARE(queuedScopeSpy.size(), 1);
+    QCOMPARE(queuedScopeSpy.at(0).at(0).value<ScopeData>().receiver, uchar(0));
+}
 
 void RadioRouterTest::routesOnlyMainReceiverFrequencyAndMode()
 {

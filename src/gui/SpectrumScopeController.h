@@ -27,6 +27,7 @@ class SpectrumScopeController : public QObject
     void onSpectrumClicked(double freqMhz);
     void onWheelStepRequested(int steps);
     void updateTuningStepSelector(int tuningStepHz);
+    bool interactionReady() const { return m_scopeFramesEnabled; }
 
   private:
     quint64 activeVfoFrequencyHz() const;
@@ -34,6 +35,7 @@ class SpectrumScopeController : public QObject
     void recenterActiveVfo(bool clearDisplay);
     void resetScopeFrameGate();
     void updateScopeFrameGate();
+    void updateInteractionLock();
     void tuneActiveVfo(quint64 hz) const;
     void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay,
                                    bool recenterDisplay);

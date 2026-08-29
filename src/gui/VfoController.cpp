@@ -264,6 +264,12 @@ void VfoController::setOperatingEnabled(bool enabled)
     updateDisplayEnabled();
 }
 
+void VfoController::setUserInteractionEnabled(bool enabled)
+{
+    m_userInteractionEnabled = enabled;
+    updateDisplayEnabled();
+}
+
 void VfoController::setSelected(bool selected)
 {
     m_display->setSelected(selected);
@@ -386,7 +392,7 @@ void VfoController::publishConfirmedState()
 
 void VfoController::updateDisplayEnabled()
 {
-    m_display->setOperatingEnabled(m_operatingEnabled && stateReady());
+    m_display->setOperatingEnabled(m_operatingEnabled && (!m_backend || m_userInteractionEnabled) && stateReady());
 }
 
 void VfoController::updateReceiverControlDisplay()

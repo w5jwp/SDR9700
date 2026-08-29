@@ -18,6 +18,7 @@ class SpectrumCanvasTest : public QObject
     void emitsFrequencyForClickWithoutDrag();
     void ignoresClicksOutsidePlotAndWhileLocked();
     void emitsWheelStepsAndHonorsInversion();
+    void configuresPeakHoldDuration();
     void paintsEmptyAndPopulatedData();
 };
 
@@ -116,6 +117,18 @@ void SpectrumCanvasTest::emitsWheelStepsAndHonorsInversion()
                          Qt::NoModifier, Qt::NoScrollPhase, false);
     QCoreApplication::sendEvent(&canvas, &inverted);
     QCOMPARE(wheelSpy.takeFirst().at(0).toInt(), -1);
+}
+
+void SpectrumCanvasTest::configuresPeakHoldDuration()
+{
+    SpectrumScopeCanvas canvas;
+    QCOMPARE(canvas.peakHoldDurationMs(), 2000);
+    canvas.setPeakHoldDurationMs(5000);
+    QCOMPARE(canvas.peakHoldDurationMs(), 5000);
+    canvas.setPeakHoldDurationMs(0);
+    QCOMPARE(canvas.peakHoldDurationMs(), 0);
+    canvas.setPeakHoldDurationMs(-1);
+    QCOMPARE(canvas.peakHoldDurationMs(), 0);
 }
 
 void SpectrumCanvasTest::paintsEmptyAndPopulatedData()

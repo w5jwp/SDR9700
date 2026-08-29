@@ -24,6 +24,7 @@ class VfoController : public QObject
     void setFrequencyHz(quint64 hz);
     void clearFrequency();
     void setOperatingEnabled(bool enabled);
+    void setUserInteractionEnabled(bool enabled);
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
     void captureExchangeableControlState();
@@ -95,6 +96,7 @@ class VfoController : public QObject
     bool m_compressorEnabled{false};
     QString m_mode;
     bool m_operatingEnabled{true};
+    bool m_userInteractionEnabled{false};
     bool m_initialStatePublished{false};
     QTimer m_initialPublishTimer;
     std::optional<ExchangeableControlState> m_capturedExchangeState;

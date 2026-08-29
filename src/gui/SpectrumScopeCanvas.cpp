@@ -14,8 +14,6 @@
 
 namespace
 {
-constexpr float kPeakDecayLevelPerSec = 25.0f;
-constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
 constexpr int kClickMoveTolerancePx = 6;
 constexpr int kLevelScaleTopInsetPx = 6;
 // Map the raw scope minimum to the clipped bottom edge. This suppresses the
@@ -70,17 +68,24 @@ SpectrumScopeCanvas::SpectrumScopeCanvas(QWidget* parent) : QWidget(parent)
     connect(&m_peakDecayTimer, &QTimer::timeout, this,
             [this]()
             {
-                if (m_peakHold.isEmpty())
+                if (m_peakHoldDurationMs <= 0 || m_peakHold.isEmpty() ||
+                    m_peakHoldTimestampsMs.size() != m_peakHold.size())
                 {
                     return;
                 }
+                const qint64 nowMs = m_peakClock.elapsed();
                 bool changed = false;
                 for (int i = 0; i < m_peakHold.size(); ++i)
                 {
-                    if (!m_spectrumBins.isEmpty() && i < m_spectrumBins.size() && m_peakHold[i] > m_spectrumBins[i])
+                    if (nowMs - m_peakHoldTimestampsMs[i] >= m_peakHoldDurationMs)
                     {
-                        m_peakHold[i] -= kPeakDecayPerTickLevel;
-                        changed = true;
+                        if (!m_spectrumBins.isEmpty() && i < m_spectrumBins.size() &&
+                            !qFuzzyCompare(m_peakHold[i], m_spectrumBins[i]))
+                        {
+                            m_peakHold[i] = m_spectrumBins[i];
+                            changed = true;
+                        }
+                        m_peakHoldTimestampsMs[i] = nowMs;
                     }
                 }
                 if (changed)
@@ -92,7 +97,7 @@ SpectrumScopeCanvas::SpectrumScopeCanvas(QWidget* parent) : QWidget(parent)
     m_repaintTimer.setSingleShot(true);
     m_repaintTimer.setInterval(16);
     connect(&m_repaintTimer, &QTimer::timeout, this, qOverload<>(&SpectrumScopeCanvas::update));
-    m_lastFrameTimer.start();
+    m_peakClock.start();
 }
 
 int SpectrumScopeCanvas::plotHeight() const
@@ -515,6 +520,24 @@ void SpectrumScopeCanvas::setInvertMouseWheel(bool invert)
     m_invertMouseWheel = invert;
 }
 
+void SpectrumScopeCanvas::setPeakHoldDurationMs(int durationMs)
+{
+    durationMs = qMax(0, durationMs);
+    if (m_peakHoldDurationMs == durationMs)
+    {
+        return;
+    }
+    m_peakHoldDurationMs = durationMs;
+    m_peakHold.clear();
+    m_peakHoldTimestampsMs.clear();
+    if (durationMs > 0 && !m_spectrumBins.isEmpty())
+    {
+        m_peakHold = m_spectrumBins;
+        m_peakHoldTimestampsMs.fill(m_peakClock.elapsed(), m_spectrumBins.size());
+    }
+    scheduleRepaint();
+}
+
 void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
     // Keep an owned copy for painting because the incoming QVector belongs to
@@ -528,17 +551,25 @@ void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outO
     std::copy(levels.cbegin(), levels.cend(), m_spectrumBins.begin());
     m_scopeOutOfRange = outOfRange;
 
-    if (m_peakHold.size() != levels.size())
+    if (m_peakHoldDurationMs <= 0)
+    {
+        m_peakHold.clear();
+        m_peakHoldTimestampsMs.clear();
+    }
+    else if (m_peakHold.size() != levels.size())
     {
         m_peakHold = levels;
+        m_peakHoldTimestampsMs.fill(m_peakClock.elapsed(), levels.size());
     }
     else
     {
+        const qint64 nowMs = m_peakClock.elapsed();
         for (int i = 0; i < levels.size(); ++i)
         {
             if (levels[i] > m_peakHold[i])
             {
                 m_peakHold[i] = levels[i];
+                m_peakHoldTimestampsMs[i] = nowMs;
             }
         }
     }
@@ -550,6 +581,7 @@ void SpectrumScopeCanvas::clearDisplay()
 {
     m_spectrumBins.clear();
     m_peakHold.clear();
+    m_peakHoldTimestampsMs.clear();
     m_scopeOutOfRange = false;
     scheduleRepaint();
 }

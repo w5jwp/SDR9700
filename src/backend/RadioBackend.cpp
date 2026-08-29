@@ -239,43 +239,8 @@ RadioBackend::RadioBackend(QObject* parent)
                         return;
                     }
 
-                    if (m_smeterPollSettlingSample)
-                    {
-                        // The IC-9700 can report one latched meter value from
-                        // the previously selected VFO. Suppress that sample and
-                        // read again after the receiver selection has settled.
-                        m_smeterPollSettlingSample = false;
-                        m_smeterPollPendingTicks = 0;
-                        QTimer::singleShot(
-                            50, this,
-                            [this, receiver]()
-                            {
-                                if (!m_smeterPollPending || m_smeterPollPendingReceiver != receiver ||
-                                    m_smeterPollSettlingSample)
-                                {
-                                    return;
-                                }
-                                invokeOnCurrentCommander(
-                                    [receiver](Commander* commandSession)
-                                    { commandSession->receiveCommand(funcSMeter, QVariant(), receiver); });
-                            });
-                        return;
-                    }
-
                     m_smeterPollPending = false;
                     m_smeterPollPendingTicks = 0;
-                    const Vfo restoreVfo = m_smeterRestoreVfo;
-                    const Vfo measuredVfo = receiver == kSubReceiver ? Vfo::Sub : Vfo::Main;
-                    if (measuredVfo != restoreVfo)
-                    {
-                        invokeOnCurrentCommander(
-                            [restoreVfo](Commander* commandSession)
-                            {
-                                commandSession->receiveCommand(
-                                    funcSelectVFO,
-                                    QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain), 0);
-                            });
-                    }
                 }
                 emit radioValueUpdated(func, value, receiver);
             });
@@ -331,23 +296,14 @@ RadioBackend::RadioBackend(QObject* parent)
                 }
 
                 const VfoStatePollItem item = kVfoStatePollItems[static_cast<std::size_t>(m_vfoStatePollPhase)];
-                const bool pollSub = m_dualWatchEnabled && m_vfoStatePollSubNext;
-                m_vfoStatePollSubNext = m_dualWatchEnabled && !m_vfoStatePollSubNext;
-
-                // A MAIN-only phase deliberately leaves the SUB slot idle. It
-                // preserves the alternating cadence instead of pulling the next
-                // receiver transaction forward into the same timer interval.
-                if (!pollSub || !item.mainOnly)
+                const Vfo targetVfo = m_activeVfo;
+                if (targetVfo == Vfo::Main || !item.mainOnly)
                 {
-                    const Vfo targetVfo = pollSub ? Vfo::Sub : Vfo::Main;
-                    routeVfoReceiverCommand(targetVfo, [item](Commander* commandSession, uchar receiver)
-                                            { commandSession->receiveCommand(item.func, QVariant(), receiver); });
+                    const uchar receiver = targetVfo == Vfo::Sub ? kSubReceiver : kMainReceiver;
+                    invokeOnCurrentCommander([item, receiver](Commander* commandSession)
+                                             { commandSession->receiveCommand(item.func, QVariant(), receiver); });
                 }
-
-                if (!m_dualWatchEnabled || pollSub)
-                {
-                    m_vfoStatePollPhase = (m_vfoStatePollPhase + 1) % static_cast<qsizetype>(kVfoStatePollItems.size());
-                }
+                m_vfoStatePollPhase = (m_vfoStatePollPhase + 1) % static_cast<qsizetype>(kVfoStatePollItems.size());
             });
 
     connect(m_radioRouter, &RadioRouter::modeReported, this,
@@ -707,30 +663,20 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
         QObject::disconnect(m_queueSendValuesConnection);
         m_queueSendValuesConnection = {};
     }
+    RadioRouter* router = m_radioRouter;
+    m_routerQueueSession = router->beginQueueSession();
+    const quint64 routerQueueSession = m_routerQueueSession;
     m_queueSendValuesConnection = connect(
-        q, &CachingQueue::sendValues, this,
-        [this, session, commandSession, sessionActive](const QVector<CacheItem>& items)
+        q, &CachingQueue::sendValues, router,
+        [router, sessionActive, routerQueueSession](const QVector<CacheItem>& items)
         {
-            if (!isCurrentSession(session, commandSession))
+            if (!sessionActive->load(std::memory_order_acquire))
             {
                 return;
             }
-            if (m_radioRouter)
-            {
-                RadioRouter* router = m_radioRouter;
-                QMetaObject::invokeMethod(
-                    router,
-                    [sessionActive, router, items]()
-                    {
-                        if (sessionActive->load(std::memory_order_acquire))
-                        {
-                            router->routeBatch(items);
-                        }
-                    },
-                    Qt::QueuedConnection);
-            }
+            router->enqueueBatch(items, routerQueueSession);
         },
-        Qt::AutoConnection);
+        Qt::DirectConnection);
 
     // IC-9700 default LAN ports: control=50001, serial=50002, audio=50003
     UdpConnectionSettings udpSettings;
@@ -897,6 +843,11 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
         QObject::disconnect(m_queueSendValuesConnection);
         m_queueSendValuesConnection = {};
     }
+    if (m_radioRouter && m_routerQueueSession != 0)
+    {
+        m_radioRouter->cancelQueueSession(m_routerQueueSession);
+        m_routerQueueSession = 0;
+    }
     if (m_pttReleaseDelayTimer)
     {
         m_pttReleaseDelayTimer->stop();
@@ -913,13 +864,9 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_pttState.reset();
     m_activeVfo = Vfo::Main;
     m_dualWatchEnabled = false;
-    m_smeterPollSubNext = false;
     m_vfoStatePollPhase = 0;
-    m_vfoStatePollSubNext = false;
     m_smeterPollPending = false;
-    m_smeterPollSettlingSample = false;
     m_smeterPollPendingTicks = 0;
-    m_smeterRestoreVfo = Vfo::Main;
     m_mainSubExchangePending = false;
     m_mainSubExchangeConfirmations = 0;
     if (m_mainSubExchangeRetryTimer)
@@ -1206,16 +1153,14 @@ void RadioBackend::setVfoFrequencyHz(Vfo vfo, quint64 hz)
     frequency.Hz = hz;
     frequency.MHzDouble = hz / 1e6;
     frequency.VFO = activeVFO;
-    invokeOnCurrentCommander(
-        [frequency](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
-            commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency), 1);
-            commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
-            commandSession->receiveCommand(funcModeGet, QVariant(), 1);
-            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-            commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-        });
+    routeVfoReceiverCommand(Vfo::Sub,
+                            [frequency](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcFreqGet, QVariant(), receiver);
+                                commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::requestVfoState(Vfo vfo)
@@ -2127,7 +2072,6 @@ void RadioBackend::updateReadyState()
             m_initialStateRetryTimer->stop();
         }
         m_vfoStatePollPhase = 0;
-        m_vfoStatePollSubNext = false;
         if (m_vfoStatePollTimer)
         {
             m_vfoStatePollTimer->start();
@@ -2511,42 +2455,21 @@ void RadioBackend::onLanReady()
                         return;
                     }
 
-                    const Vfo restoreVfo = m_smeterRestoreVfo;
-                    invokeOnCurrentCommander(
-                        [restoreVfo](Commander* commandSession)
-                        {
-                            commandSession->discardPendingReplies(funcSMeter);
-                            commandSession->receiveCommand(
-                                funcSelectVFO, QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain),
-                                0);
-                        });
+                    invokeOnCurrentCommander([](Commander* commandSession)
+                                             { commandSession->discardPendingReplies(funcSMeter); });
                     m_smeterPollPending = false;
-                    m_smeterPollSettlingSample = false;
                     m_smeterPollPendingTicks = 0;
-                    qWarning(logRadio()).noquote() << "S-meter poll timed out; receiver routing was reset";
+                    qWarning(logRadio()).noquote() << "S-meter poll timed out";
                     return;
                 }
 
-                const bool pollSub = m_dualWatchEnabled && m_smeterPollSubNext;
-                m_smeterPollSubNext = m_dualWatchEnabled && !m_smeterPollSubNext;
-                const Vfo restoreVfo = m_activeVfo;
+                const Vfo targetVfo = m_activeVfo;
+                const uchar receiver = targetVfo == Vfo::Sub ? kSubReceiver : kMainReceiver;
                 m_smeterPollPending = true;
-                m_smeterPollPendingReceiver = pollSub ? kSubReceiver : kMainReceiver;
-                m_smeterPollSettlingSample = (pollSub ? Vfo::Sub : Vfo::Main) != restoreVfo;
+                m_smeterPollPendingReceiver = receiver;
                 m_smeterPollPendingTicks = 0;
-                m_smeterRestoreVfo = restoreVfo;
-                invokeOnCurrentCommander(
-                    [pollSub, restoreVfo](Commander* commandSession)
-                    {
-                        const Vfo targetVfo = pollSub ? Vfo::Sub : Vfo::Main;
-                        const uchar receiver = pollSub ? kSubReceiver : kMainReceiver;
-                        if (targetVfo != restoreVfo)
-                        {
-                            commandSession->receiveCommand(funcSelectVFO,
-                                                           QVariant::fromValue<vfo_t>(pollSub ? vfoSub : vfoMain), 0);
-                        }
-                        commandSession->receiveCommand(funcSMeter, QVariant(), receiver);
-                    });
+                invokeOnCurrentCommander([receiver](Commander* commandSession)
+                                         { commandSession->receiveCommand(funcSMeter, QVariant(), receiver); });
             });
     m_smeterPollTimer->start();
 }

@@ -198,6 +198,11 @@ void VfoSelectionController::setControlsEnabled(bool enabled)
     m_panel->setEnabled(enabled);
 }
 
+void VfoSelectionController::setReceiverContextReady(bool ready)
+{
+    m_panel->setReceiverContextReady(ready);
+}
+
 void VfoSelectionController::reset()
 {
     m_selectedVfo = Vfo::Main;

@@ -100,7 +100,7 @@ void IcomRC28Controller::dispatchIcomRC28Action(const QString& action)
         return;
     }
 
-    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_vfo || !m_window->radioUiReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -123,7 +123,7 @@ void IcomRC28Controller::dispatchIcomRC28Action(const QString& action)
 
 void IcomRC28Controller::setIcomRC28Ptt(bool on)
 {
-    if (!m_window->m_vfo || !m_window->m_model->isReady())
+    if (!m_window->m_vfo || !m_window->m_model->isReady() || (on && !m_window->radioUiReady()))
     {
         return;
     }
@@ -186,7 +186,7 @@ void IcomRC28Controller::handleIcomRC28Tune(int steps)
 {
     qInfo(logIcomRC28()).noquote() << "Tune steps:" << steps;
 
-    if (!m_window->m_vfo || !m_window->m_model->isReady())
+    if (!m_window->m_vfo || !m_window->radioUiReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -245,7 +245,7 @@ void IcomRC28Controller::refreshIcomRC28EncoderSettings()
 
 void IcomRC28Controller::snapIcomRC28FrequencyToKhz()
 {
-    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_vfo || !m_window->radioUiReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -325,7 +325,7 @@ void IcomRC28Controller::handleIcomRC28Button(int button, int action)
         return;
     }
 
-    if (!rc28PttAllowed(m_window->m_vfo != nullptr, m_window->m_model->isReady(), m_window->m_controlsLocked))
+    if (!rc28PttAllowed(m_window->m_vfo != nullptr, m_window->radioUiReady(), m_window->m_controlsLocked))
     {
         return;
     }

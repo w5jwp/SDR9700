@@ -296,6 +296,38 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     spanSelector->setParent(spectrumToolbar);
     spanSelector->hide();
 
+    auto* peakHoldSelector = new QComboBox(spectrumToolbar);
+    peakHoldSelector->setObjectName(QStringLiteral("spectrumPeakHoldSelector"));
+    peakHoldSelector->setAccessibleName(QStringLiteral("Spectrum peak hold duration"));
+    peakHoldSelector->hide();
+    for (const int seconds : {0, 1, 2, 5})
+    {
+        peakHoldSelector->addItem(QStringLiteral("%1 s").arg(seconds), seconds);
+    }
+    const int storedPeakHoldSeconds =
+        AppSettings::instance()
+            .value(QString::fromLatin1(kSpectrumScopePeakHoldSecondsSettingsKey), kDefaultSpectrumScopePeakHoldSeconds)
+            .toInt();
+    int peakHoldIndex = peakHoldSelector->findData(storedPeakHoldSeconds);
+    if (peakHoldIndex < 0)
+    {
+        peakHoldIndex = peakHoldSelector->findData(kDefaultSpectrumScopePeakHoldSeconds);
+    }
+    peakHoldSelector->setCurrentIndex(peakHoldIndex);
+    m_window->m_spectrumScopeDisplay->setPeakHoldDurationMs(peakHoldSelector->currentData().toInt() * 1000);
+    connect(peakHoldSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this, peakHoldSelector](int index)
+            {
+                if (index < 0)
+                {
+                    return;
+                }
+                const int seconds = peakHoldSelector->itemData(index).toInt();
+                AppSettings::instance().setValue(QString::fromLatin1(kSpectrumScopePeakHoldSecondsSettingsKey),
+                                                 seconds);
+                m_window->m_spectrumScopeDisplay->setPeakHoldDurationMs(seconds * 1000);
+            });
+
     const auto makeInlineSelector = [spectrumToolbar](const QString& name, QComboBox* selector)
     {
         auto* control = new QWidget(spectrumToolbar);
@@ -324,7 +356,10 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
         label->setStyleSheet(
             QStringLiteral("color: %1; font-size: 10px; font-weight: bold;").arg(UiTheme::Color::TextStatusSecondary));
         label->setAlignment(Qt::AlignCenter);
-        value->setMinimumWidth(52);
+        // STEP and SPAN need room for values such as "500 kHz". PEAK HOLD's
+        // compact "0 s"–"5 s" values otherwise leave conspicuous empty space
+        // inside its arrows, so size that value field to its actual content.
+        value->setFixedWidth(name == QLatin1String("PEAK HOLD") ? 28 : 52);
         value->setAlignment(Qt::AlignCenter);
         value->setStyleSheet(
             QStringLiteral("color: %1; font-size: 10px; font-weight: bold;").arg(UiTheme::Color::TextBright));
@@ -347,6 +382,10 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
         layout->addWidget(label);
         layout->addWidget(value);
         layout->addWidget(next);
+        if (name == QLatin1String("PEAK HOLD"))
+        {
+            control->setFixedWidth(layout->sizeHint().width());
+        }
         return control;
     };
 
@@ -354,6 +393,9 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                                      Qt::AlignVCenter);
     spectrumToolbarLayout->addSpacing(50);
     spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("SPAN"), spanSelector), 0, Qt::AlignVCenter);
+    spectrumToolbarLayout->addSpacing(50);
+    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("PEAK HOLD"), peakHoldSelector), 0,
+                                     Qt::AlignVCenter);
     spectrumToolbarLayout->addSpacing(50);
     auto* recenterButton = new QToolButton(spectrumToolbar);
     recenterButton->setObjectName(QStringLiteral("spectrumRecenterButton"));
@@ -384,7 +426,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
             [this]()
             {
                 if (m_window->m_pendingSpectrumScopeTuneHz == 0 || !m_window->m_model->isReady() ||
-                    m_window->m_controlsLocked)
+                    m_window->m_controlsLocked || !m_scopeFramesEnabled)
                 {
                     return;
                 }
@@ -409,6 +451,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
             });
 
     m_window->m_spectrumScopeDisplay->setFilterWidth(m_window->m_vfo->filterLow(), m_window->m_vfo->filterHigh());
+    updateInteractionLock();
     updateSpectrumVfoMarker();
 
     connect(m_window->m_spectrumScope, &SpectrumScopeModel::spectrumReady, this,
@@ -436,7 +479,12 @@ void SpectrumScopeController::updateSpectrumVfoMarker()
         return;
     }
 
-    const quint64 displayedHz = activeVfoFrequencyHz();
+    // Keep the large VFO display radio-authoritative, but give tuning gestures
+    // immediate visual feedback on the scope while the CI-V set/readback is in
+    // flight. SUB takes an additional receiver-selection round trip and would
+    // otherwise look stalled on nearly every click.
+    const quint64 displayedHz =
+        m_window->m_pendingSpectrumScopeTuneHz > 0 ? m_window->m_pendingSpectrumScopeTuneHz : activeVfoFrequencyHz();
     m_window->m_spectrumScopeDisplay->setVfoFrequency(displayedHz / 1e6);
 }
 
@@ -657,7 +705,8 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
         {
             m_window->m_spectrumScopeTuneCommitTimer->stop();
         }
-        if (m_window->m_pendingSpectrumScopeTuneHz != 0 && m_window->m_model->isReady() && !m_window->m_controlsLocked)
+        if (m_window->m_pendingSpectrumScopeTuneHz != 0 && m_window->m_model->isReady() &&
+            !m_window->m_controlsLocked && m_scopeFramesEnabled)
         {
             m_window->leaveMemoryModeForManualChange();
             tuneActiveVfo(m_window->m_pendingSpectrumScopeTuneHz);
@@ -712,6 +761,7 @@ void SpectrumScopeController::resetScopeFrameGate()
     m_activeVfoStatePublished = false;
     m_scopeVfoConfirmed = false;
     m_scopeFramesEnabled = false;
+    updateInteractionLock();
     if (m_window->m_spectrumScopeDisplay)
     {
         m_window->m_spectrumScopeDisplay->clearDisplay();
@@ -725,23 +775,41 @@ void SpectrumScopeController::updateScopeFrameGate()
         return;
     }
     m_scopeFramesEnabled = true;
+    updateInteractionLock();
     recenterActiveVfo(true);
+}
+
+void SpectrumScopeController::updateInteractionLock()
+{
+    const bool ready = m_scopeFramesEnabled && !m_window->m_controlsLocked;
+    if (m_window->m_spectrumScopeDisplay)
+    {
+        m_window->m_spectrumScopeDisplay->setInteractionLocked(!ready);
+    }
+    if (m_window->m_vfoSelectionController)
+    {
+        m_window->m_vfoSelectionController->setReceiverContextReady(ready);
+    }
 }
 
 void SpectrumScopeController::onSpectrumClicked(double freqMhz)
 {
-    if (!m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_model->isReady() || m_window->m_controlsLocked || !m_scopeFramesEnabled)
     {
         return;
     }
 
     const quint64 targetHz = static_cast<quint64>(std::llround(freqMhz * 1e6));
-    scheduleSpectrumScopeTune(targetHz, false, true, false, false);
+    // Rapid clicks are absolute intents, not incremental steps. Let the
+    // existing short commit timer collapse them to the latest target so the
+    // radio does not receive a burst of VFO sets and confirmatory readbacks.
+    scheduleSpectrumScopeTune(targetHz, false, false, false, false);
 }
 
 void SpectrumScopeController::onWheelStepRequested(int steps)
 {
-    if (steps == 0 || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (steps == 0 || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked ||
+        !m_scopeFramesEnabled)
     {
         return;
     }

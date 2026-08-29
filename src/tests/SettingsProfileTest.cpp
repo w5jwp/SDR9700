@@ -60,6 +60,7 @@ void SettingsProfileTest::storesSettingsInCurrentSchema()
     QVERIFY(settings.setValue(QStringLiteral("autoConnect"), true));
     QVERIFY(settings.setValue(QStringLiteral("audioOutputChannels"), 2));
     QVERIFY(settings.setValue(QStringLiteral("spectrumScopeSpanHZ"), 500000));
+    QVERIFY(settings.setValue(QStringLiteral("spectrumScopePeakHoldSeconds"), 5));
     QVERIFY(settings.setValue(QStringLiteral("tuningStepHZ"), 100));
 
     const QJsonObject root = settingsDocument();
@@ -69,6 +70,8 @@ void SettingsProfileTest::storesSettingsInCurrentSchema()
              QStringLiteral("2"));
     QCOMPARE(root.value(QStringLiteral("spectrumScope")).toObject().value(QStringLiteral("spanHZ")).toString(),
              QStringLiteral("500000"));
+    QCOMPARE(root.value(QStringLiteral("spectrumScope")).toObject().value(QStringLiteral("peakHoldSeconds")).toString(),
+             QStringLiteral("5"));
     QCOMPARE(root.value(QStringLiteral("radio")).toObject().value(QStringLiteral("tuningStepHZ")).toString(),
              QStringLiteral("100"));
     QVERIFY(!root.contains(QStringLiteral("autoConnect")));

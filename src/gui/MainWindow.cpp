@@ -341,7 +341,7 @@ void MainWindow::buildToolBar()
     connect(m_titleBar, &MainTitleBar::volumeChanged, this,
             [this](int value)
             {
-                if (!m_model || !m_model->isReady() || m_controlsLocked)
+                if (!radioUiReady() || m_controlsLocked)
                 {
                     return;
                 }
@@ -549,7 +549,7 @@ void MainWindow::buildRadioControls()
         connect(m_titleBar, &MainTitleBar::lanModChanged, this,
                 [this](int value)
                 {
-                    if (!m_model->isReady() || m_controlsLocked)
+                    if (!radioUiReady() || m_controlsLocked)
                     {
                         return;
                     }
@@ -824,6 +824,14 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     {
         m_vfoSelectionController->setControlsEnabled(controlsEnabled);
     }
+    if (m_mainVfoController)
+    {
+        m_mainVfoController->setUserInteractionEnabled(controlsEnabled);
+    }
+    if (m_subVfoController)
+    {
+        m_subVfoController->setUserInteractionEnabled(controlsEnabled);
+    }
     if (m_titleBar)
     {
         m_titleBar->setVolumeEnabled(enabled);
@@ -835,7 +843,12 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     }
     if (m_spectrumScopeDisplay)
     {
-        m_spectrumScopeDisplay->setInteractionLocked(m_controlsLocked);
+        const bool scopeReady = m_spectrumScopeController && m_spectrumScopeController->interactionReady();
+        m_spectrumScopeDisplay->setInteractionLocked(m_controlsLocked || !scopeReady);
+        if (m_vfoSelectionController)
+        {
+            m_vfoSelectionController->setReceiverContextReady(!m_controlsLocked && scopeReady);
+        }
     }
 }
 
@@ -1765,7 +1778,7 @@ void MainWindow::onDtmfSendRequested(const QString& digits)
 
 void MainWindow::onPttPressed()
 {
-    if (!m_vfo || !m_model->isReady())
+    if (!m_vfo || !radioUiReady())
     {
         return;
     }

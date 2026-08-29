@@ -13,6 +13,122 @@ constexpr uchar kSubReceiver = 1;
 
 RadioRouter::RadioRouter(QObject* parent) : QObject(parent) {}
 
+bool RadioRouter::isReplaceable(const CacheItem& item)
+{
+    switch (item.command)
+    {
+    case funcSMeter:
+    case funcSWRMeter:
+    case funcPowerMeter:
+    case funcALCMeter:
+    case funcCompMeter:
+    case funcVdMeter:
+    case funcIdMeter:
+        return true;
+    case funcScopeWaveData:
+        return item.value.canConvert<ScopeData>() && item.value.value<ScopeData>().valid;
+    default:
+        return false;
+    }
+}
+
+quint64 RadioRouter::beginQueueSession()
+{
+    std::lock_guard locker(m_pendingMutex);
+    m_pendingItems.clear();
+    m_drainScheduled = false;
+    m_scopeReceiver.store(kMainReceiver, std::memory_order_release);
+    return ++m_queueSession;
+}
+
+void RadioRouter::cancelQueueSession(quint64 session)
+{
+    std::lock_guard locker(m_pendingMutex);
+    if (session == 0 || session != m_queueSession)
+    {
+        return;
+    }
+    m_pendingItems.clear();
+    m_drainScheduled = false;
+    ++m_queueSession;
+}
+
+void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
+{
+    bool scheduleDrain = false;
+    quint64 scheduledSession = 0;
+    {
+        std::lock_guard locker(m_pendingMutex);
+        if (session != 0 && session != m_queueSession)
+        {
+            return;
+        }
+        for (const CacheItem& item : items)
+        {
+            bool replaced = false;
+            if (isReplaceable(item))
+            {
+                for (auto pending = m_pendingItems.end(); pending != m_pendingItems.begin();)
+                {
+                    --pending;
+                    if (!isReplaceable(*pending))
+                    {
+                        break;
+                    }
+                    const bool sameKey = pending->command == item.command &&
+                                         (item.command == funcScopeWaveData || pending->receiver == item.receiver);
+                    if (sameKey)
+                    {
+                        *pending = item;
+                        ++m_coalescedItems;
+                        replaced = true;
+                        break;
+                    }
+                }
+            }
+            if (!replaced)
+            {
+                m_pendingItems.append(item);
+            }
+        }
+        m_pendingHighWaterMark = qMax(m_pendingHighWaterMark, m_pendingItems.size());
+        if (!m_drainScheduled && !m_pendingItems.isEmpty())
+        {
+            m_drainScheduled = true;
+            scheduleDrain = true;
+            scheduledSession = m_queueSession;
+        }
+    }
+
+    if (scheduleDrain)
+    {
+        QMetaObject::invokeMethod(
+            this, [this, scheduledSession]() { drainPendingBatch(scheduledSession); }, Qt::QueuedConnection);
+    }
+}
+
+void RadioRouter::drainPendingBatch(quint64 session)
+{
+    QVector<CacheItem> items;
+    {
+        std::lock_guard locker(m_pendingMutex);
+        if (session != m_queueSession)
+        {
+            return;
+        }
+        items.swap(m_pendingItems);
+        m_drainScheduled = false;
+        ++m_drainEvents;
+    }
+    routeBatch(items);
+}
+
+RadioRouterQueueDiagnostics RadioRouter::queueDiagnostics() const
+{
+    std::lock_guard locker(m_pendingMutex);
+    return {m_pendingItems.size(), m_pendingHighWaterMark, m_coalescedItems, m_drainEvents};
+}
+
 void RadioRouter::routeBatch(const QVector<CacheItem>& items)
 {
     for (const CacheItem& item : items)
@@ -122,6 +238,7 @@ void RadioRouter::route(const CacheItem& item)
         emit radioValueUpdated(item.command, item.value, kMainReceiver);
         break;
     case funcScopeMainSub:
+        m_scopeReceiver.store(item.value.toBool() ? kSubReceiver : kMainReceiver, std::memory_order_release);
         emit radioValueUpdated(item.command, item.value, kMainReceiver);
         break;
     case funcReadFreqOffset:
@@ -295,8 +412,18 @@ void RadioRouter::route(const CacheItem& item)
         emit pttChanged(item.value.toBool());
         break;
     case funcScopeWaveData:
-        emit scopeDataReady(item.value.value<ScopeData>());
+    {
+        const ScopeData data = item.value.value<ScopeData>();
+        const uchar expectedReceiver = m_scopeReceiver.load(std::memory_order_acquire);
+        if (data.receiver != expectedReceiver)
+        {
+            qDebug(logSpectrumScope()).noquote()
+                << "Ignoring scope frame for inactive receiver" << data.receiver << "expected" << expectedReceiver;
+            break;
+        }
+        emit scopeDataReady(data);
         break;
+    }
     default:
         break;
     }

@@ -331,6 +331,11 @@ void SpectrumScopeDisplay::setInvertMouseWheel(bool invert)
     m_spectrumScopeCanvas->setInvertMouseWheel(invert);
 }
 
+void SpectrumScopeDisplay::setPeakHoldDurationMs(int durationMs)
+{
+    m_spectrumScopeCanvas->setPeakHoldDurationMs(durationMs);
+}
+
 void SpectrumScopeDisplay::updateSpectrum(const QVector<float>& levels, bool outOfRange)
 {
     m_spectrumScopeCanvas->updateSpectrum(levels, outOfRange);

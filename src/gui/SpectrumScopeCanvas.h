@@ -28,6 +28,8 @@ class SpectrumScopeCanvas : public QWidget
     void setGridDensity(int density);
     void setInteractionLocked(bool locked);
     void setInvertMouseWheel(bool invert);
+    void setPeakHoldDurationMs(int durationMs);
+    int peakHoldDurationMs() const { return m_peakHoldDurationMs; }
     void setFilterWidth(int lowHz, int highHz);
     void updateSpectrum(const QVector<float>& levels, bool outOfRange);
     void clearDisplay();
@@ -83,6 +85,7 @@ class SpectrumScopeCanvas : public QWidget
 
     QVector<float> m_spectrumBins;
     QVector<float> m_peakHold;
+    QVector<qint64> m_peakHoldTimestampsMs;
     QVector<int> m_displayBins;
     QPixmap m_staticLayer;
     QSize m_staticLayerSize;
@@ -97,5 +100,6 @@ class SpectrumScopeCanvas : public QWidget
 
     QTimer m_peakDecayTimer;
     QTimer m_repaintTimer;
-    QElapsedTimer m_lastFrameTimer;
+    QElapsedTimer m_peakClock;
+    int m_peakHoldDurationMs{2000};
 };

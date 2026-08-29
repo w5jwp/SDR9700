@@ -132,6 +132,7 @@ class RadioBackend : public IRadioBackend
     ScopeController* m_scopeController{nullptr};
     RadioRouter* m_radioRouter{nullptr};
     QMetaObject::Connection m_queueSendValuesConnection;
+    quint64 m_routerQueueSession{0};
     std::atomic<quint64> m_sessionId{0};
     // Worker-thread callbacks capture this token instead of RadioBackend. It is
     // invalidated before teardown, so delayed work cannot dereference a backend
@@ -173,13 +174,9 @@ class RadioBackend : public IRadioBackend
     QTimer* m_smeterPollTimer{nullptr};
     QTimer* m_vfoStatePollTimer{nullptr};
     qsizetype m_vfoStatePollPhase{0};
-    bool m_vfoStatePollSubNext{false};
-    bool m_smeterPollSubNext{false};
     bool m_smeterPollPending{false};
-    bool m_smeterPollSettlingSample{false};
     uchar m_smeterPollPendingReceiver{0};
     int m_smeterPollPendingTicks{0};
-    Vfo m_smeterRestoreVfo{Vfo::Main};
     QTimer* m_bandStateRefreshTimer{nullptr};
     QTimer* m_mainSubExchangeRetryTimer{nullptr};
     int m_currentBandKey{-1};

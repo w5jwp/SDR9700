@@ -99,11 +99,21 @@ VfoSelectionPanel::VfoSelectionPanel(QWidget* parent) : QWidget(parent)
     updateButtonStyles();
 }
 
-void VfoSelectionPanel::setExchangePending(bool pending) const
+void VfoSelectionPanel::setExchangePending(bool pending)
 {
+    m_exchangePending = pending;
     for (QPushButton* button : {m_mainButton, m_subButton, m_exchangeButton, m_dualWatchButton})
     {
-        button->setEnabled(!pending);
+        button->setEnabled(!pending && m_receiverContextReady);
+    }
+}
+
+void VfoSelectionPanel::setReceiverContextReady(bool ready)
+{
+    m_receiverContextReady = ready;
+    for (QPushButton* button : {m_mainButton, m_subButton, m_exchangeButton, m_dualWatchButton})
+    {
+        button->setEnabled(ready && !m_exchangePending);
     }
 }
 
