@@ -55,6 +55,9 @@ void RadioCapabilitiesTest::exposesStableBandMetadata()
     QCOMPARE(sdr9700::radioBandUiIndex(bandUnknown), -1);
     QCOMPARE(sdr9700::radioBandShortLabel(band2m), QStringLiteral("2M"));
     QCOMPARE(sdr9700::radioBandShortLabel(bandUnknown), QStringLiteral("BAND"));
+    QCOMPARE(sdr9700::radioBandMaxPowerWatts(band2m), 100.0);
+    QCOMPARE(sdr9700::radioBandMaxPowerWatts(band70cm), 75.0);
+    QCOMPARE(sdr9700::radioBandMaxPowerWatts(band23cm), 10.0);
     QCOMPARE(sdr9700::radioBandDefaultFrequency(band23cm), quint64(1296100000));
     QCOMPARE(sdr9700::radioBandMemoryKey(band70cm), 430);
 }

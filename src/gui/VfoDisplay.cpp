@@ -363,6 +363,14 @@ void VfoDisplay::setTransmitPowerWatts(double watts)
     }
 }
 
+void VfoDisplay::setMaxTransmitPowerWatts(double watts)
+{
+    if (m_sMeter)
+    {
+        m_sMeter->setMaxPowerWatts(watts);
+    }
+}
+
 void VfoDisplay::setSelected(bool selected)
 {
     m_identityButton->setProperty("active", selected);

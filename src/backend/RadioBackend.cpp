@@ -20,6 +20,7 @@
 #include <QTimer>
 #include <QDebug>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iterator>
 #include <memory>
@@ -31,6 +32,7 @@ constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 3000;
 constexpr int kMaxSyncReconnectAttempts = 1;
 constexpr int kMemoryWriteReadbackDelayMs = 250;
+constexpr int kVfoStatePollIntervalMs = 250;
 constexpr int kPttReleaseTailMs = 150;
 constexpr int kPttOffConfirmationMs = 1000;
 constexpr int kMaxTransmitDurationMs = 180000;
@@ -38,6 +40,29 @@ constexpr uchar kHardwareTxTimeoutTimer = 1; // 3 minutes, the IC-9700's shortes
 constexpr uchar kMainReceiver = 0;
 constexpr uchar kSubReceiver = 1;
 constexpr quint32 kTxAudioSampleRate = 16000;
+
+struct VfoStatePollItem
+{
+    Funcs func;
+    bool mainOnly;
+};
+
+// Read one stable control per timer tick. With dual watch enabled, MAIN and
+// SUB alternate, so a complete radio-authoritative refresh takes about ten
+// seconds without producing the large CI-V bursts that contend with tuning,
+// meters, and PTT.
+constexpr std::array kVfoStatePollItems{
+    VfoStatePollItem{funcFreqGet, false},         VfoStatePollItem{funcModeGet, false},
+    VfoStatePollItem{funcAGCTimeConstant, false}, VfoStatePollItem{funcAttenuator, false},
+    VfoStatePollItem{funcNoiseBlanker, false},    VfoStatePollItem{funcAutoNotch, false},
+    VfoStatePollItem{funcManualNotch, false},     VfoStatePollItem{funcNoiseReduction, false},
+    VfoStatePollItem{funcPreamp, false},          VfoStatePollItem{funcRfGain, false},
+    VfoStatePollItem{funcSquelch, false},         VfoStatePollItem{funcSplitStatus, false},
+    VfoStatePollItem{funcReadFreqOffset, false},  VfoStatePollItem{funcToneSquelchType, false},
+    VfoStatePollItem{funcToneFreq, false},        VfoStatePollItem{funcDTCSCode, false},
+    VfoStatePollItem{funcRFPower, true},          VfoStatePollItem{funcCompressor, true},
+    VfoStatePollItem{funcXFCStatus, true},
+};
 
 quint64 memoryGroupDefaultFrequencyHz(quint16 group)
 {
@@ -290,6 +315,39 @@ RadioBackend::RadioBackend(QObject* parent)
                     });
                 m_mainSubExchangeRetryTimer->start();
             });
+
+    m_vfoStatePollTimer = new QTimer(this);
+    m_vfoStatePollTimer->setInterval(kVfoStatePollIntervalMs);
+    m_vfoStatePollTimer->setTimerType(Qt::CoarseTimer);
+    connect(m_vfoStatePollTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (!m_commander || !m_radioReady || m_pttState.safetyActive() || m_mainSubExchangePending ||
+                    m_smeterPollPending || kVfoStatePollItems.empty())
+                {
+                    return;
+                }
+
+                const VfoStatePollItem item = kVfoStatePollItems[static_cast<std::size_t>(m_vfoStatePollPhase)];
+                const bool pollSub = m_dualWatchEnabled && m_vfoStatePollSubNext;
+                m_vfoStatePollSubNext = m_dualWatchEnabled && !m_vfoStatePollSubNext;
+
+                // A MAIN-only phase deliberately leaves the SUB slot idle. It
+                // preserves the alternating cadence instead of pulling the next
+                // receiver transaction forward into the same timer interval.
+                if (!pollSub || !item.mainOnly)
+                {
+                    const Vfo targetVfo = pollSub ? Vfo::Sub : Vfo::Main;
+                    routeVfoReceiverCommand(targetVfo, [item](Commander* commandSession, uchar receiver)
+                                            { commandSession->receiveCommand(item.func, QVariant(), receiver); });
+                }
+
+                if (!m_dualWatchEnabled || pollSub)
+                {
+                    m_vfoStatePollPhase = (m_vfoStatePollPhase + 1) % static_cast<qsizetype>(kVfoStatePollItems.size());
+                }
+            });
+
     connect(m_radioRouter, &RadioRouter::modeReported, this,
             [this](const QString& mode, int filter)
             {
@@ -854,6 +912,8 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_activeVfo = Vfo::Main;
     m_dualWatchEnabled = false;
     m_smeterPollSubNext = false;
+    m_vfoStatePollPhase = 0;
+    m_vfoStatePollSubNext = false;
     m_smeterPollPending = false;
     m_smeterPollSettlingSample = false;
     m_smeterPollPendingTicks = 0;
@@ -870,6 +930,10 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
         m_smeterPollTimer->stop();
         m_smeterPollTimer->deleteLater();
         m_smeterPollTimer = nullptr;
+    }
+    if (m_vfoStatePollTimer)
+    {
+        m_vfoStatePollTimer->stop();
     }
     if (m_initialStateRetryTimer)
     {
@@ -1172,7 +1236,9 @@ void RadioBackend::requestVfoState(Vfo vfo)
             commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
             commandSession->receiveCommand(funcModeGet, QVariant(), 0);
             for (const Funcs func :
-                 {funcSplitStatus, funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcDTCSCode})
+                 {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
+                  funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcRFPower, funcSplitStatus,
+                  funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcDTCSCode, funcCompressor, funcXFCStatus})
             {
                 commandSession->receiveCommand(func, QVariant(), 0);
             }
@@ -1186,11 +1252,17 @@ void RadioBackend::routeVfoReceiverCommand(Vfo vfo, const std::function<void(Com
     invokeOnCurrentCommander(
         [vfo, restoreVfo, receiver, command](Commander* commandSession)
         {
-            commandSession->receiveCommand(funcSelectVFO,
-                                           QVariant::fromValue<vfo_t>(vfo == Vfo::Sub ? vfoSub : vfoMain), 0);
+            if (vfo != restoreVfo)
+            {
+                commandSession->receiveCommand(funcSelectVFO,
+                                               QVariant::fromValue<vfo_t>(vfo == Vfo::Sub ? vfoSub : vfoMain), 0);
+            }
             command(commandSession, receiver);
-            commandSession->receiveCommand(funcSelectVFO,
-                                           QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain), 0);
+            if (vfo != restoreVfo)
+            {
+                commandSession->receiveCommand(
+                    funcSelectVFO, QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain), 0);
+            }
         });
 }
 
@@ -1514,7 +1586,7 @@ void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
     commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
     commandSession->receiveCommand(funcModeGet, QVariant(), 1);
     for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
-                             funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSMeter, funcSplitStatus,
+                             funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus,
                              funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcDTCSCode})
     {
         commandSession->receiveCommand(func, QVariant(), 1);
@@ -2073,6 +2145,12 @@ void RadioBackend::updateReadyState()
         if (m_initialStateRetryTimer)
         {
             m_initialStateRetryTimer->stop();
+        }
+        m_vfoStatePollPhase = 0;
+        m_vfoStatePollSubNext = false;
+        if (m_vfoStatePollTimer)
+        {
+            m_vfoStatePollTimer->start();
         }
         // Let MemoryController establish the startup memory poll before the
         // broader post-ready status snapshot queues dozens of CI-V reads. This

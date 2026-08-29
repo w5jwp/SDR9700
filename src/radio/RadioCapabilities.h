@@ -450,6 +450,12 @@ inline quint64 radioBandDefaultFrequency(availableBands band)
     return def ? def->defaultFrequency : 0;
 }
 
+inline double radioBandMaxPowerWatts(availableBands band)
+{
+    const RadioBandDef* def = radioBandDefinition(band);
+    return def ? def->power : 0.0;
+}
+
 inline int radioBandMemoryKey(availableBands band)
 {
     const RadioBandDef* def = radioBandDefinition(band);

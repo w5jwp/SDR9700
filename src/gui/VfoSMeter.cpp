@@ -4,6 +4,7 @@
 #include "UiTheme.h"
 
 #include <QPainter>
+#include <cmath>
 
 namespace
 {
@@ -17,6 +18,10 @@ constexpr int kSegmentHeight = 14;
 constexpr int kScaleFontSize = 7;
 constexpr int kReadoutFontSize = 12;
 constexpr int kLegendRightInset = 4;
+constexpr int kSignalAnimationIntervalMs = 16;
+constexpr double kSignalAttackSeconds = 0.045;
+constexpr double kSignalReleaseSeconds = 0.180;
+constexpr double kSignalSnapRaw = 0.25;
 
 struct MeterMark
 {
@@ -35,10 +40,11 @@ struct PowerMark
     double fraction;
 };
 
-constexpr PowerMark kPowerMarks[] = {{"1", 1.0, 0.060},   {"5", 5.0, 0.180},   {"25", 25.0, 0.400},
-                                     {"50", 50.0, 0.620}, {"75", 75.0, 0.820}, {"100W", 100.0, 1.000}};
+constexpr PowerMark kPowerMarks[] = {{"1", 1.0, 0.060},    {"5", 5.0, 0.180},   {"10", 10.0, 0.235},
+                                     {"25", 25.0, 0.400},  {"50", 50.0, 0.620}, {"75", 75.0, 0.820},
+                                     {"100", 100.0, 1.000}};
 
-double powerFraction(double watts)
+double powerFractionOn100WScale(double watts)
 {
     const double bounded = qBound(0.0, watts, 100.0);
     double previousWatts = 0.0;
@@ -54,6 +60,13 @@ double powerFraction(double watts)
         previousFraction = mark.fraction;
     }
     return 1.0;
+}
+
+double powerFraction(double watts, double maxWatts)
+{
+    const double boundedMax = qBound(0.1, maxWatts, 100.0);
+    return qBound(0.0, powerFractionOn100WScale(qBound(0.0, watts, boundedMax)) / powerFractionOn100WScale(boundedMax),
+                  1.0);
 }
 
 QString signalText(int rawValue)
@@ -76,6 +89,10 @@ VfoSMeter::VfoSMeter(QWidget* parent) : QWidget(parent)
     setFixedHeight(kMeterHeight);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setAccessibleName(QStringLiteral("Signal strength meter"));
+
+    m_signalAnimationTimer.setTimerType(Qt::PreciseTimer);
+    m_signalAnimationTimer.setInterval(kSignalAnimationIntervalMs);
+    connect(&m_signalAnimationTimer, &QTimer::timeout, this, &VfoSMeter::advanceSignalDisplay);
 }
 
 void VfoSMeter::setRawValue(int value)
@@ -87,6 +104,34 @@ void VfoSMeter::setRawValue(int value)
     }
     m_rawValue = bounded;
     setAccessibleDescription(QStringLiteral("Signal strength %1").arg(signalText(m_rawValue)));
+    if (!m_signalAnimationTimer.isActive())
+    {
+        m_signalAnimationElapsed.restart();
+        m_signalAnimationTimer.start();
+    }
+}
+
+void VfoSMeter::advanceSignalDisplay()
+{
+    const qint64 elapsedMs = m_signalAnimationElapsed.restart();
+    if (elapsedMs <= 0)
+    {
+        return;
+    }
+
+    const double delta = double(m_rawValue) - m_displayRawValue;
+    if (qAbs(delta) <= kSignalSnapRaw)
+    {
+        m_displayRawValue = m_rawValue;
+        m_signalAnimationTimer.stop();
+        update();
+        return;
+    }
+
+    const double timeConstant = delta >= 0.0 ? kSignalAttackSeconds : kSignalReleaseSeconds;
+    const double elapsedSeconds = double(elapsedMs) / 1000.0;
+    const double alpha = 1.0 - std::exp(-elapsedSeconds / timeConstant);
+    m_displayRawValue += delta * alpha;
     update();
 }
 
@@ -98,12 +143,25 @@ void VfoSMeter::setTransmitPowerMode(bool enabled)
     }
     m_transmitPowerMode = enabled;
     setAccessibleName(enabled ? QStringLiteral("RF power meter") : QStringLiteral("Signal strength meter"));
+    if (enabled)
+    {
+        // A power-meter reply belongs to the transmission during which it was
+        // sampled. Never carry the final reading from the previous transmission
+        // into a newly confirmed PTT-on interval while the first fresh sample is
+        // still in flight.
+        m_powerWatts = 0.0;
+        setAccessibleDescription(QStringLiteral("RF power 0.0 watts"));
+    }
+    else
+    {
+        setAccessibleDescription(QStringLiteral("Signal strength %1").arg(signalText(m_rawValue)));
+    }
     update();
 }
 
 void VfoSMeter::setPowerWatts(double watts)
 {
-    const double bounded = qBound(0.0, watts, 100.0);
+    const double bounded = qBound(0.0, watts, m_maxPowerWatts);
     if (qFuzzyCompare(m_powerWatts + 1.0, bounded + 1.0))
     {
         return;
@@ -114,6 +172,18 @@ void VfoSMeter::setPowerWatts(double watts)
         setAccessibleDescription(QStringLiteral("RF power %1 watts").arg(m_powerWatts, 0, 'f', 1));
         update();
     }
+}
+
+void VfoSMeter::setMaxPowerWatts(double watts)
+{
+    const double bounded = qBound(0.1, watts, 100.0);
+    if (qFuzzyCompare(m_maxPowerWatts + 1.0, bounded + 1.0))
+    {
+        return;
+    }
+    m_maxPowerWatts = bounded;
+    m_powerWatts = qMin(m_powerWatts, m_maxPowerWatts);
+    update();
 }
 
 void VfoSMeter::paintEvent(QPaintEvent* event)
@@ -136,9 +206,16 @@ void VfoSMeter::paintEvent(QPaintEvent* event)
     {
         for (const PowerMark& mark : kPowerMarks)
         {
-            const int x = qRound(mark.fraction * qMax(0, meterRect.width() - 1));
+            if (mark.watts > m_maxPowerWatts || (mark.watts == 10.0 && m_maxPowerWatts > 10.0))
+            {
+                continue;
+            }
+            const int x = qRound(powerFraction(mark.watts, m_maxPowerWatts) * qMax(0, meterRect.width() - 1));
             painter.setPen(QColor(QString::fromLatin1(UiTheme::Color::TextStatusSecondary)));
-            const QString label = QString::fromLatin1(mark.label);
+            const QString label = qFuzzyCompare(mark.watts + 1.0, m_maxPowerWatts + 1.0)
+                                      ? QStringLiteral("%1W").arg(m_maxPowerWatts, 0, 'f',
+                                                                  m_maxPowerWatts == qRound(m_maxPowerWatts) ? 0 : 2)
+                                      : QString::fromLatin1(mark.label);
             const int labelWidth = scaleMetrics.horizontalAdvance(label);
             painter.drawText(qBound(0, x - labelWidth / 2, qMax(0, meterRect.width() - labelWidth - kLegendRightInset)),
                              meterRect.top() - 6, label);
@@ -158,7 +235,8 @@ void VfoSMeter::paintEvent(QPaintEvent* event)
         }
     }
 
-    const double meterFraction = m_transmitPowerMode ? powerFraction(m_powerWatts) : qMin(m_rawValue, 241) / 241.0;
+    const double meterFraction =
+        m_transmitPowerMode ? powerFraction(m_powerWatts, m_maxPowerWatts) : qMin(m_displayRawValue, 241.0) / 241.0;
     const int activeWidth = qRound(meterFraction * meterRect.width());
     const int s9X = qRound(120.0 / 241.0 * meterRect.width());
     for (int x = meterRect.left(); x + kSegmentWidth <= meterRect.right() + 1; x += kSegmentWidth + kSegmentGap)
@@ -179,6 +257,6 @@ void VfoSMeter::paintEvent(QPaintEvent* event)
     painter.setFont(readoutFont);
     painter.setPen(QColor(QString::fromLatin1(UiTheme::Color::TextPrimary)));
     const QString readout =
-        m_transmitPowerMode ? QStringLiteral("%1W").arg(qRound(m_powerWatts)) : signalText(m_rawValue);
+        m_transmitPowerMode ? QStringLiteral("%1W").arg(qRound(m_powerWatts)) : signalText(qRound(m_displayRawValue));
     painter.drawText(readoutRect, Qt::AlignLeft | Qt::AlignVCenter, readout);
 }

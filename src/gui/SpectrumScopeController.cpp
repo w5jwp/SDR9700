@@ -253,6 +253,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     const auto makeInlineSelector = [spectrumToolbar](const QString& name, QComboBox* selector)
     {
         auto* control = new QWidget(spectrumToolbar);
+        control->setFixedHeight(22);
         auto* layout = new QHBoxLayout(control);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(4);
@@ -276,6 +277,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
         }
         label->setStyleSheet(
             QStringLiteral("color: %1; font-size: 10px; font-weight: bold;").arg(UiTheme::Color::TextStatusSecondary));
+        label->setAlignment(Qt::AlignCenter);
         value->setMinimumWidth(52);
         value->setAlignment(Qt::AlignCenter);
         value->setStyleSheet(
@@ -302,16 +304,11 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
         return control;
     };
 
-    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("STEP"), m_tuningStepSelector));
+    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("STEP"), m_tuningStepSelector), 0,
+                                     Qt::AlignVCenter);
     spectrumToolbarLayout->addSpacing(50);
-    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("SPAN"), spanSelector));
+    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("SPAN"), spanSelector), 0, Qt::AlignVCenter);
     spectrumToolbarLayout->addStretch();
-    if (QWidget* lanModControl = m_window->m_vfoPanel ? m_window->m_vfoPanel->lanModControl() : nullptr)
-    {
-        lanModControl->setParent(spectrumToolbar);
-        lanModControl->setFixedHeight(24);
-        spectrumToolbarLayout->addWidget(lanModControl);
-    }
     spectrumFrameLayout->addWidget(spectrumToolbar);
     spectrumFrameLayout->addWidget(m_window->m_spectrumScopeDisplay);
     spectrumInsetLayout->addWidget(spectrumFrame);

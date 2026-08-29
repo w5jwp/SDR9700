@@ -171,6 +171,9 @@ class RadioBackend : public IRadioBackend
     bool m_syncReconnectPending{false};
     std::optional<std::pair<quint16, quint16>> m_selectedRadioMemory;
     QTimer* m_smeterPollTimer{nullptr};
+    QTimer* m_vfoStatePollTimer{nullptr};
+    qsizetype m_vfoStatePollPhase{0};
+    bool m_vfoStatePollSubNext{false};
     bool m_smeterPollSubNext{false};
     bool m_smeterPollPending{false};
     bool m_smeterPollSettlingSample{false};

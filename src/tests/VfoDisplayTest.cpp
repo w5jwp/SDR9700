@@ -120,12 +120,19 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
                      ->isEnabled());
     }
     mainController.setOperatingEnabled(true);
+    mainController.display()->setTransmitPowerWatts(42.0);
     mainController.setTransmitting(true);
     QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->property("transmitting"),
              QVariant(true));
     QCOMPARE(mainSMeter->accessibleName(), QStringLiteral("RF power meter"));
+    QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("RF power 0.0 watts"));
+    mainController.display()->setTransmitPowerWatts(42.0);
+    QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("RF power 42.0 watts"));
     mainController.setTransmitting(false);
     QCOMPARE(mainSMeter->accessibleName(), QStringLiteral("Signal strength meter"));
+    mainController.setTransmitting(true);
+    QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("RF power 0.0 watts"));
+    mainController.setTransmitting(false);
 
     parent.resize(640, 240);
     mainController.display()->setGeometry(0, 0, 600, mainController.display()->height());

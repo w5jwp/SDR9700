@@ -174,6 +174,16 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
 
     root->addStretch(1);
 
+    m_lanModHost = new QWidget(this);
+    m_lanModHost->setObjectName(QStringLiteral("titleLanModHost"));
+    m_lanModHost->setStyleSheet(QStringLiteral("QWidget#titleLanModHost { background: transparent; }"));
+    m_lanModLayout = new QHBoxLayout(m_lanModHost);
+    m_lanModLayout->setContentsMargins(kNoMargins);
+    m_lanModLayout->setSpacing(0);
+    m_lanModHost->hide();
+    root->addWidget(m_lanModHost);
+    root->addSpacing(kTitleControlSpacing);
+
     // Volume controls
     auto* volSep = new QWidget(this);
     volSep->setFixedSize(1, 18);
@@ -401,6 +411,18 @@ void MainTitleBar::setTxDurationActive(bool transmitting)
     {
         m_txDurationButton->setStyleSheet(txDurationStyle(transmitting));
     }
+}
+
+void MainTitleBar::setLanModControl(QWidget* control)
+{
+    if (!control || !m_lanModHost || !m_lanModLayout)
+    {
+        return;
+    }
+    control->setParent(m_lanModHost);
+    control->setFixedHeight(24);
+    m_lanModLayout->addWidget(control);
+    m_lanModHost->show();
 }
 
 void MainTitleBar::pulseRadioHeartbeat()

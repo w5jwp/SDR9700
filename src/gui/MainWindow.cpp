@@ -601,6 +601,10 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
     m_vfoPanel = new VfoPanel(QStringLiteral("VFO"), strip);
     m_vfoPanel->setLanMod(m_lanModValue);
+    if (m_titleBar)
+    {
+        m_titleBar->setLanModControl(m_vfoPanel->lanModControl());
+    }
     const int appVolume = appVolumeSettingValue();
     m_currentAfGain = appVolume;
     if (m_titleBar)

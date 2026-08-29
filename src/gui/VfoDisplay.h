@@ -27,6 +27,7 @@ class VfoDisplay : public QWidget
     void setSMeterValue(int rawValue);
     void setTransmitPowerMode(bool enabled);
     void setTransmitPowerWatts(double watts);
+    void setMaxTransmitPowerWatts(double watts);
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
     void setReceiverControlState(const QString& control, const QString& value, bool active);

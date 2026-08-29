@@ -357,6 +357,10 @@ void VfoController::publishConfirmedState()
     const quint64 frequencyHz = *m_confirmedFrequencyHz;
     m_display->setFrequencyHz(frequencyHz);
     m_display->setBandText(m_band == bandUnknown ? QStringLiteral("--") : sdr9700::radioBandShortLabel(m_band));
+    if (m_vfo == Vfo::Main)
+    {
+        m_display->setMaxTransmitPowerWatts(sdr9700::radioBandMaxPowerWatts(m_band));
+    }
     if (!m_mode.isEmpty())
     {
         m_display->setModeText(m_mode);
