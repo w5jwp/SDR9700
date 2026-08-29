@@ -8,6 +8,7 @@
 namespace
 {
 constexpr uchar kMainReceiver = 0;
+constexpr uchar kSubReceiver = 1;
 } // namespace
 
 RadioRouter::RadioRouter(QObject* parent) : QObject(parent) {}
@@ -57,14 +58,15 @@ QString RadioRouter::modeInfoToString(const ModeInfo& mi) const
     }
 }
 
-bool RadioRouter::toneRegisterIsDisplayed(Funcs command) const
+bool RadioRouter::toneRegisterIsDisplayed(Funcs command, uchar receiver) const
 {
-    if (isDtcsToneMode(m_toneAccessMode) || m_toneAccessMode == ratrNN)
+    const rptAccessTxRx_t toneAccessMode = m_toneAccessModes[receiver == kSubReceiver ? 1 : 0];
+    if (isDtcsToneMode(toneAccessMode) || toneAccessMode == ratrNN)
     {
         return false;
     }
 
-    const bool displayRxTone = m_toneAccessMode == ratrNT || m_toneAccessMode == ratrDT;
+    const bool displayRxTone = toneAccessMode == ratrNT || toneAccessMode == ratrDT;
     return displayRxTone ? command == funcTSQLFreq : command == funcToneFreq;
 }
 
@@ -128,13 +130,16 @@ void RadioRouter::route(const CacheItem& item)
         break;
     case funcToneSquelchType:
         emit radioValueUpdated(item.command, item.value, item.receiver);
-        m_toneAccessMode = item.value.value<RptrAccessData>().accessMode;
-        emit toneAccessModeChanged(m_toneAccessMode);
+        m_toneAccessModes[item.receiver == kSubReceiver ? 1 : 0] = item.value.value<RptrAccessData>().accessMode;
+        if (item.receiver == kMainReceiver)
+        {
+            emit toneAccessModeChanged(m_toneAccessModes[0]);
+        }
         break;
     case funcToneFreq:
     case funcTSQLFreq:
         emit radioValueUpdated(item.command, item.value, item.receiver);
-        if (toneRegisterIsDisplayed(item.command))
+        if (item.receiver == kMainReceiver && toneRegisterIsDisplayed(item.command, item.receiver))
         {
             emit toneFrequencyChanged(item.value.value<ToneInfo>().tone);
         }

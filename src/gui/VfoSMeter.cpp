@@ -256,7 +256,9 @@ void VfoSMeter::paintEvent(QPaintEvent* event)
     readoutFont.setBold(true);
     painter.setFont(readoutFont);
     painter.setPen(QColor(QString::fromLatin1(UiTheme::Color::TextPrimary)));
-    const QString readout =
-        m_transmitPowerMode ? QStringLiteral("%1W").arg(qRound(m_powerWatts)) : signalText(qRound(m_displayRawValue));
+    const int displayedRawValue = qRound(m_displayRawValue);
+    const QString readout = m_transmitPowerMode     ? QStringLiteral("%1W").arg(qRound(m_powerWatts))
+                            : displayedRawValue > 0 ? signalText(displayedRawValue)
+                                                    : QString();
     painter.drawText(readoutRect, Qt::AlignLeft | Qt::AlignVCenter, readout);
 }

@@ -1,5 +1,6 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "IRadioBackend.h"
+#include "VfoReceiverCommandRoute.h"
 #include "VfoModel.h"
 
 #include <QtTest>
@@ -118,6 +119,7 @@ class VfoBackendTest : public QObject
     void localControlsUpdateAndForward();
     void boundedRequestsAreClampedBeforeForwarding();
     void reportsRejectedPttRequest();
+    void receiverCommandRouteSelectsCommandsAndRestoresInOrder();
 };
 
 void VfoBackendTest::radioBackedRequestsWaitForConfirmation()
@@ -196,6 +198,23 @@ void VfoBackendTest::reportsRejectedPttRequest()
 
     QVERIFY(!model.setPtt(true));
     QVERIFY(backend.ptt);
+}
+
+void VfoBackendTest::receiverCommandRouteSelectsCommandsAndRestoresInOrder()
+{
+    QStringList events;
+    sdr9700::backend::routeVfoReceiverCommand(
+        Vfo::Sub, Vfo::Main, [&events](Vfo selected)
+        { events.append(selected == Vfo::Sub ? QStringLiteral("select-sub") : QStringLiteral("select-main")); },
+        [&events](uchar receiver) { events.append(QStringLiteral("command-%1").arg(receiver)); });
+    QCOMPARE(events,
+             QStringList({QStringLiteral("select-sub"), QStringLiteral("command-1"), QStringLiteral("select-main")}));
+
+    events.clear();
+    sdr9700::backend::routeVfoReceiverCommand(
+        Vfo::Main, Vfo::Main, [&events](Vfo) { events.append(QStringLiteral("select-main")); },
+        [&events](uchar receiver) { events.append(QStringLiteral("command-%1").arg(receiver)); });
+    QCOMPARE(events, QStringList({QStringLiteral("select-main"), QStringLiteral("command-0")}));
 }
 
 QTEST_GUILESS_MAIN(VfoBackendTest)

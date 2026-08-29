@@ -103,7 +103,8 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
                          func != funcAutoNotch && func != funcManualNotch && func != funcNoiseReduction &&
                          func != funcPreamp && func != funcRfGain && func != funcSquelch && func != funcRFPower &&
                          func != funcSMeter && func != funcSplitStatus && func != funcReadFreqOffset &&
-                         func != funcToneSquelchType && func != funcToneFreq && func != funcDTCSCode))
+                         func != funcToneSquelchType && func != funcToneFreq && func != funcTSQLFreq &&
+                         func != funcDTCSCode))
                     {
                         return;
                     }
@@ -183,9 +184,16 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
                         updateReceiverControlDisplay();
                         return;
                     case funcToneFreq:
-                        m_toneFrequency = value.value<ToneInfo>().tone;
-                        updateReceiverControlDisplay();
+                    case funcTSQLFreq:
+                    {
+                        const bool displayRxTone = m_toneAccessMode == ratrNT || m_toneAccessMode == ratrDT;
+                        if ((displayRxTone && func == funcTSQLFreq) || (!displayRxTone && func == funcToneFreq))
+                        {
+                            m_toneFrequency = value.value<ToneInfo>().tone;
+                            updateReceiverControlDisplay();
+                        }
                         return;
+                    }
                     case funcDTCSCode:
                         m_dtcsCode = value.value<ToneInfo>().tone;
                         updateReceiverControlDisplay();

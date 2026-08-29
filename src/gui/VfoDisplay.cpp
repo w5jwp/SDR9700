@@ -27,7 +27,7 @@ constexpr int kHeaderButtonHeight = 18;
 constexpr int kBandButtonWidth = 52;
 constexpr int kModeButtonWidth = 52;
 constexpr int kSquelchButtonWidth = 58;
-constexpr int kTxPowerButtonWidth = 80;
+constexpr int kTxPowerButtonWidth = 68;
 constexpr int kHeaderControlGroupSpacing = 30;
 constexpr int kReceiverControlHeight = 18;
 constexpr int kReceiverControlSpacing = 4;
@@ -132,7 +132,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
         vfo == Vfo::Main ? createHeaderControl(QStringLiteral("TX PWR"), kTxPowerButtonWidth) : nullptr;
     if (txPowerButton)
     {
-        txPowerButton->setText(QStringLiteral("TX.PWR"));
+        txPowerButton->setText(QStringLiteral("PWR"));
     }
     auto createHeaderPlaceholder = [this](int width, const QString& name)
     {
@@ -412,7 +412,7 @@ void VfoDisplay::setReceiverControlState(const QString& control, const QString& 
     }
     else if (control == QStringLiteral("TX PWR"))
     {
-        button->setText(value.isEmpty() ? QStringLiteral("TX.PWR") : QStringLiteral("TX.PWR %1").arg(value));
+        button->setText(value.isEmpty() ? QStringLiteral("PWR") : QStringLiteral("PWR %1").arg(value));
     }
     else
     {

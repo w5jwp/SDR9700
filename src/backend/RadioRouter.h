@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QVariant>
 #include <QVector>
+#include <array>
 
 struct CacheItem;
 
@@ -61,7 +62,7 @@ class RadioRouter : public QObject
 
   private:
     QString modeInfoToString(const ModeInfo& mi) const;
-    bool toneRegisterIsDisplayed(Funcs command) const;
+    bool toneRegisterIsDisplayed(Funcs command, uchar receiver) const;
 
-    rptAccessTxRx_t m_toneAccessMode{ratrNN};
+    std::array<rptAccessTxRx_t, 2> m_toneAccessModes{ratrNN, ratrNN};
 };

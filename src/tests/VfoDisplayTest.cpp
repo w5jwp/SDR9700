@@ -65,7 +65,10 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("Signal strength S9+60"));
     QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton")) != nullptr);
     QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton")) != nullptr);
-    QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTXPWRButton")) != nullptr);
+    auto* txPowerButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTXPWRButton"));
+    QVERIFY(txPowerButton != nullptr);
+    QCOMPARE(txPowerButton->width(), 68);
+    QCOMPARE(txPowerButton->text(), QStringLiteral("PWR 0%"));
     QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoTXPWRButton")) == nullptr);
     QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoXFCButton")) != nullptr);
     QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoXFCButton")) == nullptr);
@@ -76,10 +79,12 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     mainController.display()->setReceiverControlState(QStringLiteral("TONE"), QStringLiteral("TSQL 67.0"), true);
     mainController.display()->setReceiverControlState(QStringLiteral("OFFSET"), QStringLiteral("SIMPLEX"), false);
     mainController.display()->setReceiverControlState(QStringLiteral("PRE"), QString(), true);
+    mainController.display()->setReceiverControlState(QStringLiteral("TX PWR"), QStringLiteral("65%"), true);
     QCOMPARE(toneStateButton->text(), QStringLiteral("TSQL 67.0"));
     QCOMPARE(offsetStateButton->text(), QStringLiteral("SIMPLEX"));
     QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoPREButton"))->text(),
              QStringLiteral("P.AMP"));
+    QCOMPARE(txPowerButton->text(), QStringLiteral("PWR 65%"));
     for (const QString& control :
          {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"), QStringLiteral("NOTCH"),
           QStringLiteral("NR"), QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("TONE"),

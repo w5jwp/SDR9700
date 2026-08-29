@@ -1,5 +1,7 @@
 #include "RadioBackend.h"
 
+#include "VfoReceiverCommandRoute.h"
+
 #include "Commander.h"
 #include "CachingQueue.h"
 #include "RadioRouter.h"
@@ -59,9 +61,9 @@ constexpr std::array kVfoStatePollItems{
     VfoStatePollItem{funcPreamp, false},          VfoStatePollItem{funcRfGain, false},
     VfoStatePollItem{funcSquelch, false},         VfoStatePollItem{funcSplitStatus, false},
     VfoStatePollItem{funcReadFreqOffset, false},  VfoStatePollItem{funcToneSquelchType, false},
-    VfoStatePollItem{funcToneFreq, false},        VfoStatePollItem{funcDTCSCode, false},
-    VfoStatePollItem{funcRFPower, true},          VfoStatePollItem{funcCompressor, true},
-    VfoStatePollItem{funcXFCStatus, true},
+    VfoStatePollItem{funcToneFreq, false},        VfoStatePollItem{funcTSQLFreq, false},
+    VfoStatePollItem{funcDTCSCode, false},        VfoStatePollItem{funcRFPower, true},
+    VfoStatePollItem{funcCompressor, true},       VfoStatePollItem{funcXFCStatus, true},
 };
 
 quint64 memoryGroupDefaultFrequencyHz(quint16 group)
@@ -1081,26 +1083,26 @@ void RadioBackend::setFilterWidth(int lowHz, int highHz)
 
 void RadioBackend::setNrEnabled(bool on)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcNoiseReduction, QVariant::fromValue<bool>(on), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [on](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcNoiseReduction, QVariant::fromValue(on), receiver); });
 }
 
 void RadioBackend::setNrLevel(int level)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcNRLevel, QVariant(level), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [level](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcNRLevel, QVariant(level), receiver); });
 }
 
 void RadioBackend::setNbEnabled(bool on)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcNoiseBlanker, QVariant::fromValue<bool>(on), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [on](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcNoiseBlanker, QVariant::fromValue(on), receiver); });
 }
 
 void RadioBackend::setNbLevel(int level)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcNBLevel, QVariant(level), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [level](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcNBLevel, QVariant(level), receiver); });
 }
 
 void RadioBackend::setPreampEnabled(bool on)
@@ -1111,23 +1113,23 @@ void RadioBackend::setPreampEnabled(bool on)
 void RadioBackend::setPreampLevel(int level)
 {
     const uchar val = static_cast<uchar>(qBound(0, level, 3));
-    invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcPreamp, QVariant::fromValue<uchar>(val), 0);
-            commandSession->receiveCommand(funcAttenuator, QVariant(), 0);
-        });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [val](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommand(funcPreamp, QVariant::fromValue(val), receiver);
+                                commandSession->receiveCommand(funcAttenuator, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::setAttenuatorEnabled(bool on)
 {
     const uchar val = on ? 10 : 0;
-    invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcAttenuator, QVariant::fromValue<uchar>(val), 0);
-            commandSession->receiveCommand(funcPreamp, QVariant(), 0);
-        });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [val](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommand(funcAttenuator, QVariant::fromValue(val), receiver);
+                                commandSession->receiveCommand(funcPreamp, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::setAfGain(int level)
@@ -1139,22 +1141,22 @@ void RadioBackend::setAfGain(int level)
 void RadioBackend::setRfGain(int level)
 {
     const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcRfGain, QVariant::fromValue<ushort>(bounded), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [bounded](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcRfGain, QVariant::fromValue(bounded), receiver); });
 }
 
 void RadioBackend::setTxPower(int level)
 {
     const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcRFPower, QVariant::fromValue<ushort>(bounded), 0); });
+    routeVfoReceiverCommand(Vfo::Main, [bounded](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcRFPower, QVariant::fromValue(bounded), receiver); });
 }
 
 void RadioBackend::setTuningStep(int step)
 {
     const uchar val = static_cast<uchar>(qBound(0, step, 11));
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcTuningStep, QVariant::fromValue<uchar>(val), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [val](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcTuningStep, QVariant::fromValue(val), receiver); });
 }
 
 void RadioBackend::selectVfo(Vfo vfo)
@@ -1235,10 +1237,10 @@ void RadioBackend::requestVfoState(Vfo vfo)
             selectMainVfoForCommand(commandSession);
             commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
             commandSession->receiveCommand(funcModeGet, QVariant(), 0);
-            for (const Funcs func :
-                 {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
-                  funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcRFPower, funcSplitStatus,
-                  funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcDTCSCode, funcCompressor, funcXFCStatus})
+            for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch,
+                                     funcManualNotch, funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch,
+                                     funcRFPower, funcSplitStatus, funcReadFreqOffset, funcToneSquelchType,
+                                     funcToneFreq, funcTSQLFreq, funcDTCSCode, funcCompressor, funcXFCStatus})
             {
                 commandSession->receiveCommand(func, QVariant(), 0);
             }
@@ -1248,22 +1250,17 @@ void RadioBackend::requestVfoState(Vfo vfo)
 void RadioBackend::routeVfoReceiverCommand(Vfo vfo, const std::function<void(Commander*, uchar)>& command)
 {
     const Vfo restoreVfo = m_activeVfo;
-    const uchar receiver = vfo == Vfo::Main ? 0 : 1;
     invokeOnCurrentCommander(
-        [vfo, restoreVfo, receiver, command](Commander* commandSession)
+        [vfo, restoreVfo, command](Commander* commandSession)
         {
-            // Always select the command's receiver explicitly. S-meter polling
-            // temporarily selects the other receiver without changing
-            // m_activeVfo, so the logical active VFO cannot be used as proof of
-            // the radio's current physical selection.
-            commandSession->receiveCommand(funcSelectVFO,
-                                           QVariant::fromValue<vfo_t>(vfo == Vfo::Sub ? vfoSub : vfoMain), 0);
-            command(commandSession, receiver);
-            if (vfo != restoreVfo)
-            {
-                commandSession->receiveCommand(
-                    funcSelectVFO, QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain), 0);
-            }
+            sdr9700::backend::routeVfoReceiverCommand(
+                vfo, restoreVfo,
+                [commandSession](Vfo selected)
+                {
+                    commandSession->receiveCommand(
+                        funcSelectVFO, QVariant::fromValue<vfo_t>(selected == Vfo::Sub ? vfoSub : vfoMain), 0);
+                },
+                [commandSession, &command](uchar receiver) { command(commandSession, receiver); });
         });
 }
 
@@ -1403,16 +1400,12 @@ void RadioBackend::setDualWatchEnabled(bool on)
 
 void RadioBackend::setSquelch(bool on, int level)
 {
-    if (!m_commander)
-    {
-        return;
-    }
     // On IC-9700, squelch level 0 = fully open, >0 = active.
     // Setting funcSquelch with 0 disables it; non-zero enables + sets level.
     const ushort squelchVal = on ? qMax<ushort>(1, static_cast<ushort>(qBound(0, level, 255))) : 0;
-    invokeOnCurrentCommander(
-        [squelchVal](Commander* commandSession)
-        { commandSession->receiveCommand(funcSquelch, QVariant::fromValue<ushort>(squelchVal), 0); });
+    routeVfoReceiverCommand(
+        m_activeVfo, [squelchVal](Commander* commandSession, uchar receiver)
+        { commandSession->receiveCommand(funcSquelch, QVariant::fromValue(squelchVal), receiver); });
 }
 
 void RadioBackend::setAgcMode(const QString& mode)
@@ -1434,21 +1427,21 @@ void RadioBackend::setAgcMode(const QString& mode)
     {
         agc = 3;
     }
-    invokeOnCurrentCommander(
-        [agc](Commander* commandSession)
-        { commandSession->receiveCommand(funcAGCTimeConstant, QVariant::fromValue<uchar>(agc), 0); });
+    routeVfoReceiverCommand(
+        m_activeVfo, [agc](Commander* commandSession, uchar receiver)
+        { commandSession->receiveCommand(funcAGCTimeConstant, QVariant::fromValue(agc), receiver); });
 }
 
 void RadioBackend::setAutoNotch(bool on)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcAutoNotch, QVariant::fromValue<bool>(on), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [on](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcAutoNotch, QVariant::fromValue(on), receiver); });
 }
 
 void RadioBackend::setManualNotch(bool on)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcManualNotch, QVariant::fromValue<bool>(on), 0); });
+    routeVfoReceiverCommand(m_activeVfo, [on](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcManualNotch, QVariant::fromValue(on), receiver); });
 }
 
 void RadioBackend::setRitEnabled(bool on)
@@ -1466,33 +1459,33 @@ void RadioBackend::setRitOffset(short hz)
 
 void RadioBackend::setCompressor(bool on)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcCompressor, QVariant::fromValue<bool>(on), 0); });
+    routeVfoReceiverCommand(Vfo::Main, [on](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcCompressor, QVariant::fromValue(on), receiver); });
 }
 
 void RadioBackend::setCompressorLevel(int level)
 {
     const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcCompressorLevel, QVariant::fromValue(bounded), 0); });
+    routeVfoReceiverCommand(
+        Vfo::Main, [bounded](Commander* commandSession, uchar receiver)
+        { commandSession->receiveCommand(funcCompressorLevel, QVariant::fromValue(bounded), receiver); });
 }
 
 void RadioBackend::setXfcEnabled(bool on)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcXFCStatus, QVariant::fromValue<bool>(on), 0); });
+    routeVfoReceiverCommand(Vfo::Main, [on](Commander* commandSession, uchar receiver)
+                            { commandSession->receiveCommand(funcXFCStatus, QVariant::fromValue(on), receiver); });
 }
 
 void RadioBackend::setDuplexMode(duplexMode_t mode)
 {
     m_transmitConfiguration.requestDuplexMode(mode);
-    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
-    invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcSplitStatus, QVariant::fromValue(mode), receiver);
-            commandSession->receiveCommand(funcSplitStatus, QVariant(), receiver);
-        });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [mode](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommand(funcSplitStatus, QVariant::fromValue(mode), receiver);
+                                commandSession->receiveCommand(funcSplitStatus, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::setRepeaterOffsetHz(quint64 hz)
@@ -1502,66 +1495,50 @@ void RadioBackend::setRepeaterOffsetHz(quint64 hz)
     offset.Hz = hz;
     offset.MHzDouble = hz / 1e6;
     offset.VFO = activeVFO;
-    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
-    invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcSendFreqOffset, QVariant::fromValue(offset), receiver);
-            commandSession->receiveCommand(funcReadFreqOffset, QVariant(), receiver);
-        });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [offset](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommand(funcSendFreqOffset, QVariant::fromValue(offset),
+                                                               receiver);
+                                commandSession->receiveCommand(funcReadFreqOffset, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::setToneAccessMode(rptAccessTxRx_t mode)
 {
-    if (!m_commander)
-    {
-        return;
-    }
-
     RptrAccessData access;
     access.accessMode = mode;
-    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
-    invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcToneSquelchType, QVariant::fromValue(access), receiver);
-            commandSession->receiveCommand(funcToneSquelchType, QVariant(), receiver);
-        });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [access](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommand(funcToneSquelchType, QVariant::fromValue(access),
+                                                               receiver);
+                                commandSession->receiveCommand(funcToneSquelchType, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::setToneFrequency(ushort tone)
 {
-    if (!m_commander)
-    {
-        return;
-    }
-
     ToneInfo info(tone);
-    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
-    invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcToneFreq, QVariant::fromValue(info), receiver);
-            commandSession->receiveCommand(funcTSQLFreq, QVariant::fromValue(info), receiver);
-            commandSession->receiveCommand(funcToneFreq, QVariant(), receiver);
-        });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [info](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommand(funcToneFreq, QVariant::fromValue(info), receiver);
+                                commandSession->receiveCommand(funcTSQLFreq, QVariant::fromValue(info), receiver);
+                                commandSession->receiveCommand(funcToneFreq, QVariant(), receiver);
+                                commandSession->receiveCommand(funcTSQLFreq, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::setDtcsCode(ushort code)
 {
-    if (!m_commander)
-    {
-        return;
-    }
-
     ToneInfo info(code);
-    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
-    invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        {
-            commandSession->receiveCommand(funcDTCSCode, QVariant::fromValue(info), receiver);
-            commandSession->receiveCommand(funcDTCSCode, QVariant(), receiver);
-        });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [info](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommand(funcDTCSCode, QVariant::fromValue(info), receiver);
+                                commandSession->receiveCommand(funcDTCSCode, QVariant(), receiver);
+                            });
 }
 
 void RadioBackend::selectMainVfoForCommand(Commander* commandSession)
@@ -1588,7 +1565,7 @@ void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
     commandSession->receiveCommand(funcModeGet, QVariant(), 1);
     for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
                              funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus,
-                             funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcDTCSCode})
+                             funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
     {
         commandSession->receiveCommand(func, QVariant(), 1);
     }

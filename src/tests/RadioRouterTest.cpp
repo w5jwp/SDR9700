@@ -15,6 +15,7 @@ class RadioRouterTest : public QObject
     void mapsAgcAndPreampValues();
     void keepsSubReceiverControlsOutOfLegacyMainSignals();
     void routesToneRegisterForActiveToneMode();
+    void keepsToneModesIndependentByReceiver();
     void routesProtocolPayloadTypes();
     void routesConfirmedVfoSelectionState();
     void routesAllSimpleControlBranches();
@@ -185,6 +186,26 @@ void RadioRouterTest::routesToneRegisterForActiveToneMode()
     QCOMPARE(toneSpy.count(), 0);
     QCOMPARE(dtcsSpy.count(), 1);
     QCOMPARE(dtcsSpy.takeFirst().at(0).value<ushort>(), ushort(245));
+}
+
+void RadioRouterTest::keepsToneModesIndependentByReceiver()
+{
+    RadioRouter router;
+    QSignalSpy toneSpy(&router, &RadioRouter::toneFrequencyChanged);
+    QSignalSpy accessSpy(&router, &RadioRouter::toneAccessModeChanged);
+
+    RptrAccessData mainAccess;
+    mainAccess.accessMode = ratrTN;
+    RptrAccessData subAccess;
+    subAccess.accessMode = ratrNT;
+    router.route(CacheItem(funcToneSquelchType, QVariant::fromValue(mainAccess), 0));
+    router.route(CacheItem(funcToneSquelchType, QVariant::fromValue(subAccess), 1));
+    QCOMPARE(accessSpy.count(), 1);
+
+    router.route(CacheItem(funcTSQLFreq, QVariant::fromValue(ToneInfo(670)), 1));
+    router.route(CacheItem(funcToneFreq, QVariant::fromValue(ToneInfo(885)), 0));
+    QCOMPARE(toneSpy.count(), 1);
+    QCOMPARE(toneSpy.takeFirst().at(0).value<ushort>(), ushort(885));
 }
 
 void RadioRouterTest::routesProtocolPayloadTypes()
