@@ -1252,11 +1252,12 @@ void RadioBackend::routeVfoReceiverCommand(Vfo vfo, const std::function<void(Com
     invokeOnCurrentCommander(
         [vfo, restoreVfo, receiver, command](Commander* commandSession)
         {
-            if (vfo != restoreVfo)
-            {
-                commandSession->receiveCommand(funcSelectVFO,
-                                               QVariant::fromValue<vfo_t>(vfo == Vfo::Sub ? vfoSub : vfoMain), 0);
-            }
+            // Always select the command's receiver explicitly. S-meter polling
+            // temporarily selects the other receiver without changing
+            // m_activeVfo, so the logical active VFO cannot be used as proof of
+            // the radio's current physical selection.
+            commandSession->receiveCommand(funcSelectVFO,
+                                           QVariant::fromValue<vfo_t>(vfo == Vfo::Sub ? vfoSub : vfoMain), 0);
             command(commandSession, receiver);
             if (vfo != restoreVfo)
             {
@@ -2093,6 +2094,8 @@ void RadioBackend::requestPostReadyRadioState()
                 funcManualNotch,
                 funcAGCTimeConstant,
                 funcTuningStep,
+                // RIT remains polled so radio-authoritative state is retained,
+                // but its UI is intentionally deferred during the redesign.
                 funcRitStatus,
                 funcRitFreq,
                 funcMonitor,

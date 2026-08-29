@@ -988,7 +988,7 @@ void MainWindow::applySpectrumScopeSettings()
 
 void MainWindow::updateStepButton()
 {
-    m_spectrumScopeController->updateTuningStepSelector();
+    m_spectrumScopeController->updateTuningStepSelector(tuningStepHz());
 }
 
 quint64 MainWindow::roundFrequencyToStep(quint64 hz) const

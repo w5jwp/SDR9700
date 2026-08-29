@@ -232,7 +232,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     {
         m_tuningStepSelector->addItem(QString::fromLatin1(preset.label), preset.hz);
     }
-    updateTuningStepSelector();
+    updateTuningStepSelector(m_window->tuningStepHz());
     connect(m_tuningStepSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int index)
             {
@@ -377,13 +377,14 @@ void SpectrumScopeController::updateSpectrumVfoMarker()
     m_window->m_spectrumScopeDisplay->setVfoFrequency(displayedHz / 1e6);
 }
 
-void SpectrumScopeController::updateTuningStepSelector()
+void SpectrumScopeController::updateTuningStepSelector(int tuningStepHz)
 {
+    m_tuningStepHz = tuningStepHz;
     if (!m_tuningStepSelector)
     {
         return;
     }
-    const int index = m_tuningStepSelector->findData(m_window->tuningStepHz());
+    const int index = m_tuningStepSelector->findData(m_tuningStepHz);
     if (index >= 0)
     {
         const QSignalBlocker blocker(m_tuningStepSelector);

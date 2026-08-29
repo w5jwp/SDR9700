@@ -26,7 +26,7 @@ class SpectrumScopeController : public QObject
     void onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange);
     void onSpectrumClicked(double freqMhz);
     void onWheelStepRequested(int steps);
-    void updateTuningStepSelector();
+    void updateTuningStepSelector(int tuningStepHz);
 
   private:
     quint64 activeVfoFrequencyHz() const;
@@ -37,6 +37,7 @@ class SpectrumScopeController : public QObject
 
     MainWindow* m_window{nullptr};
     QComboBox* m_tuningStepSelector{nullptr};
+    int m_tuningStepHz{0};
     quint64 m_lastSpectrumScopeLimitStartHz{0};
     quint64 m_lastSpectrumScopeLimitEndHz{0};
     quint64 m_pendingMainRecenterHz{0};
