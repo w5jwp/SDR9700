@@ -114,14 +114,12 @@ class MainWindow : public QMainWindow
     void saveWindowLayout() const;
     void toggleMute();
     void cycleMode();
-    void toggleRit();
 #ifdef HAVE_HIDAPI
     void handleIcomRC28Button(int button, int action);
     void handleIcomRC28Tune(int steps);
     void dispatchIcomRC28Action(const QString& action);
     void setIcomRC28Ptt(bool on);
     void refreshIcomRC28EncoderSettings();
-    void snapIcomRC28FrequencyToKhz();
 #endif
     void updateStepButton();
     void updateIcomRC28Leds();
@@ -168,7 +166,6 @@ class MainWindow : public QMainWindow
 
     int m_lanModValue{128};
     quint64 m_vfoFrequencyHz{0};
-    QPushButton* m_muteBtn{nullptr};
     QPushButton* m_pttBtn{nullptr};
     bool m_vfoPttReady{true};
     DtmfDialog* m_dtmfDialog{nullptr};
@@ -189,7 +186,6 @@ class MainWindow : public QMainWindow
     int m_savedAfGain{128};
     MeterSnapshot m_meterSnapshot;
     bool m_muted{false};
-    bool m_applyingRadioSliderUpdate{false};
     duplexMode_t m_duplexMode{dmSimplex};
     quint64 m_repeaterOffsetHz{600000};
     rptAccessTxRx_t m_toneAccessMode{ratrNN};

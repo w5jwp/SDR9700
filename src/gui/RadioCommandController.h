@@ -17,7 +17,6 @@ class RadioCommandController : public QObject
 
     void toggleMute();
     void cycleMode();
-    void toggleRit();
     void showOffsetMenu(const QPoint& position);
     void showCustomOffsetDialog();
     void applyOffsetSelection(duplexMode_t mode, quint64 offsetHz);

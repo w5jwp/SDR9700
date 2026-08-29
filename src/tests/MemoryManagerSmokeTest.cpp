@@ -291,7 +291,7 @@ void MemoryManagerSmokeTest::compressorMenuReflectsConfirmedLevel()
                            inspectedUnknown = true;
                            menu->close();
                        });
-    controller.showCompressorMenu(QPoint(1, 1));
+    controller.showCompressorMenu(QPoint());
     QVERIFY(inspectedUnknown);
 
     model.vfo()->applyCompressorLevel(192);
@@ -319,7 +319,7 @@ void MemoryManagerSmokeTest::compressorMenuReflectsConfirmedLevel()
                            inspectedConfirmed = true;
                            menu->close();
                        });
-    controller.showCompressorMenu(QPoint(1, 1));
+    controller.showCompressorMenu(QPoint());
     QVERIFY(inspectedConfirmed);
     QCOMPARE(requestedLevel, 200);
 

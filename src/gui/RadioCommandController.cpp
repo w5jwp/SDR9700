@@ -66,7 +66,6 @@ void RadioCommandController::toggleMute()
         }
         m_window->onAfGainChanged(restored);
     }
-    setCommandButtonActive(m_window->m_muteBtn, m_window->m_muted);
     m_window->updateIcomRC28Leds();
 }
 
@@ -90,28 +89,9 @@ void RadioCommandController::cycleMode()
     m_window->m_vfo->setMode(modes.at(nextIndex));
 }
 
-void RadioCommandController::toggleRit()
-{
-    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
-    {
-        return;
-    }
-
-    if (m_window->m_vfo->ritOn())
-    {
-        m_window->m_vfo->setRitEnabled(false);
-    }
-    else
-    {
-        m_window->m_vfo->setRitOffset(m_window->m_vfo->ritHz());
-        m_window->m_vfo->setRitEnabled(true);
-    }
-    m_window->updateIcomRC28Leds();
-}
-
 void RadioCommandController::showOffsetMenu(const QPoint& position)
 {
-    if (position.isNull() || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -229,7 +209,7 @@ void RadioCommandController::applyOffsetSelection(duplexMode_t mode, quint64 off
 
 void RadioCommandController::showToneMenu(const QPoint& position)
 {
-    if (position.isNull() || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -357,7 +337,7 @@ void RadioCommandController::applyToneSelection(rptAccessTxRx_t mode, ushort val
 
 void RadioCommandController::showCompressorMenu(const QPoint& position)
 {
-    if (position.isNull() || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
         return;
     }

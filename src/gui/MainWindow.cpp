@@ -549,7 +549,7 @@ void MainWindow::buildRadioControls()
         connect(m_titleBar, &MainTitleBar::lanModChanged, this,
                 [this](int value)
                 {
-                    if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
+                    if (!m_model->isReady() || m_controlsLocked)
                     {
                         return;
                     }
@@ -829,10 +829,6 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
         m_titleBar->setVolumeEnabled(enabled);
         m_titleBar->setLanModEnabled(controlsEnabled);
     }
-    if (m_muteBtn)
-    {
-        m_muteBtn->setEnabled(enabled);
-    }
     if (m_pttBtn)
     {
         m_pttBtn->setEnabled(enabled && m_vfoPttReady);
@@ -902,11 +898,6 @@ void MainWindow::cycleMode()
     m_radioCommandController->cycleMode();
 }
 
-void MainWindow::toggleRit()
-{
-    m_radioCommandController->toggleRit();
-}
-
 #ifdef HAVE_HIDAPI
 void MainWindow::dispatchIcomRC28Action(const QString& action)
 {
@@ -931,11 +922,6 @@ void MainWindow::handleIcomRC28Tune(int steps)
 void MainWindow::refreshIcomRC28EncoderSettings()
 {
     m_icomRC28Controller->refreshIcomRC28EncoderSettings();
-}
-
-void MainWindow::snapIcomRC28FrequencyToKhz()
-{
-    m_icomRC28Controller->snapIcomRC28FrequencyToKhz();
 }
 
 void MainWindow::handleIcomRC28Button(int button, int action)
