@@ -74,6 +74,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPainter>
+#include <QPalette>
 #include <QPlainTextEdit>
 #include <QSignalBlocker>
 #include <QScreen>
@@ -123,6 +124,11 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     setFixedSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight);
 
     auto* central = new QWidget(this);
+    central->setObjectName(QStringLiteral("mainContent"));
+    QPalette centralPalette = central->palette();
+    centralPalette.setColor(QPalette::Window, QColor(QString::fromLatin1(UiTheme::Color::ContentBackground)));
+    central->setPalette(centralPalette);
+    central->setAutoFillBackground(true);
     auto* vbox = new QVBoxLayout(central);
     vbox->setContentsMargins(0, 0, 0, 0);
     vbox->setSpacing(0);
@@ -132,7 +138,14 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
 #if defined(Q_OS_MAC)
     vbox->addWidget(m_titleBar);
 #endif
-    buildControlPanel(vbox);
+    // Keep the legacy widgets alive temporarily because radio synchronization
+    // still owns several of their models and signals, but do not place the old
+    // VFO, Memories, or Control boxes in the visible application layout.
+    auto* legacyControlHost = new QWidget(central);
+    auto* legacyControlLayout = new QVBoxLayout(legacyControlHost);
+    legacyControlLayout->setContentsMargins(0, 0, 0, 0);
+    buildControlPanel(legacyControlLayout);
+    legacyControlHost->hide();
     m_spectrumScopeController->buildSpectrumScope(vbox);
     buildMemoryWindow();
     restoreWindowLayout();
@@ -159,29 +172,9 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     connect(m_vfo, &VfoModel::toneAccessModeChanged, this, &MainWindow::onToneAccessModeChanged);
     connect(m_vfo, &VfoModel::toneFrequencyChanged, this, &MainWindow::onToneFrequencyChanged);
     connect(m_vfo, &VfoModel::dtcsCodeChanged, this, &MainWindow::onDtcsCodeChanged);
-    connect(m_vfo, &VfoModel::nrChanged, this, [this](bool on, int) { setCommandButtonActive(m_nrBtn, on); });
-    connect(m_vfo, &VfoModel::nbChanged, this, [this](bool on, int) { setCommandButtonActive(m_nbBtn, on); });
-    connect(m_vfo, &VfoModel::preampChanged, this, [this](bool) { updatePreampButton(); });
-    connect(m_vfo, &VfoModel::preampLevelChanged, this, [this](int) { updatePreampButton(); });
-    connect(m_vfo, &VfoModel::attenuatorChanged, this, [this](bool on) { setCommandButtonActive(m_attBtn, on); });
-    connect(m_vfo, &VfoModel::autoNotchChanged, this, [this](bool) { updateNotchButton(); });
-    connect(m_vfo, &VfoModel::manualNotchChanged, this, [this](bool) { updateNotchButton(); });
     connect(m_vfo, &VfoModel::compressorChanged, this, [this](bool on) { setCommandButtonActive(m_compBtn, on); });
     connect(m_vfo, &VfoModel::xfcChanged, this, [this](bool on) { setCommandButtonActive(m_xfcBtn, on); });
     connect(m_vfo, &VfoModel::ritChanged, this, [this](bool, short) { updateRitButton(); });
-    connect(m_vfo, &VfoModel::agcModeChanged, this, [this](const QString&) { updateAgcButton(); });
-    connect(m_vfo, &VfoModel::rfGainChanged, this, &MainWindow::onRfGainChanged);
-    connect(m_vfo, &VfoModel::squelchChanged, this,
-            [this](bool, int level)
-            {
-                m_squelchValue = level;
-                if (m_vfoPanel)
-                {
-                    m_vfoPanel->setSquelch(level);
-                }
-                updateSquelchButton();
-            });
-    connect(m_vfo, &VfoModel::txPowerChanged, this, &MainWindow::onTxPowerChanged);
     if (auto* backend = m_model->backend())
     {
         connect(backend, &IRadioBackend::radioValueUpdated, this,
@@ -191,7 +184,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                     {
                         return;
                     }
-                    auto* receiverPanel = m_vfoPanel;
                     switch (func)
                     {
                     case funcVFOBandMS:
@@ -201,10 +193,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                     case funcFreqSet:
                     case funcSelectedFreq:
                     {
-                        if (!receiverPanel)
-                        {
-                            break;
-                        }
                         const auto f = value.value<Frequency>();
                         if (m_applyingMemorySelection && !m_activeMemoryId.isEmpty() &&
                             f.Hz != m_activeMemoryFrequencyHz)
@@ -219,12 +207,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                         {
                             m_vfoFrequencyHz = f.Hz;
                             qInfo(logGui()).noquote() << "VFO route: MAIN frequency to VFO" << f.Hz;
-                            receiverPanel->setFrequencyText(formatFrequency(f.Hz));
-                            receiverPanel->setBandText(bandLabelForHz(f.Hz));
-                        }
-                        else
-                        {
-                            receiverPanel->setFrequencyText(QStringLiteral("---.---.---"));
                         }
                         break;
                     }
@@ -232,13 +214,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                     case funcModeSet:
                     case funcSelectedMode:
                     {
-                        if (!receiverPanel)
-                        {
-                            break;
-                        }
                         const auto mi = value.value<ModeInfo>();
                         qInfo(logGui()).noquote() << "VFO route: MAIN mode to VFO" << mi.name.toUpper();
-                        receiverPanel->setModeText(mi.name.toUpper());
                         break;
                     }
                     case funcUnselectedFreq:
@@ -246,28 +223,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                         // Command 25/26 unselected data is the inactive VFO inside the MAIN band,
                         // not the SUB band. Do not paint the right-hand SUB VFO from it.
                         break;
-                    case funcRFPower:
-                    {
-                        const int level = qBound(0, value.toInt(), 255);
-                        if (receiverPanel)
-                        {
-                            receiverPanel->setTxPower(level);
-                        }
-                        m_txPowerValue = level;
-                        updateTxPowerButton();
-                        break;
-                    }
-                    case funcSquelch:
-                    {
-                        const int level = qBound(0, value.toInt(), 255);
-                        if (receiverPanel)
-                        {
-                            receiverPanel->setSquelch(level);
-                        }
-                        m_squelchValue = level;
-                        updateSquelchButton();
-                        break;
-                    }
                     default:
                         break;
                     }
@@ -620,7 +575,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
                                         "QLabel { color: %5; }"
                                         "QLineEdit { background: %6; border: 1px solid %7; border-radius: 3px; "
                                         "color: %8; padding: 0 8px; selection-background-color: %9; }")
-                             .arg(UiTheme::Color::Panel, UiTheme::Color::TextStatusPrimary,
+                             .arg(UiTheme::Color::ContentBackground, UiTheme::Color::TextStatusPrimary,
                                   UiTheme::Color::BorderMedium, UiTheme::Color::TextStatusSecondary,
                                   UiTheme::Color::TextStatusPrimary, UiTheme::Color::Field, UiTheme::Color::BorderFocus,
                                   UiTheme::Color::TextField, UiTheme::Color::AccentDark));
@@ -643,16 +598,8 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
         return button;
     };
 
-    m_txPowerValue = 0;
-    m_squelchValue = 0;
-    m_rfGainValue = 0;
     m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
     m_vfoPanel = new VfoPanel(QStringLiteral("VFO"), strip);
-    m_vfoPanel->setFrequencyReadOnly(false);
-    m_vfoPanel->setFrequencyText(QStringLiteral("---.---.---"));
-    m_vfoPanel->setBandText(QStringLiteral("--"));
-    m_vfoPanel->setModeText(QStringLiteral("--"));
-    m_vfoPanel->setTxPower(0);
     m_vfoPanel->setLanMod(m_lanModValue);
     const int appVolume = appVolumeSettingValue();
     m_currentAfGain = appVolume;
@@ -660,41 +607,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     {
         m_titleBar->setVolume(appVolume);
     }
-    m_vfoPanel->setSquelch(0);
     m_memoryPanel = new MemoryPanel(strip);
-
-    m_agcBtn = makeSelectorButton("AGC", QStringLiteral("MID"), "AGC mode", "Select AGC time constant.");
-    m_attBtn = makeSelectorButton("ATT", QStringLiteral("OFF"), "Attenuator", "Toggle receiver attenuator.");
-    m_attBtn->setCheckable(true);
-    m_attBtn->setProperty("toggleLabel", "ATT");
-    m_nbBtn = makeSelectorButton("NB", QStringLiteral("OFF"), "Noise blanker", "Toggle noise blanker.");
-    m_nbBtn->setCheckable(true);
-    m_nbBtn->setProperty("toggleLabel", "NB");
-    m_notchBtn = makeSelectorButton("NOTCH", QStringLiteral("OFF"), "Notch", "Select notch filter mode.");
-    m_nrBtn = makeSelectorButton("NR", QStringLiteral("OFF"), "Noise reduction", "Toggle noise reduction.");
-    m_nrBtn->setCheckable(true);
-    m_nrBtn->setProperty("toggleLabel", "NR");
-    m_preBtn = makeSelectorButton("PRE", QStringLiteral("OFF"), "Preamp", "Select receiver preamp.");
-    m_ritBtn = makeSelectorButton("RIT", QStringLiteral("OFF"), "RIT", "Set receiver incremental tuning offset.");
-    m_rfGainBtn = makeSelectorButton("RF GAIN", QStringLiteral("OFF"), "RF gain", "Set receiver RF gain.");
-    m_rfGainBtn->setObjectName(QStringLiteral("rfGainButton"));
-    m_agcBtn->setToolTip(QStringLiteral("Automatic Gain Control (AGC)\n"
-                                        "Controls receiver gain to produce a constant audio output level."));
-    m_attBtn->setToolTip(QStringLiteral("Attenuator (ATT)\n"
-                                        "Prevents a desired signal from becoming distorted in the presence of a very "
-                                        "strong signal."));
-    m_nbBtn->setToolTip(
-        QStringLiteral("Noise Blanker (NB)\nEliminate pulse-type noise such as the noise from car ignitions."));
-    m_notchBtn->setToolTip(QStringLiteral("Notch Filter\n"
-                                          "Attenuates beat tones, tuning signals, and so on in the SSB, CW, RTTY, and "
-                                          "AM modes."));
-    m_nrBtn->setToolTip(
-        QStringLiteral("Noise Reduction (NR)\nReduces random noise components and enhances signal audio."));
-    m_preBtn->setToolTip(QStringLiteral("Preamplifier (PRE)\nAmplifies received signals in the receiver front end."));
-    m_rfGainBtn->setToolTip(
-        QStringLiteral("RF Gain\nIncrease/decrease the noise received from a nearby strong station."));
-    m_ritBtn->setToolTip(
-        QStringLiteral("Receive Increment Tuning (RIT)\nCompensate for differences in frequencies of other stations."));
 
     m_pttBtn = makeSelectorButton("PTT", QStringLiteral("OFF"), "PTT", "Hold to transmit.");
     m_pttBtn->setCheckable(false);
@@ -704,22 +617,14 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     // by confirmed radio state, not by QAbstractButton's local click toggle.
     m_compBtn->setCheckable(false);
     m_compBtn->setProperty("toggleLabel", "COMP");
-    m_offsetBtn =
-        makeSelectorButton("OFFSET", QStringLiteral("SIMPLEX"), "Repeater offset", "Select repeater duplex offset.");
-    m_offsetBtn->setToolTip("Select repeater duplex offset.");
-    m_toneBtn = makeSelectorButton("TONE", QStringLiteral("OFF"), "Tone settings", "Select tone or DTCS.");
-    m_toneBtn->setToolTip("Select tone or DTCS.");
-    m_xfcBtn = makeSelectorButton("XFC", QStringLiteral("OFF"), "XFC", "Toggle transmit frequency check.");
-    m_xfcBtn->setCheckable(true);
-    m_xfcBtn->setProperty("toggleLabel", "XFC");
-    m_xfcBtn->setToolTip("Transmit Frequency Check (XFC)\nMonitor the transmit frequency while split is active.");
-
-    const ReceivePanel::Buttons receiveButtons{
-        m_agcBtn,    m_attBtn, m_compBtn,   m_nbBtn,  m_notchBtn, m_nrBtn,
-        m_offsetBtn, m_preBtn, m_rfGainBtn, m_ritBtn, m_toneBtn,  m_xfcBtn,
-    };
+    const ReceivePanel::Buttons receiveButtons{m_compBtn, m_offsetBtn, m_ritBtn, m_toneBtn, m_xfcBtn};
     auto* receiveGroup = new ReceivePanel(receiveButtons, strip);
-    auto* pttGroup = new PttPanel(m_pttBtn, nullptr, strip);
+    // Preserve the control row's current allocation while PTT is temporarily
+    // hosted in the VFO selection panel.
+    auto* pttPlaceholder = new QWidget(strip);
+    pttPlaceholder->setFixedWidth(kSelectorButtonSize.width() + 16);
+    pttPlaceholder->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    m_pttBtn->hide();
     auto* receiveStack = new QWidget(strip);
     receiveStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     auto* receiveStackLayout = new QVBoxLayout(receiveStack);
@@ -730,24 +635,10 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     receiveTopRow->setContentsMargins(0, 0, 0, 0);
     receiveTopRow->setSpacing(kControlRowSpacing);
     receiveTopRow->addWidget(receiveGroup, 1);
-    receiveTopRow->addWidget(pttGroup);
+    receiveTopRow->addWidget(pttPlaceholder);
     receiveStackLayout->addLayout(receiveTopRow);
 
-    connect(m_agcBtn, &QPushButton::clicked, this, &MainWindow::showAgcMenu);
     connect(m_compBtn, &QPushButton::clicked, this, &MainWindow::showCompressorMenu);
-    connect(m_notchBtn, &QPushButton::clicked, this, &MainWindow::showNotchMenu);
-    connect(m_ritBtn, &QPushButton::clicked, this, &MainWindow::showRitMenu);
-    connect(m_offsetBtn, &QPushButton::clicked, this, &MainWindow::showOffsetMenu);
-    connect(m_toneBtn, &QPushButton::clicked, this, &MainWindow::showToneMenu);
-    connect(m_xfcBtn, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (m_vfo)
-                {
-                    m_vfo->setXfcEnabled(!m_vfo->xfcOn());
-                    setCommandButtonActive(m_xfcBtn, m_vfo->xfcOn());
-                }
-            });
     connect(m_memoryPanel, &MemoryPanel::memoryActivated, this,
             [this](const QString& memoryId) { selectMemoryById(memoryId, false); });
 
@@ -777,27 +668,9 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     vbox->addWidget(strip);
     strip->setFocus();
 
-    connect(m_vfoPanel, &VfoPanel::frequencyReturnPressed, this, [this]() { commitFrequencyEdit(m_vfoPanel); });
     connect(m_pttBtn, &QPushButton::pressed, this, &MainWindow::onPttPressed);
     connect(m_pttBtn, &QPushButton::released, this, &MainWindow::onPttReleased);
     connect(m_dtmfDialog, &DtmfDialog::sendRequested, this, &MainWindow::onDtmfSendRequested);
-    auto connectTxPowerSlider = [this](VfoPanel* widget)
-    {
-        connect(widget, &VfoPanel::txPowerChanged, this,
-                [this](int value)
-                {
-                    if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
-                    {
-                        return;
-                    }
-                    m_txPowerValue = qBound(0, value, 255);
-                    if (auto* backend = m_model ? m_model->backend() : nullptr)
-                    {
-                        backend->setTxPower(m_txPowerValue);
-                    }
-                });
-    };
-    connectTxPowerSlider(m_vfoPanel);
     auto connectLanModSlider = [this](VfoPanel* widget)
     {
         connect(widget, &VfoPanel::lanModChanged, this,
@@ -813,133 +686,7 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
                 });
     };
     connectLanModSlider(m_vfoPanel);
-    auto connectSquelchSlider = [this](VfoPanel* widget)
-    {
-        connect(widget, &VfoPanel::squelchChanged, this,
-                [this](int value)
-                {
-                    if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
-                    {
-                        return;
-                    }
-                    if (auto* backend = m_model ? m_model->backend() : nullptr)
-                    {
-                        backend->setSquelch(value > 0, value);
-                    }
-                });
-    };
-    connectSquelchSlider(m_vfoPanel);
-    connect(m_rfGainBtn, &QPushButton::clicked, this, &MainWindow::showRfGainMenu);
-    auto showModeMenuFor = [this](const VfoPanel* widget)
-    {
-        if (!widget || !m_vfo)
-        {
-            return;
-        }
-        QMenu menu(this);
-        styleCompactMenu(&menu);
-        for (const QString& mode : m_vfo->availableModes())
-        {
-            menu.addAction(mode);
-        }
-        const QAction* chosen = menu.exec(widget->modeMenuPosition());
-        if (chosen)
-        {
-            leaveMemoryModeForManualChange();
-            m_vfo->setMode(chosen->text());
-        }
-    };
-    connect(m_vfoPanel, &VfoPanel::modeClicked, this, [showModeMenuFor, this]() { showModeMenuFor(m_vfoPanel); });
-    auto showBandMenuFor = [this](const VfoPanel* widget)
-    {
-        if (!widget || !m_vfo)
-        {
-            return;
-        }
-        QMenu menu(this);
-        styleCompactMenu(&menu);
-        for (const availableBands band : sdr9700::kRadioUiBandOrder)
-        {
-            auto* action = menu.addAction(sdr9700::radioBandMenuLabel(band));
-            action->setData(static_cast<int>(band));
-        }
-        const QAction* chosen = menu.exec(widget->bandMenuPosition());
-        if (chosen)
-        {
-            const auto band = static_cast<availableBands>(chosen->data().toInt());
-            const int bandIndex = sdr9700::radioBandUiIndex(band);
-            if (bandIndex < 0)
-            {
-                return;
-            }
-            const quint64 defaultFrequency = sdr9700::radioBandDefaultFrequency(band);
-            const quint64 hz =
-                m_lastBandFrequencyHz[bandIndex] > 0 ? m_lastBandFrequencyHz[bandIndex] : defaultFrequency;
-            if (hz == 0)
-            {
-                return;
-            }
-            qInfo(logGui()).noquote() << "VFO action: band selected" << sdr9700::radioBandShortLabel(band) << hz;
-            leaveMemoryModeForManualChange();
-            m_vfo->setFrequencyHz(hz);
-        }
-    };
-    connect(m_vfoPanel, &VfoPanel::bandClicked, this, [showBandMenuFor, this]() { showBandMenuFor(m_vfoPanel); });
-    connect(m_vfoPanel, &VfoPanel::stepClicked, this,
-            [this]()
-            {
-                if (!m_vfoPanel)
-                {
-                    return;
-                }
-                const int currentStep = tuningStepHz();
-                QMenu menu(this);
-                styleCompactMenu(&menu);
-                for (const auto& preset : kStepPresets)
-                {
-                    auto* action = menu.addAction(QString::fromLatin1(preset.label));
-                    action->setData(preset.hz);
-                    action->setCheckable(true);
-                    action->setChecked(preset.hz == currentStep);
-                }
-                const QAction* chosen = menu.exec(m_vfoPanel->stepMenuPosition());
-                if (chosen)
-                {
-                    AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHZSettingsKey),
-                                                     chosen->data().toInt());
-                    updateStepButton();
-                    applyRadioTuningStep();
-                }
-            });
     updateStepButton();
-    connect(m_nrBtn, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (m_vfo)
-                {
-                    m_vfo->setNrEnabled(!m_vfo->nrOn());
-                    setCommandButtonActive(m_nrBtn, m_vfo->nrOn());
-                }
-            });
-    connect(m_nbBtn, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (m_vfo)
-                {
-                    m_vfo->setNbEnabled(!m_vfo->nbOn());
-                    setCommandButtonActive(m_nbBtn, m_vfo->nbOn());
-                }
-            });
-    connect(m_preBtn, &QPushButton::clicked, this, &MainWindow::showPreampMenu);
-    connect(m_attBtn, &QPushButton::clicked, this,
-            [this]()
-            {
-                if (m_vfo)
-                {
-                    m_vfo->setAttenuatorEnabled(!m_vfo->attenuatorOn());
-                    setCommandButtonActive(m_attBtn, m_vfo->attenuatorOn());
-                }
-            });
 
     m_currentAfGain = appVolumeSettingValue();
     m_savedAfGain = m_currentAfGain;
@@ -1186,8 +933,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
         m_titleBar->setVolumeEnabled(enabled);
     }
 
-    for (auto* button : {m_agcBtn, m_nrBtn, m_nbBtn, m_notchBtn, m_preBtn, m_attBtn, m_ritBtn, m_compBtn, m_offsetBtn,
-                         m_toneBtn, m_xfcBtn, m_squelchBtn})
+    for (auto* button : {m_ritBtn, m_compBtn, m_offsetBtn, m_toneBtn, m_xfcBtn})
     {
         if (button)
         {
@@ -1202,11 +948,6 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     {
         m_pttBtn->setEnabled(enabled && m_vfoPttReady);
     }
-    if (m_rfGainBtn)
-    {
-        m_rfGainBtn->setEnabled(controlsEnabled);
-    }
-
     if (m_spectrumScopeDisplay)
     {
         m_spectrumScopeDisplay->setInteractionLocked(m_controlsLocked);
@@ -1223,9 +964,6 @@ void MainWindow::resetRadioOwnedControlsForSync()
 {
     m_vfoFrequencyHz = 0;
     m_meterSnapshot = {};
-    m_txPowerValue = 0;
-    m_rfGainValue = 0;
-    m_squelchValue = 0;
     m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
     m_duplexMode = dmSimplex;
     m_toneAccessMode = ratrNN;
@@ -1234,18 +972,10 @@ void MainWindow::resetRadioOwnedControlsForSync()
 
     if (m_vfoPanel)
     {
-        if (!m_vfoPanel->frequencyHasFocus())
-        {
-            m_vfoPanel->setFrequencyText(QStringLiteral("---.---.---"));
-        }
-        m_vfoPanel->setBandText(QStringLiteral("--"));
-        m_vfoPanel->setModeText(QStringLiteral("--"));
         m_vfoPanel->setMeterEnabled(false);
         m_vfoPanel->setTransmitPowerMode(false);
         m_vfoPanel->setSMeterValue(0);
-        m_vfoPanel->setTxPower(0);
         m_vfoPanel->setLanMod(m_lanModValue);
-        m_vfoPanel->setSquelch(0);
     }
     if (m_mainVfoController)
     {
@@ -1256,23 +986,10 @@ void MainWindow::resetRadioOwnedControlsForSync()
         m_subVfoController->clearFrequency();
     }
 
-    setCommandButtonActive(m_nrBtn, false);
-    setCommandButtonActive(m_nbBtn, false);
-    setSelectorButtonLines(m_notchBtn, QStringLiteral("NOTCH"), QStringLiteral("OFF"));
-    setCommandButtonActive(m_notchBtn, false);
-    setSelectorButtonLines(m_preBtn, QStringLiteral("PRE"), QStringLiteral("OFF"));
-    setCommandButtonActive(m_preBtn, false);
-    setCommandButtonActive(m_attBtn, false);
     setCommandButtonActive(m_compBtn, false);
     setCommandButtonActive(m_xfcBtn, false);
-    setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), QStringLiteral("MID"));
-    setSelectorButtonLines(m_ritBtn, QStringLiteral("RIT"), QStringLiteral("OFF"));
-    setCommandButtonActive(m_ritBtn, false);
     updateOffsetButton();
     updateToneButton();
-    updateSquelchButton();
-    updateTxPowerButton();
-    updateRfGainButton();
     updateTxIndicator(false);
     if (m_metersDialog)
     {
@@ -1404,6 +1121,7 @@ void MainWindow::applySpectrumScopeSettings()
 void MainWindow::updateStepButton()
 {
     m_radioCommandController->updateStepButton();
+    m_spectrumScopeController->updateTuningStepSelector();
 }
 
 quint64 MainWindow::roundFrequencyToStep(quint64 hz) const
@@ -1675,7 +1393,6 @@ void MainWindow::onRadioReadyChanged(bool ready)
     const bool notifyReady = uiReady && !m_radioUiReadyNotified;
     m_radioUiReadyNotified = uiReady;
     setRadioControlsEnabled(uiReady);
-    updateAgcButton();
     if (m_vfoPanel)
     {
         m_vfoPanel->setMeterEnabled(uiReady);
@@ -1781,22 +1498,10 @@ void MainWindow::onFrequencyChanged(quint64 hz)
 
     m_vfoFrequencyHz = hz;
     updateSpectrumScopeBandLimits(hz);
-    if (const int bandIndex = vfoBandIndexForHz(hz); bandIndex >= 0)
-    {
-        m_lastBandFrequencyHz[bandIndex] = hz;
-    }
     qInfo(logGui()).noquote() << "VFO route: selected MAIN frequency" << hz;
-    if (m_vfoPanel && !m_vfoPanel->frequencyHasFocus())
-    {
-        m_vfoPanel->setFrequencyText(formatFrequency(hz));
-    }
     if (m_mainVfoController)
     {
         m_mainVfoController->setFrequencyHz(hz);
-    }
-    if (m_vfoPanel)
-    {
-        m_vfoPanel->setBandText(bandLabelForHz(hz));
     }
     updateSpectrumVfoMarker();
 }
@@ -1815,11 +1520,6 @@ void MainWindow::onModeChanged(const QString& mode)
             clearActiveMemory();
         }
     }
-    if (m_vfoPanel)
-    {
-        m_vfoPanel->setModeText(mode);
-    }
-    updateAgcButton();
 }
 
 void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
@@ -2116,22 +1816,6 @@ void MainWindow::onAfGainChanged(int value)
     m_vfo->setAfGain(value);
 }
 
-void MainWindow::onRfGainChanged(int value)
-{
-    m_rfGainValue = qBound(0, value, 255);
-    updateRfGainButton();
-}
-
-void MainWindow::onTxPowerChanged(int value)
-{
-    m_txPowerValue = qBound(0, value, 255);
-    if (m_vfoPanel)
-    {
-        m_vfoPanel->setTxPower(m_txPowerValue);
-    }
-    updateTxPowerButton();
-}
-
 void MainWindow::showDtmfDialog()
 {
     if (!m_dtmfDialog)
@@ -2405,86 +2089,9 @@ void MainWindow::onDtcsCodeChanged(ushort code)
     updateToneButton();
 }
 
-void MainWindow::commitFrequencyEdit(VfoPanel* panel)
-{
-    auto* backend = m_model ? m_model->backend() : nullptr;
-    if (!panel || !m_vfo || !backend || !m_model->isReady() || m_controlsLocked)
-    {
-        return;
-    }
-    if (panel != m_vfoPanel)
-    {
-        panel->setFrequencyText(QStringLiteral("---.---.---"));
-        panel->clearFrequencyFocus();
-        return;
-    }
-
-    const quint64 currentHz = m_vfoFrequencyHz;
-    const auto restoreFrequencyText = [panel, currentHz]()
-    {
-        if (currentHz > 0)
-        {
-            panel->setFrequencyText(formatFrequency(currentHz));
-        }
-        else
-        {
-            panel->setFrequencyText(QStringLiteral("---.---.---"));
-        }
-    };
-
-    quint64 hz = 0;
-    if (!parseFrequencyText(panel->frequencyText(), &hz))
-    {
-        restoreFrequencyText();
-        return;
-    }
-
-    leaveMemoryModeForManualChange();
-    backend->setFrequencyHz(hz);
-    panel->clearFrequencyFocus();
-}
-
-void MainWindow::showAgcMenu()
-{
-    m_radioCommandController->showAgcMenu();
-}
-
-void MainWindow::updateAgcButton()
-{
-    if (!m_agcBtn || !m_vfo)
-    {
-        return;
-    }
-
-    setSelectorButtonLines(m_agcBtn, QStringLiteral("AGC"), agcDisplayMode(m_vfo->mode(), m_vfo->agcMode()));
-    // The IC-9700 has no AGC-off state. Some modes expose a selectable time
-    // constant, while FM-family modes keep AGC fixed at FAST.
-    setCommandButtonActive(m_agcBtn, radioUiReady());
-}
-
-void MainWindow::showPreampMenu()
-{
-    m_radioCommandController->showPreampMenu();
-}
-
-void MainWindow::updatePreampButton()
-{
-    m_radioCommandController->updatePreampButton();
-}
-
-void MainWindow::showNotchMenu()
-{
-    m_radioCommandController->showNotchMenu();
-}
-
 void MainWindow::showCompressorMenu()
 {
     m_radioCommandController->showCompressorMenu();
-}
-
-void MainWindow::updateNotchButton()
-{
-    m_radioCommandController->updateNotchButton();
 }
 
 void MainWindow::updateRitButton()
@@ -2535,24 +2142,4 @@ void MainWindow::applyToneSelection(rptAccessTxRx_t mode, ushort value)
 void MainWindow::updateToneButton()
 {
     m_radioCommandController->updateToneButton();
-}
-
-void MainWindow::updateSquelchButton()
-{
-    m_radioCommandController->updateSquelchButton();
-}
-
-void MainWindow::updateTxPowerButton()
-{
-    m_radioCommandController->updateTxPowerButton();
-}
-
-void MainWindow::updateRfGainButton()
-{
-    m_radioCommandController->updateRfGainButton();
-}
-
-void MainWindow::showRfGainMenu()
-{
-    m_radioCommandController->showRfGainMenu();
 }

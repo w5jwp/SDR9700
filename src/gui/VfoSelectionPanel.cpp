@@ -11,7 +11,7 @@
 namespace
 {
 constexpr int kPanelWidth = 148;
-constexpr int kPanelHeight = 171;
+constexpr int kPanelHeight = 218;
 constexpr int kPanelMargin = 6;
 constexpr int kButtonHeight = 18;
 constexpr int kButtonWidth = 108;
@@ -42,6 +42,10 @@ VfoSelectionPanel::VfoSelectionPanel(QWidget* parent) : QWidget(parent)
     setObjectName(QStringLiteral("vfoSelectionPanel"));
     setAccessibleName(QStringLiteral("VFO selection controls"));
     setFixedSize(kPanelWidth, kPanelHeight);
+    QPalette chromePalette = palette();
+    chromePalette.setColor(QPalette::Window, QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
+    setPalette(chromePalette);
+    setAutoFillBackground(true);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(kPanelMargin, kPanelMargin, kPanelMargin, kPanelMargin);
@@ -103,12 +107,30 @@ void VfoSelectionPanel::setExchangePending(bool pending)
     }
 }
 
+void VfoSelectionPanel::setPttButton(QPushButton* button)
+{
+    if (!button || m_pttButton == button)
+    {
+        return;
+    }
+
+    m_pttButton = button;
+    m_pttButton->setParent(this);
+    m_pttButton->setFixedSize(kButtonWidth, 36);
+    m_pttButton->setProperty("pttButton", true);
+    layout()->activate();
+    m_pttButton->move((width() - m_pttButton->width()) / 2,
+                      m_dualWatchButton->geometry().bottom() + 1 + kButtonSpacing);
+    m_pttButton->show();
+    m_pttButton->raise();
+}
+
 void VfoSelectionPanel::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(QString::fromLatin1(UiTheme::Color::Field)));
+    painter.fillRect(rect(), QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
 }
 
 void VfoSelectionPanel::setSelectedVfo(Vfo vfo)

@@ -16,6 +16,15 @@
 VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayParent, QObject* parent)
     : QObject(parent), m_vfo(vfo), m_backend(backend), m_display(new VfoDisplay(vfo, displayParent))
 {
+    m_initialPublishTimer.setSingleShot(true);
+    m_initialPublishTimer.setInterval(250);
+    connect(&m_initialPublishTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                m_initialStatePublished = true;
+                publishConfirmedState();
+            });
+
     connect(m_display, &VfoDisplay::frequencySubmitted, this,
             [this](const QString& text)
             {
@@ -24,6 +33,7 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
                                    sdr9700::ui::main_window::vfoBandIndexForHz(hz) >= 0;
                 if (valid && m_backend)
                 {
+                    emit frequencyRecenterRequested(m_vfo, hz);
                     m_backend->setVfoFrequencyHz(m_vfo, hz);
                 }
                 if (m_confirmedFrequencyHz.has_value())
@@ -39,9 +49,49 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
     connect(m_display, &VfoDisplay::bandClicked, this,
             [this]() { emit bandMenuRequested(m_vfo, m_display->bandMenuPosition()); });
     connect(m_display, &VfoDisplay::modeClicked, this, &VfoController::showModeMenu);
-    connect(m_display, &VfoDisplay::receiverControlClicked, this, &VfoController::showReceiverControlMenu);
+    connect(m_display, &VfoDisplay::receiverControlClicked, this,
+            [this](const QString& control)
+            {
+                if (control == QStringLiteral("TONE"))
+                {
+                    emit toneMenuRequested(m_vfo, m_display->receiverControlMenuPosition(control));
+                    return;
+                }
+                if (control == QStringLiteral("OFFSET"))
+                {
+                    emit offsetMenuRequested(m_vfo, m_display->receiverControlMenuPosition(control));
+                    return;
+                }
+                if (control == QStringLiteral("XFC") && m_vfo == Vfo::Main && m_backend)
+                {
+                    m_backend->setXfcEnabled(!m_xfcEnabled);
+                    return;
+                }
+                if (control == QStringLiteral("COMP") && m_vfo == Vfo::Main)
+                {
+                    emit compressorMenuRequested(m_vfo, m_display->receiverControlMenuPosition(control));
+                    return;
+                }
+                showReceiverControlMenu(control);
+            });
     if (m_backend)
     {
+        if (m_vfo == Vfo::Main)
+        {
+            connect(m_backend, &IRadioBackend::powerMeterChanged, m_display, &VfoDisplay::setTransmitPowerWatts);
+            connect(m_backend, &IRadioBackend::xfcChanged, this,
+                    [this](bool enabled)
+                    {
+                        m_xfcEnabled = enabled;
+                        updateReceiverControlDisplay();
+                    });
+            connect(m_backend, &IRadioBackend::compressorChanged, this,
+                    [this](bool enabled)
+                    {
+                        m_compressorEnabled = enabled;
+                        updateReceiverControlDisplay();
+                    });
+        }
         connect(m_backend, &IRadioBackend::radioValueUpdated, this,
                 [this](Funcs func, const QVariant& value, uchar receiver)
                 {
@@ -51,7 +101,9 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
                          func != funcModeGet && func != funcModeSet && func != funcSelectedMode &&
                          func != funcAGCTimeConstant && func != funcAttenuator && func != funcNoiseBlanker &&
                          func != funcAutoNotch && func != funcManualNotch && func != funcNoiseReduction &&
-                         func != funcPreamp && func != funcRfGain && func != funcSquelch && func != funcRFPower))
+                         func != funcPreamp && func != funcRfGain && func != funcSquelch && func != funcRFPower &&
+                         func != funcSMeter && func != funcSplitStatus && func != funcReadFreqOffset &&
+                         func != funcToneSquelchType && func != funcToneFreq && func != funcDTCSCode))
                     {
                         return;
                     }
@@ -65,7 +117,7 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
                         if (!mode.isEmpty())
                         {
                             m_mode = mode;
-                            m_display->setModeText(mode);
+                            publishConfirmedState();
                         }
                         return;
                     }
@@ -112,6 +164,32 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
                             updateReceiverControlDisplay();
                         }
                         return;
+                    case funcSMeter:
+                        if (stateReady())
+                        {
+                            m_display->setSMeterValue(qBound(0, value.toInt(), 255));
+                        }
+                        return;
+                    case funcSplitStatus:
+                        m_duplexMode = value.value<duplexMode_t>();
+                        updateReceiverControlDisplay();
+                        return;
+                    case funcReadFreqOffset:
+                        m_repeaterOffsetHz = value.value<Frequency>().Hz;
+                        updateReceiverControlDisplay();
+                        return;
+                    case funcToneSquelchType:
+                        m_toneAccessMode = value.value<RptrAccessData>().accessMode;
+                        updateReceiverControlDisplay();
+                        return;
+                    case funcToneFreq:
+                        m_toneFrequency = value.value<ToneInfo>().tone;
+                        updateReceiverControlDisplay();
+                        return;
+                    case funcDTCSCode:
+                        m_dtcsCode = value.value<ToneInfo>().tone;
+                        updateReceiverControlDisplay();
+                        return;
                     default:
                         break;
                     }
@@ -144,11 +222,11 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayPa
                 });
     }
     updateReceiverControlDisplay();
+    updateDisplayEnabled();
 }
 
 void VfoController::setFrequencyHz(quint64 hz)
 {
-    const bool changed = !m_confirmedFrequencyHz.has_value() || *m_confirmedFrequencyHz != hz;
     m_confirmedFrequencyHz = hz;
     m_band = sdr9700::radioBandForFrequency(hz);
     const int bandIndex = sdr9700::radioBandUiIndex(m_band);
@@ -156,25 +234,26 @@ void VfoController::setFrequencyHz(quint64 hz)
     {
         m_lastBandFrequencyHz[static_cast<std::size_t>(bandIndex)] = hz;
     }
-    m_display->setFrequencyHz(hz);
-    m_display->setBandText(m_band == bandUnknown ? QStringLiteral("--") : sdr9700::radioBandShortLabel(m_band));
-    if (changed)
-    {
-        emit frequencyChanged(hz);
-    }
+    publishConfirmedState();
 }
 
 void VfoController::clearFrequency()
 {
+    m_initialPublishTimer.stop();
+    m_initialStatePublished = false;
     m_confirmedFrequencyHz.reset();
+    m_publishedFrequencyHz.reset();
     m_band = bandUnknown;
     m_display->clearFrequency();
     m_mode.clear();
+    m_display->setSMeterValue(0);
+    updateDisplayEnabled();
 }
 
 void VfoController::setOperatingEnabled(bool enabled)
 {
-    m_display->setOperatingEnabled(enabled);
+    m_operatingEnabled = enabled;
+    updateDisplayEnabled();
 }
 
 void VfoController::setSelected(bool selected)
@@ -185,13 +264,18 @@ void VfoController::setSelected(bool selected)
 void VfoController::setTransmitting(bool transmitting)
 {
     m_display->setTransmitting(transmitting);
+    if (m_vfo == Vfo::Main)
+    {
+        m_display->setTransmitPowerMode(transmitting);
+    }
 }
 
 void VfoController::captureExchangeableControlState()
 {
     m_capturedExchangeState = ExchangeableControlState{
-        m_agcMode,   m_attenuatorEnabled, m_nbEnabled, m_autoNotchEnabled, m_manualNotchEnabled,
-        m_nrEnabled, m_preampLevel,       m_squelch};
+        m_agcMode,        m_attenuatorEnabled, m_nbEnabled, m_autoNotchEnabled, m_manualNotchEnabled,
+        m_nrEnabled,      m_preampLevel,       m_squelch,   m_duplexMode,       m_repeaterOffsetHz,
+        m_toneAccessMode, m_toneFrequency,     m_dtcsCode};
 }
 
 void VfoController::applyCapturedControlExchange(VfoController* other)
@@ -219,6 +303,11 @@ void VfoController::applyExchangeableControlState(const ExchangeableControlState
     m_nrEnabled = state.nrEnabled;
     m_preampLevel = state.preampLevel;
     m_squelch = state.squelch;
+    m_duplexMode = state.duplexMode;
+    m_repeaterOffsetHz = state.repeaterOffsetHz;
+    m_toneAccessMode = state.toneAccessMode;
+    m_toneFrequency = state.toneFrequency;
+    m_dtcsCode = state.dtcsCode;
     updateReceiverControlDisplay();
 }
 
@@ -233,27 +322,93 @@ void VfoController::selectBand(availableBands requestedBand)
     const quint64 hz = remembered > 0 ? remembered : sdr9700::radioBandDefaultFrequency(requestedBand);
     if (hz > 0)
     {
+        emit frequencyRecenterRequested(m_vfo, hz);
         m_backend->setVfoFrequencyHz(m_vfo, hz);
     }
 }
 
+bool VfoController::stateReady() const
+{
+    // Controllers without a backend are used as inert UI fixtures in tests and
+    // previews. Live radio controllers require both authoritative fields.
+    return m_confirmedFrequencyHz.has_value() && (!m_backend || !m_mode.isEmpty());
+}
+
+void VfoController::publishConfirmedState()
+{
+    if (!stateReady())
+    {
+        updateDisplayEnabled();
+        return;
+    }
+
+    // Let the radio's remaining per-VFO replies settle before exposing the
+    // first confirmed snapshot. MAIN and SUB retain independent timers so one
+    // side never delays or prematurely publishes the other.
+    if (m_backend && !m_initialStatePublished)
+    {
+        if (!m_initialPublishTimer.isActive())
+        {
+            m_initialPublishTimer.start();
+        }
+        return;
+    }
+
+    const quint64 frequencyHz = *m_confirmedFrequencyHz;
+    m_display->setFrequencyHz(frequencyHz);
+    m_display->setBandText(m_band == bandUnknown ? QStringLiteral("--") : sdr9700::radioBandShortLabel(m_band));
+    if (!m_mode.isEmpty())
+    {
+        m_display->setModeText(m_mode);
+    }
+    updateReceiverControlDisplay();
+    updateDisplayEnabled();
+
+    if (!m_publishedFrequencyHz.has_value() || *m_publishedFrequencyHz != frequencyHz)
+    {
+        m_publishedFrequencyHz = frequencyHz;
+        emit frequencyChanged(frequencyHz);
+    }
+}
+
+void VfoController::updateDisplayEnabled()
+{
+    m_display->setOperatingEnabled(m_operatingEnabled && stateReady());
+}
+
 void VfoController::updateReceiverControlDisplay()
 {
+    if (!stateReady())
+    {
+        return;
+    }
     static const char* const kAgcLabels[] = {"--", "FAST", "MID", "SLOW"};
     m_display->setReceiverControlState(QStringLiteral("AGC"), QString::fromLatin1(kAgcLabels[m_agcMode]),
                                        m_agcMode > 0);
     m_display->setReceiverControlState(QStringLiteral("ATT"), QString(), m_attenuatorEnabled);
     m_display->setReceiverControlState(QStringLiteral("NB"), QString(), m_nbEnabled);
-    const QString notch = m_autoNotchEnabled     ? QStringLiteral("AUTO")
-                          : m_manualNotchEnabled ? QStringLiteral("MAN")
-                                                 : QString();
-    m_display->setReceiverControlState(QStringLiteral("NOTCH"), notch, m_autoNotchEnabled || m_manualNotchEnabled);
+    m_display->setReceiverControlState(QStringLiteral("NOTCH"), QString(), m_autoNotchEnabled);
     m_display->setReceiverControlState(QStringLiteral("NR"), QString(), m_nrEnabled);
-    static const char* const kPreampLabels[] = {"", "INT", "EXT", "BOTH"};
-    m_display->setReceiverControlState(QStringLiteral("PRE"), QString::fromLatin1(kPreampLabels[m_preampLevel]),
-                                       m_preampLevel > 0);
+    m_display->setReceiverControlState(QStringLiteral("PRE"), QString(), (m_preampLevel & 0x01) != 0);
     const int rfPercent = qBound(0, qRound(m_rfGain * 100.0 / 255.0), 100);
     m_display->setReceiverControlState(QStringLiteral("RFG"), QString::number(rfPercent), m_rfGain > 0);
+    const bool offsetActive = m_duplexMode == dmDupMinus || m_duplexMode == dmDupPlus;
+    m_display->setReceiverControlState(QStringLiteral("OFFSET"),
+                                       sdr9700::ui::main_window::offsetModeLabel(m_duplexMode, m_repeaterOffsetHz),
+                                       offsetActive);
+    const bool toneActive = m_toneAccessMode != ratrNN;
+    const ushort toneValue = isDtcsToneMode(m_toneAccessMode) ? m_dtcsCode : m_toneFrequency;
+    const QString toneValueLabel = sdr9700::ui::main_window::memoryToneFrequencyLabel(m_toneAccessMode, toneValue);
+    const QString toneStatus =
+        toneActive
+            ? QStringLiteral("%1 %2").arg(sdr9700::ui::main_window::toneOptionLabel(m_toneAccessMode), toneValueLabel)
+            : QString();
+    m_display->setReceiverControlState(QStringLiteral("TONE"), toneStatus, toneActive);
+    if (m_vfo == Vfo::Main)
+    {
+        m_display->setReceiverControlState(QStringLiteral("XFC"), QString(), m_xfcEnabled);
+        m_display->setReceiverControlState(QStringLiteral("COMP"), QString(), m_compressorEnabled);
+    }
     const int squelchPercent = qBound(0, qRound(m_squelch * 100.0 / 255.0), 100);
     m_display->setReceiverControlState(QStringLiteral("SQL"), QStringLiteral("%1%").arg(squelchPercent), m_squelch > 0);
     if (m_vfo == Vfo::Main)
@@ -303,6 +458,16 @@ void VfoController::showReceiverControlMenu(const QString& control)
         m_backend->setVfoNrEnabled(m_vfo, !m_nrEnabled);
         return;
     }
+    if (control == QStringLiteral("PRE"))
+    {
+        m_backend->setVfoPreampLevel(m_vfo, (m_preampLevel & 0x01) != 0 ? 0 : 1);
+        return;
+    }
+    if (control == QStringLiteral("NOTCH"))
+    {
+        m_backend->setVfoNotch(m_vfo, m_autoNotchEnabled ? VfoNotch::Off : VfoNotch::Auto);
+        return;
+    }
 
     QMenu menu(m_display);
     sdr9700::ui::main_window::styleCompactMenu(&menu);
@@ -319,27 +484,6 @@ void VfoController::showReceiverControlMenu(const QString& control)
             QAction* action = menu.addAction(item.first);
             connect(action, &QAction::triggered, this,
                     [this, mode = item.second]() { m_backend->setVfoAgcMode(m_vfo, mode); });
-        }
-    }
-    else if (control == QStringLiteral("NOTCH"))
-    {
-        for (const auto& item :
-             {qMakePair(QStringLiteral("OFF"), VfoNotch::Off), qMakePair(QStringLiteral("AUTO"), VfoNotch::Auto),
-              qMakePair(QStringLiteral("MANUAL"), VfoNotch::Manual)})
-        {
-            QAction* action = menu.addAction(item.first);
-            connect(action, &QAction::triggered, this,
-                    [this, notch = item.second]() { m_backend->setVfoNotch(m_vfo, notch); });
-        }
-    }
-    else if (control == QStringLiteral("PRE"))
-    {
-        const QStringList labels = {QStringLiteral("OFF"), QStringLiteral("INT"), QStringLiteral("EXT"),
-                                    QStringLiteral("INT+EXT")};
-        for (int level = 0; level < labels.size(); ++level)
-        {
-            QAction* action = menu.addAction(labels.at(level));
-            connect(action, &QAction::triggered, this, [this, level]() { m_backend->setVfoPreampLevel(m_vfo, level); });
         }
     }
     else if (control == QStringLiteral("RFG") || control == QStringLiteral("SQL") ||

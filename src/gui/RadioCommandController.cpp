@@ -110,130 +110,6 @@ void RadioCommandController::toggleRit()
     m_window->updateIcomRC28Leds();
 }
 
-void RadioCommandController::showAgcMenu()
-{
-    if (!m_window->m_agcBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
-    {
-        return;
-    }
-    if (!agcPresetSelectableForMode(m_window->m_vfo->mode()))
-    {
-        m_window->showToast(QStringLiteral("AGC is fixed to FAST in %1 mode").arg(m_window->m_vfo->mode()), 5000,
-                            MainWindow::ToastKind::Info);
-        return;
-    }
-    QMenu menu(m_window);
-    styleCompactMenu(&menu);
-    static const struct
-    {
-        const char* mode;
-        const char* label;
-    } kItems[] = {{"fast", "FAST"}, {"mid", "MID"}, {"slow", "SLOW"}};
-    for (const auto& item : kItems)
-    {
-        auto* act = menu.addAction(QString::fromLatin1(item.label));
-        const QString modeStr = QString::fromLatin1(item.mode);
-        connect(act, &QAction::triggered, this, [this, modeStr]() { m_window->m_vfo->setAgcMode(modeStr); });
-    }
-    menu.exec(m_window->m_agcBtn->mapToGlobal(QPoint(0, m_window->m_agcBtn->height())));
-}
-
-void RadioCommandController::showPreampMenu()
-{
-    if (!m_window->m_preBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
-    {
-        return;
-    }
-
-    QMenu menu(m_window);
-    styleCompactMenu(&menu);
-    static const struct
-    {
-        const char* label;
-        int level;
-    } kItems[] = {{"OFF", 0}, {"INT", 1}, {"EXT", 2}, {"INT+EXT", 3}};
-    for (const auto& item : kItems)
-    {
-        auto* act = menu.addAction(QString::fromLatin1(item.label));
-        connect(act, &QAction::triggered, this,
-                [this, item]()
-                {
-                    if (item.level >= 2)
-                    {
-                        m_window->showToast(QStringLiteral("External preamp must be enabled for this band"), 6000,
-                                            MainWindow::ToastKind::Info);
-                    }
-                    m_window->m_vfo->setPreampLevel(item.level);
-                });
-    }
-    menu.exec(m_window->m_preBtn->mapToGlobal(QPoint(0, m_window->m_preBtn->height())));
-}
-
-void RadioCommandController::updatePreampButton()
-{
-    if (!m_window->m_preBtn || !m_window->m_vfo)
-    {
-        return;
-    }
-
-    const int level = m_window->m_vfo->preampLevel();
-    setSelectorButtonLines(m_window->m_preBtn, QStringLiteral("PRE"), preampLevelLabel(level));
-    setCommandButtonActive(m_window->m_preBtn, level != 0);
-}
-
-void RadioCommandController::showNotchMenu()
-{
-    if (!m_window->m_notchBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
-    {
-        return;
-    }
-
-    QMenu menu(m_window);
-    styleCompactMenu(&menu);
-    const auto* offAction = menu.addAction(QStringLiteral("OFF"));
-    const auto* autoAction = menu.addAction(QStringLiteral("AUTO"));
-    const auto* manualAction = menu.addAction(QStringLiteral("MANUAL"));
-
-    const QAction* selected = menu.exec(m_window->m_notchBtn->mapToGlobal(QPoint(0, m_window->m_notchBtn->height())));
-    if (!selected)
-    {
-        return;
-    }
-
-    if (selected == offAction)
-    {
-        m_window->m_vfo->setAutoNotch(false);
-        m_window->m_vfo->setManualNotch(false);
-    }
-    else if (selected == autoAction)
-    {
-        m_window->m_vfo->setManualNotch(false);
-        m_window->m_vfo->setAutoNotch(true);
-    }
-    else if (selected == manualAction)
-    {
-        m_window->m_vfo->setAutoNotch(false);
-        m_window->m_vfo->setManualNotch(true);
-    }
-}
-
-void RadioCommandController::updateNotchButton()
-{
-    if (!m_window->m_notchBtn || !m_window->m_vfo)
-    {
-        return;
-    }
-
-    const bool autoOn = m_window->m_vfo->autoNotchOn();
-    const bool manualOn = m_window->m_vfo->manualNotchOn();
-    const QString secondary = autoOn && manualOn ? QStringLiteral("A/M")
-                              : autoOn           ? QStringLiteral("AUTO")
-                              : manualOn         ? QStringLiteral("MAN")
-                                                 : QStringLiteral("OFF");
-    setSelectorButtonLines(m_window->m_notchBtn, QStringLiteral("NOTCH"), secondary);
-    setCommandButtonActive(m_window->m_notchBtn, autoOn || manualOn);
-}
-
 void RadioCommandController::updateRitButton()
 {
     if (!m_window->m_ritBtn || !m_window->m_vfo)
@@ -322,9 +198,10 @@ void RadioCommandController::showCustomRitDialog()
     m_window->m_vfo->setRitEnabled(true);
 }
 
-void RadioCommandController::showOffsetMenu()
+void RadioCommandController::showOffsetMenu(const QPoint& position)
 {
-    if (!m_window->m_offsetBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if ((position.isNull() && !m_window->m_offsetBtn) || !m_window->m_vfo || !m_window->m_model->isReady() ||
+        m_window->m_controlsLocked)
     {
         return;
     }
@@ -344,7 +221,9 @@ void RadioCommandController::showOffsetMenu()
     menu.addSeparator();
     const auto* customAction = menu.addAction(QStringLiteral("CUSTOM"));
 
-    const QAction* selected = menu.exec(m_window->m_offsetBtn->mapToGlobal(QPoint(0, m_window->m_offsetBtn->height())));
+    const QPoint menuPosition =
+        position.isNull() ? m_window->m_offsetBtn->mapToGlobal(QPoint(0, m_window->m_offsetBtn->height())) : position;
+    const QAction* selected = menu.exec(menuPosition);
     if (!selected)
     {
         return;
@@ -453,9 +332,10 @@ void RadioCommandController::updateOffsetButton()
     setCommandButtonActive(m_window->m_offsetBtn, active);
 }
 
-void RadioCommandController::showToneMenu()
+void RadioCommandController::showToneMenu(const QPoint& position)
 {
-    if (!m_window->m_toneBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if ((position.isNull() && !m_window->m_toneBtn) || !m_window->m_vfo || !m_window->m_model->isReady() ||
+        m_window->m_controlsLocked)
     {
         return;
     }
@@ -535,15 +415,16 @@ void RadioCommandController::showToneMenu()
         submenu->addAction(action);
     };
 
-    addCtcssMenu(&menu, QStringLiteral("TONE (TX)"), ratrTN);
-    addCtcssMenu(&menu, QStringLiteral("TONE (TX/RX)"), ratrTT);
+    addCtcssMenu(&menu, QStringLiteral("TONE"), ratrTN);
+    addCtcssMenu(&menu, QStringLiteral("TSQL"), ratrTT);
     menu.addSeparator();
-    addDtcsMenu(&menu, QStringLiteral("DTCS (TX)"), ratrDN);
-    addDtcsMenu(&menu, QStringLiteral("DTCS (TX/RX)"), ratrDD);
+    addDtcsMenu(&menu, QStringLiteral("DTCS"), ratrDD);
     menu.addSeparator();
     const auto* offAction = menu.addAction(QStringLiteral("OFF"));
 
-    const QAction* selected = menu.exec(m_window->m_toneBtn->mapToGlobal(QPoint(0, m_window->m_toneBtn->height())));
+    const QPoint menuPosition =
+        position.isNull() ? m_window->m_toneBtn->mapToGlobal(QPoint(0, m_window->m_toneBtn->height())) : position;
+    const QAction* selected = menu.exec(menuPosition);
     if (!selected)
     {
         return;
@@ -598,103 +479,7 @@ void RadioCommandController::updateToneButton()
     setCommandButtonActive(m_window->m_toneBtn, active);
 }
 
-void RadioCommandController::updateSquelchButton()
-{
-    if (!m_window->m_squelchBtn)
-    {
-        return;
-    }
-    const bool active = m_window->m_squelchValue > 0;
-    const QString pct =
-        active ? QStringLiteral("%1%").arg(m_window->m_squelchValue * 100 / 255) : QStringLiteral("OFF");
-    setSelectorButtonLines(m_window->m_squelchBtn, QStringLiteral("SQL"), pct);
-    setCommandButtonActive(m_window->m_squelchBtn, active);
-}
-
-void RadioCommandController::updateTxPowerButton()
-{
-    if (!m_window->m_txPowerBtn)
-    {
-        return;
-    }
-
-    const bool active = m_window->m_txPowerValue > 0;
-    const int pct = active ? qBound(1, qRound(m_window->m_txPowerValue * 100.0 / 255.0), 100) : 0;
-    const QString secondary = active ? QStringLiteral("%1%").arg(pct) : QStringLiteral("OFF");
-    setSelectorButtonLines(m_window->m_txPowerBtn, QStringLiteral("TX PWR"), secondary);
-    setCommandButtonActive(m_window->m_txPowerBtn, active);
-}
-
-void RadioCommandController::updateRfGainButton()
-{
-    if (!m_window->m_rfGainBtn)
-    {
-        return;
-    }
-
-    const bool active = m_window->m_rfGainValue > 0;
-    const int pct = active ? qBound(1, qRound(m_window->m_rfGainValue * 100.0 / 255.0), 100) : 0;
-    const QString secondary = active ? QStringLiteral("%1%").arg(pct) : QStringLiteral("OFF");
-    setSelectorButtonLines(m_window->m_rfGainBtn, QStringLiteral("RF GAIN"), secondary);
-    setCommandButtonActive(m_window->m_rfGainBtn, active);
-}
-
-void RadioCommandController::showRfGainMenu()
-{
-    if (!m_window->m_rfGainBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
-    {
-        return;
-    }
-
-    QMenu menu(m_window);
-    styleCompactMenu(&menu);
-
-    auto* panel = new QWidget(&menu);
-    panel->setFixedWidth(190);
-    auto* panelLayout = new QVBoxLayout(panel);
-    panelLayout->setContentsMargins(8, 6, 8, 6);
-    panelLayout->setSpacing(4);
-
-    auto rfGainPercentText = [](int value)
-    {
-        const int bounded = qBound(0, value, 255);
-        if (bounded == 0)
-        {
-            return QStringLiteral("OFF");
-        }
-        return QStringLiteral("%1%").arg(qBound(1, qRound(bounded * 100.0 / 255.0), 100));
-    };
-
-    auto* valueLabel = new QLabel(rfGainPercentText(m_window->m_rfGainValue), panel);
-    valueLabel->setAlignment(Qt::AlignCenter);
-    valueLabel->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; }").arg(UiTheme::Color::TextMuted));
-
-    auto applyRfGain = [this, valueLabel](int v)
-    {
-        const int bounded = qBound(0, v, 255);
-        const QString text = bounded == 0 ? QStringLiteral("OFF")
-                                          : QStringLiteral("%1%").arg(qBound(1, qRound(bounded * 100.0 / 255.0), 100));
-        valueLabel->setText(text);
-        m_window->m_vfo->setRfGain(bounded);
-    };
-
-    auto* slider = new QSlider(Qt::Horizontal, panel);
-    slider->setRange(0, 255);
-    slider->setValue(m_window->m_rfGainValue);
-    connect(slider, &QSlider::valueChanged, this, [applyRfGain](int v) { applyRfGain(v); });
-
-    panelLayout->addWidget(valueLabel);
-    panelLayout->addWidget(slider);
-
-    auto* panelAction = new QWidgetAction(&menu);
-    panelAction->setDefaultWidget(panel);
-    menu.addAction(panelAction);
-
-    menu.exec(m_window->m_rfGainBtn->mapToGlobal(QPoint(0, m_window->m_rfGainBtn->height())));
-}
-
-void RadioCommandController::showCompressorMenu()
+void RadioCommandController::showCompressorMenu(const QPoint& position)
 {
     if (!m_window->m_compBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
@@ -766,7 +551,8 @@ void RadioCommandController::showCompressorMenu()
     auto* panelAction = new QWidgetAction(&menu);
     panelAction->setDefaultWidget(panel);
     menu.addAction(panelAction);
-    menu.exec(m_window->m_compBtn->mapToGlobal(QPoint(0, m_window->m_compBtn->height())));
+    menu.exec(position.isNull() ? m_window->m_compBtn->mapToGlobal(QPoint(0, m_window->m_compBtn->height()))
+                                : position);
 }
 
 int RadioCommandController::tuningStepHz() const

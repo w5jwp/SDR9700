@@ -8,6 +8,7 @@
 class QLineEdit;
 class QLabel;
 class QPushButton;
+class VfoSMeter;
 
 class VfoDisplay : public QWidget
 {
@@ -23,6 +24,9 @@ class VfoDisplay : public QWidget
     void setOperatingEnabled(bool enabled);
     void setBandText(const QString& text);
     void setModeText(const QString& text);
+    void setSMeterValue(int rawValue);
+    void setTransmitPowerMode(bool enabled);
+    void setTransmitPowerWatts(double watts);
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
     void setReceiverControlState(const QString& control, const QString& value, bool active);
@@ -47,6 +51,7 @@ class VfoDisplay : public QWidget
     QPushButton* m_bandButton{nullptr};
     QPushButton* m_modeButton{nullptr};
     QLineEdit* m_frequencyEdit{nullptr};
+    VfoSMeter* m_sMeter{nullptr};
     QHash<QString, QPushButton*> m_receiverControlButtons;
     bool m_operatingEnabled{true};
 };

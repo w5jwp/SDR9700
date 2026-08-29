@@ -262,6 +262,13 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
     return false;
 }
 
+void Commander::discardPendingReplies(Funcs func)
+{
+    m_pendingReplies.erase(std::remove_if(m_pendingReplies.begin(), m_pendingReplies.end(),
+                                          [func](const PendingReply& reply) { return reply.func == func; }),
+                           m_pendingReplies.end());
+}
+
 void Commander::discardExpiredPendingReplies()
 {
     static constexpr qint64 kPendingReplyLifetimeMs = 5000;

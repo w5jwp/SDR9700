@@ -3,6 +3,7 @@
 #include "Types.h"
 
 #include <QObject>
+#include <QPoint>
 #include <functional>
 
 class MainWindow;
@@ -17,26 +18,17 @@ class RadioCommandController : public QObject
     void toggleMute();
     void cycleMode();
     void toggleRit();
-    void showAgcMenu();
-    void showPreampMenu();
-    void updatePreampButton();
-    void showNotchMenu();
-    void updateNotchButton();
     void updateRitButton();
     void showRitMenu();
     void showCustomRitDialog();
-    void showOffsetMenu();
+    void showOffsetMenu(const QPoint& position = {});
     void showCustomOffsetDialog();
     void applyOffsetSelection(duplexMode_t mode, quint64 offsetHz);
     void updateOffsetButton();
-    void showToneMenu();
+    void showToneMenu(const QPoint& position = {});
     void applyToneSelection(rptAccessTxRx_t mode, ushort value);
     void updateToneButton();
-    void updateSquelchButton();
-    void updateTxPowerButton();
-    void updateRfGainButton();
-    void showRfGainMenu();
-    void showCompressorMenu();
+    void showCompressorMenu(const QPoint& position = {});
     int tuningStepHz() const;
     void applyRadioTuningStep();
     void updateStepButton();

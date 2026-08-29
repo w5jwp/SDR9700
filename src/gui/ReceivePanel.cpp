@@ -39,16 +39,25 @@ ReceivePanel::ReceivePanel(const Buttons& buttons, QWidget* parent) : QGroupBox(
     layout->addLayout(buttonRow);
     layout->addStretch();
 
-    grid->addWidget(buttons.agc, 0, 0);
-    grid->addWidget(buttons.attenuator, 0, 1);
-    grid->addWidget(buttons.compressor, 0, 2);
-    grid->addWidget(buttons.noiseBlanker, 0, 3);
-    grid->addWidget(buttons.notch, 1, 0);
-    grid->addWidget(buttons.noiseReduction, 1, 1);
-    grid->addWidget(buttons.offset, 1, 2);
-    grid->addWidget(buttons.preamp, 1, 3);
-    grid->addWidget(buttons.rfGain, 2, 0);
-    grid->addWidget(buttons.rit, 2, 1);
-    grid->addWidget(buttons.tone, 2, 2);
-    grid->addWidget(buttons.xfc, 2, 3);
+    const auto addButton = [grid](QPushButton* button, int row, int column)
+    {
+        if (button)
+        {
+            grid->addWidget(button, row, column);
+        }
+    };
+    if (!buttons.offset && !buttons.tone)
+    {
+        addButton(buttons.compressor, 0, 0);
+        addButton(buttons.rit, 0, 1);
+        addButton(buttons.xfc, 0, 2);
+    }
+    else
+    {
+        addButton(buttons.compressor, 0, 0);
+        addButton(buttons.offset, 0, 1);
+        addButton(buttons.rit, 0, 2);
+        addButton(buttons.tone, 1, 0);
+        addButton(buttons.xfc, 1, 1);
+    }
 }

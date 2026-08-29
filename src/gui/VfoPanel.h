@@ -4,7 +4,6 @@
 #include <QPoint>
 
 class QLabel;
-class QLineEdit;
 class QProgressBar;
 class QPushButton;
 class QSlider;
@@ -18,13 +17,6 @@ class VfoPanel : public QGroupBox
   public:
     explicit VfoPanel(const QString& title, QWidget* parent = nullptr);
 
-    QString frequencyText() const;
-    bool frequencyHasFocus() const;
-    void clearFrequencyFocus();
-    void setFrequencyText(const QString& text);
-    void setFrequencyReadOnly(bool readOnly);
-    void setBandText(const QString& text);
-    void setModeText(const QString& text);
     void setControlsEnabled(bool enabled);
     void setMeterEnabled(bool enabled);
     void setStepText(const QString& text);
@@ -32,20 +24,12 @@ class VfoPanel : public QGroupBox
     void setSMeterValue(int value);
     void setTransmitPowerMode(bool on);
     void setTransmitPowerMeter(double watts);
-    void setTxPower(int value);
     void setLanMod(int value);
-    void setSquelch(int value);
-    QPoint bandMenuPosition() const;
-    QPoint modeMenuPosition() const;
+    QWidget* lanModControl() const { return m_lanModControl; }
 
   signals:
-    void frequencyReturnPressed();
-    void bandClicked();
-    void modeClicked();
     void stepClicked();
-    void txPowerChanged(int value);
     void lanModChanged(int value);
-    void squelchChanged(int value);
 
   private:
     QPushButton* makeSelectorButton(const QString& primary, const QString& secondary, const QString& name,
@@ -54,17 +38,11 @@ class VfoPanel : public QGroupBox
     void setSliderValue(QSlider* slider, QLabel* valueLabel, int value);
     void updateSliderValueLabel(QLabel* label, int value);
 
-    QLineEdit* m_frequencyEdit{nullptr};
-    QPushButton* m_bandButton{nullptr};
-    QPushButton* m_modeButton{nullptr};
     QPushButton* m_stepButton{nullptr};
     QProgressBar* m_signalMeter{nullptr};
     QWidget* m_signalScale{nullptr};
-    QSlider* m_txPowerSlider{nullptr};
     QSlider* m_lanModSlider{nullptr};
-    QSlider* m_squelchSlider{nullptr};
-    QLabel* m_txPowerValueLabel{nullptr};
+    QWidget* m_lanModControl{nullptr};
     QLabel* m_lanModValueLabel{nullptr};
-    QLabel* m_squelchValueLabel{nullptr};
     bool m_meterEnabled{false};
 };

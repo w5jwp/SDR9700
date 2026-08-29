@@ -303,26 +303,23 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     QVERIFY(!compressorButton->isCheckable());
     auto* rfGainButton = window.findChild<QPushButton*>(QStringLiteral("rfGainButton"));
     auto* frequencyField = window.findChild<QWidget*>(QStringLiteral("vfoFrequencyField"));
-    auto* frequencyEdit = window.findChild<QLineEdit*>(QStringLiteral("vfoFrequencyEdit"));
+    const auto frequencyEdits = window.findChildren<QLineEdit*>(QStringLiteral("vfoFrequency"));
     auto* statusDateLabel = window.findChild<QLabel*>(QStringLiteral("statusDateLabel"));
     auto* statusTimeLabel = window.findChild<QLabel*>(QStringLiteral("statusTimeLabel"));
-    QVERIFY(rfGainButton != nullptr);
-    QVERIFY(frequencyField != nullptr);
-    QVERIFY(frequencyEdit != nullptr);
+    QVERIFY(rfGainButton == nullptr);
+    QVERIFY(frequencyField == nullptr);
+    QCOMPARE(frequencyEdits.size(), 2);
     QVERIFY(window.findChild<QWidget*>(QStringLiteral("vfoMemoryNameField")) == nullptr);
     QVERIFY(window.findChild<QLineEdit*>(QStringLiteral("vfoMemoryNameLabel")) == nullptr);
     QVERIFY(statusDateLabel != nullptr);
     QVERIFY(statusTimeLabel != nullptr);
-    QVERIFY(!rfGainButton->property("levelControl").toBool());
-    QCOMPARE(frequencyField->size(), QSize(220, 48));
-    QCOMPARE(frequencyField->layout()->contentsMargins(), QMargins(6, 4, 6, 4));
-    QCOMPARE(frequencyField->parentWidget()->layout()->spacing(), 6);
-    QCOMPARE(frequencyField->parentWidget()->layout()->itemAt(0)->layout()->contentsMargins(), QMargins(0, 0, 0, 5));
-    QCOMPARE(frequencyEdit->alignment(), Qt::AlignRight | Qt::AlignVCenter);
-    QCOMPARE(frequencyEdit->textMargins(), QMargins(0, 0, 6, 0));
+    for (const QLineEdit* frequencyEdit : frequencyEdits)
+    {
+        QCOMPARE(frequencyEdit->alignment(), Qt::AlignRight | Qt::AlignVCenter);
+    }
     QCOMPARE(statusDateLabel->alignment(), Qt::AlignCenter);
     QCOMPARE(statusTimeLabel->alignment(), Qt::AlignCenter);
-    const QFontMetrics frequencyMetrics(frequencyEdit->font());
+    const QFontMetrics frequencyMetrics(frequencyEdits.constFirst()->font());
     QCOMPARE(frequencyMetrics.horizontalAdvance(QStringLiteral("000.000.000")),
              frequencyMetrics.horizontalAdvance(QStringLiteral("111.111.111")));
 }

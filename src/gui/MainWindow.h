@@ -88,12 +88,6 @@ class MainWindow : public QMainWindow
     void onError(ErrorCode code, const QString& msg);
 
     void onAfGainChanged(int value);
-    void onRfGainChanged(int value);
-    void updateSquelchButton();
-    void showRfGainMenu();
-    void updateRfGainButton();
-    void onTxPowerChanged(int value);
-    void updateTxPowerButton();
     void onPttPressed();
     void onPttReleased();
     void onPttChanged(bool on);
@@ -123,13 +117,7 @@ class MainWindow : public QMainWindow
     void tryAutoConnect();
     void restoreWindowLayout();
     void saveWindowLayout() const;
-    void showAgcMenu();
-    void updateAgcButton();
-    void showPreampMenu();
-    void updatePreampButton();
-    void showNotchMenu();
     void showCompressorMenu();
-    void updateNotchButton();
     void showRitMenu();
     void showCustomRitDialog();
     void updateRitButton();
@@ -197,23 +185,10 @@ class MainWindow : public QMainWindow
 
     VfoPanel* m_vfoPanel{nullptr};
     MemoryPanel* m_memoryPanel{nullptr};
-    QPushButton* m_rfGainBtn{nullptr};
-    int m_rfGainValue{128};
-    QPushButton* m_squelchBtn{nullptr};
-    int m_squelchValue{0};
     int m_lanModValue{128};
-    QPushButton* m_txPowerBtn{nullptr};
-    int m_txPowerValue{128};
     quint64 m_vfoFrequencyHz{0};
-    quint64 m_lastBandFrequencyHz[3]{0, 0, 0};
     QPushButton* m_muteBtn{nullptr};
-    QPushButton* m_agcBtn{nullptr};
-    QPushButton* m_attBtn{nullptr};
     QPushButton* m_compBtn{nullptr};
-    QPushButton* m_nbBtn{nullptr};
-    QPushButton* m_notchBtn{nullptr};
-    QPushButton* m_nrBtn{nullptr};
-    QPushButton* m_preBtn{nullptr};
     QPushButton* m_ritBtn{nullptr};
     QPushButton* m_offsetBtn{nullptr};
     QPushButton* m_toneBtn{nullptr};
@@ -356,5 +331,4 @@ class MainWindow : public QMainWindow
     void clearActiveMemory();
     void leaveMemoryModeForManualChange();
     void beginMemoryPttFrequencyTransition();
-    void commitFrequencyEdit(VfoPanel* panel);
 };

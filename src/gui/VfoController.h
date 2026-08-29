@@ -4,6 +4,7 @@
 #include "radio/RadioCapabilities.h"
 
 #include <QObject>
+#include <QTimer>
 #include <array>
 #include <optional>
 
@@ -33,8 +34,12 @@ class VfoController : public QObject
 
   signals:
     void bandMenuRequested(Vfo vfo, const QPoint& position);
+    void toneMenuRequested(Vfo vfo, const QPoint& position);
+    void offsetMenuRequested(Vfo vfo, const QPoint& position);
+    void compressorMenuRequested(Vfo vfo, const QPoint& position);
     void selectionRequested(Vfo vfo);
     void frequencyChanged(quint64 hz);
+    void frequencyRecenterRequested(Vfo vfo, quint64 hz);
 
   private:
     struct ExchangeableControlState
@@ -47,10 +52,18 @@ class VfoController : public QObject
         bool nrEnabled{false};
         int preampLevel{0};
         int squelch{0};
+        duplexMode_t duplexMode{dmSimplex};
+        quint64 repeaterOffsetHz{0};
+        rptAccessTxRx_t toneAccessMode{ratrNN};
+        ushort toneFrequency{670};
+        ushort dtcsCode{23};
     };
 
     void showReceiverControlMenu(const QString& control);
     void showModeMenu();
+    bool stateReady() const;
+    void publishConfirmedState();
+    void updateDisplayEnabled();
     void updateReceiverControlDisplay();
     void applyExchangeableControlState(const ExchangeableControlState& state);
 
@@ -58,6 +71,7 @@ class VfoController : public QObject
     IRadioBackend* m_backend{nullptr};
     VfoDisplay* m_display{nullptr};
     std::optional<quint64> m_confirmedFrequencyHz;
+    std::optional<quint64> m_publishedFrequencyHz;
     availableBands m_band{bandUnknown};
     std::array<quint64, std::size(sdr9700::kRadioUiBandOrder)> m_lastBandFrequencyHz{};
     int m_agcMode{0};
@@ -70,6 +84,16 @@ class VfoController : public QObject
     int m_rfGain{0};
     int m_squelch{0};
     int m_txPower{0};
+    duplexMode_t m_duplexMode{dmSimplex};
+    quint64 m_repeaterOffsetHz{0};
+    rptAccessTxRx_t m_toneAccessMode{ratrNN};
+    ushort m_toneFrequency{670};
+    ushort m_dtcsCode{23};
+    bool m_xfcEnabled{false};
+    bool m_compressorEnabled{false};
     QString m_mode;
+    bool m_operatingEnabled{true};
+    bool m_initialStatePublished{false};
+    QTimer m_initialPublishTimer;
     std::optional<ExchangeableControlState> m_capturedExchangeState;
 };

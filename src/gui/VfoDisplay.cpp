@@ -2,6 +2,7 @@
 
 #include "MainWindowHelpers.h"
 #include "UiTheme.h"
+#include "VfoSMeter.h"
 
 #include <QFontDatabase>
 #include <QHBoxLayout>
@@ -13,24 +14,26 @@
 
 namespace
 {
-constexpr int kDisplayHeight = 171;
+constexpr int kDisplayHeight = 218;
 constexpr int kDisplayHorizontalInset = 12;
-constexpr int kDisplayTopLayoutInset = 10;
-constexpr int kDisplayBottomLayoutInset = 7;
-constexpr int kHeaderFrequencySpacing = 60;
+constexpr int kDisplayVerticalInset = 12;
+constexpr int kHeaderMeterSpacing = 20;
+constexpr int kMeterFrequencySpacing = 0;
 constexpr int kTitleFontPixelSize = 10;
-constexpr int kFrequencyFontPixelSize = 30;
+constexpr int kFrequencyFontPixelSize = 32;
 constexpr int kTxBadgeWidth = 30;
 constexpr int kTxBadgeHeight = 18;
 constexpr int kHeaderButtonHeight = 18;
 constexpr int kBandButtonWidth = 52;
 constexpr int kModeButtonWidth = 52;
 constexpr int kSquelchButtonWidth = 58;
-constexpr int kTxPowerButtonWidth = 70;
+constexpr int kTxPowerButtonWidth = 80;
 constexpr int kHeaderControlGroupSpacing = 30;
 constexpr int kReceiverControlHeight = 18;
 constexpr int kReceiverControlSpacing = 4;
-constexpr int kFrequencyReceiverControlSpacing = 10;
+constexpr int kSecondaryControlWidth = 80;
+constexpr int kXfcControlWidth = 52;
+constexpr int kSecondaryToPrimaryControlSpacing = 40;
 
 QString vfoTitle(Vfo vfo)
 {
@@ -63,11 +66,8 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     auto* layout = new QVBoxLayout(this);
-    // Qt's styled button row contributes 3 px below its controls on macOS.
-    // Compensate here so the rendered border-to-control gap matches the top.
-    const int leftInset = vfo == Vfo::Main ? kDisplayHorizontalInset : 20;
-    const int rightInset = vfo == Vfo::Main ? 20 : kDisplayHorizontalInset;
-    layout->setContentsMargins(leftInset, kDisplayTopLayoutInset, rightInset, kDisplayBottomLayoutInset);
+    layout->setContentsMargins(kDisplayHorizontalInset, kDisplayVerticalInset, kDisplayHorizontalInset,
+                               kDisplayVerticalInset);
     layout->setSpacing(0);
 
     auto* headerLayout = new QHBoxLayout;
@@ -130,26 +130,46 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     QPushButton* squelchButton = createHeaderControl(QStringLiteral("SQL"), kSquelchButtonWidth);
     QPushButton* txPowerButton =
         vfo == Vfo::Main ? createHeaderControl(QStringLiteral("TX PWR"), kTxPowerButtonWidth) : nullptr;
-
-    if (m_txBadge)
+    if (txPowerButton)
     {
-        headerLayout->addWidget(m_txBadge);
+        txPowerButton->setText(QStringLiteral("TX.PWR"));
     }
+    auto createHeaderPlaceholder = [this](int width, const QString& name)
+    {
+        auto* placeholder = new QWidget(this);
+        placeholder->setObjectName(name);
+        placeholder->setFixedSize(width, kHeaderButtonHeight);
+        return placeholder;
+    };
+
+    headerLayout->addWidget(m_identityButton);
     headerLayout->addStretch();
     if (txPowerButton)
     {
         headerLayout->addWidget(txPowerButton);
+    }
+    else
+    {
+        headerLayout->addWidget(createHeaderPlaceholder(kTxPowerButtonWidth, QStringLiteral("vfoTxPowerPlaceholder")));
     }
     headerLayout->addWidget(squelchButton);
     headerLayout->addSpacing(kHeaderControlGroupSpacing);
     headerLayout->addWidget(m_bandButton);
     headerLayout->addWidget(m_modeButton);
     headerLayout->addSpacing(kHeaderControlGroupSpacing);
-    headerLayout->addWidget(m_identityButton);
+    if (m_txBadge)
+    {
+        headerLayout->addWidget(m_txBadge);
+    }
+    else
+    {
+        headerLayout->addWidget(createHeaderPlaceholder(kTxBadgeWidth, QStringLiteral("vfoTxBadgePlaceholder")));
+    }
 
     m_frequencyEdit = new QLineEdit(this);
     m_frequencyEdit->setObjectName(QStringLiteral("vfoFrequency"));
     m_frequencyEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_frequencyEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_frequencyEdit->setFocusPolicy(Qt::ClickFocus);
     m_frequencyEdit->setAccessibleName(QStringLiteral("%1 frequency").arg(title));
     m_frequencyEdit->setAccessibleDescription(QStringLiteral("Enter frequency in MHz, then press Enter."));
@@ -157,6 +177,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     m_frequencyEdit->setStyleSheet(
         QStringLiteral("QLineEdit { background: transparent; border: none; padding: 0px; color: %1; }")
             .arg(UiTheme::Color::TextField));
+    m_frequencyEdit->setTextMargins(0, 8, 0, 0);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
     QFont frequencyFont = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
     frequencyFont.setFeature(QFont::Tag("tnum"), 1);
@@ -174,9 +195,75 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
             });
 
     layout->addLayout(headerLayout);
-    layout->addSpacing(kHeaderFrequencySpacing);
-    layout->addWidget(m_frequencyEdit, 1);
-    layout->addSpacing(kFrequencyReceiverControlSpacing);
+    layout->addSpacing(kHeaderMeterSpacing);
+    m_sMeter = new VfoSMeter(this);
+    layout->addWidget(m_sMeter);
+    layout->addSpacing(kMeterFrequencySpacing);
+
+    auto createReceiverControl = [this, &title](const QString& control)
+    {
+        auto* button = new QPushButton(control, this);
+        button->setObjectName(QStringLiteral("vfo%1Button").arg(control).remove(QLatin1Char(' ')));
+        button->setFixedHeight(kReceiverControlHeight);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setAccessibleName(QStringLiteral("%1 %2 control").arg(title, control));
+        button->setStyleSheet(receiverControlStyle());
+        connect(button, &QPushButton::clicked, this, [this, control]() { emit receiverControlClicked(control); });
+        m_receiverControlButtons.insert(control, button);
+        return button;
+    };
+
+    auto* secondaryControlGroup = new QWidget(this);
+    secondaryControlGroup->setFixedSize(kSecondaryControlWidth + kReceiverControlSpacing + kXfcControlWidth,
+                                        (kReceiverControlHeight * 2) + kReceiverControlSpacing);
+    auto* secondaryControlLayout = new QVBoxLayout(secondaryControlGroup);
+    secondaryControlLayout->setContentsMargins(0, 0, 0, 0);
+    secondaryControlLayout->setSpacing(kReceiverControlSpacing);
+    auto* offsetButton = createReceiverControl(QStringLiteral("OFFSET"));
+    auto* toneButton = createReceiverControl(QStringLiteral("TONE"));
+    offsetButton->setFixedWidth(kSecondaryControlWidth);
+    toneButton->setFixedWidth(kSecondaryControlWidth);
+    auto* offsetControlLayout = new QHBoxLayout;
+    offsetControlLayout->setContentsMargins(0, 0, 0, 0);
+    offsetControlLayout->setSpacing(kReceiverControlSpacing);
+    offsetControlLayout->addWidget(offsetButton);
+    if (vfo == Vfo::Main)
+    {
+        auto* xfcButton = createReceiverControl(QStringLiteral("XFC"));
+        xfcButton->setFixedWidth(kXfcControlWidth);
+        offsetControlLayout->addWidget(xfcButton);
+    }
+    else
+    {
+        auto* xfcPlaceholder = new QWidget(secondaryControlGroup);
+        xfcPlaceholder->setFixedSize(kXfcControlWidth, kReceiverControlHeight);
+        offsetControlLayout->addWidget(xfcPlaceholder);
+    }
+    secondaryControlLayout->addLayout(offsetControlLayout);
+    auto* toneControlLayout = new QHBoxLayout;
+    toneControlLayout->setContentsMargins(0, 0, 0, 0);
+    toneControlLayout->setSpacing(kReceiverControlSpacing);
+    toneControlLayout->addWidget(toneButton);
+    if (vfo == Vfo::Main)
+    {
+        auto* compressorButton = createReceiverControl(QStringLiteral("COMP"));
+        compressorButton->setFixedWidth(kXfcControlWidth);
+        toneControlLayout->addWidget(compressorButton);
+    }
+    else
+    {
+        auto* compressorPlaceholder = new QWidget(secondaryControlGroup);
+        compressorPlaceholder->setFixedSize(kXfcControlWidth, kReceiverControlHeight);
+        toneControlLayout->addWidget(compressorPlaceholder);
+    }
+    secondaryControlLayout->addLayout(toneControlLayout);
+    auto* frequencyControlLayout = new QHBoxLayout;
+    frequencyControlLayout->setContentsMargins(0, 0, 0, 0);
+    frequencyControlLayout->setSpacing(kReceiverControlSpacing);
+    frequencyControlLayout->addWidget(secondaryControlGroup, 0, Qt::AlignBottom);
+    frequencyControlLayout->addWidget(m_frequencyEdit, 1);
+    layout->addLayout(frequencyControlLayout, 1);
+    layout->addSpacing(kSecondaryToPrimaryControlSpacing);
 
     auto* receiverControlLayout = new QHBoxLayout;
     receiverControlLayout->setContentsMargins(0, 0, 0, 0);
@@ -187,15 +274,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     };
     for (const QString& control : controls)
     {
-        auto* button = new QPushButton(control, this);
-        button->setObjectName(QStringLiteral("vfo%1Button").arg(control).remove(QLatin1Char(' ')));
-        button->setFixedHeight(kReceiverControlHeight);
-        button->setCursor(Qt::PointingHandCursor);
-        button->setAccessibleName(QStringLiteral("%1 %2 control").arg(title, control));
-        button->setStyleSheet(receiverControlStyle());
-        connect(button, &QPushButton::clicked, this, [this, control]() { emit receiverControlClicked(control); });
-        m_receiverControlButtons.insert(control, button);
-        receiverControlLayout->addWidget(button);
+        receiverControlLayout->addWidget(createReceiverControl(control), 1);
     }
     layout->addLayout(receiverControlLayout);
     setOperatingEnabled(true);
@@ -243,6 +322,10 @@ void VfoDisplay::setOperatingEnabled(bool enabled)
     {
         button->setEnabled(enabled);
     }
+    if (!enabled)
+    {
+        setSMeterValue(0);
+    }
     update();
 }
 
@@ -254,6 +337,30 @@ void VfoDisplay::setBandText(const QString& text)
 void VfoDisplay::setModeText(const QString& text)
 {
     m_modeButton->setText(text);
+}
+
+void VfoDisplay::setSMeterValue(int rawValue)
+{
+    if (m_sMeter)
+    {
+        m_sMeter->setRawValue(rawValue);
+    }
+}
+
+void VfoDisplay::setTransmitPowerMode(bool enabled)
+{
+    if (m_sMeter)
+    {
+        m_sMeter->setTransmitPowerMode(enabled);
+    }
+}
+
+void VfoDisplay::setTransmitPowerWatts(double watts)
+{
+    if (m_sMeter)
+    {
+        m_sMeter->setPowerWatts(watts);
+    }
 }
 
 void VfoDisplay::setSelected(bool selected)
@@ -283,7 +390,26 @@ void VfoDisplay::setReceiverControlState(const QString& control, const QString& 
     {
         return;
     }
-    button->setText(value.isEmpty() ? control : QStringLiteral("%1 %2").arg(control, value));
+    if (control == QStringLiteral("PRE"))
+    {
+        button->setText(QStringLiteral("P.AMP"));
+    }
+    else if (control == QStringLiteral("TONE"))
+    {
+        button->setText(active && !value.isEmpty() ? value : control);
+    }
+    else if (control == QStringLiteral("OFFSET"))
+    {
+        button->setText(value.isEmpty() ? control : value);
+    }
+    else if (control == QStringLiteral("TX PWR"))
+    {
+        button->setText(value.isEmpty() ? QStringLiteral("TX.PWR") : QStringLiteral("TX.PWR %1").arg(value));
+    }
+    else
+    {
+        button->setText(value.isEmpty() ? control : QStringLiteral("%1 %2").arg(control, value));
+    }
     button->setProperty("active", active);
     button->style()->unpolish(button);
     button->style()->polish(button);

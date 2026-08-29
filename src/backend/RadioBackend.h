@@ -171,11 +171,18 @@ class RadioBackend : public IRadioBackend
     bool m_syncReconnectPending{false};
     std::optional<std::pair<quint16, quint16>> m_selectedRadioMemory;
     QTimer* m_smeterPollTimer{nullptr};
+    bool m_smeterPollSubNext{false};
+    bool m_smeterPollPending{false};
+    bool m_smeterPollSettlingSample{false};
+    uchar m_smeterPollPendingReceiver{0};
+    int m_smeterPollPendingTicks{0};
+    Vfo m_smeterRestoreVfo{Vfo::Main};
     QTimer* m_bandStateRefreshTimer{nullptr};
     QTimer* m_mainSubExchangeRetryTimer{nullptr};
     int m_currentBandKey{-1};
     quint64 m_currentMainFrequencyHz{0};
     Vfo m_activeVfo{Vfo::Main};
+    bool m_dualWatchEnabled{false};
     bool m_mainSubExchangePending{false};
     quint8 m_mainSubExchangeConfirmations{0};
     duplexMode_t m_currentDuplexMode{dmSimplex};

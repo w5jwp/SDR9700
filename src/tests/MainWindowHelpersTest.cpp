@@ -80,6 +80,9 @@ void MainWindowHelpersTest::formatsRadioValues()
     QCOMPARE(offsetModeLabel(dmDupPlus, 5000000), QStringLiteral("+5.000"));
     QCOMPARE(toneFrequencyLabel(1000), QStringLiteral("100.0"));
     QCOMPARE(dtcsCodeLabel(23), QStringLiteral("023"));
+    QCOMPARE(toneOptionLabel(ratrTN), QStringLiteral("TONE"));
+    QCOMPARE(toneOptionLabel(ratrTT), QStringLiteral("TSQL"));
+    QCOMPARE(toneOptionLabel(ratrDD), QStringLiteral("DTCS"));
     QCOMPARE(memoryModeLabel(modeFM), QStringLiteral("FM"));
 }
 

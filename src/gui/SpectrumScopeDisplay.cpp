@@ -166,7 +166,7 @@ void SpectrumScopeDisplay::setCurrentSpanHz(quint64 hz)
 
 void SpectrumScopeDisplay::updateSpanComboGeometry()
 {
-    if (!m_spanCombo)
+    if (!m_spanCombo || m_spanCombo->parentWidget() != this)
     {
         return;
     }

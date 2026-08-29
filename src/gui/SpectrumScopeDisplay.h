@@ -27,6 +27,7 @@ class SpectrumScopeDisplay : public QWidget
 
     void setSpanChoices(const QVector<SpanChoice>& choices);
     void setCurrentSpanHz(quint64 hz);
+    QComboBox* spanSelector() const { return m_spanCombo; }
     void setFrequencyRange(double startMhz, double endMhz);
     void setFrequencyPanRange(double startMhz, double endMhz);
     void clearFrequencyPanRange();

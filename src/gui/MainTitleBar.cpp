@@ -7,6 +7,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPalette>
 #include <QPushButton>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -120,8 +121,11 @@ QString windowButtonStyle(const char* hoverBg)
 MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
 {
     setFixedHeight(kTitleBarHeight);
-    setAutoFillBackground(false);
-    setStyleSheet(QStringLiteral("MainTitleBar { background: %1; }").arg(UiTheme::Color::MenuBar));
+    QPalette titlePalette = palette();
+    titlePalette.setColor(QPalette::Window, QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
+    setPalette(titlePalette);
+    setAutoFillBackground(true);
+    setStyleSheet(QStringLiteral("MainTitleBar { background: %1; }").arg(UiTheme::Color::WindowChrome));
 
     auto* root = new QHBoxLayout(this);
     root->setContentsMargins(kNoMargins);
@@ -435,6 +439,13 @@ void MainTitleBar::setVolumeEnabled(bool enabled)
     {
         m_lockBtn->setEnabled(true); // lock is always available regardless of radio state
     }
+}
+
+void MainTitleBar::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event)
+    QPainter painter(this);
+    painter.fillRect(rect(), QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
 }
 
 void MainTitleBar::mousePressEvent(QMouseEvent* event)

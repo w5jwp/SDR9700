@@ -1,6 +1,7 @@
 #include "VfoController.h"
 #include "VfoDisplay.h"
 #include "VfoSelectionPanel.h"
+#include "VfoSMeter.h"
 
 #include <QLabel>
 #include <QLineEdit>
@@ -48,13 +49,37 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
              QVariant(true));
     QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->text(), QStringLiteral("TX"));
     QVERIFY(subController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge")) == nullptr);
+    auto* mainSMeter = mainController.display()->findChild<VfoSMeter*>();
+    auto* subSMeter = subController.display()->findChild<VfoSMeter*>();
+    QVERIFY(mainSMeter != nullptr);
+    QVERIFY(subSMeter != nullptr);
+    mainController.display()->setSMeterValue(120);
+    QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("Signal strength S9"));
+    mainController.display()->setSMeterValue(130);
+    QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("Signal strength S9+05"));
+    mainController.display()->setSMeterValue(255);
+    QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("Signal strength S9+60"));
     QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton")) != nullptr);
     QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton")) != nullptr);
     QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTXPWRButton")) != nullptr);
     QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoTXPWRButton")) == nullptr);
-    for (const QString& control : {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"),
-                                   QStringLiteral("NOTCH"), QStringLiteral("NR"), QStringLiteral("PRE"),
-                                   QStringLiteral("RFG"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
+    QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoXFCButton")) != nullptr);
+    QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoXFCButton")) == nullptr);
+    QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoCOMPButton")) != nullptr);
+    QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoCOMPButton")) == nullptr);
+    auto* toneStateButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"));
+    auto* offsetStateButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoOFFSETButton"));
+    mainController.display()->setReceiverControlState(QStringLiteral("TONE"), QStringLiteral("TSQL 67.0"), true);
+    mainController.display()->setReceiverControlState(QStringLiteral("OFFSET"), QStringLiteral("SIMPLEX"), false);
+    mainController.display()->setReceiverControlState(QStringLiteral("PRE"), QString(), true);
+    QCOMPARE(toneStateButton->text(), QStringLiteral("TSQL 67.0"));
+    QCOMPARE(offsetStateButton->text(), QStringLiteral("SIMPLEX"));
+    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoPREButton"))->text(),
+             QStringLiteral("P.AMP"));
+    for (const QString& control :
+         {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"), QStringLiteral("NOTCH"),
+          QStringLiteral("NR"), QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("TONE"),
+          QStringLiteral("OFFSET"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
     {
         QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfo%1Button").arg(control)) !=
                 nullptr);
@@ -85,9 +110,10 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
              QVariant(false));
     QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoModeButton"))->property("active"),
              QVariant(false));
-    for (const QString& control : {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"),
-                                   QStringLiteral("NOTCH"), QStringLiteral("NR"), QStringLiteral("PRE"),
-                                   QStringLiteral("RFG"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
+    for (const QString& control :
+         {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"), QStringLiteral("NOTCH"),
+          QStringLiteral("NR"), QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("TONE"),
+          QStringLiteral("OFFSET"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
     {
         QVERIFY(!mainController.display()
                      ->findChild<QPushButton*>(QStringLiteral("vfo%1Button").arg(control))
@@ -97,6 +123,9 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     mainController.setTransmitting(true);
     QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->property("transmitting"),
              QVariant(true));
+    QCOMPARE(mainSMeter->accessibleName(), QStringLiteral("RF power meter"));
+    mainController.setTransmitting(false);
+    QCOMPARE(mainSMeter->accessibleName(), QStringLiteral("Signal strength meter"));
 
     parent.resize(640, 240);
     mainController.display()->setGeometry(0, 0, 600, mainController.display()->height());
@@ -105,17 +134,20 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QApplication::processEvents();
     const auto* txBadge = mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"));
     const auto* receiverButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoAGCButton"));
+    const auto* toneButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"));
+    QCOMPARE(toneButton->width(), 80);
     const auto* rightReceiverButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoRFGButton"));
     const auto* sqlButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton"));
     const auto* bandButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoBandButton"));
     const auto* modeButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoModeButton"));
     const auto* identityButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoIdentityButton"));
-    const int renderedInset = txBadge->y();
+    const int renderedInset = identityButton->y();
     QCOMPARE(mainController.display()->height() - receiverButton->geometry().bottom() - 1, renderedInset);
-    QCOMPARE(txBadge->x(), renderedInset);
-    QCOMPARE(mainController.display()->width() - rightReceiverButton->geometry().right() - 1, 20);
-    QCOMPARE(bandButton->x() - sqlButton->geometry().right() - 1,
-             identityButton->x() - modeButton->geometry().right() - 1);
+    const int toneBottom = toneButton->mapTo(mainController.display(), QPoint(0, toneButton->height() - 1)).y();
+    QCOMPARE(receiverButton->y() - toneBottom - 1, 40);
+    QCOMPARE(identityButton->x(), renderedInset);
+    QCOMPARE(mainController.display()->width() - rightReceiverButton->geometry().right() - 1, renderedInset);
+    QCOMPARE(bandButton->x() - sqlButton->geometry().right() - 1, txBadge->x() - modeButton->geometry().right() - 1);
 }
 
 void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()

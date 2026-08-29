@@ -31,8 +31,8 @@ constexpr auto kSpectrumScopeGridDensitySettingsKey = "spectrumScopeGridDensity"
 constexpr int kDefaultTuningStepHZ = 100;
 constexpr quint64 kDefaultSpectrumScopeSpanHZ = 500000;
 const QColor kDefaultSpectrumScopeCenterLineColor(0xf5, 0xf7, 0xf8);
-const QColor kDefaultSpectrumScopeBackgroundColor(0x0b, 0x3f, 0x55);
-const QColor kDefaultSpectrumScopeGridLineColor(0xc8, 0xf1, 0xf5);
+const QColor kDefaultSpectrumScopeBackgroundColor(0x08, 0x12, 0x1b);
+const QColor kDefaultSpectrumScopeGridLineColor(0x6f, 0x89, 0x9e);
 constexpr int kDefaultSpectrumScopeGridDensity = 1;
 
 struct StepPreset

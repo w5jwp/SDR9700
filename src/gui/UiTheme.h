@@ -14,6 +14,8 @@ inline constexpr const char* AccentBright = "#38d8ff";
 
 inline constexpr const char* Panel = "#1d1f24";
 inline constexpr const char* PanelDark = "#1a1e24";
+inline constexpr const char* WindowChrome = "#1e1e1e";
+inline constexpr const char* ContentBackground = "#1d2329";
 inline constexpr const char* MenuBar = "#242b33";
 inline constexpr const char* MenuPanel = "#20242b";
 inline constexpr const char* Field = "#10151c";
@@ -69,7 +71,10 @@ inline constexpr int ControlSliderHeight = 24;
 inline constexpr int InlineSliderBlockHeight = 42;
 inline constexpr int ControlButtonHeight = 40;
 inline constexpr int MainWindowMinWidth = 1160;
-inline constexpr int MainWindowMinHeight = 884;
+// The legacy command strip was 263 px taller than its original replacement
+// gap. Give 100 px each to the panadapter and waterfall, retain 10 additional
+// pixels above the VFO block, and remove the unused 53 px.
+inline constexpr int MainWindowMinHeight = 917;
 inline constexpr int StatusNetworkWidth = 78;
 inline constexpr int StatusTxWidth = 80;
 inline constexpr int StatusClockWidth = 92;

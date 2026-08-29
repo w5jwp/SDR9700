@@ -22,8 +22,8 @@ constexpr auto kSpectrumScopeGridLineColorSettingsKey = "spectrumScopeGridLineCo
 constexpr auto kSpectrumScopeGridDensitySettingsKey = "spectrumScopeGridDensity";
 constexpr auto kSpectrumScopeInvertMouseWheelSettingsKey = "spectrumScopeInvertMouseWheel";
 const QColor kDefaultCenterLineColor(0xf5, 0xf7, 0xf8);
-const QColor kDefaultBackgroundColor(0x0b, 0x3f, 0x55);
-const QColor kDefaultGridLineColor(0xc8, 0xf1, 0xf5);
+const QColor kDefaultBackgroundColor(0x08, 0x12, 0x1b);
+const QColor kDefaultGridLineColor(0x6f, 0x89, 0x9e);
 constexpr int kDefaultGridDensity = 1;
 constexpr int kMinGridDensity = 0;
 constexpr int kMaxGridDensity = 2;

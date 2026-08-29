@@ -2,10 +2,8 @@
 
 #include "UiTheme.h"
 
-#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
@@ -17,24 +15,14 @@
 namespace
 {
 constexpr QMargins kNoMargins(0, 0, 0, 0);
-constexpr int kNoSpacing = 0;
 constexpr int kGroupMargin = 8;
 constexpr int kGroupSpacing = 6;
-constexpr int kHeaderFrequencyExtraSpacing = 5;
 constexpr int kInlineSpacing = 4;
 constexpr int kSliderRowSpacing = 2;
 constexpr int kSliderWidth = 118;
-constexpr QSize kVfoFieldSize(220, 48);
-constexpr int kVfoFieldSideMargin = 6;
-constexpr int kVfoFieldTopMargin = 4;
-constexpr int kVfoFieldBottomMargin = 4;
-constexpr int kFrequencyFontPixelSize = 26;
-constexpr int kFrequencyEditHeight = 40;
 constexpr int kSignalMeterWidth = 220;
-constexpr int kSignalMeterHeight = 10;
 constexpr int kSignalScaleHeight = 11;
 constexpr double kSignalScaleTextTopGap = 0.5;
-constexpr QSize kSignalBoxSize(kSignalMeterWidth, kSignalMeterHeight + kSignalScaleHeight);
 constexpr QSize kHeaderBadgeSize(54, 18);
 constexpr double kRfPowerMeterMaxWatts = 100.0;
 
@@ -259,153 +247,17 @@ VfoPanel::VfoPanel(const QString& title, QWidget* parent) : QGroupBox(parent)
     layout->setContentsMargins(kGroupMargin, kGroupMargin, kGroupMargin, kGroupMargin);
     layout->setSpacing(kGroupSpacing);
 
-    auto* header = new QHBoxLayout;
-    header->setContentsMargins(0, 0, 0, kHeaderFrequencyExtraSpacing);
-    header->setSpacing(kInlineSpacing);
-    m_bandButton = makeSelectorButton(QStringLiteral("BAND"), QStringLiteral("--"), QStringLiteral("Band menu"),
-                                      QStringLiteral("Open IC-9700 band presets."));
-    m_modeButton = makeSelectorButton(QStringLiteral("MODE"), QStringLiteral("--"), QStringLiteral("Mode menu"),
-                                      QStringLiteral("Open operating mode selection."));
-    m_stepButton = makeSelectorButton(QStringLiteral("STEP"), QStringLiteral("100 Hz"), QStringLiteral("Step menu"),
-                                      QStringLiteral("Select tuning step size."));
-
-    header->addStretch();
-    header->addWidget(m_stepButton);
-    header->addSpacing(8);
-    header->addWidget(m_bandButton);
-    header->addSpacing(8);
-    header->addWidget(m_modeButton);
-
-    auto* frequencyField = new QWidget(this);
-    frequencyField->setObjectName(QStringLiteral("vfoFrequencyField"));
-    frequencyField->setFixedSize(kVfoFieldSize);
-    frequencyField->setStyleSheet(
-        QStringLiteral("QWidget#vfoFrequencyField { background: %1; border: 1px solid %2; border-radius: 3px; }")
-            .arg(UiTheme::Color::Field, UiTheme::Color::BorderFocus));
-    auto* frequencyLayout = new QVBoxLayout(frequencyField);
-    frequencyLayout->setContentsMargins(kVfoFieldSideMargin, kVfoFieldTopMargin, kVfoFieldSideMargin,
-                                        kVfoFieldBottomMargin);
-    frequencyLayout->setSpacing(kNoSpacing);
-
-    m_frequencyEdit = new QLineEdit(QStringLiteral("---.---.---"), frequencyField);
-    m_frequencyEdit->setObjectName(QStringLiteral("vfoFrequencyEdit"));
-    m_frequencyEdit->setFixedHeight(kFrequencyEditHeight);
-    m_frequencyEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_frequencyEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_frequencyEdit->setTextMargins(0, 0, kVfoFieldSideMargin, 0);
-    m_frequencyEdit->setFocusPolicy(Qt::ClickFocus);
-    m_frequencyEdit->setAccessibleName(QStringLiteral("%1 frequency").arg(title));
-    m_frequencyEdit->setAccessibleDescription(QStringLiteral("Enter frequency in MHz."));
-    m_frequencyEdit->setToolTip(QStringLiteral("Enter frequency in MHz, then press Enter"));
-    m_frequencyEdit->setStyleSheet(
-        QStringLiteral("QLineEdit { background: transparent; border: none; padding: 0px; color: %1; }")
-            .arg(UiTheme::Color::TextField));
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    QFont freqFont = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    // Tabular numerals keep the frequency display visually stable while
-    // retaining the platform UI font's plain (non-slashed) zero.
-    freqFont.setFeature(QFont::Tag("tnum"), 1);
-#else
-    // QFont OpenType feature selection was introduced in Qt 6.7. Preserve
-    // equal-width digits on older supported Qt releases.
-    QFont freqFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-#endif
-    freqFont.setPixelSize(kFrequencyFontPixelSize);
-    freqFont.setBold(true);
-    m_frequencyEdit->setFont(freqFont);
-    connect(m_frequencyEdit, &QLineEdit::returnPressed, this, &VfoPanel::frequencyReturnPressed);
-
-    frequencyLayout->addWidget(m_frequencyEdit);
-
-    auto* signalBox = new QWidget(this);
-    signalBox->setFixedSize(kSignalBoxSize);
-    m_signalMeter = new SMeter(signalBox);
-    m_signalMeter->setRange(0, 100);
-    m_signalMeter->setValue(0);
-    m_signalMeter->setFixedWidth(kSignalMeterWidth);
-    m_signalMeter->setFixedHeight(kSignalMeterHeight);
-    m_signalMeter->setTextVisible(false);
-    m_signalMeter->setAccessibleName(QStringLiteral("%1 signal meter").arg(title));
-    m_signalMeter->setAccessibleDescription(QStringLiteral("Received signal strength meter."));
-    m_signalMeter->move(0, 0);
-    m_signalScale = new SMeterScaleCanvas(signalBox);
-    static_cast<SMeterScaleCanvas*>(m_signalScale)->setFixedWidth(kSignalMeterWidth);
-    m_signalScale->move(0, kSignalMeterHeight);
-
-    auto* sliders = new QWidget(this);
-    auto* slidersLayout = new QVBoxLayout(sliders);
+    m_lanModControl = new QWidget(this);
+    auto* slidersLayout = new QVBoxLayout(m_lanModControl);
     slidersLayout->setContentsMargins(kNoMargins);
     slidersLayout->setSpacing(kSliderRowSpacing);
-    slidersLayout->addWidget(makeSliderRow(QStringLiteral("TX PWR"), 0, &m_txPowerSlider, &m_txPowerValueLabel));
-    slidersLayout->addWidget(makeSliderRow(QStringLiteral("SQL"), 0, &m_squelchSlider, &m_squelchValueLabel));
     slidersLayout->addWidget(makeSliderRow(QStringLiteral("LAN MOD"), 0, &m_lanModSlider, &m_lanModValueLabel));
 
-    layout->addLayout(header);
-    layout->addWidget(frequencyField);
-    layout->addWidget(signalBox);
-    layout->addWidget(sliders);
+    layout->addWidget(m_lanModControl);
 
-    connect(m_bandButton, &QPushButton::clicked, this, &VfoPanel::bandClicked);
-    connect(m_modeButton, &QPushButton::clicked, this, &VfoPanel::modeClicked);
-    connect(m_stepButton, &QPushButton::clicked, this, &VfoPanel::stepClicked);
-    connect(m_txPowerSlider, &QSlider::valueChanged, this, &VfoPanel::txPowerChanged);
     connect(m_lanModSlider, &QSlider::valueChanged, this, &VfoPanel::lanModChanged);
-    connect(m_squelchSlider, &QSlider::valueChanged, this, &VfoPanel::squelchChanged);
 
     setMeterEnabled(false);
-}
-
-QString VfoPanel::frequencyText() const
-{
-    return m_frequencyEdit ? m_frequencyEdit->text() : QString();
-}
-
-bool VfoPanel::frequencyHasFocus() const
-{
-    return m_frequencyEdit && m_frequencyEdit->hasFocus();
-}
-
-void VfoPanel::clearFrequencyFocus()
-{
-    if (m_frequencyEdit)
-    {
-        m_frequencyEdit->clearFocus();
-    }
-}
-
-void VfoPanel::setFrequencyText(const QString& text)
-{
-    if (m_frequencyEdit)
-    {
-        m_frequencyEdit->setText(text);
-    }
-}
-
-void VfoPanel::setFrequencyReadOnly(bool readOnly)
-{
-    if (m_frequencyEdit)
-    {
-        m_frequencyEdit->setReadOnly(readOnly);
-        m_frequencyEdit->setFocusPolicy(readOnly ? Qt::NoFocus : Qt::ClickFocus);
-    }
-}
-
-void VfoPanel::setBandText(const QString& text)
-{
-    if (m_bandButton)
-    {
-        m_bandButton->setText(text);
-        m_bandButton->setAccessibleName(QStringLiteral("Band %1").arg(text));
-    }
-}
-
-void VfoPanel::setModeText(const QString& text)
-{
-    if (m_modeButton)
-    {
-        m_modeButton->setText(text);
-        m_modeButton->setAccessibleName(QStringLiteral("Mode %1").arg(text));
-    }
 }
 
 void VfoPanel::setStepText(const QString& text)
@@ -418,33 +270,13 @@ void VfoPanel::setStepText(const QString& text)
 
 void VfoPanel::setControlsEnabled(bool enabled)
 {
-    if (m_frequencyEdit)
-    {
-        m_frequencyEdit->setEnabled(enabled);
-    }
-    if (m_bandButton)
-    {
-        m_bandButton->setEnabled(enabled);
-    }
-    if (m_modeButton)
-    {
-        m_modeButton->setEnabled(enabled);
-    }
     if (m_stepButton)
     {
         m_stepButton->setEnabled(enabled);
     }
-    if (m_txPowerSlider)
-    {
-        m_txPowerSlider->setEnabled(enabled);
-    }
     if (m_lanModSlider)
     {
         m_lanModSlider->setEnabled(enabled);
-    }
-    if (m_squelchSlider)
-    {
-        m_squelchSlider->setEnabled(enabled);
     }
 }
 
@@ -534,29 +366,9 @@ void VfoPanel::setTransmitPowerMeter(double watts)
     m_signalMeter->setAccessibleDescription(QStringLiteral("RF power meter: %1 watts").arg(boundedWatts, 0, 'f', 1));
 }
 
-void VfoPanel::setTxPower(int value)
-{
-    setSliderValue(m_txPowerSlider, m_txPowerValueLabel, value);
-}
-
 void VfoPanel::setLanMod(int value)
 {
     setSliderValue(m_lanModSlider, m_lanModValueLabel, value);
-}
-
-void VfoPanel::setSquelch(int value)
-{
-    setSliderValue(m_squelchSlider, m_squelchValueLabel, value);
-}
-
-QPoint VfoPanel::bandMenuPosition() const
-{
-    return m_bandButton ? m_bandButton->mapToGlobal(QPoint(0, m_bandButton->height())) : mapToGlobal(QPoint());
-}
-
-QPoint VfoPanel::modeMenuPosition() const
-{
-    return m_modeButton ? m_modeButton->mapToGlobal(QPoint(0, m_modeButton->height())) : mapToGlobal(QPoint());
 }
 
 QPoint VfoPanel::stepMenuPosition() const

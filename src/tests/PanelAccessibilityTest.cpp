@@ -32,14 +32,11 @@ void PanelAccessibilityTest::panelsAdoptProvidedButtons()
 {
     QWidget owner;
     QList<QPushButton*> buttons;
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < 5; ++i)
     {
         buttons.append(new QPushButton(QString::number(i), &owner));
     }
-    ReceivePanel::Buttons receiveButtons{
-        buttons[0], buttons[1], buttons[2], buttons[3], buttons[4],  buttons[5],
-        buttons[6], buttons[7], buttons[8], buttons[9], buttons[10], buttons[11],
-    };
+    ReceivePanel::Buttons receiveButtons{buttons[0], buttons[1], buttons[2], buttons[3], buttons[4]};
     ReceivePanel panel(receiveButtons);
     QCOMPARE(panel.accessibleName(), QStringLiteral("Control"));
     for (QPushButton* button : buttons)

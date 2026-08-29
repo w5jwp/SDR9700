@@ -81,6 +81,11 @@ void TwoLineButton::paintEvent(QPaintEvent* event)
 
 void setSelectorButtonLines(QPushButton* button, const QString& primary, const QString& secondary)
 {
+    if (!button)
+    {
+        return;
+    }
+
     if (auto* selector = dynamic_cast<TwoLineButton*>(button))
     {
         selector->setLines(primary, secondary);
@@ -260,9 +265,9 @@ QString toneOptionLabel(rptAccessTxRx_t mode)
     case ratrTN:
         return QStringLiteral("TONE");
     case ratrNT:
-        return QStringLiteral("TONE");
+        return QStringLiteral("TSQL");
     case ratrTT:
-        return QStringLiteral("TONE");
+        return QStringLiteral("TSQL");
     case ratrDN:
         return QStringLiteral("DTCS");
     case ratrDD:

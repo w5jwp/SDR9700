@@ -66,8 +66,8 @@ class SpectrumScopeCanvas : public QWidget
     double m_dataEndMhz{146.0};
     double m_vfoMhz{145.0};
     QColor m_vfoMarkerColor{0xf5, 0xf7, 0xf8, 230};
-    QColor m_backgroundColor{0x0b, 0x3f, 0x55};
-    QColor m_gridLineColor{0xc8, 0xf1, 0xf5};
+    QColor m_backgroundColor{0x08, 0x12, 0x1b};
+    QColor m_gridLineColor{0x6f, 0x89, 0x9e};
     float m_minLevel{0.0f};
     float m_maxLevel{160.0f};
 

@@ -11,15 +11,8 @@ class ReceivePanel : public QGroupBox
   public:
     struct Buttons
     {
-        QPushButton* agc{nullptr};
-        QPushButton* attenuator{nullptr};
         QPushButton* compressor{nullptr};
-        QPushButton* noiseBlanker{nullptr};
-        QPushButton* notch{nullptr};
-        QPushButton* noiseReduction{nullptr};
         QPushButton* offset{nullptr};
-        QPushButton* preamp{nullptr};
-        QPushButton* rfGain{nullptr};
         QPushButton* rit{nullptr};
         QPushButton* tone{nullptr};
         QPushButton* xfc{nullptr};

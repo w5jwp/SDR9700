@@ -110,6 +110,7 @@ void RadioRouter::route(const CacheItem& item)
         break;
     }
     case funcSplitStatus:
+        emit radioValueUpdated(item.command, item.value, item.receiver);
         emit duplexModeChanged(item.value.value<duplexMode_t>());
         break;
     case funcVFOBandMS:
@@ -119,6 +120,7 @@ void RadioRouter::route(const CacheItem& item)
         emit radioValueUpdated(item.command, item.value, kMainReceiver);
         break;
     case funcReadFreqOffset:
+        emit radioValueUpdated(item.command, item.value, item.receiver);
         emit repeaterOffsetChanged(item.value.value<Frequency>().Hz);
         break;
     case funcToneSquelchType:
@@ -128,12 +130,14 @@ void RadioRouter::route(const CacheItem& item)
         break;
     case funcToneFreq:
     case funcTSQLFreq:
+        emit radioValueUpdated(item.command, item.value, item.receiver);
         if (toneRegisterIsDisplayed(item.command))
         {
             emit toneFrequencyChanged(item.value.value<ToneInfo>().tone);
         }
         break;
     case funcDTCSCode:
+        emit radioValueUpdated(item.command, item.value, item.receiver);
         emit dtcsCodeChanged(item.value.value<ToneInfo>().tone);
         break;
     case funcMemoryContents:
@@ -143,10 +147,10 @@ void RadioRouter::route(const CacheItem& item)
     case funcSMeter:
     {
         const int rawValue = qBound(0, item.value.toInt(), 255);
-        qDebug(logRadioTraffic()).noquote().nospace() << "S meter raw=" << rawValue;
+        qDebug(logRadioTraffic()).noquote().nospace() << "S meter receiver=" << item.receiver << " raw=" << rawValue;
+        emit radioValueUpdated(item.command, QVariant(rawValue), item.receiver);
         if (item.receiver == kMainReceiver)
         {
-            emit radioValueUpdated(item.command, QVariant(rawValue), kMainReceiver);
             emit smeterChanged(rawValue);
         }
         break;

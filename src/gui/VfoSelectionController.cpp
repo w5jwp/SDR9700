@@ -38,19 +38,9 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
     };
     connect(m_mainController, &VfoController::bandMenuRequested, this, showBandMenu);
     connect(m_subController, &VfoController::bandMenuRequested, this, showBandMenu);
-    const auto requestSelection = [this](Vfo vfo)
-    {
-        if (m_backend)
-        {
-            m_requestedVfo = vfo;
-            m_selectionPending = true;
-            setPttReady(false);
-            m_backend->selectVfo(vfo);
-        }
-    };
-    connect(m_panel, &VfoSelectionPanel::vfoRequested, this, requestSelection);
-    connect(m_mainController, &VfoController::selectionRequested, this, requestSelection);
-    connect(m_subController, &VfoController::selectionRequested, this, requestSelection);
+    connect(m_panel, &VfoSelectionPanel::vfoRequested, this, &VfoSelectionController::requestSelection);
+    connect(m_mainController, &VfoController::selectionRequested, this, &VfoSelectionController::requestSelection);
+    connect(m_subController, &VfoController::selectionRequested, this, &VfoSelectionController::requestSelection);
     connect(m_panel, &VfoSelectionPanel::dualWatchRequested, this,
             [this](bool enabled)
             {
@@ -106,7 +96,7 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                     updateTransmitIndicators();
                 });
         connect(m_backend, &IRadioBackend::radioValueUpdated, this,
-                [this, requestSelection](Funcs func, const QVariant& value, uchar receiver)
+                [this](Funcs func, const QVariant& value, uchar receiver)
                 {
                     if (receiver != 0)
                     {
@@ -134,6 +124,11 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                         if (changed)
                         {
                             emit selectedVfoChanged(selected);
+                        }
+                        if (m_selectedAction && selected == m_requestedVfo)
+                        {
+                            auto action = std::move(m_selectedAction);
+                            action();
                         }
                     }
                     else if (func == funcVFODualWatch)
@@ -164,6 +159,34 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
     setControlsEnabled(false);
 }
 
+void VfoSelectionController::requestSelection(Vfo vfo)
+{
+    m_selectedAction = {};
+    if (!m_backend)
+    {
+        return;
+    }
+    m_requestedVfo = vfo;
+    m_selectionPending = true;
+    setPttReady(false);
+    m_backend->selectVfo(vfo);
+}
+
+void VfoSelectionController::runWhenSelected(Vfo vfo, std::function<void()> action)
+{
+    if (!action)
+    {
+        return;
+    }
+    if (!m_selectionPending && m_selectedVfo == vfo)
+    {
+        action();
+        return;
+    }
+    requestSelection(vfo);
+    m_selectedAction = std::move(action);
+}
+
 void VfoSelectionController::setControlsEnabled(bool enabled)
 {
     m_panel->setEnabled(enabled);
@@ -175,6 +198,7 @@ void VfoSelectionController::reset()
     m_requestedVfo = Vfo::Main;
     m_selectionPending = false;
     m_exchangePending = false;
+    m_selectedAction = {};
     m_panel->setExchangePending(false);
     setPttReady(true);
     m_transmitting = false;

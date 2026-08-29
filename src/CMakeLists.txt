@@ -221,6 +221,8 @@ set(SDR9700_APP_SOURCES
     gui/VfoController.cpp
     gui/VfoDisplay.h
     gui/VfoDisplay.cpp
+    gui/VfoSMeter.h
+    gui/VfoSMeter.cpp
     gui/VfoSelectionController.h
     gui/VfoSelectionController.cpp
     gui/VfoSelectionPanel.h
@@ -519,6 +521,7 @@ if(BUILD_TESTING)
         gui/MainWindowHelpers.cpp
         gui/VfoController.cpp
         gui/VfoDisplay.cpp
+        gui/VfoSMeter.cpp
         gui/VfoSelectionPanel.cpp
         models/VfoModel.cpp
     )

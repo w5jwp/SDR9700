@@ -36,6 +36,7 @@ constexpr int kPttOffConfirmationMs = 1000;
 constexpr int kMaxTransmitDurationMs = 180000;
 constexpr uchar kHardwareTxTimeoutTimer = 1; // 3 minutes, the IC-9700's shortest non-off value.
 constexpr uchar kMainReceiver = 0;
+constexpr uchar kSubReceiver = 1;
 constexpr quint32 kTxAudioSampleRate = 16000;
 
 quint64 memoryGroupDefaultFrequencyHz(quint16 group)
@@ -197,6 +198,57 @@ RadioBackend::RadioBackend(QObject* parent)
                 if (func == funcVFOBandMS && receiver == 0)
                 {
                     m_activeVfo = value.toBool() ? Vfo::Sub : Vfo::Main;
+                }
+                else if (func == funcVFODualWatch && receiver == 0)
+                {
+                    m_dualWatchEnabled = value.toBool();
+                }
+                else if (func == funcSMeter && m_smeterPollPending)
+                {
+                    if (receiver != m_smeterPollPendingReceiver)
+                    {
+                        qWarning(logRadio()).noquote() << "Ignoring mismatched S-meter reply receiver=" << receiver
+                                                       << "expected=" << m_smeterPollPendingReceiver;
+                        return;
+                    }
+
+                    if (m_smeterPollSettlingSample)
+                    {
+                        // The IC-9700 can report one latched meter value from
+                        // the previously selected VFO. Suppress that sample and
+                        // read again after the receiver selection has settled.
+                        m_smeterPollSettlingSample = false;
+                        m_smeterPollPendingTicks = 0;
+                        QTimer::singleShot(
+                            50, this,
+                            [this, receiver]()
+                            {
+                                if (!m_smeterPollPending || m_smeterPollPendingReceiver != receiver ||
+                                    m_smeterPollSettlingSample)
+                                {
+                                    return;
+                                }
+                                invokeOnCurrentCommander(
+                                    [receiver](Commander* commandSession)
+                                    { commandSession->receiveCommand(funcSMeter, QVariant(), receiver); });
+                            });
+                        return;
+                    }
+
+                    m_smeterPollPending = false;
+                    m_smeterPollPendingTicks = 0;
+                    const Vfo restoreVfo = m_smeterRestoreVfo;
+                    const Vfo measuredVfo = receiver == kSubReceiver ? Vfo::Sub : Vfo::Main;
+                    if (measuredVfo != restoreVfo)
+                    {
+                        invokeOnCurrentCommander(
+                            [restoreVfo](Commander* commandSession)
+                            {
+                                commandSession->receiveCommand(
+                                    funcSelectVFO,
+                                    QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain), 0);
+                            });
+                    }
                 }
                 emit radioValueUpdated(func, value, receiver);
             });
@@ -800,6 +852,12 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     }
     m_pttState.reset();
     m_activeVfo = Vfo::Main;
+    m_dualWatchEnabled = false;
+    m_smeterPollSubNext = false;
+    m_smeterPollPending = false;
+    m_smeterPollSettlingSample = false;
+    m_smeterPollPendingTicks = 0;
+    m_smeterRestoreVfo = Vfo::Main;
     m_mainSubExchangePending = false;
     m_mainSubExchangeConfirmations = 0;
     if (m_mainSubExchangeRetryTimer)
@@ -1113,6 +1171,11 @@ void RadioBackend::requestVfoState(Vfo vfo)
             selectMainVfoForCommand(commandSession);
             commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
             commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+            for (const Funcs func :
+                 {funcSplitStatus, funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcDTCSCode})
+            {
+                commandSession->receiveCommand(func, QVariant(), 0);
+            }
         });
 }
 
@@ -1350,11 +1413,12 @@ void RadioBackend::setXfcEnabled(bool on)
 void RadioBackend::setDuplexMode(duplexMode_t mode)
 {
     m_transmitConfiguration.requestDuplexMode(mode);
+    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
     invokeOnCurrentCommander(
         [=](Commander* commandSession)
         {
-            commandSession->receiveCommand(funcSplitStatus, QVariant::fromValue(mode), 0);
-            commandSession->receiveCommand(funcSplitStatus, QVariant(), 0);
+            commandSession->receiveCommand(funcSplitStatus, QVariant::fromValue(mode), receiver);
+            commandSession->receiveCommand(funcSplitStatus, QVariant(), receiver);
         });
 }
 
@@ -1365,11 +1429,12 @@ void RadioBackend::setRepeaterOffsetHz(quint64 hz)
     offset.Hz = hz;
     offset.MHzDouble = hz / 1e6;
     offset.VFO = activeVFO;
+    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
     invokeOnCurrentCommander(
         [=](Commander* commandSession)
         {
-            commandSession->receiveCommand(funcSendFreqOffset, QVariant::fromValue(offset), 0);
-            commandSession->receiveCommand(funcReadFreqOffset, QVariant(), 0);
+            commandSession->receiveCommand(funcSendFreqOffset, QVariant::fromValue(offset), receiver);
+            commandSession->receiveCommand(funcReadFreqOffset, QVariant(), receiver);
         });
 }
 
@@ -1382,11 +1447,12 @@ void RadioBackend::setToneAccessMode(rptAccessTxRx_t mode)
 
     RptrAccessData access;
     access.accessMode = mode;
+    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
     invokeOnCurrentCommander(
         [=](Commander* commandSession)
         {
-            commandSession->receiveCommand(funcToneSquelchType, QVariant::fromValue(access), 0);
-            commandSession->receiveCommand(funcToneSquelchType, QVariant(), 0);
+            commandSession->receiveCommand(funcToneSquelchType, QVariant::fromValue(access), receiver);
+            commandSession->receiveCommand(funcToneSquelchType, QVariant(), receiver);
         });
 }
 
@@ -1398,12 +1464,13 @@ void RadioBackend::setToneFrequency(ushort tone)
     }
 
     ToneInfo info(tone);
+    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
     invokeOnCurrentCommander(
         [=](Commander* commandSession)
         {
-            commandSession->receiveCommand(funcToneFreq, QVariant::fromValue(info), 0);
-            commandSession->receiveCommand(funcTSQLFreq, QVariant::fromValue(info), 0);
-            commandSession->receiveCommand(funcToneFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcToneFreq, QVariant::fromValue(info), receiver);
+            commandSession->receiveCommand(funcTSQLFreq, QVariant::fromValue(info), receiver);
+            commandSession->receiveCommand(funcToneFreq, QVariant(), receiver);
         });
 }
 
@@ -1415,11 +1482,12 @@ void RadioBackend::setDtcsCode(ushort code)
     }
 
     ToneInfo info(code);
+    const uchar receiver = m_activeVfo == Vfo::Sub ? 1 : 0;
     invokeOnCurrentCommander(
         [=](Commander* commandSession)
         {
-            commandSession->receiveCommand(funcDTCSCode, QVariant::fromValue(info), 0);
-            commandSession->receiveCommand(funcDTCSCode, QVariant(), 0);
+            commandSession->receiveCommand(funcDTCSCode, QVariant::fromValue(info), receiver);
+            commandSession->receiveCommand(funcDTCSCode, QVariant(), receiver);
         });
 }
 
@@ -1446,7 +1514,8 @@ void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
     commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
     commandSession->receiveCommand(funcModeGet, QVariant(), 1);
     for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
-                             funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch})
+                             funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSMeter, funcSplitStatus,
+                             funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcDTCSCode})
     {
         commandSession->receiveCommand(func, QVariant(), 1);
     }
@@ -2377,8 +2446,49 @@ void RadioBackend::onLanReady()
                 }
 
                 m_txMeterPollTick = 0;
-                invokeOnCurrentCommander([](Commander* commandSession)
-                                         { commandSession->receiveCommand(funcSMeter, QVariant(), kMainReceiver); });
+                if (m_smeterPollPending)
+                {
+                    if (++m_smeterPollPendingTicks < 3)
+                    {
+                        return;
+                    }
+
+                    const Vfo restoreVfo = m_smeterRestoreVfo;
+                    invokeOnCurrentCommander(
+                        [restoreVfo](Commander* commandSession)
+                        {
+                            commandSession->discardPendingReplies(funcSMeter);
+                            commandSession->receiveCommand(
+                                funcSelectVFO, QVariant::fromValue<vfo_t>(restoreVfo == Vfo::Sub ? vfoSub : vfoMain),
+                                0);
+                        });
+                    m_smeterPollPending = false;
+                    m_smeterPollSettlingSample = false;
+                    m_smeterPollPendingTicks = 0;
+                    qWarning(logRadio()).noquote() << "S-meter poll timed out; receiver routing was reset";
+                    return;
+                }
+
+                const bool pollSub = m_dualWatchEnabled && m_smeterPollSubNext;
+                m_smeterPollSubNext = m_dualWatchEnabled && !m_smeterPollSubNext;
+                const Vfo restoreVfo = m_activeVfo;
+                m_smeterPollPending = true;
+                m_smeterPollPendingReceiver = pollSub ? kSubReceiver : kMainReceiver;
+                m_smeterPollSettlingSample = (pollSub ? Vfo::Sub : Vfo::Main) != restoreVfo;
+                m_smeterPollPendingTicks = 0;
+                m_smeterRestoreVfo = restoreVfo;
+                invokeOnCurrentCommander(
+                    [pollSub, restoreVfo](Commander* commandSession)
+                    {
+                        const Vfo targetVfo = pollSub ? Vfo::Sub : Vfo::Main;
+                        const uchar receiver = pollSub ? kSubReceiver : kMainReceiver;
+                        if (targetVfo != restoreVfo)
+                        {
+                            commandSession->receiveCommand(funcSelectVFO,
+                                                           QVariant::fromValue<vfo_t>(pollSub ? vfoSub : vfoMain), 0);
+                        }
+                        commandSession->receiveCommand(funcSMeter, QVariant(), receiver);
+                    });
             });
     m_smeterPollTimer->start();
 }

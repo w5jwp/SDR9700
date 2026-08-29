@@ -12,6 +12,7 @@
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPalette>
 #include <QStatusBar>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -216,12 +217,19 @@ void StatusBarController::buildStatusBar()
 {
     m_window->statusBar()->setFixedHeight(46);
     m_window->statusBar()->setSizeGripEnabled(false);
+    QPalette statusPalette = m_window->statusBar()->palette();
+    statusPalette.setColor(QPalette::Window, QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
+    m_window->statusBar()->setPalette(statusPalette);
+    m_window->statusBar()->setAutoFillBackground(true);
     m_window->statusBar()->setStyleSheet(QStringLiteral("QStatusBar { background: %1; border-top: 1px solid %2; }"
                                                         "QStatusBar::item { border: none; }"
                                                         "QLabel { background: transparent; }")
-                                             .arg(UiTheme::Color::MenuBar, UiTheme::Color::StatusBorder));
+                                             .arg(UiTheme::Color::WindowChrome, UiTheme::Color::StatusBorder));
 
     auto* container = new QWidget(m_window);
+    container->setObjectName(QStringLiteral("statusBarContent"));
+    container->setStyleSheet(
+        QStringLiteral("QWidget#statusBarContent { background: %1; }").arg(UiTheme::Color::WindowChrome));
     auto* hbox = new QHBoxLayout(container);
     hbox->setContentsMargins(6, 0, 6, 0);
     hbox->setSpacing(0);

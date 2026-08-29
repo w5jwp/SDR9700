@@ -18,7 +18,9 @@ constexpr float kPeakDecayLevelPerSec = 25.0f;
 constexpr float kPeakDecayPerTickLevel = kPeakDecayLevelPerSec * 0.05f;
 constexpr int kClickMoveTolerancePx = 6;
 constexpr int kLevelScaleTopInsetPx = 6;
-constexpr int kLevelScaleBottomInsetPx = 9;
+// Map the raw scope minimum to the clipped bottom edge. This suppresses the
+// artificial full-width baseline while leaving signal peaks visible.
+constexpr int kLevelScaleBottomInsetPx = 0;
 constexpr int kFrequencyLabelHorizontalPaddingPx = 6;
 constexpr int kGridDensityFewer = 0;
 constexpr int kGridDensityMore = 2;
@@ -223,7 +225,6 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
 
     static const QColor kBgScale(0x06, 0x11, 0x16);
     static const QColor kGridText(0xc6, 0xe0, 0xe8);
-    static const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 
     const int specH = plotHeight();
     const int w = width();
@@ -242,19 +243,17 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
         painter->setFont(f);
 
         const float range = m_maxLevel - m_minLevel;
+        // Keep the level grid open enough that the spectrum trace is not boxed in by
+        // closely spaced horizontal rules. Density preferences still scale this base.
         float majorLevelStep = range > 100.0f ? 20.0f : 10.0f;
-        float levelMinorDivisions = 4.0f;
         if (m_gridDensity == kGridDensityFewer)
         {
             majorLevelStep *= 2.0f;
-            levelMinorDivisions = 2.0f;
         }
         else if (m_gridDensity == kGridDensityMore)
         {
             majorLevelStep /= 2.0f;
-            levelMinorDivisions = 5.0f;
         }
-        const float minorLevelStep = majorLevelStep / levelMinorDivisions;
         auto drawLevelLines = [&](float step)
         {
             const int firstStep = int(std::ceil(m_minLevel / step));
@@ -267,9 +266,6 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
             }
         };
 
-        painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 46), 1));
-        drawLevelLines(minorLevelStep);
-
         painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 86), 1));
         drawLevelLines(majorLevelStep);
 
@@ -277,24 +273,22 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
         const double scaleEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
         const int plotW = qMax(1, plotWidthPx());
         const double mhzPerPx = (scaleEndMhz > scaleStartMhz) ? (scaleEndMhz - scaleStartMhz) / plotW : 1.0;
-        double tickStep = 0.5;
-        double minMajorGridPx = 80.0;
-        double frequencyMinorDivisions = 5.0;
+        // The reference presentation uses closely spaced major divisions. Start
+        // at 100 kHz and still coarsen the step for wider spans or small canvases.
+        double tickStep = 0.1;
+        double minMajorGridPx = 60.0;
         if (m_gridDensity == kGridDensityFewer)
         {
-            minMajorGridPx = 130.0;
-            frequencyMinorDivisions = 2.0;
+            minMajorGridPx = 105.0;
         }
         else if (m_gridDensity == kGridDensityMore)
         {
-            minMajorGridPx = 45.0;
-            frequencyMinorDivisions = 10.0;
+            minMajorGridPx = 35.0;
         }
         while (tickStep / mhzPerPx < minMajorGridPx && tickStep < 100)
         {
             tickStep *= 2;
         }
-        const double minorTickStep = tickStep / frequencyMinorDivisions;
         auto drawMhzLines = [&](double step)
         {
             const qint64 firstStep = qint64(std::ceil(scaleStartMhz / step - 1e-9));
@@ -307,9 +301,6 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
             }
         };
 
-        painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 46), 1));
-        drawMhzLines(minorTickStep);
-
         painter->setPen(QPen(colorWithAlpha(m_gridLineColor, 86), 1));
         drawMhzLines(tickStep);
     }
@@ -317,7 +308,6 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
     {
         const int scaleY = specH - 1;
         painter->fillRect(0, scaleY, w, scaleHeight(), kBgScale);
-        painter->fillRect(plotLeftX(), scaleY, qMax(0, w - plotLeftX()), 1, kScaleAccentLine);
         painter->setPen(kGridText);
 
         QFont f = painter->font();
@@ -576,8 +566,9 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
-    static const QColor kTrace(0xf2, 0xf7, 0xfa);
-    static const QColor kPeak(0xae, 0xe8, 0xff, 95);
+    static const QColor kTrace(0xd2, 0xdc, 0xe4);
+    static const QColor kPeak(0x8b, 0xa0, 0xb0, 95);
+    static const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
 
     ensureStaticLayer();
     QPainter p(this);
@@ -636,11 +627,10 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
         fillPath.closeSubpath();
 
         QLinearGradient fillGrad(0, specTop, 0, specH);
-        fillGrad.setColorAt(0.00, QColor(0xff, 0xf8, 0x00, 230));
-        fillGrad.setColorAt(0.18, QColor(0x72, 0xff, 0x00, 220));
-        fillGrad.setColorAt(0.42, QColor(0x00, 0xf0, 0xff, 205));
-        fillGrad.setColorAt(0.72, QColor(0x43, 0xb8, 0xff, 205));
-        fillGrad.setColorAt(1.00, QColor(0x35, 0x8f, 0xff, 190));
+        fillGrad.setColorAt(0.00, QColor(0xa1, 0xb0, 0xbc, 175));
+        fillGrad.setColorAt(0.35, QColor(0x6d, 0x80, 0x90, 180));
+        fillGrad.setColorAt(0.72, QColor(0x42, 0x58, 0x6a, 190));
+        fillGrad.setColorAt(1.00, QColor(0x24, 0x36, 0x46, 205));
         p.setPen(Qt::NoPen);
         p.fillPath(fillPath, fillGrad);
 
@@ -683,6 +673,12 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
         p.setPen(QPen(m_vfoMarkerColor, 1, Qt::SolidLine));
         p.drawLine(vx, 0, vx, scaleY - 1);
     }
+
+    // Draw the scale boundary independently and last. Raw scope level zero is
+    // deliberately clipped at this edge, but must not obscure the red border.
+    const int scaleY = specH - 1;
+    p.setPen(QPen(kScaleAccentLine, 1));
+    p.drawLine(plotLeftX(), scaleY, w - 1, scaleY);
 }
 
 void SpectrumScopeCanvas::mousePressEvent(QMouseEvent* ev)

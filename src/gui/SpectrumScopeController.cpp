@@ -5,6 +5,7 @@
 #include "SpectrumScopeDisplay.h"
 #include "LogCategories.h"
 #include "MainWindow.h"
+#include "RadioCommandController.h"
 #include "MainWindowHelpers.h"
 #include "VfoPanel.h"
 #include "VfoController.h"
@@ -16,7 +17,11 @@
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
 
+#include <QComboBox>
+#include <QLabel>
+#include <QSignalBlocker>
 #include <QTimer>
+#include <QToolButton>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -25,29 +30,27 @@
 
 using namespace sdr9700::ui::main_window;
 
+namespace
+{
+constexpr int kSpectrumToolbarHeight = 29;
+}
+
 SpectrumScopeController::SpectrumScopeController(MainWindow* window) : QObject(window), m_window(window) {}
 
 void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
 {
-    auto* spectrumScopeDivider = new QWidget(m_window->centralWidget());
-    spectrumScopeDivider->setObjectName(QStringLiteral("spectrumScopeDivider"));
-    spectrumScopeDivider->setFixedHeight(6);
-    spectrumScopeDivider->setStyleSheet(
-        QStringLiteral("QWidget#spectrumScopeDivider { background: %1; }").arg(UiTheme::Color::PanelDark));
-    vbox->addWidget(spectrumScopeDivider);
-
     auto* vfoStrip = new QWidget(m_window->centralWidget());
     vfoStrip->setObjectName(QStringLiteral("vfoDisplayStrip"));
     vfoStrip->setStyleSheet(
-        QStringLiteral("QWidget#vfoDisplayStrip { background: %1; }").arg(UiTheme::Color::PanelDark));
+        QStringLiteral("QWidget#vfoDisplayStrip { background: %1; }").arg(UiTheme::Color::ContentBackground));
     auto* vfoLayout = new QHBoxLayout(vfoStrip);
-    vfoLayout->setContentsMargins(kControlStripMargins.left(), 6, kControlStripMargins.right(), 6);
+    vfoLayout->setContentsMargins(kControlStripMargins.left(), 0, kControlStripMargins.right(), 6);
     vfoLayout->setSpacing(0);
 
     auto* vfoBlock = new QWidget(vfoStrip);
     vfoBlock->setObjectName(QStringLiteral("vfoBlock"));
-    vfoBlock->setStyleSheet(QStringLiteral("QWidget#vfoBlock { background: black; border: 1px solid %1; }")
-                                .arg(UiTheme::Color::BorderFocus));
+    vfoBlock->setStyleSheet(
+        QStringLiteral("QWidget#vfoBlock { background: black; border: 1px solid %1; }").arg(UiTheme::Color::Border));
     auto* vfoBlockLayout = new QHBoxLayout(vfoBlock);
     vfoBlockLayout->setContentsMargins(1, 1, 1, 1);
     vfoBlockLayout->setSpacing(0);
@@ -56,6 +59,23 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     m_window->m_subVfoController = new VfoController(Vfo::Sub, m_window->m_model->backend(), vfoStrip, m_window);
     m_window->m_vfoSelectionController = new VfoSelectionController(
         m_window->m_model->backend(), m_window->m_mainVfoController, m_window->m_subVfoController, vfoStrip, m_window);
+    m_window->m_vfoSelectionController->panel()->setPttButton(m_window->m_pttBtn);
+    const auto showToneMenu = [this](Vfo vfo, const QPoint& position)
+    {
+        m_window->m_vfoSelectionController->runWhenSelected(
+            vfo, [this, position]() { m_window->m_radioCommandController->showToneMenu(position); });
+    };
+    const auto showOffsetMenu = [this](Vfo vfo, const QPoint& position)
+    {
+        m_window->m_vfoSelectionController->runWhenSelected(
+            vfo, [this, position]() { m_window->m_radioCommandController->showOffsetMenu(position); });
+    };
+    connect(m_window->m_mainVfoController, &VfoController::toneMenuRequested, this, showToneMenu);
+    connect(m_window->m_subVfoController, &VfoController::toneMenuRequested, this, showToneMenu);
+    connect(m_window->m_mainVfoController, &VfoController::offsetMenuRequested, this, showOffsetMenu);
+    connect(m_window->m_subVfoController, &VfoController::offsetMenuRequested, this, showOffsetMenu);
+    connect(m_window->m_mainVfoController, &VfoController::compressorMenuRequested, this,
+            [this](Vfo, const QPoint& position) { m_window->m_radioCommandController->showCompressorMenu(position); });
     connect(m_window->m_vfoSelectionController, &VfoSelectionController::selectedVfoChanged, this,
             [this](Vfo vfo)
             {
@@ -67,7 +87,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                 {
                     m_window->m_spectrumScopeDisplay->clearDisplay();
                 }
-                followActiveVfo();
+                recenterActiveVfo(false);
             });
     connect(m_window->m_vfoSelectionController, &VfoSelectionController::pttReadyChanged, this,
             [this](bool ready)
@@ -82,26 +102,40 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                 }
             });
     connect(m_window->m_mainVfoController, &VfoController::frequencyChanged, this,
-            [this](quint64)
-            {
-                if (m_window->m_vfoSelectionController->selectedVfo() == Vfo::Main)
-                {
-                    followActiveVfo();
-                }
-            });
+            [this](quint64 hz) { onActiveVfoFrequencyChanged(Vfo::Main, hz); });
     connect(m_window->m_subVfoController, &VfoController::frequencyChanged, this,
-            [this](quint64)
-            {
-                if (m_window->m_vfoSelectionController->selectedVfo() == Vfo::Sub)
+            [this](quint64 hz) { onActiveVfoFrequencyChanged(Vfo::Sub, hz); });
+    const auto markRecenterPending = [this](Vfo vfo, quint64 hz)
+    {
+        if (vfo == Vfo::Main)
+        {
+            m_pendingMainRecenterHz = hz;
+        }
+        else
+        {
+            m_pendingSubRecenterHz = hz;
+        }
+    };
+    connect(m_window->m_mainVfoController, &VfoController::frequencyRecenterRequested, this, markRecenterPending);
+    connect(m_window->m_subVfoController, &VfoController::frequencyRecenterRequested, this, markRecenterPending);
+    if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
+    {
+        connect(backend, &IRadioBackend::readyChanged, this,
+                [this](bool ready)
                 {
-                    followActiveVfo();
-                }
-            });
+                    if (!ready)
+                    {
+                        m_hasCenteredActiveVfo = false;
+                        m_pendingMainRecenterHz = 0;
+                        m_pendingSubRecenterHz = 0;
+                    }
+                });
+    }
     auto createSeparator = [vfoBlock]()
     {
         auto* separator = new QWidget(vfoBlock);
         separator->setFixedWidth(1);
-        separator->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::BorderFocus));
+        separator->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
         return separator;
     };
     vfoBlockLayout->addWidget(m_window->m_mainVfoController->display(), 1);
@@ -110,8 +144,13 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     vfoBlockLayout->addWidget(createSeparator());
     vfoBlockLayout->addWidget(m_window->m_subVfoController->display(), 1);
     vfoLayout->addWidget(vfoBlock, 1);
+    // Nineteen empty layout pixels plus the first border pixel produce a 20 px
+    // visible edge-to-edge separation below the title bar.
+    vbox->addSpacing(19);
     vbox->addWidget(vfoStrip);
-    vbox->addSpacing(10);
+    // The VFO strip already contributes a 6 px bottom inset. Add 14 px here
+    // so the 20 px top gap matches the spectrum frame's side and bottom insets.
+    vbox->addSpacing(14);
 
     m_window->m_spectrumScopeDisplay = new SpectrumScopeDisplay(m_window->centralWidget());
     m_window->m_spectrumScopeDisplay->setInvertMouseWheel(
@@ -167,9 +206,113 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     spectrumFrame->setObjectName(QStringLiteral("spectrumFrame"));
     spectrumFrame->setStyleSheet(
         QStringLiteral("QWidget#spectrumFrame { border: 1px solid %1; }").arg(UiTheme::Color::Border));
-    auto* spectrumFrameLayout = new QHBoxLayout(spectrumFrame);
+    auto* spectrumFrameLayout = new QVBoxLayout(spectrumFrame);
     spectrumFrameLayout->setContentsMargins(1, 1, 1, 1);
     spectrumFrameLayout->setSpacing(0);
+
+    auto* spectrumToolbar = new QWidget(spectrumFrame);
+    spectrumToolbar->setObjectName(QStringLiteral("spectrumToolbar"));
+    spectrumToolbar->setFixedHeight(kSpectrumToolbarHeight);
+    spectrumToolbar->setAccessibleName(QStringLiteral("Spectrum controls toolbar"));
+    QPalette chromePalette = spectrumToolbar->palette();
+    chromePalette.setColor(QPalette::Window, QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
+    spectrumToolbar->setPalette(chromePalette);
+    spectrumToolbar->setAutoFillBackground(true);
+    spectrumToolbar->setStyleSheet(
+        QStringLiteral("QWidget#spectrumToolbar { background: %1; border: 0; border-bottom: 1px solid %2; }")
+            .arg(UiTheme::Color::WindowChrome, UiTheme::Color::StatusBorder));
+    auto* spectrumToolbarLayout = new QHBoxLayout(spectrumToolbar);
+    spectrumToolbarLayout->setContentsMargins(8, 2, 8, 2);
+    spectrumToolbarLayout->setSpacing(6);
+
+    m_tuningStepSelector = new QComboBox(spectrumToolbar);
+    m_tuningStepSelector->setObjectName(QStringLiteral("spectrumStepSelector"));
+    m_tuningStepSelector->setAccessibleName(QStringLiteral("Tuning step"));
+    m_tuningStepSelector->hide();
+    for (const auto& preset : kStepPresets)
+    {
+        m_tuningStepSelector->addItem(QString::fromLatin1(preset.label), preset.hz);
+    }
+    updateTuningStepSelector();
+    connect(m_tuningStepSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int index)
+            {
+                if (index < 0 || !m_tuningStepSelector)
+                {
+                    return;
+                }
+                AppSettings::instance().setValue(QString::fromLatin1(kTuningStepHZSettingsKey),
+                                                 m_tuningStepSelector->itemData(index).toInt());
+                m_window->applyRadioTuningStep();
+            });
+
+    auto* spanSelector = m_window->m_spectrumScopeDisplay->spanSelector();
+    spanSelector->setParent(spectrumToolbar);
+    spanSelector->hide();
+
+    const auto makeInlineSelector = [spectrumToolbar](const QString& name, QComboBox* selector)
+    {
+        auto* control = new QWidget(spectrumToolbar);
+        auto* layout = new QHBoxLayout(control);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(4);
+
+        auto* previous = new QToolButton(control);
+        auto* label = new QLabel(name, control);
+        auto* value = new QLabel(selector->currentText(), control);
+        auto* next = new QToolButton(control);
+        previous->setText(QStringLiteral("‹"));
+        next->setText(QStringLiteral("›"));
+        previous->setAccessibleName(QStringLiteral("Previous %1").arg(name.toLower()));
+        next->setAccessibleName(QStringLiteral("Next %1").arg(name.toLower()));
+        for (QToolButton* button : {previous, next})
+        {
+            button->setFixedSize(16, 22);
+            button->setFocusPolicy(Qt::NoFocus);
+            button->setStyleSheet(
+                QStringLiteral("QToolButton { background: transparent; border: 0; color: %1; font-size: 14px; "
+                               "font-weight: bold; padding: 0; } QToolButton:hover { color: %2; }")
+                    .arg(UiTheme::Color::TextStatusSecondary, UiTheme::Color::TextBright));
+        }
+        label->setStyleSheet(
+            QStringLiteral("color: %1; font-size: 10px; font-weight: bold;").arg(UiTheme::Color::TextStatusSecondary));
+        value->setMinimumWidth(52);
+        value->setAlignment(Qt::AlignCenter);
+        value->setStyleSheet(
+            QStringLiteral("color: %1; font-size: 10px; font-weight: bold;").arg(UiTheme::Color::TextBright));
+
+        const auto updateControl = [selector, value, previous, next]()
+        {
+            value->setText(selector->currentText());
+            previous->setEnabled(selector->currentIndex() > 0);
+            next->setEnabled(selector->currentIndex() + 1 < selector->count());
+        };
+        QObject::connect(previous, &QToolButton::clicked, selector,
+                         [selector]() { selector->setCurrentIndex(selector->currentIndex() - 1); });
+        QObject::connect(next, &QToolButton::clicked, selector,
+                         [selector]() { selector->setCurrentIndex(selector->currentIndex() + 1); });
+        QObject::connect(selector, &QComboBox::currentTextChanged, control,
+                         [updateControl](const QString&) { updateControl(); });
+        updateControl();
+
+        layout->addWidget(previous);
+        layout->addWidget(label);
+        layout->addWidget(value);
+        layout->addWidget(next);
+        return control;
+    };
+
+    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("STEP"), m_tuningStepSelector));
+    spectrumToolbarLayout->addSpacing(50);
+    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("SPAN"), spanSelector));
+    spectrumToolbarLayout->addStretch();
+    if (QWidget* lanModControl = m_window->m_vfoPanel ? m_window->m_vfoPanel->lanModControl() : nullptr)
+    {
+        lanModControl->setParent(spectrumToolbar);
+        lanModControl->setFixedHeight(24);
+        spectrumToolbarLayout->addWidget(lanModControl);
+    }
+    spectrumFrameLayout->addWidget(spectrumToolbar);
     spectrumFrameLayout->addWidget(m_window->m_spectrumScopeDisplay);
     spectrumInsetLayout->addWidget(spectrumFrame);
     vbox->addWidget(spectrumInset, 1);
@@ -236,6 +379,20 @@ void SpectrumScopeController::updateSpectrumVfoMarker()
 
     const quint64 displayedHz = activeVfoFrequencyHz();
     m_window->m_spectrumScopeDisplay->setVfoFrequency(displayedHz / 1e6);
+}
+
+void SpectrumScopeController::updateTuningStepSelector()
+{
+    if (!m_tuningStepSelector)
+    {
+        return;
+    }
+    const int index = m_tuningStepSelector->findData(m_window->tuningStepHz());
+    if (index >= 0)
+    {
+        const QSignalBlocker blocker(m_tuningStepSelector);
+        m_tuningStepSelector->setCurrentIndex(index);
+    }
 }
 
 void SpectrumScopeController::updateSpectrumScopeBandLimits(quint64 hz)
@@ -485,7 +642,31 @@ quint64 SpectrumScopeController::activeVfoFrequencyHz() const
     return controller ? controller->frequencyHz() : 0;
 }
 
-void SpectrumScopeController::followActiveVfo()
+void SpectrumScopeController::onActiveVfoFrequencyChanged(Vfo vfo, quint64 hz)
+{
+    if (!m_window->m_vfoSelectionController || m_window->m_vfoSelectionController->selectedVfo() != vfo)
+    {
+        return;
+    }
+
+    quint64& pendingRecenterHz = vfo == Vfo::Main ? m_pendingMainRecenterHz : m_pendingSubRecenterHz;
+    const bool requestedRecenter = pendingRecenterHz > 0 && pendingRecenterHz == hz;
+    if (requestedRecenter)
+    {
+        pendingRecenterHz = 0;
+    }
+
+    if (!m_hasCenteredActiveVfo || requestedRecenter)
+    {
+        recenterActiveVfo(true);
+        return;
+    }
+
+    updateSpectrumScopeBandLimits(hz);
+    updateSpectrumVfoMarker();
+}
+
+void SpectrumScopeController::recenterActiveVfo(bool clearDisplay)
 {
     const quint64 hz = activeVfoFrequencyHz();
     if (hz == 0 || !m_window->m_spectrumScope)
@@ -495,8 +676,13 @@ void SpectrumScopeController::followActiveVfo()
     m_window->m_pendingSpectrumScopeTuneHz = 0;
     m_window->m_spectrumScope->clearDisplayCenterHold();
     updateSpectrumScopeBandLimits(hz);
+    if (clearDisplay && m_window->m_spectrumScopeDisplay)
+    {
+        m_window->m_spectrumScopeDisplay->clearDisplay();
+    }
     m_window->m_spectrumScope->centerOnFrequency(hz / 1e6);
     updateSpectrumVfoMarker();
+    m_hasCenteredActiveVfo = true;
 }
 
 void SpectrumScopeController::tuneActiveVfo(quint64 hz)

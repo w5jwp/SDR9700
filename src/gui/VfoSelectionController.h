@@ -3,6 +3,7 @@
 #include "Vfo.h"
 
 #include <QObject>
+#include <functional>
 
 class IRadioBackend;
 class VfoController;
@@ -20,6 +21,7 @@ class VfoSelectionController : public QObject
     VfoSelectionPanel* panel() const { return m_panel; }
     Vfo selectedVfo() const { return m_selectedVfo; }
     void setControlsEnabled(bool enabled);
+    void runWhenSelected(Vfo vfo, std::function<void()> action);
 
   signals:
     void selectedVfoChanged(Vfo vfo);
@@ -27,6 +29,7 @@ class VfoSelectionController : public QObject
 
   private:
     void reset();
+    void requestSelection(Vfo vfo);
     void setPttReady(bool ready);
     void updateTransmitIndicators();
 
@@ -40,4 +43,5 @@ class VfoSelectionController : public QObject
     bool m_exchangePending{false};
     bool m_pttReady{true};
     bool m_transmitting{false};
+    std::function<void()> m_selectedAction;
 };

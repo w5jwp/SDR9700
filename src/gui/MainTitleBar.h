@@ -11,6 +11,7 @@ class QPushButton;
 class QLabel;
 class QHBoxLayout;
 class QMouseEvent;
+class QPaintEvent;
 class QTimer;
 
 class MainTitleBar : public QWidget
@@ -41,6 +42,7 @@ class MainTitleBar : public QWidget
     void closeRequested();
 
   protected:
+    void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
 
   private:

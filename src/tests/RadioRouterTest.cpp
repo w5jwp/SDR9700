@@ -130,12 +130,14 @@ void RadioRouterTest::keepsSubReceiverControlsOutOfLegacyMainSignals()
     QSignalSpy agcSpy(&router, &RadioRouter::agcModeChanged);
     QSignalSpy nrSpy(&router, &RadioRouter::nrChanged);
     QSignalSpy rfGainSpy(&router, &RadioRouter::rfGainChanged);
+    QSignalSpy smeterSpy(&router, &RadioRouter::smeterChanged);
 
     router.route(CacheItem(funcAGCTimeConstant, 3, 1));
     router.route(CacheItem(funcNoiseReduction, true, 1));
     router.route(CacheItem(funcRfGain, 128, 1));
+    router.route(CacheItem(funcSMeter, 120, 1));
 
-    QCOMPARE(valueSpy.count(), 3);
+    QCOMPARE(valueSpy.count(), 4);
     for (const QList<QVariant>& arguments : valueSpy)
     {
         QCOMPARE(arguments.at(2).toUInt(), uint(1));
@@ -143,6 +145,7 @@ void RadioRouterTest::keepsSubReceiverControlsOutOfLegacyMainSignals()
     QCOMPARE(agcSpy.count(), 0);
     QCOMPARE(nrSpy.count(), 0);
     QCOMPARE(rfGainSpy.count(), 0);
+    QCOMPARE(smeterSpy.count(), 0);
 }
 
 void RadioRouterTest::routesToneRegisterForActiveToneMode()
