@@ -120,6 +120,10 @@ class VfoBackendTest : public QObject
     void boundedRequestsAreClampedBeforeForwarding();
     void reportsRejectedPttRequest();
     void receiverCommandRouteSelectsCommandsAndRestoresInOrder();
+    void mapsVfoToReceiverByte();
+    void alternatesInactiveMeterSamplesDuringDualWatch();
+    void suppressesReceiverMeterPollingDuringContextTransitions();
+    void survivesRepeatedExchangeAndTunePressure();
 };
 
 void VfoBackendTest::radioBackedRequestsWaitForConfirmation()
@@ -221,6 +225,71 @@ void VfoBackendTest::receiverCommandRouteSelectsCommandsAndRestoresInOrder()
         Vfo::Main, Vfo::Main, [&events](Vfo) { events.append(QStringLiteral("select-main")); },
         [&events](uchar receiver) { events.append(QStringLiteral("command-%1").arg(receiver)); });
     QCOMPARE(events, QStringList({QStringLiteral("select-main"), QStringLiteral("command-0")}));
+}
+
+void VfoBackendTest::mapsVfoToReceiverByte()
+{
+    QCOMPARE(sdr9700::backend::receiverForVfo(Vfo::Main), uchar(0));
+    QCOMPARE(sdr9700::backend::receiverForVfo(Vfo::Sub), uchar(1));
+}
+
+void VfoBackendTest::alternatesInactiveMeterSamplesDuringDualWatch()
+{
+    for (int tick = 0; tick < 10; ++tick)
+    {
+        const Vfo expected = tick % 5 == 4 ? Vfo::Sub : Vfo::Main;
+        QCOMPARE(sdr9700::backend::meterPollTarget(Vfo::Main, true, tick), expected);
+    }
+    QCOMPARE(sdr9700::backend::meterPollTarget(Vfo::Sub, true, 4), Vfo::Main);
+    QCOMPARE(sdr9700::backend::meterPollTarget(Vfo::Sub, false, 4), Vfo::Sub);
+}
+
+void VfoBackendTest::suppressesReceiverMeterPollingDuringContextTransitions()
+{
+    using sdr9700::backend::receiverMeterPollAllowed;
+    QVERIFY(receiverMeterPollAllowed(true, false, false, false));
+    QVERIFY(!receiverMeterPollAllowed(false, false, false, false));
+    QVERIFY(!receiverMeterPollAllowed(true, true, false, false));
+    QVERIFY(!receiverMeterPollAllowed(true, false, true, false));
+    QVERIFY(!receiverMeterPollAllowed(true, false, false, true));
+}
+
+void VfoBackendTest::survivesRepeatedExchangeAndTunePressure()
+{
+    Vfo activeVfo = Vfo::Main;
+    int pollTick = 0;
+    int activeSamples = 0;
+    int inactiveSamples = 0;
+
+    for (int iteration = 0; iteration < 500; ++iteration)
+    {
+        const bool exchangePending = iteration % 7 == 0;
+        const bool tuningHoldoff = iteration % 11 == 0;
+        const bool pttTransition = iteration % 37 == 0;
+        if (exchangePending)
+        {
+            activeVfo = activeVfo == Vfo::Main ? Vfo::Sub : Vfo::Main;
+        }
+
+        if (!sdr9700::backend::receiverMeterPollAllowed(true, pttTransition, exchangePending, tuningHoldoff))
+        {
+            continue;
+        }
+
+        const Vfo target = sdr9700::backend::meterPollTarget(activeVfo, true, pollTick++);
+        if (target == activeVfo)
+        {
+            ++activeSamples;
+        }
+        else
+        {
+            ++inactiveSamples;
+        }
+    }
+
+    QVERIFY(activeSamples > 0);
+    QVERIFY(inactiveSamples > 0);
+    QCOMPARE(activeSamples, inactiveSamples * 4 + (pollTick % 5));
 }
 
 QTEST_GUILESS_MAIN(VfoBackendTest)

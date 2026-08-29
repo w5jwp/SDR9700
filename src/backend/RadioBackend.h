@@ -5,6 +5,7 @@
 #include "UdpBase.h"
 #include "AudioConverter.h"
 #include <QAudioDevice>
+#include <QElapsedTimer>
 #include <QThread>
 #include <QPointer>
 #include <QTimer>
@@ -177,8 +178,11 @@ class RadioBackend : public IRadioBackend
     bool m_smeterPollPending{false};
     uchar m_smeterPollPendingReceiver{0};
     int m_smeterPollPendingTicks{0};
+    int m_smeterPollTick{0};
+    QElapsedTimer m_meterPollTuneHoldoff;
     QTimer* m_bandStateRefreshTimer{nullptr};
     QTimer* m_mainSubExchangeRetryTimer{nullptr};
+    QElapsedTimer m_mainSubExchangeClock;
     int m_currentBandKey{-1};
     quint64 m_currentMainFrequencyHz{0};
     Vfo m_activeVfo{Vfo::Main};

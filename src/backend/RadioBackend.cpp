@@ -628,7 +628,10 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 {
                     m_mainSubExchangePending = false;
                     m_mainSubExchangeRetryTimer->stop();
-                    qInfo(logRadio()).noquote() << "MAIN/SUB exchange confirmed on physical MAIN";
+                    m_meterPollTuneHoldoff.restart();
+                    qInfo(logRadio()).noquote()
+                        << "MAIN/SUB exchange confirmed on physical MAIN elapsedMs="
+                        << (m_mainSubExchangeClock.isValid() ? m_mainSubExchangeClock.elapsed() : -1);
                     emit mainSubExchangeCompleted();
                 }
             });
@@ -867,8 +870,10 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_vfoStatePollPhase = 0;
     m_smeterPollPending = false;
     m_smeterPollPendingTicks = 0;
+    m_smeterPollTick = 0;
     m_mainSubExchangePending = false;
     m_mainSubExchangeConfirmations = 0;
+    m_mainSubExchangeClock.invalidate();
     if (m_mainSubExchangeRetryTimer)
     {
         m_mainSubExchangeRetryTimer->stop();
@@ -945,6 +950,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_currentRepeaterOffsetHz = 0;
     m_transmitConfiguration.reset();
     m_txMeterPollTick = 0;
+    m_smeterPollTick = 0;
     m_originalDataOffMod.reset();
     m_originalData1Mod.reset();
     m_lastUserVisibleNetworkMessage.clear();
@@ -961,6 +967,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
 
 void RadioBackend::setFrequencyHz(quint64 hz)
 {
+    m_meterPollTuneHoldoff.restart();
     m_transmitConfiguration.requestFrequency(hz);
     const bool transferSelectedMemory = m_selectedRadioMemory.has_value();
     m_selectedRadioMemory.reset();
@@ -1115,6 +1122,9 @@ void RadioBackend::selectVfo(Vfo vfo)
 
 void RadioBackend::exchangeMainSub()
 {
+    m_meterPollTuneHoldoff.restart();
+    m_mainSubExchangeClock.restart();
+    qInfo(logRadio()).noquote() << "MAIN/SUB exchange requested";
     m_mainSubExchangePending = true;
     m_mainSubExchangeConfirmations = 0;
     m_mainSubExchangeRetryTimer->start();
@@ -1143,6 +1153,7 @@ void RadioBackend::exchangeMainSub()
 
 void RadioBackend::setVfoFrequencyHz(Vfo vfo, quint64 hz)
 {
+    m_meterPollTuneHoldoff.restart();
     if (vfo == Vfo::Main)
     {
         setFrequencyHz(hz);
@@ -1594,17 +1605,19 @@ void RadioBackend::setScopeSpanHz(quint64 hz)
     centerSpanData span;
     span.freq = selected;
     span.name = QString::number(selected);
+    const uchar receiver = sdr9700::backend::receiverForVfo(m_activeVfo);
     invokeOnCurrentCommander(
-        [span](Commander* commandSession)
-        { commandSession->receiveCommand(funcScopeSpan, QVariant::fromValue<centerSpanData>(span), 0); });
+        [span, receiver](Commander* commandSession)
+        { commandSession->receiveCommand(funcScopeSpan, QVariant::fromValue<centerSpanData>(span), receiver); });
 }
 
 void RadioBackend::setScopeMode(int mode)
 {
     const uchar bounded = static_cast<uchar>(qBound(0, mode, 1));
+    const uchar receiver = sdr9700::backend::receiverForVfo(m_activeVfo);
     invokeOnCurrentCommander(
-        [=](Commander* commandSession)
-        { commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(bounded), 0); });
+        [bounded, receiver](Commander* commandSession)
+        { commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(bounded), receiver); });
 }
 
 void RadioBackend::setScopeVfo(Vfo vfo)
@@ -1623,12 +1636,13 @@ void RadioBackend::setScopeFixedRangeHz(quint64 startHz, quint64 endHz)
 
     static constexpr uchar kPanScopeEdge = 1;
     SpectrumBounds bounds(startHz / 1e6, endHz / 1e6, kPanScopeEdge);
+    const uchar receiver = sdr9700::backend::receiverForVfo(m_activeVfo);
     invokeOnCurrentCommander(
-        [bounds](Commander* commandSession)
+        [bounds, receiver](Commander* commandSession)
         {
             commandSession->receiveCommand(funcScopeFixedEdgeFreq, QVariant::fromValue<SpectrumBounds>(bounds), 0);
-            commandSession->receiveCommand(funcScopeEdge, QVariant::fromValue<uchar>(bounds.edge), 0);
-            commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(1), 0);
+            commandSession->receiveCommand(funcScopeEdge, QVariant::fromValue<uchar>(bounds.edge), receiver);
+            commandSession->receiveCommand(funcScopeMode, QVariant::fromValue<uchar>(1), receiver);
         });
 }
 
@@ -2276,6 +2290,7 @@ void RadioBackend::onLanReady()
     m_initialMainModeReceived = false;
     m_initialStateRequested = false;
     m_txMeterPollTick = 0;
+    m_smeterPollTick = 0;
     emit readyChanged(false);
 
     invokeOnCurrentCommander(
@@ -2466,13 +2481,46 @@ void RadioBackend::onLanReady()
                     return;
                 }
 
-                const Vfo targetVfo = m_activeVfo;
-                const uchar receiver = targetVfo == Vfo::Sub ? kSubReceiver : kMainReceiver;
+                static constexpr qint64 kPostTuneMeterHoldoffMs = 250;
+                const bool tuningHoldoffActive =
+                    m_meterPollTuneHoldoff.isValid() && m_meterPollTuneHoldoff.elapsed() < kPostTuneMeterHoldoffMs;
+                if (!sdr9700::backend::receiverMeterPollAllowed(m_radioReady, m_pttState.safetyActive(),
+                                                                m_mainSubExchangePending, tuningHoldoffActive))
+                {
+                    return;
+                }
+
+                const Vfo activeVfo = m_activeVfo;
+                const Vfo targetVfo =
+                    sdr9700::backend::meterPollTarget(activeVfo, m_dualWatchEnabled, m_smeterPollTick++);
+                const uchar receiver = sdr9700::backend::receiverForVfo(targetVfo);
                 m_smeterPollPending = true;
                 m_smeterPollPendingReceiver = receiver;
                 m_smeterPollPendingTicks = 0;
-                invokeOnCurrentCommander([receiver](Commander* commandSession)
-                                         { commandSession->scheduleMeterRead(funcSMeter, receiver); });
+                if (targetVfo == activeVfo)
+                {
+                    invokeOnCurrentCommander([receiver](Commander* commandSession)
+                                             { commandSession->scheduleMeterRead(funcSMeter, receiver); });
+                    return;
+                }
+
+                // CI-V 15 02 has no receiver byte. Sample the inactive side in
+                // one ordered Commander-thread transaction, then immediately
+                // restore both the physical selection and scope source. The
+                // inactive side is sampled at 2 Hz to bound switching traffic.
+                invokeOnCurrentCommander(
+                    [activeVfo, targetVfo, receiver](Commander* commandSession)
+                    {
+                        commandSession->receiveCommand(
+                            funcSelectVFO,
+                            QVariant::fromValue<vfo_t>(targetVfo == Vfo::Sub ? vfo_t::vfoSub : vfo_t::vfoMain), 0);
+                        commandSession->receiveCommand(funcSMeter, QVariant(), receiver);
+                        commandSession->receiveCommand(
+                            funcSelectVFO,
+                            QVariant::fromValue<vfo_t>(activeVfo == Vfo::Sub ? vfo_t::vfoSub : vfo_t::vfoMain), 0);
+                        commandSession->receiveCommandNoReadback(funcScopeMainSub,
+                                                                 QVariant::fromValue<bool>(activeVfo == Vfo::Sub), 0);
+                    });
             });
     m_smeterPollTimer->start();
 }
