@@ -354,8 +354,8 @@ void VfoController::publishConfirmedState()
         return;
     }
 
-    const quint64 frequencyHz = *m_confirmedFrequencyHz;
-    m_display->setFrequencyHz(frequencyHz);
+    const quint64 confirmedFrequencyHz = *m_confirmedFrequencyHz;
+    m_display->setFrequencyHz(confirmedFrequencyHz);
     m_display->setBandText(m_band == bandUnknown ? QStringLiteral("--") : sdr9700::radioBandShortLabel(m_band));
     if (m_vfo == Vfo::Main)
     {
@@ -368,10 +368,10 @@ void VfoController::publishConfirmedState()
     updateReceiverControlDisplay();
     updateDisplayEnabled();
 
-    if (!m_publishedFrequencyHz.has_value() || *m_publishedFrequencyHz != frequencyHz)
+    if (!m_publishedFrequencyHz.has_value() || *m_publishedFrequencyHz != confirmedFrequencyHz)
     {
-        m_publishedFrequencyHz = frequencyHz;
-        emit frequencyChanged(frequencyHz);
+        m_publishedFrequencyHz = confirmedFrequencyHz;
+        emit frequencyChanged(confirmedFrequencyHz);
     }
 }
 

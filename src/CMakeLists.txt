@@ -157,8 +157,6 @@ set(SDR9700_APP_SOURCES
     gui/MainWindowHelpers.cpp
     gui/SpectrumScopeController.h
     gui/SpectrumScopeController.cpp
-    gui/ControlPanelController.h
-    gui/ControlPanelController.cpp
     gui/MemoryCsvController.h
     gui/MemoryCsvController.cpp
     gui/MemoryCsvHelpers.h
@@ -211,12 +209,6 @@ set(SDR9700_APP_SOURCES
     gui/MetersDialog.cpp
     gui/MainTitleBar.h
     gui/MainTitleBar.cpp
-    gui/MemoryPanel.h
-    gui/MemoryPanel.cpp
-    gui/PttPanel.h
-    gui/PttPanel.cpp
-    gui/ReceivePanel.h
-    gui/ReceivePanel.cpp
     gui/VfoController.h
     gui/VfoController.cpp
     gui/VfoDisplay.h
@@ -227,8 +219,6 @@ set(SDR9700_APP_SOURCES
     gui/VfoSelectionController.cpp
     gui/VfoSelectionPanel.h
     gui/VfoSelectionPanel.cpp
-    gui/VfoPanel.h
-    gui/VfoPanel.cpp
     gui/MainWindow.h
     gui/MainWindow.cpp
 )
@@ -507,8 +497,6 @@ if(BUILD_TESTING)
     add_executable(PanelAccessibilityTest
         tests/PanelAccessibilityTest.cpp
         gui/MetersDialog.cpp
-        gui/PttPanel.cpp
-        gui/ReceivePanel.cpp
     )
     target_include_directories(PanelAccessibilityTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
     target_link_libraries(PanelAccessibilityTest PRIVATE SDR9700_dtmf_dialog_test_support Qt6::Test)

@@ -71,9 +71,8 @@ inline constexpr int ControlSliderHeight = 24;
 inline constexpr int InlineSliderBlockHeight = 42;
 inline constexpr int ControlButtonHeight = 40;
 inline constexpr int MainWindowMinWidth = 1160;
-// The legacy command strip was 263 px taller than its original replacement
-// gap. Give 100 px each to the panadapter and waterfall, retain 10 additional
-// pixels above the VFO block, and remove the unused 53 px.
+// Accommodates the enlarged panadapter and waterfall introduced with the
+// dual-VFO layout while retaining the standard inset above the VFO block.
 inline constexpr int MainWindowMinHeight = 917;
 inline constexpr int StatusNetworkWidth = 78;
 inline constexpr int StatusTxWidth = 80;

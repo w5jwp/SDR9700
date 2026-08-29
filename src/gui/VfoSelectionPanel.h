@@ -15,7 +15,7 @@ class VfoSelectionPanel : public QWidget
 
     void setSelectedVfo(Vfo vfo);
     void setDualWatchEnabled(bool enabled);
-    void setExchangePending(bool pending);
+    void setExchangePending(bool pending) const;
     void setPttButton(QPushButton* button);
     Vfo selectedVfo() const { return m_selectedVfo; }
     bool dualWatchEnabled() const { return m_dualWatchEnabled; }

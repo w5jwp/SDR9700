@@ -5,7 +5,6 @@
 #include "MemoryController.h"
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
-#include "VfoPanel.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
 

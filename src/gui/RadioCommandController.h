@@ -18,20 +18,14 @@ class RadioCommandController : public QObject
     void toggleMute();
     void cycleMode();
     void toggleRit();
-    void updateRitButton();
-    void showRitMenu();
-    void showCustomRitDialog();
-    void showOffsetMenu(const QPoint& position = {});
+    void showOffsetMenu(const QPoint& position);
     void showCustomOffsetDialog();
     void applyOffsetSelection(duplexMode_t mode, quint64 offsetHz);
-    void updateOffsetButton();
-    void showToneMenu(const QPoint& position = {});
+    void showToneMenu(const QPoint& position);
     void applyToneSelection(rptAccessTxRx_t mode, ushort value);
-    void updateToneButton();
-    void showCompressorMenu(const QPoint& position = {});
+    void showCompressorMenu(const QPoint& position);
     int tuningStepHz() const;
     void applyRadioTuningStep();
-    void updateStepButton();
 
   private:
     MainWindow* m_window{nullptr};

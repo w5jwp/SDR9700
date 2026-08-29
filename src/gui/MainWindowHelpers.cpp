@@ -215,21 +215,6 @@ int radioTuningStepForHz(int hz)
     return preset != std::end(kStepPresets) ? preset->radioStep : -1;
 }
 
-QString preampLevelLabel(int level)
-{
-    switch (qBound(0, level, 3))
-    {
-    case 1:
-        return QStringLiteral("INT");
-    case 2:
-        return QStringLiteral("EXT");
-    case 3:
-        return QStringLiteral("INT+EXT");
-    default:
-        return QStringLiteral("OFF");
-    }
-}
-
 bool agcPresetSelectableForMode(const QString& mode)
 {
     const QString normalized = mode.trimmed().toUpper();

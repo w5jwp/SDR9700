@@ -6,7 +6,6 @@
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
 #include "MemoryViewHelpers.h"
-#include "MemoryPanel.h"
 #include "MemorySyncController.h"
 #include "UtilityWindow.h"
 
@@ -56,11 +55,11 @@ void MemoryViewController::buildMemoryWindow()
 
     auto* panel = new QWidget(m_owner->m_window->m_memoryWindow);
     auto* root = new QHBoxLayout(panel);
-    root->setContentsMargins(kMemoryPanelMargins.left(), kMemoryPanelMargins.top(), kMemoryPanelMargins.right(), 0);
-    root->setSpacing(kMemoryPanelSpacing);
+    root->setContentsMargins(kMemoryWindowMargins.left(), kMemoryWindowMargins.top(), kMemoryWindowMargins.right(), 0);
+    root->setSpacing(kMemoryWindowSpacing);
 
     auto* leftPane = new QWidget(panel);
-    leftPane->setFixedWidth(kMemoryWindowSize.width() - kMemoryPanelMargins.left() - kMemoryPanelMargins.right());
+    leftPane->setFixedWidth(kMemoryWindowSize.width() - kMemoryWindowMargins.left() - kMemoryWindowMargins.right());
     auto* leftRoot = new QVBoxLayout(leftPane);
     leftRoot->setContentsMargins(0, 0, 0, 0);
     leftRoot->setSpacing(sdr9700::ui::kDialogFooterSpacing);
@@ -307,13 +306,6 @@ void MemoryViewController::clearProgress()
 void MemoryViewController::rebuild()
 {
     const QVector<MemoryRecord> memories = m_owner->currentMemories();
-    if (m_owner->m_window->m_memoryPanel)
-    {
-        m_owner->m_window->m_memoryPanel->setSyncInProgress(m_owner->m_memorySyncController->refreshInProgress(),
-                                                            QStringLiteral("Syncing radio memories..."));
-        m_owner->m_window->m_memoryPanel->setMemories(memories, m_owner->m_window->m_activeMemoryId);
-    }
-
     if (!m_owner->m_window->m_memoryTable)
     {
         return;

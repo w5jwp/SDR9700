@@ -7,7 +7,6 @@
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
 #include "UiTheme.h"
-#include "VfoPanel.h"
 #include "backend/IRadioBackend.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
@@ -110,98 +109,9 @@ void RadioCommandController::toggleRit()
     m_window->updateIcomRC28Leds();
 }
 
-void RadioCommandController::updateRitButton()
-{
-    if (!m_window->m_ritBtn || !m_window->m_vfo)
-    {
-        return;
-    }
-    const bool on = m_window->m_vfo->ritOn();
-    const short hz = m_window->m_vfo->ritHz();
-    QString label;
-    if (!on)
-    {
-        label = QStringLiteral("OFF");
-    }
-    else if (hz >= 0)
-    {
-        label = QStringLiteral("+%1").arg(hz);
-    }
-    else
-    {
-        label = QString::number(hz);
-    }
-    setSelectorButtonLines(m_window->m_ritBtn, QStringLiteral("RIT"), label);
-    setCommandButtonActive(m_window->m_ritBtn, on);
-}
-
-void RadioCommandController::showRitMenu()
-{
-    if (!m_window->m_ritBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
-    {
-        return;
-    }
-    QMenu menu(m_window);
-    styleCompactMenu(&menu);
-    const auto* customAction = menu.addAction(QStringLiteral("CUSTOM"));
-    menu.addSeparator();
-    const auto* offAction = menu.addAction(QStringLiteral("OFF"));
-    connect(customAction, &QAction::triggered, this, &RadioCommandController::showCustomRitDialog);
-    connect(offAction, &QAction::triggered, this, [this]() { m_window->m_vfo->setRitEnabled(false); });
-    menu.exec(m_window->m_ritBtn->mapToGlobal(QPoint(0, m_window->m_ritBtn->height())));
-}
-
-void RadioCommandController::showCustomRitDialog()
-{
-    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
-    {
-        return;
-    }
-
-    QDialog dialog(m_window);
-    dialog.setWindowTitle(QStringLiteral("Custom RIT"));
-    dialog.setModal(true);
-
-    auto* layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
-    layout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
-    auto* form = new QFormLayout;
-    auto* rit = new QSpinBox(&dialog);
-    rit->setRange(-999, 999);
-    rit->setSingleStep(10);
-    rit->setSuffix(QStringLiteral(" Hz"));
-    rit->setValue(m_window->m_vfo->ritOn() ? m_window->m_vfo->ritHz() : 0);
-    form->addRow(QStringLiteral("RIT"), rit);
-    layout->addLayout(form);
-
-    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(&dialog);
-    footer.buttonBox->addButton(QDialogButtonBox::Cancel);
-    footer.buttonBox->addButton(QStringLiteral("Set"), QDialogButtonBox::AcceptRole);
-    layout->addWidget(footer.widget);
-    connect(footer.buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(footer.buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    m_window->centerPopupWindow(&dialog);
-    if (dialog.exec() != QDialog::Accepted)
-    {
-        return;
-    }
-
-    const short hz = static_cast<short>(rit->value());
-    if (hz == 0)
-    {
-        m_window->m_vfo->setRitEnabled(false);
-        return;
-    }
-
-    m_window->m_vfo->setRitOffset(hz);
-    m_window->m_vfo->setRitEnabled(true);
-}
-
 void RadioCommandController::showOffsetMenu(const QPoint& position)
 {
-    if ((position.isNull() && !m_window->m_offsetBtn) || !m_window->m_vfo || !m_window->m_model->isReady() ||
-        m_window->m_controlsLocked)
+    if (position.isNull() || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -221,9 +131,7 @@ void RadioCommandController::showOffsetMenu(const QPoint& position)
     menu.addSeparator();
     const auto* customAction = menu.addAction(QStringLiteral("CUSTOM"));
 
-    const QPoint menuPosition =
-        position.isNull() ? m_window->m_offsetBtn->mapToGlobal(QPoint(0, m_window->m_offsetBtn->height())) : position;
-    const QAction* selected = menu.exec(menuPosition);
+    const QAction* selected = menu.exec(position);
     if (!selected)
     {
         return;
@@ -319,23 +227,9 @@ void RadioCommandController::applyOffsetSelection(duplexMode_t mode, quint64 off
     m_window->m_vfo->setDuplexMode(mode);
 }
 
-void RadioCommandController::updateOffsetButton()
-{
-    if (!m_window->m_offsetBtn)
-    {
-        return;
-    }
-
-    const bool active = m_window->m_duplexMode == dmDupMinus || m_window->m_duplexMode == dmDupPlus;
-    setSelectorButtonLines(m_window->m_offsetBtn, QStringLiteral("OFFSET"),
-                           offsetModeLabel(m_window->m_duplexMode, m_window->m_repeaterOffsetHz));
-    setCommandButtonActive(m_window->m_offsetBtn, active);
-}
-
 void RadioCommandController::showToneMenu(const QPoint& position)
 {
-    if ((position.isNull() && !m_window->m_toneBtn) || !m_window->m_vfo || !m_window->m_model->isReady() ||
-        m_window->m_controlsLocked)
+    if (position.isNull() || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -422,9 +316,7 @@ void RadioCommandController::showToneMenu(const QPoint& position)
     menu.addSeparator();
     const auto* offAction = menu.addAction(QStringLiteral("OFF"));
 
-    const QPoint menuPosition =
-        position.isNull() ? m_window->m_toneBtn->mapToGlobal(QPoint(0, m_window->m_toneBtn->height())) : position;
-    const QAction* selected = menu.exec(menuPosition);
+    const QAction* selected = menu.exec(position);
     if (!selected)
     {
         return;
@@ -463,25 +355,9 @@ void RadioCommandController::applyToneSelection(rptAccessTxRx_t mode, ushort val
     m_window->m_vfo->setToneAccessMode(mode);
 }
 
-void RadioCommandController::updateToneButton()
-{
-    if (!m_window->m_toneBtn)
-    {
-        return;
-    }
-
-    const bool active = m_window->m_toneAccessMode != ratrNN;
-    const QString primary = active ? toneOptionLabel(m_window->m_toneAccessMode) : QStringLiteral("TONE");
-    const ushort value = isDtcsToneMode(m_window->m_toneAccessMode) ? m_window->m_dtcsCode : m_window->m_toneFrequency;
-    const QString secondary =
-        active ? memoryToneFrequencyLabel(m_window->m_toneAccessMode, value) : QStringLiteral("OFF");
-    setSelectorButtonLines(m_window->m_toneBtn, primary, secondary);
-    setCommandButtonActive(m_window->m_toneBtn, active);
-}
-
 void RadioCommandController::showCompressorMenu(const QPoint& position)
 {
-    if (!m_window->m_compBtn || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (position.isNull() || !m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
         return;
     }
@@ -551,8 +427,7 @@ void RadioCommandController::showCompressorMenu(const QPoint& position)
     auto* panelAction = new QWidgetAction(&menu);
     panelAction->setDefaultWidget(panel);
     menu.addAction(panelAction);
-    menu.exec(position.isNull() ? m_window->m_compBtn->mapToGlobal(QPoint(0, m_window->m_compBtn->height()))
-                                : position);
+    menu.exec(position);
 }
 
 int RadioCommandController::tuningStepHz() const
@@ -573,34 +448,5 @@ void RadioCommandController::applyRadioTuningStep()
     if (step >= 0)
     {
         m_window->m_model->setTuningStep(step);
-    }
-}
-
-void RadioCommandController::updateStepButton()
-{
-    if (!m_window->m_vfoPanel)
-    {
-        return;
-    }
-    const int hz = tuningStepHz();
-    const auto presetIt = std::find_if(std::begin(kStepPresets), std::end(kStepPresets),
-                                       [hz](const StepPreset& preset) { return preset.hz == hz; });
-    if (presetIt != std::end(kStepPresets))
-    {
-        m_window->m_vfoPanel->setStepText(QString::fromLatin1(presetIt->label));
-        return;
-    }
-    // Custom value not in the preset list — format with units
-    if (hz >= 1000000)
-    {
-        m_window->m_vfoPanel->setStepText(QStringLiteral("%1 MHz").arg(hz / 1000000));
-    }
-    else if (hz >= 1000)
-    {
-        m_window->m_vfoPanel->setStepText(QStringLiteral("%1 kHz").arg(hz / 1000.0, 0, 'f', hz % 1000 == 0 ? 0 : 3));
-    }
-    else
-    {
-        m_window->m_vfoPanel->setStepText(QStringLiteral("%1 Hz").arg(hz));
     }
 }

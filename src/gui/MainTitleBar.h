@@ -30,12 +30,14 @@ class MainTitleBar : public QWidget
     void setLocked(bool locked);
     void setTxDuration(const QString& duration, bool transmitting);
     void setTxDurationActive(bool transmitting);
-    void setLanModControl(QWidget* control);
+    void setLanMod(int value);
+    void setLanModEnabled(bool enabled);
     void pulseRadioHeartbeat();
     void clearRadioHeartbeat();
 
   signals:
     void volumeChanged(int value);
+    void lanModChanged(int value);
     void muteToggled();
     void lockToggled();
     void txDurationResetRequested();
@@ -51,8 +53,8 @@ class MainTitleBar : public QWidget
     QLabel* m_titleLabel{nullptr};
     QLabel* m_heartbeatIndicator{nullptr};
     QTimer* m_heartbeatFadeTimer{nullptr};
-    QWidget* m_lanModHost{nullptr};
-    QHBoxLayout* m_lanModLayout{nullptr};
+    QSlider* m_lanModSlider{nullptr};
+    QLabel* m_lanModLabel{nullptr};
     QPushButton* m_txDurationButton{nullptr};
     QPushButton* m_muteBtn{nullptr};
     QPushButton* m_lockBtn{nullptr};

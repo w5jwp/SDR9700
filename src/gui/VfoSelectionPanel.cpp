@@ -99,7 +99,7 @@ VfoSelectionPanel::VfoSelectionPanel(QWidget* parent) : QWidget(parent)
     updateButtonStyles();
 }
 
-void VfoSelectionPanel::setExchangePending(bool pending)
+void VfoSelectionPanel::setExchangePending(bool pending) const
 {
     for (QPushButton* button : {m_mainButton, m_subButton, m_exchangeButton, m_dualWatchButton})
     {

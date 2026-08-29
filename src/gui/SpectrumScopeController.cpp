@@ -7,7 +7,6 @@
 #include "MainWindow.h"
 #include "RadioCommandController.h"
 #include "MainWindowHelpers.h"
-#include "VfoPanel.h"
 #include "VfoController.h"
 #include "VfoDisplay.h"
 #include "VfoSelectionController.h"
@@ -682,7 +681,7 @@ void SpectrumScopeController::recenterActiveVfo(bool clearDisplay)
     m_hasCenteredActiveVfo = true;
 }
 
-void SpectrumScopeController::tuneActiveVfo(quint64 hz)
+void SpectrumScopeController::tuneActiveVfo(quint64 hz) const
 {
     if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
     {

@@ -14,11 +14,8 @@ class VfoModel;
 class SpectrumScopeModel;
 class SpectrumScopeController;
 class SpectrumScopeDisplay;
-class ControlPanelController;
 class VfoController;
 class VfoSelectionController;
-class VfoPanel;
-class MemoryPanel;
 class QLabel;
 class QToolBar;
 class QAction;
@@ -57,7 +54,6 @@ class MainWindow : public QMainWindow
 {
     Q_OBJECT
     friend class SpectrumScopeController;
-    friend class ControlPanelController;
     friend class IcomRC28Controller;
     // MemoryController and its Qt-owned collaborators form one UI subsystem.
     // Friendship is intentionally confined to these classes so they can update
@@ -103,8 +99,7 @@ class MainWindow : public QMainWindow
 
   private:
     void buildToolBar();
-    void buildControlPanel(QVBoxLayout* vbox);
-    void buildControlPanelContent(QVBoxLayout* vbox);
+    void buildRadioControls();
     void buildStatusBar();
     void centerPopupWindow(QWidget* popup) const;
     void bringDialogToFront(QWidget* dialog) const;
@@ -117,10 +112,6 @@ class MainWindow : public QMainWindow
     void tryAutoConnect();
     void restoreWindowLayout();
     void saveWindowLayout() const;
-    void showCompressorMenu();
-    void showRitMenu();
-    void showCustomRitDialog();
-    void updateRitButton();
     void toggleMute();
     void cycleMode();
     void toggleRit();
@@ -132,13 +123,6 @@ class MainWindow : public QMainWindow
     void refreshIcomRC28EncoderSettings();
     void snapIcomRC28FrequencyToKhz();
 #endif
-    void showOffsetMenu();
-    void showCustomOffsetDialog();
-    void applyOffsetSelection(duplexMode_t mode, quint64 offsetHz);
-    void updateOffsetButton();
-    void showToneMenu();
-    void applyToneSelection(rptAccessTxRx_t mode, ushort value);
-    void updateToneButton();
     void updateStepButton();
     void updateIcomRC28Leds();
     void showDtmfDialog();
@@ -166,7 +150,6 @@ class MainWindow : public QMainWindow
 
     MainTitleBar* m_titleBar{nullptr};
     SpectrumScopeController* m_spectrumScopeController{nullptr};
-    ControlPanelController* m_controlPanelController{nullptr};
 #ifdef HAVE_HIDAPI
     IcomRC28Controller* m_icomRC28Controller{nullptr};
 #endif
@@ -183,16 +166,9 @@ class MainWindow : public QMainWindow
     VfoController* m_subVfoController{nullptr};
     VfoSelectionController* m_vfoSelectionController{nullptr};
 
-    VfoPanel* m_vfoPanel{nullptr};
-    MemoryPanel* m_memoryPanel{nullptr};
     int m_lanModValue{128};
     quint64 m_vfoFrequencyHz{0};
     QPushButton* m_muteBtn{nullptr};
-    QPushButton* m_compBtn{nullptr};
-    QPushButton* m_ritBtn{nullptr};
-    QPushButton* m_offsetBtn{nullptr};
-    QPushButton* m_toneBtn{nullptr};
-    QPushButton* m_xfcBtn{nullptr};
     QPushButton* m_pttBtn{nullptr};
     bool m_vfoPttReady{true};
     DtmfDialog* m_dtmfDialog{nullptr};

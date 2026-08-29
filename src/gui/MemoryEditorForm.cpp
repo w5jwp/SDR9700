@@ -8,7 +8,6 @@
 #include "MemoryEditorPolicy.h"
 #include "MainWindow.h"
 #include "UtilityWindow.h"
-#include "VfoPanel.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
 

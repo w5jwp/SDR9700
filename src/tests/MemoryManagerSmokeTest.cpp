@@ -3,7 +3,6 @@
 #include "MainWindowHelpers.h"
 #include "AppInfo.h"
 #include "AppPaths.h"
-#include "MemoryPanel.h"
 #include "MemoryEditorPolicy.h"
 #include "RadioChooserDialog.h"
 #include "RadioCommandController.h"
@@ -45,7 +44,6 @@ class MemoryManagerSmokeTest : public QObject
     void initTestCase();
     void newInstallationCanAddRadioProfile();
     void constructsMemoryManagerUi();
-    void mainMemoryBrowserKeepsActiveMemorySelected();
     void mainWindowRetainsFixedFramelessDesign();
     void fileMenuTracksRadioConnection();
     void selectorButtonsAvoidDynamicStyleSheets();
@@ -101,57 +99,6 @@ void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()
     QCOMPARE(savedProfile.name, QStringLiteral("Test IC-9700"));
     QCOMPARE(savedProfile.host, QStringLiteral("192.0.2.1"));
     QVERIFY(RadioProfileStore::instance().removeProfile(savedProfile.id));
-}
-
-void MemoryManagerSmokeTest::mainMemoryBrowserKeepsActiveMemorySelected()
-{
-    MemoryPanel panel;
-    MemoryRecord first;
-    first.id = QStringLiteral("0:1");
-    first.group = 0;
-    first.channel = 1;
-    first.name = QStringLiteral("First");
-    MemoryRecord second;
-    second.id = QStringLiteral("0:2");
-    second.group = 0;
-    second.channel = 2;
-    second.name = QStringLiteral("Second");
-
-    panel.setMemories({first, second}, first.id);
-    auto* table = panel.findChild<QTableWidget*>(QStringLiteral("memoryBrowserTable"));
-    QVERIFY(table != nullptr);
-    QCOMPARE(table->currentRow(), 0);
-
-    table->selectRow(1);
-    QCOMPARE(table->currentRow(), 0);
-
-    QSignalSpy activatedSpy(&panel, &MemoryPanel::memoryActivated);
-    QVERIFY(QMetaObject::invokeMethod(table, "cellDoubleClicked", Qt::DirectConnection, Q_ARG(int, 1), Q_ARG(int, 0)));
-    QCOMPARE(activatedSpy.count(), 1);
-    QCOMPARE(activatedSpy.constFirst().constFirst().toString(), second.id);
-    QCOMPARE(table->currentRow(), 0);
-
-    QVector<MemoryRecord> manyMemories;
-    for (int channel = 1; channel <= 30; ++channel)
-    {
-        MemoryRecord memory;
-        memory.id = QStringLiteral("0:%1").arg(channel);
-        memory.group = 0;
-        memory.channel = static_cast<quint16>(channel);
-        memory.name = QStringLiteral("Memory %1").arg(channel);
-        manyMemories.append(memory);
-    }
-    panel.setFixedHeight(160);
-    panel.setMemories(manyMemories, manyMemories.constFirst().id);
-    panel.show();
-    QCoreApplication::processEvents();
-    table->verticalScrollBar()->setValue(table->verticalScrollBar()->maximum());
-    const int scrollPosition = table->verticalScrollBar()->value();
-    QVERIFY(scrollPosition > 0);
-
-    table->selectRow(table->rowCount() - 1);
-    QCOMPARE(table->currentRow(), 0);
-    QCOMPARE(table->verticalScrollBar()->value(), scrollPosition);
 }
 
 void MemoryManagerSmokeTest::constructsMemoryManagerUi()
@@ -240,14 +187,9 @@ void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
     QCOMPARE(window.windowTitle(), expectedTitle);
     QCOMPARE(window.minimumSize(), window.maximumSize());
     QCOMPARE(window.minimumSize(), QSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight));
-    auto* memoryBrowser = window.findChild<QTableWidget*>(QStringLiteral("memoryBrowserTable"));
-    QVERIFY(memoryBrowser != nullptr);
-    QCOMPARE(memoryBrowser->columnCount(), 4);
-    QCOMPARE(memoryBrowser->horizontalHeaderItem(0)->text(), QStringLiteral("Channel"));
-    QCOMPARE(memoryBrowser->horizontalHeaderItem(1)->text(), QStringLiteral("Name"));
-    QCOMPARE(memoryBrowser->horizontalHeader()->defaultAlignment(), Qt::AlignLeft | Qt::AlignVCenter);
-    QVERIFY(memoryBrowser->alternatingRowColors());
-    QVERIFY(memoryBrowser->styleSheet().contains(QLatin1String(UiTheme::Color::PanelDark)));
+    QVERIFY(window.findChild<QTableWidget*>(QStringLiteral("memoryBrowserTable")) == nullptr);
+    QVERIFY(window.findChild<QWidget*>(QStringLiteral("vfoDisplayStrip")) != nullptr);
+    QVERIFY(window.findChild<QSlider*>(QStringLiteral("titleLanModSlider")) != nullptr);
 }
 
 void MemoryManagerSmokeTest::fileMenuTracksRadioConnection()
@@ -282,7 +224,6 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
     QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
 
     int selectorCount = 0;
-    QPushButton* compressorButton = nullptr;
     for (QPushButton* button : window.findChildren<QPushButton*>())
     {
         if (dynamic_cast<sdr9700::ui::main_window::TwoLineButton*>(button))
@@ -292,13 +233,10 @@ void MemoryManagerSmokeTest::selectorButtonsAvoidDynamicStyleSheets()
             sdr9700::ui::main_window::setCommandButtonActive(button, true);
             sdr9700::ui::main_window::setCommandButtonActive(button, false);
             QVERIFY(button->styleSheet().isEmpty());
-            if (button->accessibleName() == QStringLiteral("Compressor"))
-            {
-                compressorButton = button;
-            }
         }
     }
     QVERIFY(selectorCount > 0);
+    auto* compressorButton = window.findChild<QPushButton*>(QStringLiteral("vfoCOMPButton"));
     QVERIFY(compressorButton != nullptr);
     QVERIFY(!compressorButton->isCheckable());
     auto* rfGainButton = window.findChild<QPushButton*>(QStringLiteral("rfGainButton"));
@@ -353,7 +291,7 @@ void MemoryManagerSmokeTest::compressorMenuReflectsConfirmedLevel()
                            inspectedUnknown = true;
                            menu->close();
                        });
-    controller.showCompressorMenu();
+    controller.showCompressorMenu(QPoint(1, 1));
     QVERIFY(inspectedUnknown);
 
     model.vfo()->applyCompressorLevel(192);
@@ -381,7 +319,7 @@ void MemoryManagerSmokeTest::compressorMenuReflectsConfirmedLevel()
                            inspectedConfirmed = true;
                            menu->close();
                        });
-    controller.showCompressorMenu();
+    controller.showCompressorMenu(QPoint(1, 1));
     QVERIFY(inspectedConfirmed);
     QCOMPARE(requestedLevel, 200);
 

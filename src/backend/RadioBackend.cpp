@@ -43,8 +43,8 @@ constexpr quint32 kTxAudioSampleRate = 16000;
 
 struct VfoStatePollItem
 {
-    Funcs func;
-    bool mainOnly;
+    Funcs func{};
+    bool mainOnly{false};
 };
 
 // Read one stable control per timer tick. With dual watch enabled, MAIN and
@@ -323,7 +323,7 @@ RadioBackend::RadioBackend(QObject* parent)
             [this]()
             {
                 if (!m_commander || !m_radioReady || m_pttState.safetyActive() || m_mainSubExchangePending ||
-                    m_smeterPollPending || kVfoStatePollItems.empty())
+                    m_smeterPollPending)
                 {
                     return;
                 }

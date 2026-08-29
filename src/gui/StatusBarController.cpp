@@ -4,9 +4,7 @@
 #include "MainTitleBar.h"
 #include "MainWindowHelpers.h"
 #include "MetersDialog.h"
-#include "SMeterScale.h"
 #include "UiTheme.h"
-#include "VfoPanel.h"
 #include "models/RadioModel.h"
 
 #include <QFontMetrics>
@@ -64,18 +62,6 @@ void StatusBarController::updateTxIndicator(bool on)
     }
     m_window->m_txActive = on;
     m_window->updateIcomRC28Leds();
-    if (m_window->m_vfoPanel)
-    {
-        m_window->m_vfoPanel->setTransmitPowerMode(on);
-        if (on)
-        {
-            m_window->m_vfoPanel->setTransmitPowerMeter(0.0);
-        }
-        else
-        {
-            m_window->m_vfoPanel->setSMeterValue(sdr9700::sMeterDisplayPercent(m_window->m_meterSnapshot.sMeter));
-        }
-    }
     if (on)
     {
         m_window->m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::Danger, true));

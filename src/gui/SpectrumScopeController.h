@@ -32,7 +32,7 @@ class SpectrumScopeController : public QObject
     quint64 activeVfoFrequencyHz() const;
     void onActiveVfoFrequencyChanged(Vfo vfo, quint64 hz);
     void recenterActiveVfo(bool clearDisplay);
-    void tuneActiveVfo(quint64 hz);
+    void tuneActiveVfo(quint64 hz) const;
     void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay);
 
     MainWindow* m_window{nullptr};

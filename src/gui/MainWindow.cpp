@@ -11,20 +11,15 @@
 #include "SpectrumScopeController.h"
 #include "MainTitleBar.h"
 #include "MemoryController.h"
-#include "MemoryPanel.h"
 #include "MetersDialog.h"
-#include "PttPanel.h"
 #include "RadioCommandController.h"
-#include "ReceivePanel.h"
 #include "StatusBarController.h"
-#include "VfoPanel.h"
 #include "VfoController.h"
 #include "VfoSelectionController.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
 #include "ConfigurationManager.h"
 #include "backend/ConnectionRetryPolicy.h"
-#include "ControlPanelController.h"
 #include "MemoryStore.h"
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
@@ -108,7 +103,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
 {
     m_connectedAudioOutputChannels = qBound(1, AppSettings::instance().value("audioOutputChannels", 2).toInt(), 2);
     m_spectrumScopeController = new SpectrumScopeController(this);
-    m_controlPanelController = new ControlPanelController(this);
 #ifdef HAVE_HIDAPI
     m_icomRC28Controller = new IcomRC28Controller(this);
 #endif
@@ -138,14 +132,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
 #if defined(Q_OS_MAC)
     vbox->addWidget(m_titleBar);
 #endif
-    // Keep the legacy widgets alive temporarily because radio synchronization
-    // still owns several of their models and signals, but do not place the old
-    // VFO, Memories, or Control boxes in the visible application layout.
-    auto* legacyControlHost = new QWidget(central);
-    auto* legacyControlLayout = new QVBoxLayout(legacyControlHost);
-    legacyControlLayout->setContentsMargins(0, 0, 0, 0);
-    buildControlPanel(legacyControlLayout);
-    legacyControlHost->hide();
+    buildRadioControls();
     m_spectrumScopeController->buildSpectrumScope(vbox);
     buildMemoryWindow();
     restoreWindowLayout();
@@ -172,9 +159,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     connect(m_vfo, &VfoModel::toneAccessModeChanged, this, &MainWindow::onToneAccessModeChanged);
     connect(m_vfo, &VfoModel::toneFrequencyChanged, this, &MainWindow::onToneFrequencyChanged);
     connect(m_vfo, &VfoModel::dtcsCodeChanged, this, &MainWindow::onDtcsCodeChanged);
-    connect(m_vfo, &VfoModel::compressorChanged, this, [this](bool on) { setCommandButtonActive(m_compBtn, on); });
-    connect(m_vfo, &VfoModel::xfcChanged, this, [this](bool on) { setCommandButtonActive(m_xfcBtn, on); });
-    connect(m_vfo, &VfoModel::ritChanged, this, [this](bool, short) { updateRitButton(); });
     if (auto* backend = m_model->backend())
     {
         connect(backend, &IRadioBackend::radioValueUpdated, this,
@@ -465,9 +449,9 @@ void MainWindow::showSettingsDialog()
                 }
 
                 m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
-                if (m_vfoPanel)
+                if (m_titleBar)
                 {
-                    m_vfoPanel->setLanMod(m_lanModValue);
+                    m_titleBar->setLanMod(m_lanModValue);
                 }
                 m_model->setLanModLevel(m_lanModValue);
                 m_spectrumScopeDisplay->setInvertMouseWheel(
@@ -556,54 +540,23 @@ void MainWindow::reloadMemoryTable()
     m_memoryController->reloadMemoryTable();
 }
 
-void MainWindow::buildControlPanel(QVBoxLayout* vbox)
+void MainWindow::buildRadioControls()
 {
-    m_controlPanelController->buildControlPanel(vbox);
-}
-
-void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
-{
-    auto* strip = new QWidget(centralWidget());
-    strip->setObjectName("controlStrip");
-    strip->setMinimumWidth(UiTheme::Size::MainWindowMinWidth);
-    strip->setFocusPolicy(Qt::StrongFocus);
-    strip->setStyleSheet(QStringLiteral("QWidget#controlStrip { background: %1; }"
-                                        "QGroupBox { color: %2; border: 1px solid %3; border-radius: 3px; "
-                                        "margin-top: 8px; padding-top: 4px; font-size: 10px; font-weight: bold; }"
-                                        "QGroupBox::title { subcontrol-origin: border; subcontrol-position: top left; "
-                                        "left: 8px; top: -6px; padding: 0 4px; color: %4; background: %1; }"
-                                        "QLabel { color: %5; }"
-                                        "QLineEdit { background: %6; border: 1px solid %7; border-radius: 3px; "
-                                        "color: %8; padding: 0 8px; selection-background-color: %9; }")
-                             .arg(UiTheme::Color::ContentBackground, UiTheme::Color::TextStatusPrimary,
-                                  UiTheme::Color::BorderMedium, UiTheme::Color::TextStatusSecondary,
-                                  UiTheme::Color::TextStatusPrimary, UiTheme::Color::Field, UiTheme::Color::BorderFocus,
-                                  UiTheme::Color::TextField, UiTheme::Color::AccentDark));
-    auto* root = new QVBoxLayout(strip);
-    root->setContentsMargins(kControlStripMargins);
-    root->setSpacing(kNoSpacing);
-
-    auto* controlRow = new QHBoxLayout;
-    controlRow->setSpacing(kControlRowSpacing);
-
-    auto makeSelectorButton = [strip](const QString& primary, const QString& secondary, const QString& name,
-                                      const QString& description) -> QPushButton*
-    {
-        auto* button = new TwoLineButton(strip);
-        button->setCheckable(false);
-        button->setFixedSize(kSelectorButtonSize);
-        button->setAccessibleDescription(description);
-        setSelectorButtonLines(button, primary, secondary);
-        button->setAccessibleName(name);
-        return button;
-    };
-
     m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
-    m_vfoPanel = new VfoPanel(QStringLiteral("VFO"), strip);
-    m_vfoPanel->setLanMod(m_lanModValue);
     if (m_titleBar)
     {
-        m_titleBar->setLanModControl(m_vfoPanel->lanModControl());
+        m_titleBar->setLanMod(m_lanModValue);
+        connect(m_titleBar, &MainTitleBar::lanModChanged, this,
+                [this](int value)
+                {
+                    if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
+                    {
+                        return;
+                    }
+                    m_lanModValue = qBound(0, value, 255);
+                    AppSettings::instance().setValueDeferred(QStringLiteral("LANModLevel"), m_lanModValue);
+                    m_model->setLanModLevel(m_lanModValue);
+                });
     }
     const int appVolume = appVolumeSettingValue();
     m_currentAfGain = appVolume;
@@ -611,44 +564,13 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
     {
         m_titleBar->setVolume(appVolume);
     }
-    m_memoryPanel = new MemoryPanel(strip);
-
-    m_pttBtn = makeSelectorButton("PTT", QStringLiteral("OFF"), "PTT", "Hold to transmit.");
+    m_pttBtn = new TwoLineButton(centralWidget());
+    m_pttBtn->setFixedSize(kSelectorButtonSize);
+    m_pttBtn->setAccessibleName(QStringLiteral("PTT"));
+    m_pttBtn->setAccessibleDescription(QStringLiteral("Hold to transmit."));
+    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QStringLiteral("OFF"));
     m_pttBtn->setCheckable(false);
-
-    m_compBtn = makeSelectorButton("COMP", QStringLiteral("OFF"), "Compressor", "Open speech compressor settings.");
-    // COMP opens a settings menu. Its active appearance is driven exclusively
-    // by confirmed radio state, not by QAbstractButton's local click toggle.
-    m_compBtn->setCheckable(false);
-    m_compBtn->setProperty("toggleLabel", "COMP");
-    const ReceivePanel::Buttons receiveButtons{m_compBtn, m_offsetBtn, m_ritBtn, m_toneBtn, m_xfcBtn};
-    auto* receiveGroup = new ReceivePanel(receiveButtons, strip);
-    // Preserve the control row's current allocation while PTT is temporarily
-    // hosted in the VFO selection panel.
-    auto* pttPlaceholder = new QWidget(strip);
-    pttPlaceholder->setFixedWidth(kSelectorButtonSize.width() + 16);
-    pttPlaceholder->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     m_pttBtn->hide();
-    auto* receiveStack = new QWidget(strip);
-    receiveStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    auto* receiveStackLayout = new QVBoxLayout(receiveStack);
-    receiveStackLayout->setContentsMargins(0, 0, 0, 0);
-    receiveStackLayout->setSpacing(kControlGroupSpacing);
-
-    auto* receiveTopRow = new QHBoxLayout;
-    receiveTopRow->setContentsMargins(0, 0, 0, 0);
-    receiveTopRow->setSpacing(kControlRowSpacing);
-    receiveTopRow->addWidget(receiveGroup, 1);
-    receiveTopRow->addWidget(pttPlaceholder);
-    receiveStackLayout->addLayout(receiveTopRow);
-
-    connect(m_compBtn, &QPushButton::clicked, this, &MainWindow::showCompressorMenu);
-    connect(m_memoryPanel, &MemoryPanel::memoryActivated, this,
-            [this](const QString& memoryId) { selectMemoryById(memoryId, false); });
-
-    controlRow->addWidget(m_vfoPanel);
-    controlRow->addWidget(m_memoryPanel);
-    controlRow->addWidget(receiveStack, 1);
 
     m_dtmfDialog = new DtmfDialog(this);
     m_metersDialog = new MetersDialog(this);
@@ -668,30 +590,9 @@ void MainWindow::buildControlPanelContent(QVBoxLayout* vbox)
                 }
             });
 
-    root->addLayout(controlRow);
-    vbox->addWidget(strip);
-    strip->setFocus();
-
     connect(m_pttBtn, &QPushButton::pressed, this, &MainWindow::onPttPressed);
     connect(m_pttBtn, &QPushButton::released, this, &MainWindow::onPttReleased);
     connect(m_dtmfDialog, &DtmfDialog::sendRequested, this, &MainWindow::onDtmfSendRequested);
-    auto connectLanModSlider = [this](VfoPanel* widget)
-    {
-        connect(widget, &VfoPanel::lanModChanged, this,
-                [this](int value)
-                {
-                    if (m_applyingRadioSliderUpdate || !m_model->isReady() || m_controlsLocked)
-                    {
-                        return;
-                    }
-                    m_lanModValue = qBound(0, value, 255);
-                    AppSettings::instance().setValueDeferred(QStringLiteral("LANModLevel"), m_lanModValue);
-                    m_model->setLanModLevel(m_lanModValue);
-                });
-    };
-    connectLanModSlider(m_vfoPanel);
-    updateStepButton();
-
     m_currentAfGain = appVolumeSettingValue();
     m_savedAfGain = m_currentAfGain;
     resetRadioOwnedControlsForSync();
@@ -919,15 +820,6 @@ void MainWindow::updateSpectrumVfoMarker()
 void MainWindow::setRadioControlsEnabled(bool enabled)
 {
     const bool controlsEnabled = enabled && !m_controlsLocked;
-    if (m_vfoPanel)
-    {
-        m_vfoPanel->setEnabled(controlsEnabled);
-        m_vfoPanel->setControlsEnabled(controlsEnabled);
-    }
-    if (m_memoryPanel)
-    {
-        m_memoryPanel->setEnabled(controlsEnabled);
-    }
     if (m_vfoSelectionController)
     {
         m_vfoSelectionController->setControlsEnabled(controlsEnabled);
@@ -935,14 +827,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     if (m_titleBar)
     {
         m_titleBar->setVolumeEnabled(enabled);
-    }
-
-    for (auto* button : {m_ritBtn, m_compBtn, m_offsetBtn, m_toneBtn, m_xfcBtn})
-    {
-        if (button)
-        {
-            button->setEnabled(controlsEnabled);
-        }
+        m_titleBar->setLanModEnabled(controlsEnabled);
     }
     if (m_muteBtn)
     {
@@ -974,12 +859,9 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_toneFrequency = 670;
     m_dtcsCode = 23;
 
-    if (m_vfoPanel)
+    if (m_titleBar)
     {
-        m_vfoPanel->setMeterEnabled(false);
-        m_vfoPanel->setTransmitPowerMode(false);
-        m_vfoPanel->setSMeterValue(0);
-        m_vfoPanel->setLanMod(m_lanModValue);
+        m_titleBar->setLanMod(m_lanModValue);
     }
     if (m_mainVfoController)
     {
@@ -990,10 +872,6 @@ void MainWindow::resetRadioOwnedControlsForSync()
         m_subVfoController->clearFrequency();
     }
 
-    setCommandButtonActive(m_compBtn, false);
-    setCommandButtonActive(m_xfcBtn, false);
-    updateOffsetButton();
-    updateToneButton();
     updateTxIndicator(false);
     if (m_metersDialog)
     {
@@ -1124,7 +1002,6 @@ void MainWindow::applySpectrumScopeSettings()
 
 void MainWindow::updateStepButton()
 {
-    m_radioCommandController->updateStepButton();
     m_spectrumScopeController->updateTuningStepSelector();
 }
 
@@ -1172,10 +1049,6 @@ void MainWindow::setActiveMemory(const QString& id, quint64 frequencyHz, int mod
     m_activeMemoryToneValueSettled = toneMode == ratrNN || (isDtcs && m_dtcsCode == toneValue) ||
                                      (!isDtcs && toneMode != ratrNN && m_toneFrequency == toneValue);
     m_activeMemoryAwaitingReceiveFrequency = false;
-    if (m_memoryPanel)
-    {
-        m_memoryPanel->setActiveMemoryId(m_activeMemoryId);
-    }
 }
 
 void MainWindow::clearActiveMemory()
@@ -1201,10 +1074,6 @@ void MainWindow::clearActiveMemory()
     m_activeMemoryOffsetHz = 0;
     m_activeMemoryToneMode = ratrNN;
     m_activeMemoryToneValue = 0;
-    if (m_memoryPanel)
-    {
-        m_memoryPanel->setActiveMemoryId(QString());
-    }
 }
 
 void MainWindow::leaveMemoryModeForManualChange()
@@ -1397,15 +1266,6 @@ void MainWindow::onRadioReadyChanged(bool ready)
     const bool notifyReady = uiReady && !m_radioUiReadyNotified;
     m_radioUiReadyNotified = uiReady;
     setRadioControlsEnabled(uiReady);
-    if (m_vfoPanel)
-    {
-        m_vfoPanel->setMeterEnabled(uiReady);
-        if (!uiReady)
-        {
-            m_vfoPanel->setTransmitPowerMode(false);
-            m_vfoPanel->setSMeterValue(0);
-        }
-    }
     if (!m_connStateLabel || !connected)
     {
         return;
@@ -1581,21 +1441,6 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
             m_metersDialog->setTransmitAudioLevel(m_meterSnapshot.txAudioPeak, m_meterSnapshot.txAudioRms);
         }
     }
-    if (m_vfoPanel)
-    {
-        if (m_txActive)
-        {
-            if (m_meterSnapshot.powerValid)
-            {
-                m_vfoPanel->setTransmitPowerMeter(m_meterSnapshot.powerWatts);
-            }
-        }
-        else if (m_meterSnapshot.sMeterValid)
-        {
-            m_vfoPanel->setSMeterValue(sdr9700::sMeterDisplayPercent(m_meterSnapshot.sMeter));
-        }
-    }
-
     if (!m_txActive || !m_txSwrLabel)
     {
         return;
@@ -2018,7 +1863,6 @@ void MainWindow::onDuplexModeChanged(duplexMode_t mode)
             clearActiveMemory();
         }
     }
-    updateOffsetButton();
 }
 
 void MainWindow::onRepeaterOffsetChanged(quint64 hz)
@@ -2036,7 +1880,6 @@ void MainWindow::onRepeaterOffsetChanged(quint64 hz)
             clearActiveMemory();
         }
     }
-    updateOffsetButton();
 }
 
 void MainWindow::onToneAccessModeChanged(rptAccessTxRx_t mode)
@@ -2054,7 +1897,6 @@ void MainWindow::onToneAccessModeChanged(rptAccessTxRx_t mode)
             clearActiveMemory();
         }
     }
-    updateToneButton();
 }
 
 void MainWindow::onToneFrequencyChanged(ushort tone)
@@ -2072,7 +1914,6 @@ void MainWindow::onToneFrequencyChanged(ushort tone)
             clearActiveMemory();
         }
     }
-    updateToneButton();
 }
 
 void MainWindow::onDtcsCodeChanged(ushort code)
@@ -2090,60 +1931,4 @@ void MainWindow::onDtcsCodeChanged(ushort code)
             clearActiveMemory();
         }
     }
-    updateToneButton();
-}
-
-void MainWindow::showCompressorMenu()
-{
-    m_radioCommandController->showCompressorMenu();
-}
-
-void MainWindow::updateRitButton()
-{
-    m_radioCommandController->updateRitButton();
-}
-
-void MainWindow::showRitMenu()
-{
-    m_radioCommandController->showRitMenu();
-}
-
-void MainWindow::showCustomRitDialog()
-{
-    m_radioCommandController->showCustomRitDialog();
-}
-
-void MainWindow::showOffsetMenu()
-{
-    m_radioCommandController->showOffsetMenu();
-}
-
-void MainWindow::showCustomOffsetDialog()
-{
-    m_radioCommandController->showCustomOffsetDialog();
-}
-
-void MainWindow::applyOffsetSelection(duplexMode_t mode, quint64 offsetHz)
-{
-    m_radioCommandController->applyOffsetSelection(mode, offsetHz);
-}
-
-void MainWindow::updateOffsetButton()
-{
-    m_radioCommandController->updateOffsetButton();
-}
-
-void MainWindow::showToneMenu()
-{
-    m_radioCommandController->showToneMenu();
-}
-
-void MainWindow::applyToneSelection(rptAccessTxRx_t mode, ushort value)
-{
-    m_radioCommandController->applyToneSelection(mode, value);
-}
-
-void MainWindow::updateToneButton()
-{
-    m_radioCommandController->updateToneButton();
 }
