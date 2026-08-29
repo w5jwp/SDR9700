@@ -32,8 +32,11 @@ class SpectrumScopeController : public QObject
     quint64 activeVfoFrequencyHz() const;
     void onActiveVfoFrequencyChanged(Vfo vfo, quint64 hz);
     void recenterActiveVfo(bool clearDisplay);
+    void resetScopeFrameGate();
+    void updateScopeFrameGate();
     void tuneActiveVfo(quint64 hz) const;
-    void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay);
+    void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay,
+                                   bool recenterDisplay);
 
     MainWindow* m_window{nullptr};
     QComboBox* m_tuningStepSelector{nullptr};
@@ -44,4 +47,7 @@ class SpectrumScopeController : public QObject
     quint64 m_pendingSubRecenterHz{0};
     bool m_hasLastSpectrumScopeLimits{false};
     bool m_hasCenteredActiveVfo{false};
+    bool m_activeVfoStatePublished{false};
+    bool m_scopeVfoConfirmed{false};
+    bool m_scopeFramesEnabled{false};
 };

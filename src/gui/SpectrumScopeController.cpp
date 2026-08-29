@@ -78,15 +78,15 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     connect(m_window->m_vfoSelectionController, &VfoSelectionController::selectedVfoChanged, this,
             [this](Vfo vfo)
             {
+                resetScopeFrameGate();
+                const VfoController* selectedController =
+                    vfo == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController;
+                m_activeVfoStatePublished = selectedController && selectedController->hasPublishedState();
                 if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
                 {
                     backend->setScopeVfo(vfo);
                 }
-                if (m_window->m_spectrumScopeDisplay)
-                {
-                    m_window->m_spectrumScopeDisplay->clearDisplay();
-                }
-                recenterActiveVfo(false);
+                updateScopeFrameGate();
             });
     connect(m_window->m_vfoSelectionController, &VfoSelectionController::pttReadyChanged, this,
             [this](bool ready)
@@ -104,6 +104,16 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
             [this](quint64 hz) { onActiveVfoFrequencyChanged(Vfo::Main, hz); });
     connect(m_window->m_subVfoController, &VfoController::frequencyChanged, this,
             [this](quint64 hz) { onActiveVfoFrequencyChanged(Vfo::Sub, hz); });
+    const auto markVfoStatePublished = [this](Vfo vfo)
+    {
+        if (m_window->m_vfoSelectionController && m_window->m_vfoSelectionController->selectedVfo() == vfo)
+        {
+            m_activeVfoStatePublished = true;
+            updateScopeFrameGate();
+        }
+    };
+    connect(m_window->m_mainVfoController, &VfoController::statePublished, this, markVfoStatePublished);
+    connect(m_window->m_subVfoController, &VfoController::statePublished, this, markVfoStatePublished);
     const auto markRecenterPending = [this](Vfo vfo, quint64 hz)
     {
         if (vfo == Vfo::Main)
@@ -119,11 +129,27 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     connect(m_window->m_subVfoController, &VfoController::frequencyRecenterRequested, this, markRecenterPending);
     if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
     {
+        connect(backend, &IRadioBackend::radioValueUpdated, this,
+                [this](Funcs func, const QVariant& value, uchar receiver)
+                {
+                    if (func != funcScopeMainSub || receiver != 0 || !m_window->m_vfoSelectionController)
+                    {
+                        return;
+                    }
+                    const Vfo confirmedVfo = value.toBool() ? Vfo::Sub : Vfo::Main;
+                    if (confirmedVfo != m_window->m_vfoSelectionController->selectedVfo())
+                    {
+                        return;
+                    }
+                    m_scopeVfoConfirmed = true;
+                    updateScopeFrameGate();
+                });
         connect(backend, &IRadioBackend::readyChanged, this,
                 [this](bool ready)
                 {
                     if (!ready)
                     {
+                        resetScopeFrameGate();
                         m_hasCenteredActiveVfo = false;
                         m_pendingMainRecenterHz = 0;
                         m_pendingSubRecenterHz = 0;
@@ -307,6 +333,22 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                                      Qt::AlignVCenter);
     spectrumToolbarLayout->addSpacing(50);
     spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("SPAN"), spanSelector), 0, Qt::AlignVCenter);
+    spectrumToolbarLayout->addSpacing(50);
+    auto* recenterButton = new QToolButton(spectrumToolbar);
+    recenterButton->setObjectName(QStringLiteral("spectrumRecenterButton"));
+    recenterButton->setText(QStringLiteral("RECENTER"));
+    recenterButton->setFixedHeight(22);
+    recenterButton->setFocusPolicy(Qt::NoFocus);
+    recenterButton->setCursor(Qt::PointingHandCursor);
+    recenterButton->setAccessibleName(QStringLiteral("Recenter spectrum"));
+    recenterButton->setAccessibleDescription(
+        QStringLiteral("Center the panadapter and waterfall on the active VFO frequency."));
+    recenterButton->setStyleSheet(
+        QStringLiteral("QToolButton { background: transparent; border: 0; color: %1; font-size: 10px; "
+                       "font-weight: bold; padding: 0 4px; } QToolButton:hover { color: %2; }")
+            .arg(UiTheme::Color::TextStatusSecondary, UiTheme::Color::TextBright));
+    connect(recenterButton, &QToolButton::clicked, this, [this]() { recenterActiveVfo(true); });
+    spectrumToolbarLayout->addWidget(recenterButton, 0, Qt::AlignVCenter);
     spectrumToolbarLayout->addStretch();
     spectrumFrameLayout->addWidget(spectrumToolbar);
     spectrumFrameLayout->addWidget(m_window->m_spectrumScopeDisplay);
@@ -419,9 +461,20 @@ void SpectrumScopeController::updateSpectrumScopeBandLimits(quint64 hz)
         return;
     }
 
-    if (m_hasLastSpectrumScopeLimits && m_lastSpectrumScopeLimitStartHz == startHz &&
-        m_lastSpectrumScopeLimitEndHz == endHz)
+    if (m_window->m_spectrumScopeFixedPanStartHz == 0 && m_window->m_spectrumScopeFixedPanEndHz == 0)
     {
+        // Center mode may legitimately extend beyond an amateur-band edge
+        // when the active VFO is closer to that edge than the selected
+        // half-span. Keep the band range for the scrollbar, but do not clamp
+        // the canvas away from the VFO's true center.
+        m_hasLastSpectrumScopeLimits = true;
+        m_lastSpectrumScopeLimitStartHz = startHz;
+        m_lastSpectrumScopeLimitEndHz = endHz;
+        m_window->m_spectrumScope->clearFrequencyLimits();
+        if (m_window->m_spectrumScopeDisplay)
+        {
+            m_window->m_spectrumScopeDisplay->setFrequencyPanRange(startHz / 1e6, endHz / 1e6);
+        }
         return;
     }
     m_hasLastSpectrumScopeLimits = true;
@@ -516,25 +569,34 @@ quint64 SpectrumScopeController::clampFrequencyHzToActiveBand(quint64 hz) const
 
 void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz)
 {
-    scheduleSpectrumScopeTune(hz, true, false, false);
+    scheduleSpectrumScopeTune(hz, true, false, false, true);
 }
 
 void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately,
-                                                        bool clearStaleDisplay)
+                                                        bool clearStaleDisplay, bool recenterDisplay)
 {
     // Wheel and RC-28 tuning are step-based controls, but a mouse click on the
     // Spectrum Scope is an absolute frequency selection. Snapping clicks to the
-    // current VFO step makes off-step signals appear to move away after the
-    // display recenters, so callers choose the behavior explicitly. Clicks also
-    // clear stale bins and commit immediately; otherwise a near-frequency click
-    // can briefly show old scope data under the newly centered frequency scale.
+    // current VFO step makes off-step signals appear to move away, so callers
+    // choose the behavior explicitly. Mouse clicks preserve the current view;
+    // RECENTER is the operator's explicit request to move it.
     if (snapToTuningStep)
     {
         hz = roundFrequencyToStep(hz);
     }
     hz = clampFrequencyHzToActiveBand(hz);
-    const quint64 displayCenterHz =
+    quint64 displayCenterHz =
         clampSpectrumScopeCenterHz(hz, m_window->m_spectrumScope ? m_window->m_spectrumScope->bandwidthMhz() : 0.0);
+    if (!recenterDisplay && m_window->m_spectrumScope)
+    {
+        displayCenterHz = m_window->m_spectrumScopeDisplayCenterHz;
+        if (displayCenterHz == 0)
+        {
+            displayCenterHz = static_cast<quint64>(
+                std::llround((m_window->m_spectrumScope->startMhz() + m_window->m_spectrumScope->endMhz()) * 0.5e6));
+        }
+        panSpectrumScopeToCenter(displayCenterHz);
+    }
     m_window->leaveMemoryModeForManualChange();
     m_window->m_pendingSpectrumScopeTuneHz = hz;
     updateSpectrumScopeBandLimits(hz);
@@ -542,7 +604,7 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
     {
         m_window->m_spectrumScopeDisplay->clearDisplay();
     }
-    if (m_window->m_spectrumScopeFixedPanStartHz > 0 || m_window->m_spectrumScopeFixedPanEndHz > 0)
+    if (recenterDisplay && (m_window->m_spectrumScopeFixedPanStartHz > 0 || m_window->m_spectrumScopeFixedPanEndHz > 0))
     {
         if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
         {
@@ -558,7 +620,8 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
     }
     if (m_window->m_spectrumScope)
     {
-        m_window->m_spectrumScope->holdDisplayCenter(displayCenterHz / 1e6, hz / 1e6);
+        const quint64 expectedSourceCenterHz = recenterDisplay ? hz : displayCenterHz;
+        m_window->m_spectrumScope->holdDisplayCenter(displayCenterHz / 1e6, expectedSourceCenterHz / 1e6);
     }
 
     if (m_window->m_spectrumScope)
@@ -591,6 +654,10 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
 
 void SpectrumScopeController::onSpectrumReady(const QVector<float>& levels, double start, double end, bool outOfRange)
 {
+    if (!m_scopeFramesEnabled)
+    {
+        return;
+    }
     const quint64 referenceHz = activeVfoFrequencyHz();
     if (referenceHz > 0)
     {
@@ -601,6 +668,27 @@ void SpectrumScopeController::onSpectrumReady(const QVector<float>& levels, doub
     m_window->m_spectrumScopeDisplay->updateSpectrum(levels, outOfRange);
 }
 
+void SpectrumScopeController::resetScopeFrameGate()
+{
+    m_activeVfoStatePublished = false;
+    m_scopeVfoConfirmed = false;
+    m_scopeFramesEnabled = false;
+    if (m_window->m_spectrumScopeDisplay)
+    {
+        m_window->m_spectrumScopeDisplay->clearDisplay();
+    }
+}
+
+void SpectrumScopeController::updateScopeFrameGate()
+{
+    if (m_scopeFramesEnabled || !m_activeVfoStatePublished || !m_scopeVfoConfirmed)
+    {
+        return;
+    }
+    m_scopeFramesEnabled = true;
+    recenterActiveVfo(true);
+}
+
 void SpectrumScopeController::onSpectrumClicked(double freqMhz)
 {
     if (!m_window->m_model->isReady() || m_window->m_controlsLocked)
@@ -609,7 +697,7 @@ void SpectrumScopeController::onSpectrumClicked(double freqMhz)
     }
 
     const quint64 targetHz = static_cast<quint64>(std::llround(freqMhz * 1e6));
-    scheduleSpectrumScopeTune(targetHz, false, true, true);
+    scheduleSpectrumScopeTune(targetHz, false, true, false, false);
 }
 
 void SpectrumScopeController::onWheelStepRequested(int steps)
@@ -670,6 +758,29 @@ void SpectrumScopeController::recenterActiveVfo(bool clearDisplay)
     {
         return;
     }
+
+    // Panning puts the IC-9700 scope into fixed-range mode. Re-centering only
+    // the local canvas leaves the radio streaming that same fixed range, so
+    // the next frame immediately moves the display back. Restore center mode
+    // and the configured span before accepting new frames.
+    if (m_window->m_model && m_window->m_model->isReady() && !m_window->m_controlsLocked)
+    {
+        if (auto* backend = m_window->m_model->backend())
+        {
+            const quint64 spanHz = AppSettings::instance()
+                                       .value(QString::fromLatin1(kSpectrumScopeSpanHZSettingsKey),
+                                              QVariant::fromValue<qulonglong>(kDefaultSpectrumScopeSpanHZ))
+                                       .toULongLong();
+            backend->setScopeMode(0);
+            backend->setScopeSpanHz(spanHz);
+            if (m_window->m_spectrumScopeDisplay)
+            {
+                m_window->m_spectrumScopeDisplay->setCurrentSpanHz(spanHz);
+            }
+        }
+    }
+    m_window->m_spectrumScopeFixedPanStartHz = 0;
+    m_window->m_spectrumScopeFixedPanEndHz = 0;
     m_window->m_pendingSpectrumScopeTuneHz = 0;
     m_window->m_spectrumScope->clearDisplayCenterHold();
     updateSpectrumScopeBandLimits(hz);

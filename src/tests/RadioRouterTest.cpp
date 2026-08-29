@@ -56,12 +56,16 @@ void RadioRouterTest::routesConfirmedVfoSelectionState()
 
     router.route(CacheItem(funcVFOBandMS, true));
     router.route(CacheItem(funcVFODualWatch, true));
+    router.route(CacheItem(funcScopeMainSub, true));
 
-    QCOMPARE(valueSpy.count(), 2);
+    QCOMPARE(valueSpy.count(), 3);
     QCOMPARE(static_cast<Funcs>(valueSpy.at(0).at(0).toInt()), funcVFOBandMS);
     QCOMPARE(valueSpy.at(0).at(1).toBool(), true);
     QCOMPARE(static_cast<Funcs>(valueSpy.at(1).at(0).toInt()), funcVFODualWatch);
     QCOMPARE(valueSpy.at(1).at(1).toBool(), true);
+    QCOMPARE(static_cast<Funcs>(valueSpy.at(2).at(0).toInt()), funcScopeMainSub);
+    QCOMPARE(valueSpy.at(2).at(1).toBool(), true);
+    QCOMPARE(valueSpy.at(2).at(2).toUInt(), uint(0));
 }
 
 void RadioRouterTest::clampsMeterAndLevelValues()

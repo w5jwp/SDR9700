@@ -367,6 +367,7 @@ void VfoController::publishConfirmedState()
     }
     updateReceiverControlDisplay();
     updateDisplayEnabled();
+    emit statePublished(m_vfo);
 
     if (!m_publishedFrequencyHz.has_value() || *m_publishedFrequencyHz != confirmedFrequencyHz)
     {

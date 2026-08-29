@@ -28,8 +28,12 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QCOMPARE(mainController.display()->frequencyText(), QStringLiteral("---.---.---"));
     QCOMPARE(subController.display()->frequencyText(), QStringLiteral("---.---.---"));
 
+    QSignalSpy mainStatePublishedSpy(&mainController, &VfoController::statePublished);
     mainController.setFrequencyHz(145500000ULL);
     subController.setFrequencyHz(433920000ULL);
+    QVERIFY(mainController.hasPublishedState());
+    QCOMPARE(mainStatePublishedSpy.count(), 1);
+    QCOMPARE(mainStatePublishedSpy.takeFirst().at(0).value<Vfo>(), Vfo::Main);
 
     QCOMPARE(mainController.display()->frequencyText(), QStringLiteral("145.500.000"));
     QCOMPARE(subController.display()->frequencyText(), QStringLiteral("433.920.000"));

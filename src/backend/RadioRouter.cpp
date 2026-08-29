@@ -119,6 +119,9 @@ void RadioRouter::route(const CacheItem& item)
     case funcVFODualWatch:
         emit radioValueUpdated(item.command, item.value, kMainReceiver);
         break;
+    case funcScopeMainSub:
+        emit radioValueUpdated(item.command, item.value, kMainReceiver);
+        break;
     case funcReadFreqOffset:
         emit radioValueUpdated(item.command, item.value, item.receiver);
         emit repeaterOffsetChanged(item.value.value<Frequency>().Hz);

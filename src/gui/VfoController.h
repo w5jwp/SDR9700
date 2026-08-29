@@ -30,6 +30,7 @@ class VfoController : public QObject
     void applyCapturedControlExchange(VfoController* other);
     availableBands band() const { return m_band; }
     quint64 frequencyHz() const { return m_confirmedFrequencyHz.value_or(0); }
+    bool hasPublishedState() const { return stateReady() && (!m_backend || m_initialStatePublished); }
     void selectBand(availableBands requestedBand);
 
   signals:
@@ -40,6 +41,7 @@ class VfoController : public QObject
     void selectionRequested(Vfo vfo);
     void frequencyChanged(quint64 hz);
     void frequencyRecenterRequested(Vfo vfo, quint64 hz);
+    void statePublished(Vfo vfo);
 
   private:
     struct ExchangeableControlState
