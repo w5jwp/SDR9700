@@ -3,6 +3,7 @@
 #include "Types.h"
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QVector>
 
 class QTimer;
@@ -30,4 +31,5 @@ class ScopeController : public QObject
     ScopeData m_pendingFrame;
     QVector<float> m_levelsScratch;
     bool m_hasPendingFrame{false};
+    QElapsedTimer m_frameArrivalClock;
 };

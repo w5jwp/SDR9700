@@ -1142,12 +1142,18 @@ void RadioBackend::exchangeMainSub()
             commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
             commandSession->receiveCommand(funcModeGet, QVariant(), 0);
             requestSubVfoStateForCommand(commandSession);
-            commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-            commandSession->receiveCommand(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
-            // This final readback is deliberately last: it proves that the
-            // exchange, both receiver snapshots, and restoration to physical
-            // MAIN have all completed before PTT is unlocked.
+            // Suppress the setters' asynchronous CachingQueue readbacks and
+            // issue the completion reads explicitly below. This preserves a
+            // single wire order: restore MAIN, publish its exchanged
+            // frequency, then collect the two confirmations that unlock the
+            // UI. Previously those queued confirmation reads could overtake
+            // the final frequency reply, reopening the scope gate with the
+            // pre-exchange band and leaving the display blank for seconds.
+            commandSession->receiveCommandNoReadback(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+            commandSession->receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+            commandSession->receiveCommand(funcVFOBandMS, QVariant(), 0);
+            commandSession->receiveCommand(funcScopeMainSub, QVariant(), 0);
         });
 }
 

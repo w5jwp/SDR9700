@@ -3,6 +3,7 @@
 #include "Vfo.h"
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QVector>
 
 class MainWindow;
@@ -36,7 +37,7 @@ class SpectrumScopeController : public QObject
     void resetScopeFrameGate();
     void updateScopeFrameGate();
     void updateInteractionLock();
-    void tuneActiveVfo(quint64 hz) const;
+    void tuneActiveVfo(quint64 hz);
     void scheduleSpectrumScopeTune(quint64 hz, bool snapToTuningStep, bool commitImmediately, bool clearStaleDisplay,
                                    bool recenterDisplay);
 
@@ -53,4 +54,8 @@ class SpectrumScopeController : public QObject
     bool m_scopeVfoConfirmed{false};
     bool m_scopeFramesEnabled{false};
     bool m_exchangeScopeSyncPending{false};
+    int m_exchangeRejectedFrames{0};
+    QElapsedTimer m_tuneIntentClock;
+    quint64 m_tuneIntentHz{0};
+    quint64 m_tuneIntentGeneration{0};
 };

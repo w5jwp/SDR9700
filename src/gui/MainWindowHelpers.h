@@ -106,6 +106,16 @@ inline bool rc28PttAllowed(bool hasVfo, bool radioReady, bool controlsLocked)
     (void)controlsLocked;
     return hasVfo && radioReady;
 }
+
+inline quint64 spectrumTuneDisplayFrequency(quint64 confirmedHz, quint64 pendingHz)
+{
+    return pendingHz > 0 ? pendingHz : confirmedHz;
+}
+
+inline quint64 spectrumTunePendingAfterReadback(quint64 pendingHz, quint64 reportedHz)
+{
+    return pendingHz > 0 && pendingHz == reportedHz ? 0 : pendingHz;
+}
 constexpr QSize kMemoryWindowSize(980, 620);
 constexpr int kMemoryChannelColumnWidth = 110;
 constexpr int kMemoryNameColumnWidth = 180;

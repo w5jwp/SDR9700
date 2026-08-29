@@ -1348,10 +1348,9 @@ void MainWindow::onFrequencyChanged(quint64 hz)
         }
     }
 
-    if (m_pendingSpectrumScopeTuneHz > 0 && m_spectrumScopeTuneReleaseTimer &&
-        m_spectrumScopeTuneReleaseTimer->isActive() && hz == m_pendingSpectrumScopeTuneHz)
+    if (m_spectrumScopeTuneReleaseTimer && m_spectrumScopeTuneReleaseTimer->isActive())
     {
-        m_pendingSpectrumScopeTuneHz = 0;
+        m_pendingSpectrumScopeTuneHz = spectrumTunePendingAfterReadback(m_pendingSpectrumScopeTuneHz, hz);
         // Keep the Spectrum Scope hold active until the release timer expires.
         // The VFO frequency readback can arrive before the radio's scope stream
         // has produced a frame centered on that new frequency. Clearing the

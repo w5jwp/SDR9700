@@ -229,6 +229,17 @@ QStringList parseLogCategories(const QString& value)
     return categories;
 }
 
+QString qtLoggingCategoryName(const QString& requestedCategory)
+{
+    // Command-line category matching is intentionally case-insensitive, but
+    // Qt logging filter rules match the declared category name verbatim.
+    if (requestedCategory == QStringLiteral("spectrumscope"))
+    {
+        return QStringLiteral("spectrumScope");
+    }
+    return requestedCategory;
+}
+
 QString loggingRulesForOptions(const LoggingOptions& options)
 {
     if (!options.logEnabled)
@@ -255,8 +266,9 @@ QString loggingRulesForOptions(const LoggingOptions& options)
     QStringList rules{quietLoggingRules()};
     for (const QString& category : requested)
     {
-        rules.append(QStringLiteral("%1.debug=true").arg(category));
-        rules.append(QStringLiteral("%1.info=true").arg(category));
+        const QString qtCategory = qtLoggingCategoryName(category);
+        rules.append(QStringLiteral("%1.debug=true").arg(qtCategory));
+        rules.append(QStringLiteral("%1.info=true").arg(qtCategory));
     }
     return rules.join(QLatin1Char('\n'));
 }

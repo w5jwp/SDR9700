@@ -22,6 +22,7 @@ class MainWindowHelpersTest : public QObject
     void identifiesModesWithSelectableAgcPresets();
     void preservesMemorySelectionAcrossPttFrequencyTransitions();
     void allowsRc28PttWhileControlsAreLocked();
+    void keepsNewestSpectrumTuneIntentAcrossStaleReadbacks();
 };
 
 void MainWindowHelpersTest::parsesFrequencyText_data()
@@ -170,6 +171,31 @@ void MainWindowHelpersTest::allowsRc28PttWhileControlsAreLocked()
     QVERIFY(rc28PttAllowed(true, true, true));
     QVERIFY(!rc28PttAllowed(false, true, true));
     QVERIFY(!rc28PttAllowed(true, false, true));
+}
+
+void MainWindowHelpersTest::keepsNewestSpectrumTuneIntentAcrossStaleReadbacks()
+{
+    constexpr quint64 baseHz = 146000000;
+    quint64 pendingHz = 0;
+
+    for (quint64 index = 1; index <= 500; ++index)
+    {
+        pendingHz = baseHz + index * 100;
+        QCOMPARE(spectrumTuneDisplayFrequency(baseHz, pendingHz), pendingHz);
+
+        // Replies for every earlier click may arrive after this newer intent.
+        // None may clear or move the displayed target backward.
+        for (quint64 stale = 0; stale < index; ++stale)
+        {
+            pendingHz = spectrumTunePendingAfterReadback(pendingHz, baseHz + stale * 100);
+            QCOMPARE(pendingHz, baseHz + index * 100);
+            QCOMPARE(spectrumTuneDisplayFrequency(baseHz + stale * 100, pendingHz), baseHz + index * 100);
+        }
+    }
+
+    pendingHz = spectrumTunePendingAfterReadback(pendingHz, baseHz + 500 * 100);
+    QCOMPARE(pendingHz, quint64(0));
+    QCOMPARE(spectrumTuneDisplayFrequency(baseHz + 500 * 100, pendingHz), baseHz + 500 * 100);
 }
 
 QTEST_GUILESS_MAIN(MainWindowHelpersTest)

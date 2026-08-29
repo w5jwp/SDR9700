@@ -157,6 +157,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                     // have nevertheless changed.
                     resetScopeFrameGate();
                     m_exchangeScopeSyncPending = true;
+                    m_exchangeRejectedFrames = 0;
                     const Vfo selected = m_window->m_vfoSelectionController->selectedVfo();
                     const VfoController* selectedController =
                         selected == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController;
@@ -171,9 +172,12 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                     {
                         resetScopeFrameGate();
                         m_exchangeScopeSyncPending = false;
+                        m_exchangeRejectedFrames = 0;
                         m_hasCenteredActiveVfo = false;
                         m_pendingMainRecenterHz = 0;
                         m_pendingSubRecenterHz = 0;
+                        m_tuneIntentHz = 0;
+                        m_tuneIntentClock.invalidate();
                     }
                 });
     }
@@ -441,6 +445,15 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
             [this]()
             {
                 m_window->m_pendingSpectrumScopeTuneHz = 0;
+                if (m_tuneIntentHz > 0)
+                {
+                    qWarning(logSpectrumScope()).noquote().nospace()
+                        << "Spectrum tune confirmation delayed generation=" << m_tuneIntentGeneration
+                        << " targetHz=" << m_tuneIntentHz
+                        << " elapsedMs=" << (m_tuneIntentClock.isValid() ? m_tuneIntentClock.elapsed() : -1);
+                    m_tuneIntentHz = 0;
+                    m_tuneIntentClock.invalidate();
+                }
                 m_window->m_spectrumScopeDisplayCenterHz = 0;
                 m_window->m_spectrumScopeFixedPanStartHz = 0;
                 m_window->m_spectrumScopeFixedPanEndHz = 0;
@@ -484,7 +497,7 @@ void SpectrumScopeController::updateSpectrumVfoMarker()
     // flight. SUB takes an additional receiver-selection round trip and would
     // otherwise look stalled on nearly every click.
     const quint64 displayedHz =
-        m_window->m_pendingSpectrumScopeTuneHz > 0 ? m_window->m_pendingSpectrumScopeTuneHz : activeVfoFrequencyHz();
+        spectrumTuneDisplayFrequency(activeVfoFrequencyHz(), m_window->m_pendingSpectrumScopeTuneHz);
     m_window->m_spectrumScopeDisplay->setVfoFrequency(displayedHz / 1e6);
 }
 
@@ -668,6 +681,11 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
     }
     m_window->leaveMemoryModeForManualChange();
     m_window->m_pendingSpectrumScopeTuneHz = hz;
+    m_tuneIntentHz = hz;
+    ++m_tuneIntentGeneration;
+    m_tuneIntentClock.restart();
+    qInfo(logSpectrumScope()).noquote().nospace()
+        << "Spectrum tune requested generation=" << m_tuneIntentGeneration << " targetHz=" << hz;
     updateSpectrumScopeBandLimits(hz);
     if (clearStaleDisplay && m_window->m_spectrumScopeDisplay)
     {
@@ -739,9 +757,14 @@ void SpectrumScopeController::onSpectrumReady(const QVector<float>& levels, doub
         const bool rangeContainsReference = referenceMhz >= start && referenceMhz <= end;
         if (referenceHz == 0 || (!bandsMatch && !rangeContainsReference))
         {
+            ++m_exchangeRejectedFrames;
             return;
         }
+        qInfo(logSpectrumScope()).noquote().nospace()
+            << "Exchange scope synchronized rejectedFrames=" << m_exchangeRejectedFrames
+            << " referenceHz=" << referenceHz << " frameStart=" << start << " frameEnd=" << end;
         m_exchangeScopeSyncPending = false;
+        m_exchangeRejectedFrames = 0;
         if (m_window->m_vfoSelectionController)
         {
             m_window->m_vfoSelectionController->completeExchangeScopeSync();
@@ -841,6 +864,24 @@ void SpectrumScopeController::onActiveVfoFrequencyChanged(Vfo vfo, quint64 hz)
         return;
     }
 
+    if (m_tuneIntentHz > 0)
+    {
+        if (hz == m_tuneIntentHz)
+        {
+            qInfo(logSpectrumScope()).noquote().nospace()
+                << "Spectrum tune confirmed generation=" << m_tuneIntentGeneration << " targetHz=" << hz
+                << " elapsedMs=" << (m_tuneIntentClock.isValid() ? m_tuneIntentClock.elapsed() : -1);
+            m_tuneIntentHz = 0;
+            m_tuneIntentClock.invalidate();
+        }
+        else
+        {
+            qDebug(logSpectrumScope()).noquote().nospace()
+                << "Spectrum tune ignored stale readback generation=" << m_tuneIntentGeneration << " reportedHz=" << hz
+                << " targetHz=" << m_tuneIntentHz;
+        }
+    }
+
     quint64& pendingRecenterHz = vfo == Vfo::Main ? m_pendingMainRecenterHz : m_pendingSubRecenterHz;
     const bool requestedRecenter = pendingRecenterHz > 0 && pendingRecenterHz == hz;
     if (requestedRecenter)
@@ -900,12 +941,15 @@ void SpectrumScopeController::recenterActiveVfo(bool clearDisplay)
     m_hasCenteredActiveVfo = true;
 }
 
-void SpectrumScopeController::tuneActiveVfo(quint64 hz) const
+void SpectrumScopeController::tuneActiveVfo(quint64 hz)
 {
     if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
     {
         const Vfo active =
             m_window->m_vfoSelectionController ? m_window->m_vfoSelectionController->selectedVfo() : Vfo::Main;
+        qInfo(logSpectrumScope()).noquote().nospace()
+            << "Spectrum tune dispatched generation=" << m_tuneIntentGeneration << " targetHz=" << hz
+            << " elapsedMs=" << (m_tuneIntentClock.isValid() ? m_tuneIntentClock.elapsed() : -1);
         backend->setVfoFrequencyHz(active, hz);
     }
 }

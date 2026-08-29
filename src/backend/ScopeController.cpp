@@ -10,7 +10,8 @@
 namespace
 {
 constexpr int kScopeFlushIntervalMs = 16;
-}
+constexpr qint64 kScopeFrameStallWarningMs = 500;
+} // namespace
 
 ScopeController::ScopeController(QObject* parent) : QObject(parent)
 {
@@ -28,6 +29,7 @@ void ScopeController::reset()
     }
     m_pendingFrame = {};
     m_hasPendingFrame = false;
+    m_frameArrivalClock.invalidate();
 }
 
 void ScopeController::acceptScopeData(const ScopeData& data)
@@ -39,6 +41,14 @@ void ScopeController::acceptScopeData(const ScopeData& data)
     {
         return;
     }
+
+    if (m_frameArrivalClock.isValid() && m_frameArrivalClock.elapsed() >= kScopeFrameStallWarningMs)
+    {
+        qWarning(logSpectrumScope()).noquote().nospace()
+            << "Scope frame arrival stalled elapsedMs=" << m_frameArrivalClock.elapsed()
+            << " receiver=" << data.receiver << " start=" << data.startFreq << " end=" << data.endFreq;
+    }
+    m_frameArrivalClock.restart();
 
     m_pendingFrame = data;
     m_hasPendingFrame = true;
