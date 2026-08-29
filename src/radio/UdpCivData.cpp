@@ -33,6 +33,7 @@ UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, qui
     idleTimer = new QTimer(this);
     areYouThereTimer = new QTimer(this);
     startCivDataTimer = new QTimer(this);
+    m_sequenceClock.start();
 
     connect(pingTimer, &QTimer::timeout, this, &UdpBase::sendPing);
     connect(idleTimer, &QTimer::timeout, this, std::bind(&UdpBase::sendControl, this, true, 0, 0));
@@ -152,6 +153,10 @@ void UdpCivData::dataReceived()
             continue;
         }
         QByteArray r = datagram.data();
+        // Update loss/retransmit bookkeeping before any accepted payload can
+        // reach Commander. The CI-V sequence gate below then enforces delivery
+        // order and suppresses duplicates at the parser boundary.
+        UdpBase::dataReceived(r);
 
         const bool scopeDataDatagram = isScopeDataDatagram(r);
         switch (r.length())
@@ -173,6 +178,11 @@ void UdpCivData::dataReceived()
             }
             else if (in->type == 0x06)
             {
+                if (remoteId != in->sentid)
+                {
+                    m_sequenceGate.reset();
+                    m_sequenceClock.restart();
+                }
                 remoteId = in->sentid;
                 // Request the CI-V data stream until the radio starts sending
                 // frames. Packet captures from stale-session recovery showed
@@ -234,15 +244,32 @@ void UdpCivData::dataReceived()
                         qDebug(logUdp()).noquote().nospace() << "UdpCivData: RX len=" << r.length()
                                                              << " hex=" << QString::fromLatin1(r.left(16).toHex(' '));
                     }
-                    emit receive(r.mid(0x15));
+                    const CivSequenceGateResult gateResult =
+                        m_sequenceGate.accept(in->seq, r.mid(DATA_SIZE), m_sequenceClock.elapsed());
+                    deliverSequencedPayloads(gateResult);
                 }
             }
             break;
         }
         }
-        UdpBase::dataReceived(r);
-
         r.clear();
         datagram.clear();
+    }
+}
+
+void UdpCivData::deliverSequencedPayloads(const CivSequenceGateResult& result)
+{
+    if (result.discontinuity)
+    {
+        const CivSequenceGateDiagnostics diagnostics = sequenceDiagnostics();
+        qWarning(logUdp()).noquote().nospace()
+            << "CI-V sequence discontinuity firstMissing=" << result.firstMissing
+            << " lastMissing=" << result.lastMissing << " duplicatesSuppressed=" << diagnostics.duplicatesSuppressed
+            << " reordered=" << diagnostics.reordered << " highWaterMark=" << diagnostics.highWaterMark;
+        emit sequenceDiscontinuity(result.firstMissing, result.lastMissing);
+    }
+    for (const QByteArray& payload : result.payloads)
+    {
+        emit receive(payload);
     }
 }

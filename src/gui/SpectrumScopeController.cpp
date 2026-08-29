@@ -144,12 +144,33 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                     m_scopeVfoConfirmed = true;
                     updateScopeFrameGate();
                 });
+        connect(backend, &IRadioBackend::mainSubExchangeCompleted, this,
+                [this, backend]()
+                {
+                    if (!m_window->m_vfoSelectionController)
+                    {
+                        return;
+                    }
+                    // MAIN remains selected after an exchange, so the normal
+                    // selectedVfoChanged path does not run. Reconfirm and
+                    // recenter the scope because the selected VFO's contents
+                    // have nevertheless changed.
+                    resetScopeFrameGate();
+                    m_exchangeScopeSyncPending = true;
+                    const Vfo selected = m_window->m_vfoSelectionController->selectedVfo();
+                    const VfoController* selectedController =
+                        selected == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController;
+                    m_activeVfoStatePublished = selectedController && selectedController->hasPublishedState();
+                    backend->setScopeVfo(selected);
+                    updateScopeFrameGate();
+                });
         connect(backend, &IRadioBackend::readyChanged, this,
                 [this](bool ready)
                 {
                     if (!ready)
                     {
                         resetScopeFrameGate();
+                        m_exchangeScopeSyncPending = false;
                         m_hasCenteredActiveVfo = false;
                         m_pendingMainRecenterHz = 0;
                         m_pendingSubRecenterHz = 0;
@@ -659,6 +680,24 @@ void SpectrumScopeController::onSpectrumReady(const QVector<float>& levels, doub
         return;
     }
     const quint64 referenceHz = activeVfoFrequencyHz();
+    if (m_exchangeScopeSyncPending)
+    {
+        const double referenceMhz = referenceHz / 1e6;
+        const quint64 frameCenterHz = static_cast<quint64>(std::llround(((start + end) / 2.0) * 1e6));
+        const availableBands referenceBand = sdr9700::radioBandForFrequency(referenceHz);
+        const availableBands frameBand = sdr9700::radioBandForFrequency(frameCenterHz);
+        const bool bandsMatch = referenceBand != bandUnknown && frameBand == referenceBand;
+        const bool rangeContainsReference = referenceMhz >= start && referenceMhz <= end;
+        if (referenceHz == 0 || (!bandsMatch && !rangeContainsReference))
+        {
+            return;
+        }
+        m_exchangeScopeSyncPending = false;
+        if (m_window->m_vfoSelectionController)
+        {
+            m_window->m_vfoSelectionController->completeExchangeScopeSync();
+        }
+    }
     if (referenceHz > 0)
     {
         updateSpectrumScopeBandLimits(referenceHz);

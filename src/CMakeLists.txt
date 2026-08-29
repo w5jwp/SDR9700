@@ -45,6 +45,8 @@ set(SDR9700_CORE_SOURCES
 
     # Radio / CI-V protocol
     radio/UdpStatusMessages.h
+    radio/CivSequenceGate.h
+    radio/CivSequenceGate.cpp
     radio/UdpBase.cpp
     radio/UdpHandler.cpp
     radio/UdpCivData.cpp
@@ -216,6 +218,7 @@ set(SDR9700_APP_SOURCES
     gui/VfoSMeter.h
     gui/VfoSMeter.cpp
     gui/VfoSelectionController.h
+    gui/MainSubExchangePolicy.h
     gui/VfoSelectionController.cpp
     gui/VfoSelectionPanel.h
     gui/VfoSelectionPanel.cpp
@@ -429,6 +432,10 @@ if(BUILD_TESTING)
     add_executable(UdpBaseTest tests/UdpBaseTest.cpp)
     target_link_libraries(UdpBaseTest PRIVATE SDR9700_core Qt6::Test)
     add_test(NAME UdpBaseTest COMMAND UdpBaseTest)
+
+    add_executable(CivSequenceGateTest tests/CivSequenceGateTest.cpp)
+    target_link_libraries(CivSequenceGateTest PRIVATE SDR9700_core Qt6::Test)
+    add_test(NAME CivSequenceGateTest COMMAND CivSequenceGateTest)
 
     add_executable(RadioSessionWatchdogTest tests/RadioSessionWatchdogTest.cpp)
     target_link_libraries(RadioSessionWatchdogTest PRIVATE SDR9700_core Qt6::Test)

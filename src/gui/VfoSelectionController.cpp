@@ -52,11 +52,10 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
     connect(m_panel, &VfoSelectionPanel::exchangeRequested, this,
             [this]()
             {
-                if (!m_backend || m_exchangePending || m_transmitting)
+                if (!m_backend || m_transmitting || !m_exchangePolicy.request())
                 {
                     return;
                 }
-                m_exchangePending = true;
                 m_selectionPending = false;
                 m_mainController->captureExchangeableControlState();
                 m_subController->captureExchangeableControlState();
@@ -69,13 +68,11 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
         connect(m_backend, &IRadioBackend::mainSubExchangeCompleted, this,
                 [this]()
                 {
-                    if (!m_exchangePending)
+                    if (!m_exchangePolicy.confirmRadio())
                     {
                         return;
                     }
-                    m_exchangePending = false;
                     m_mainController->applyCapturedControlExchange(m_subController);
-                    m_panel->setExchangePending(false);
                     const bool changed = m_selectedVfo != Vfo::Main;
                     m_selectedVfo = Vfo::Main;
                     m_requestedVfo = Vfo::Main;
@@ -87,7 +84,6 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                     {
                         emit selectedVfoChanged(Vfo::Main);
                     }
-                    setPttReady(true);
                 });
         connect(m_backend, &IRadioBackend::pttChanged, this,
                 [this](bool transmitting)
@@ -159,6 +155,16 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
     setControlsEnabled(false);
 }
 
+void VfoSelectionController::completeExchangeScopeSync()
+{
+    if (!m_exchangePolicy.confirmScope())
+    {
+        return;
+    }
+    m_panel->setExchangePending(false);
+    setPttReady(true);
+}
+
 void VfoSelectionController::requestSelection(Vfo vfo)
 {
     m_selectedAction = {};
@@ -197,7 +203,7 @@ void VfoSelectionController::reset()
     m_selectedVfo = Vfo::Main;
     m_requestedVfo = Vfo::Main;
     m_selectionPending = false;
-    m_exchangePending = false;
+    m_exchangePolicy.reset();
     m_selectedAction = {};
     m_panel->setExchangePending(false);
     setPttReady(true);

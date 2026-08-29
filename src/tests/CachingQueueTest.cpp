@@ -26,6 +26,10 @@ class CachingQueueTest : public QObject
     void resetClearsSessionState();
     void emitsCacheChangesWithoutHoldingMutex();
     void restartsAfterExplicitShutdown();
+    void reportsQueueDiagnostics();
+    void deduplicatesRepeatedCacheRefreshes();
+    void boundsCommandQueue();
+    void recurringWorkSurvivesImmediatePressure();
 };
 
 void CachingQueueTest::init()
@@ -149,6 +153,85 @@ void CachingQueueTest::restartsAfterExplicitShutdown()
     queue->add(kPriorityImmediate, funcFreqGet);
 
     QTRY_COMPARE(dispatched.size(), 1);
+}
+
+void CachingQueueTest::reportsQueueDiagnostics()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    queue->add(kPriorityLowest, funcFreqGet, true);
+    queue->add(kPriorityLowest, funcModeGet, true);
+
+    QTRY_VERIFY(queue->diagnostics().highWaterMark >= 2);
+    const CachingQueueDiagnostics diagnostics = queue->diagnostics();
+    QVERIFY(diagnostics.depth >= 2);
+    QCOMPARE(diagnostics.depthByPriority.value(kPriorityLowest), qsizetype(2));
+    QCOMPARE(diagnostics.depthByPriority.value(kPriorityImmediate), diagnostics.depth - 2);
+    QVERIFY(diagnostics.oldestItemAgeMs >= 0);
+}
+
+void CachingQueueTest::deduplicatesRepeatedCacheRefreshes()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    const quint64 dispatchedBefore = queue->diagnostics().dispatched;
+
+    for (int i = 0; i < 100; ++i)
+    {
+        queue->getCache(funcRfGain, 0);
+    }
+
+    QTRY_COMPARE(queue->diagnostics().dispatched, dispatchedBefore + 1);
+    QTest::qWait(100);
+    QCOMPARE(queue->diagnostics().dispatched, dispatchedBefore + 1);
+}
+
+void CachingQueueTest::boundsCommandQueue()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    for (int i = 0; i < 700; ++i)
+    {
+        queue->add(kPriorityLowest, QueueItem(funcRfGain, i, false, 0));
+    }
+
+    const CachingQueueDiagnostics diagnostics = queue->diagnostics();
+    QVERIFY(diagnostics.depth <= 512);
+    QVERIFY(diagnostics.droppedForCapacity > 0);
+}
+
+void CachingQueueTest::recurringWorkSurvivesImmediatePressure()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    QSignalSpy dispatched(queue, &CachingQueue::haveCommand);
+
+    {
+        std::lock_guard locker(queue->mutex);
+        queue->queue.insert(kPriorityHighest, QueueItem(funcModeGet, true, 0));
+        queue->queue.insert(kPriorityLowest, QueueItem(funcTransceiverId, true, 0));
+        for (int i = 0; i < 40; ++i)
+        {
+            queue->queue.insert(kPriorityImmediate, QueueItem(funcRfGain, i, false, 0));
+        }
+        queue->m_queueWakeRequested = true;
+    }
+    queue->waiting.notify_one();
+
+    QTRY_VERIFY(dispatched.size() >= 18);
+    int highestIndex = -1;
+    int lowestIndex = -1;
+    for (int i = 0; i < dispatched.size(); ++i)
+    {
+        if (dispatched.at(i).at(0).value<Funcs>() == funcModeGet && highestIndex < 0)
+        {
+            highestIndex = i;
+        }
+        if (dispatched.at(i).at(0).value<Funcs>() == funcTransceiverId && lowestIndex < 0)
+        {
+            lowestIndex = i;
+        }
+    }
+    QVERIFY(highestIndex >= 0);
+    QVERIFY(lowestIndex >= 0);
+    QVERIFY(highestIndex <= int(CachingQueue::kMaximumImmediateBurst));
+    QVERIFY(lowestIndex <= int(CachingQueue::kMaximumImmediateBurst * 2 + 1));
 }
 
 QTEST_GUILESS_MAIN(CachingQueueTest)

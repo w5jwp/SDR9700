@@ -14,6 +14,41 @@
 // Parses IC-9700 CI-V frames and forms outbound CI-V commands.
 // Encoding follows the local IC-9700 reference material in resources/.
 
+namespace
+{
+constexpr qint64 kPendingReplyLifetimeMs = 5000;
+
+Funcs canonicalReplyFunc(Funcs func)
+{
+    switch (func)
+    {
+    case funcFreq:
+    case funcFreqTR:
+    case funcFreqGet:
+    case funcSelectedFreq:
+        return funcFreqGet;
+    case funcMode:
+    case funcModeTR:
+    case funcModeGet:
+    case funcSelectedMode:
+        return funcModeGet;
+    default:
+        return func;
+    }
+}
+
+bool repliesMatch(Funcs pending, Funcs incoming)
+{
+    return canonicalReplyFunc(pending) == canonicalReplyFunc(incoming);
+}
+
+bool replyIdentifiesReceiver(Funcs func)
+{
+    return func == funcSelectedFreq || func == funcSelectedMode || func == funcUnselectedFreq ||
+           func == funcUnselectedMode;
+}
+} // namespace
+
 Commander::Commander(RadioCommander* parent) : RadioCommander(parent)
 {
 
@@ -153,7 +188,6 @@ void Commander::shutdownComm()
         queue->resetSessionState();
     }
     m_pendingReplies.clear();
-    m_pendingSetCommands.clear();
     udp = nullptr;
     m_shutdownComplete = true;
 }
@@ -169,7 +203,7 @@ void Commander::commonSetup()
     lookingForRadio = true;
     foundRadio = false;
     m_pendingReplies.clear();
-    m_pendingSetCommands.clear();
+    m_correlationDiagnostics = {};
     m_pendingCommandClock.start();
 
     // Minimal commands used before the built-in IC-9700 capability table is loaded.
@@ -223,10 +257,40 @@ void Commander::rememberPendingReply(Funcs func, uchar receiver)
 
     discardExpiredPendingReplies();
     m_pendingReplies.append(PendingReply{func, receiver, m_pendingCommandClock.elapsed()});
+    m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
+    m_correlationDiagnostics.pendingReplyHighWaterMark =
+        qMax(m_correlationDiagnostics.pendingReplyHighWaterMark, m_pendingReplies.size());
     if (m_pendingReplies.size() > kMaxPendingReplies)
     {
-        m_pendingReplies.remove(0, m_pendingReplies.size() - kMaxPendingReplies);
+        const qsizetype dropped = m_pendingReplies.size() - kMaxPendingReplies;
+        m_pendingReplies.remove(0, dropped);
+        m_correlationDiagnostics.pendingReplyOverflows += dropped;
+        m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
+        qCritical(logRadio()).noquote().nospace()
+            << "CI-V pending reply overflow dropped=" << dropped << " depth=" << m_pendingReplies.size();
     }
+
+    QTimer::singleShot(kPendingReplyLifetimeMs + 1, this, [this]() { discardExpiredPendingReplies(); });
+}
+
+bool Commander::pendingReplyReceiver(Funcs func, uchar* receiver)
+{
+    if (!receiver)
+    {
+        return false;
+    }
+
+    discardExpiredPendingReplies();
+    for (int i = 0; i < m_pendingReplies.size(); ++i)
+    {
+        if (repliesMatch(m_pendingReplies.at(i).func, func))
+        {
+            *receiver = m_pendingReplies.at(i).receiver;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
@@ -237,79 +301,51 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
     }
 
     discardExpiredPendingReplies();
-    const auto repliesMatch = [](Funcs pending, Funcs incoming)
-    {
-        const bool pendingFrequency =
-            pending == funcFreq || pending == funcFreqTR || pending == funcFreqGet || pending == funcSelectedFreq;
-        const bool incomingFrequency =
-            incoming == funcFreq || incoming == funcFreqTR || incoming == funcFreqGet || incoming == funcSelectedFreq;
-        const bool pendingMode =
-            pending == funcMode || pending == funcModeTR || pending == funcModeGet || pending == funcSelectedMode;
-        const bool incomingMode =
-            incoming == funcMode || incoming == funcModeTR || incoming == funcModeGet || incoming == funcSelectedMode;
-        return pending == incoming || (pendingFrequency && incomingFrequency) || (pendingMode && incomingMode);
-    };
     for (int i = 0; i < m_pendingReplies.size(); ++i)
     {
         if (repliesMatch(m_pendingReplies.at(i).func, func))
         {
             *receiver = m_pendingReplies.at(i).receiver;
             m_pendingReplies.removeAt(i);
+            m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
             return true;
         }
     }
 
+    ++m_correlationDiagnostics.unmatchedReplyFrames;
     return false;
 }
 
 void Commander::discardPendingReplies(Funcs func)
 {
     m_pendingReplies.erase(std::remove_if(m_pendingReplies.begin(), m_pendingReplies.end(),
-                                          [func](const PendingReply& reply) { return reply.func == func; }),
+                                          [func](const PendingReply& reply) { return repliesMatch(reply.func, func); }),
                            m_pendingReplies.end());
+    m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
 }
 
 void Commander::discardExpiredPendingReplies()
 {
-    static constexpr qint64 kPendingReplyLifetimeMs = 5000;
     const qint64 oldestAllowed = m_pendingCommandClock.elapsed() - kPendingReplyLifetimeMs;
 
     // A command reply that arrives after this window can no longer be routed
     // confidently to MAIN or SUB. Discarding stale hints is safer than applying
     // an unsolicited update to a receiver selected several seconds earlier.
+    const qsizetype previousSize = m_pendingReplies.size();
     m_pendingReplies.erase(std::remove_if(m_pendingReplies.begin(), m_pendingReplies.end(),
                                           [oldestAllowed](const PendingReply& reply)
                                           { return reply.createdAtMs < oldestAllowed; }),
                            m_pendingReplies.end());
+    const qsizetype expired = previousSize - m_pendingReplies.size();
+    m_correlationDiagnostics.pendingReplyExpirations += expired;
+    m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
 }
 
-void Commander::rememberPendingSetCommand(Funcs func, const QByteArray& payload, const QVariant& value, uchar receiver,
-                                          const FuncType& command)
+CommanderCorrelationDiagnostics Commander::correlationDiagnostics() const
 {
-    static constexpr qsizetype kMaxPendingSetCommands = 128;
-
-    // CI-V FB/FA frames do not identify the command they acknowledge. Preserve
-    // send order so each acknowledgement is applied to the oldest outstanding
-    // set operation instead of whichever command happened to be sent last.
-    m_pendingSetCommands.enqueue(
-        CommandErrorType(func, payload, value, receiver, command.minVal, command.maxVal, command.bytes));
-    if (m_pendingSetCommands.size() > kMaxPendingSetCommands)
-    {
-        qCritical(logRadio()).noquote()
-            << "CI-V acknowledgement queue overflow; dropping the oldest command correlation";
-        m_pendingSetCommands.dequeue();
-    }
-}
-
-bool Commander::takePendingSetCommand(CommandErrorType* command)
-{
-    if (!command || m_pendingSetCommands.isEmpty())
-    {
-        return false;
-    }
-
-    *command = m_pendingSetCommands.dequeue();
-    return true;
+    CommanderCorrelationDiagnostics diagnostics = m_correlationDiagnostics;
+    diagnostics.pendingReplies = m_pendingReplies.size();
+    return diagnostics;
 }
 
 FuncType Commander::getCommand(Funcs func, QByteArray& payload, int value, uchar receiver)
@@ -587,7 +623,7 @@ void Commander::parseData(const QByteArray& dataInput)
             {
                 break;
             }
-            parseCommand();
+            parseCommand(FrameOrigin::SolicitedReply);
             if (!radioPoweredOn && !payloadIn.isEmpty())
             {
                 queue->receiveValue(funcPowerControl, QVariant::fromValue<bool>(true), 0);
@@ -615,7 +651,7 @@ void Commander::parseData(const QByteArray& dataInput)
                 {
                     break;
                 }
-                parseCommand();
+                parseCommand(FrameOrigin::UnsolicitedBroadcast);
             }
             break;
         default:
@@ -658,6 +694,13 @@ Commander::ReplyParseResult Commander::parseFrequencyReply(Funcs& func, QVariant
     else if (func == funcUnselectedFreq)
     {
         vfo = 1;
+    }
+
+    if (payloadIn.size() < 5)
+    {
+        qWarning(logRadio()).noquote() << "Ignoring short CI-V payload for" << funcString[func] << "required" << 5
+                                       << "got" << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+        return ReplyParseResult::Malformed;
     }
 
     value.setValue(parseFreqData(payloadIn, vfo));
@@ -722,6 +765,13 @@ Commander::ReplyParseResult Commander::parseModeReply(Funcs& func, QVariant& val
     }
     else
     {
+        if (payloadIn.isEmpty())
+        {
+            qWarning(logRadio()).noquote()
+                << "Ignoring short CI-V payload for" << funcString[originalFunc] << "required" << 1 << "got"
+                << payloadIn.size() << "data:" << payloadIn.toHex(' ');
+            return ReplyParseResult::Malformed;
+        }
         if (!payloadIn.isEmpty())
         {
             mode.reg = bcdHexToUChar(payloadIn.at(0));
@@ -1408,7 +1458,7 @@ Commander::ReplyParseResult Commander::parseScopeReply(Funcs func, QVariant& val
     }
 }
 
-void Commander::parseCommand()
+void Commander::parseCommand(FrameOrigin origin)
 {
 #ifdef DEBUG_PARSE
     QElapsedTimer performanceTimer;
@@ -1460,14 +1510,19 @@ void Commander::parseCommand()
         return;
     }
 
+    const Funcs correlationFunc = func;
+    const bool explicitlyIdentifiesReceiver = radioCaps.hasCommand29 || replyIdentifiesReceiver(func);
+    bool pendingCorrelationFound = false;
+
     // When CI-V 29h is unavailable, most IC-9700 replies do not identify MAIN
     // or SUB. Prefer the receiver from the matching outstanding request; fall
     // back to the current selected receiver for unsolicited updates.
-    if (!radioCaps.hasCommand29 && func != funcSelectedFreq && func != funcSelectedMode && func != funcUnselectedFreq &&
-        func != funcUnselectedMode)
+    if (!explicitlyIdentifiesReceiver)
     {
         uchar pendingReceiver = 0;
-        receiver = takePendingReplyReceiver(func, &pendingReceiver) ? pendingReceiver : queue->getState().receiver;
+        pendingCorrelationFound =
+            origin == FrameOrigin::SolicitedReply && pendingReplyReceiver(correlationFunc, &pendingReceiver);
+        receiver = pendingCorrelationFound ? pendingReceiver : queue->getState().receiver;
     }
 
     QVector<MemParserFormat> memParser;
@@ -1835,37 +1890,16 @@ void Commander::parseCommand()
         break;
     case funcFB:
     {
-        CommandErrorType acknowledgedCommand;
-        if (takePendingSetCommand(&acknowledgedCommand) && acknowledgedCommand.value.isValid() && queue != nullptr)
-        {
-            qDebug(logRadio()).noquote() << "Radio (FB) acknowledged set command:"
-                                         << funcString[acknowledgedCommand.func];
-            // FB confirms that the command was accepted, not the resulting
-            // radio state. In particular, a delayed PTT-on acknowledgement can
-            // arrive after a later unkey and must not repaint the UI as TX.
-            // The set path already queues a 1C 00 readback for authoritative
-            // state confirmation.
-            if (acknowledgedCommand.func != funcTransceiverStatus)
-            {
-                queue->receiveValue(acknowledgedCommand.func, acknowledgedCommand.value, acknowledgedCommand.receiver);
-            }
-        }
+        ++m_correlationDiagnostics.acceptedAcknowledgements;
+        qDebug(logRadio()).noquote()
+            << "Radio accepted a CI-V command (FB); acknowledgement is not command-identifying";
         break;
     }
     case funcFA:
     {
-        CommandErrorType rejectedCommand;
-        if (takePendingSetCommand(&rejectedCommand))
-        {
-            qWarning(logRadio()).noquote()
-                << "Radio rejected CI-V set command (FA):" << funcString[rejectedCommand.func]
-                << "(min:" << rejectedCommand.minValue << "max:" << rejectedCommand.maxValue
-                << "bytes:" << rejectedCommand.bytes << ") data:" << rejectedCommand.data.toHex(' ');
-        }
-        else
-        {
-            qWarning(logRadio()).noquote() << "Radio returned CI-V rejection (FA) with no pending set command";
-        }
+        ++m_correlationDiagnostics.rejectedAcknowledgements;
+        qWarning(logRadio()).noquote()
+            << "Radio rejected a CI-V command (FA); acknowledgement does not identify which command";
         break;
     }
     default:
@@ -1908,6 +1942,35 @@ void Commander::parseCommand()
         lastParseReport = QTime::currentTime();
     }
 #endif
+
+    if (origin == FrameOrigin::SolicitedReply && pendingCorrelationFound)
+    {
+        uchar consumedReceiver = 0;
+        if (!takePendingReplyReceiver(correlationFunc, &consumedReceiver) || consumedReceiver != receiver)
+        {
+            qCritical(logRadio()).noquote()
+                << "CI-V pending reply correlation changed while parsing" << funcString[correlationFunc];
+            return;
+        }
+    }
+
+    const bool ambiguousFrequencyOrModeBroadcast =
+        origin == FrameOrigin::UnsolicitedBroadcast && !explicitlyIdentifiesReceiver &&
+        (correlationFunc == funcFreq || correlationFunc == funcFreqTR || correlationFunc == funcFreqGet ||
+         correlationFunc == funcMode || correlationFunc == funcModeTR || correlationFunc == funcModeGet ||
+         correlationFunc == funcDataModeWithFilter);
+    if (ambiguousFrequencyOrModeBroadcast)
+    {
+        ++m_correlationDiagnostics.ambiguousUnsolicitedFrames;
+        qWarning(logRadio()).noquote() << "Ignoring receiver-ambiguous unsolicited CI-V value"
+                                       << funcString[correlationFunc];
+        return;
+    }
+    if (origin == FrameOrigin::SolicitedReply && !explicitlyIdentifiesReceiver && !pendingCorrelationFound &&
+        value.isValid())
+    {
+        ++m_correlationDiagnostics.unmatchedReplyFrames;
+    }
 
     if (value.isValid() && queue != nullptr)
     {
@@ -3730,14 +3793,9 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
                 return;
             }
         }
-        if (!value.isValid() && cmd.getCmd)
+        if (!value.isValid() && cmd.getCmd && !radioCaps.hasCommand29 && !replyIdentifiesReceiver(func))
         {
             rememberPendingReply(func, receiver);
-        }
-        else if (value.isValid() && cmd.setCmd &&
-                 !(func == funcMemoryContents && value.metaType().id() == qMetaTypeId<uint>()))
-        {
-            rememberPendingSetCommand(func, payload, value, receiver, cmd);
         }
         // Register command correlation before emitting dataForComm. Most
         // production connections are queued across threads, but this ordering

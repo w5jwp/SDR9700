@@ -27,8 +27,12 @@ class CommanderCodecTest : public QObject
     void parsesMemoryFields();
     void serializesOutboundCommandValues();
     void rejectsUnknownOutboundValueTypes();
-    void pttAcknowledgementDoesNotSynthesizeTransmitState();
+    void acknowledgementsAreDiagnosticOnly();
+    void tracksPendingReplyPressure();
+    void unsolicitedUpdateDoesNotConsumePendingReply();
+    void malformedReplyDoesNotConsumePendingReply();
     void correlatesEquivalentFrequencyAndModeReplyCommands();
+    void discardsPendingRepliesByCanonicalFamily();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
     void parserToleratesDeterministicArbitraryInput();
@@ -39,6 +43,8 @@ class CommanderCodecTest : public QObject
 
 void CommanderCodecTest::init()
 {
+    m_commander.m_pendingReplies.clear();
+    m_commander.m_correlationDiagnostics = {};
     sdr9700::populateRadioCapabilities(m_commander.radioCaps);
     m_commander.haveRadioCaps = true;
     m_commander.setCIVAddr(0xA2);
@@ -55,6 +61,19 @@ void CommanderCodecTest::correlatesEquivalentFrequencyAndModeReplyCommands()
     receiver = 0;
     QVERIFY(m_commander.takePendingReplyReceiver(funcSelectedMode, &receiver));
     QCOMPARE(receiver, uchar(1));
+}
+
+void CommanderCodecTest::discardsPendingRepliesByCanonicalFamily()
+{
+    m_commander.rememberPendingReply(funcFreqGet, 1);
+    m_commander.rememberPendingReply(funcModeGet, 0);
+
+    m_commander.discardPendingReplies(funcSelectedFreq);
+
+    uchar receiver = 0;
+    QVERIFY(!m_commander.takePendingReplyReceiver(funcFreqTR, &receiver));
+    QVERIFY(m_commander.takePendingReplyReceiver(funcSelectedMode, &receiver));
+    QCOMPARE(receiver, uchar(0));
 }
 
 void CommanderCodecTest::encodesAndDecodesPackedBcd()
@@ -278,17 +297,17 @@ void CommanderCodecTest::rejectsUnknownOutboundValueTypes()
     QVERIFY(payload.isEmpty());
 }
 
-void CommanderCodecTest::pttAcknowledgementDoesNotSynthesizeTransmitState()
+void CommanderCodecTest::acknowledgementsAreDiagnosticOnly()
 {
     m_commander.queue->resetSessionState();
     m_commander.radioPoweredOn = true;
     QSignalSpy cacheSpy(m_commander.queue, &CachingQueue::cacheUpdated);
 
-    const FuncType command = m_commander.radioCaps.commands.value(funcTransceiverStatus);
-    m_commander.rememberPendingSetCommand(funcTransceiverStatus, QByteArray::fromHex("1c0001"),
-                                          QVariant::fromValue(true), 0, command);
     m_commander.handleNewData(QByteArray::fromHex("fefee1a2fbfd"));
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a2fafd"));
     QCOMPARE(cacheSpy.count(), 0);
+    QCOMPARE(m_commander.correlationDiagnostics().acceptedAcknowledgements, quint64(1));
+    QCOMPARE(m_commander.correlationDiagnostics().rejectedAcknowledgements, quint64(1));
 
     m_commander.handleNewData(QByteArray::fromHex("fefee1a21c0000fd"));
     cacheSpy.clear();
@@ -297,6 +316,58 @@ void CommanderCodecTest::pttAcknowledgementDoesNotSynthesizeTransmitState()
     const CacheItem update = qvariant_cast<CacheItem>(cacheSpy.takeFirst().at(0));
     QCOMPARE(update.command, funcTransceiverStatus);
     QVERIFY(update.value.toBool());
+}
+
+void CommanderCodecTest::tracksPendingReplyPressure()
+{
+    m_commander.m_pendingReplies.clear();
+    m_commander.m_correlationDiagnostics = {};
+    m_commander.m_pendingCommandClock.restart();
+
+    QTest::ignoreMessage(QtCriticalMsg, QRegularExpression(QStringLiteral("CI-V pending reply overflow.*")));
+    for (int i = 0; i < 65; ++i)
+    {
+        m_commander.rememberPendingReply(funcFreqGet, static_cast<uchar>(i % 2));
+    }
+
+    const CommanderCorrelationDiagnostics diagnostics = m_commander.correlationDiagnostics();
+    QCOMPARE(diagnostics.pendingReplies, qsizetype(64));
+    QCOMPARE(diagnostics.pendingReplyHighWaterMark, qsizetype(65));
+    QCOMPARE(diagnostics.pendingReplyOverflows, quint64(1));
+}
+
+void CommanderCodecTest::unsolicitedUpdateDoesNotConsumePendingReply()
+{
+    m_commander.m_pendingReplies.clear();
+    m_commander.m_correlationDiagnostics = {};
+    m_commander.m_pendingCommandClock.restart();
+    m_commander.queue->resetSessionState();
+    m_commander.rememberPendingReply(funcFreqGet, 1);
+
+    m_commander.handleNewData(QByteArray::fromHex("fefe00a2030052140600fd"));
+
+    QCOMPARE(m_commander.correlationDiagnostics().pendingReplies, qsizetype(1));
+    QCOMPARE(m_commander.correlationDiagnostics().ambiguousUnsolicitedFrames, quint64(1));
+    uchar receiver = 0;
+    QVERIFY(m_commander.takePendingReplyReceiver(funcFreqGet, &receiver));
+    QCOMPARE(receiver, uchar(1));
+    QVERIFY(!m_commander.queue->getCache(funcFreq, 0).value.isValid());
+    QVERIFY(!m_commander.queue->getCache(funcFreq, 1).value.isValid());
+}
+
+void CommanderCodecTest::malformedReplyDoesNotConsumePendingReply()
+{
+    m_commander.m_pendingReplies.clear();
+    m_commander.m_correlationDiagnostics = {};
+    m_commander.m_pendingCommandClock.restart();
+    m_commander.rememberPendingReply(funcModeGet, 1);
+
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a204fd"));
+
+    QCOMPARE(m_commander.correlationDiagnostics().pendingReplies, qsizetype(1));
+    uchar receiver = 0;
+    QVERIFY(m_commander.takePendingReplyReceiver(funcModeGet, &receiver));
+    QCOMPARE(receiver, uchar(1));
 }
 
 void CommanderCodecTest::rejectsShortSpectrumFrames()

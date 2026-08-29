@@ -50,4 +50,5 @@ class SpectrumScopeController : public QObject
     bool m_activeVfoStatePublished{false};
     bool m_scopeVfoConfirmed{false};
     bool m_scopeFramesEnabled{false};
+    bool m_exchangeScopeSyncPending{false};
 };

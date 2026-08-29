@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vfo.h"
+#include "MainSubExchangePolicy.h"
 
 #include <QObject>
 #include <functional>
@@ -22,6 +23,7 @@ class VfoSelectionController : public QObject
     Vfo selectedVfo() const { return m_selectedVfo; }
     void setControlsEnabled(bool enabled);
     void runWhenSelected(Vfo vfo, std::function<void()> action);
+    void completeExchangeScopeSync();
 
   signals:
     void selectedVfoChanged(Vfo vfo);
@@ -40,7 +42,7 @@ class VfoSelectionController : public QObject
     Vfo m_selectedVfo{Vfo::Main};
     Vfo m_requestedVfo{Vfo::Main};
     bool m_selectionPending{false};
-    bool m_exchangePending{false};
+    sdr9700::MainSubExchangePolicy m_exchangePolicy;
     bool m_pttReady{true};
     bool m_transmitting{false};
     std::function<void()> m_selectedAction;

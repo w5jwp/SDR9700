@@ -3,8 +3,19 @@
 #include "RadioCommander.h"
 
 #include <QElapsedTimer>
-#include <QQueue>
 #include <QVector>
+
+struct CommanderCorrelationDiagnostics
+{
+    qsizetype pendingReplies{0};
+    qsizetype pendingReplyHighWaterMark{0};
+    quint64 pendingReplyOverflows{0};
+    quint64 pendingReplyExpirations{0};
+    quint64 unmatchedReplyFrames{0};
+    quint64 ambiguousUnsolicitedFrames{0};
+    quint64 acceptedAcknowledgements{0};
+    quint64 rejectedAcknowledgements{0};
+};
 
 class Commander : public RadioCommander
 {
@@ -15,6 +26,7 @@ class Commander : public RadioCommander
     explicit Commander(RadioCommander* parent = nullptr);
     explicit Commander(quint8 guid[GUIDLEN], RadioCommander* parent = nullptr);
     ~Commander();
+    CommanderCorrelationDiagnostics correlationDiagnostics() const;
 
   public slots:
     void process() override;
@@ -40,6 +52,12 @@ class Commander : public RadioCommander
     bool stopLocalAudio();
 
   private:
+    enum class FrameOrigin
+    {
+        SolicitedReply,
+        UnsolicitedBroadcast
+    };
+
     enum class ReplyParseResult
     {
         NotHandled,
@@ -51,7 +69,7 @@ class Commander : public RadioCommander
     void shutdownComm();
 
     void parseData(const QByteArray& dataInput);
-    void parseCommand();
+    void parseCommand(FrameOrigin origin);
     ReplyParseResult parseFrequencyReply(Funcs& func, QVariant& value, uchar& receiver);
     ReplyParseResult parseModeReply(Funcs& func, QVariant& value, uchar& receiver);
     ReplyParseResult parseLevelMeterReply(Funcs func, QVariant& value);
@@ -94,10 +112,8 @@ class Commander : public RadioCommander
     bool decodeSpectrumSequence(quint8& sequence, quint8& sequenceMax) const;
     FuncType getCommand(Funcs func, QByteArray& payload, int value = INT_MIN, uchar receiver = 0);
     void rememberPendingReply(Funcs func, uchar receiver);
+    bool pendingReplyReceiver(Funcs func, uchar* receiver);
     bool takePendingReplyReceiver(Funcs func, uchar* receiver);
-    void rememberPendingSetCommand(Funcs func, const QByteArray& payload, const QVariant& value, uchar receiver,
-                                   const FuncType& command);
-    bool takePendingSetCommand(CommandErrorType* command);
     void discardExpiredPendingReplies();
 
     QByteArray getLANAddr();
@@ -143,8 +159,8 @@ class Commander : public RadioCommander
         qint64 createdAtMs{0};
     };
     QVector<PendingReply> m_pendingReplies;
-    QQueue<CommandErrorType> m_pendingSetCommands;
     QElapsedTimer m_pendingCommandClock;
+    CommanderCorrelationDiagnostics m_correlationDiagnostics;
     bool m_suppressReadbackForCurrentCommand{false};
     bool m_shutdownComplete{false};
 

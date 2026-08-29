@@ -6,6 +6,7 @@
 #include <QVariant>
 #include <QVector>
 #include <QQueue>
+#include <QHash>
 #include <QRect>
 #include <QDateTime>
 #include <QRandomGenerator>
@@ -44,33 +45,76 @@ inline qint64 nextQueueItemId()
 
 struct QueueItem
 {
-    QueueItem() : command(funcNone), param(), receiver(0), recurring(false), id(nextQueueItemId()) {}
+    QueueItem()
+        : command(funcNone),
+          param(),
+          receiver(0),
+          recurring(false),
+          id(nextQueueItemId()),
+          enqueuedAtMs(QDateTime::currentMSecsSinceEpoch())
+    {
+    }
     QueueItem(QueueItem const& q)
-        : command(q.command), param(q.param), receiver(q.receiver), recurring(q.recurring), id(q.id)
+        : command(q.command),
+          param(q.param),
+          receiver(q.receiver),
+          recurring(q.recurring),
+          id(q.id),
+          enqueuedAtMs(q.enqueuedAtMs)
     {
     }
     QueueItem(Funcs command, QVariant param, bool recurring, uchar receiver)
-        : command(command), param(param), receiver(receiver), recurring(recurring), id(nextQueueItemId())
+        : command(command),
+          param(param),
+          receiver(receiver),
+          recurring(recurring),
+          id(nextQueueItemId()),
+          enqueuedAtMs(QDateTime::currentMSecsSinceEpoch())
     {
     }
     QueueItem(Funcs command, QVariant param, bool recurring)
-        : command(command), param(param), receiver(0), recurring(recurring), id(nextQueueItemId())
+        : command(command),
+          param(param),
+          receiver(0),
+          recurring(recurring),
+          id(nextQueueItemId()),
+          enqueuedAtMs(QDateTime::currentMSecsSinceEpoch())
     {
     }
     QueueItem(Funcs command, QVariant param)
-        : command(command), param(param), receiver(0), recurring(false), id(nextQueueItemId())
+        : command(command),
+          param(param),
+          receiver(0),
+          recurring(false),
+          id(nextQueueItemId()),
+          enqueuedAtMs(QDateTime::currentMSecsSinceEpoch())
     {
     }
     QueueItem(Funcs command, bool recurring, uchar receiver)
-        : command(command), param(QVariant()), receiver(receiver), recurring(recurring), id(nextQueueItemId())
+        : command(command),
+          param(QVariant()),
+          receiver(receiver),
+          recurring(recurring),
+          id(nextQueueItemId()),
+          enqueuedAtMs(QDateTime::currentMSecsSinceEpoch())
     {
     }
     QueueItem(Funcs command, bool recurring)
-        : command(command), param(QVariant()), receiver(0), recurring(recurring), id(nextQueueItemId())
+        : command(command),
+          param(QVariant()),
+          receiver(0),
+          recurring(recurring),
+          id(nextQueueItemId()),
+          enqueuedAtMs(QDateTime::currentMSecsSinceEpoch())
     {
     }
     explicit QueueItem(Funcs command)
-        : command(command), param(QVariant()), receiver(0), recurring(false), id(nextQueueItemId())
+        : command(command),
+          param(QVariant()),
+          receiver(0),
+          recurring(false),
+          id(nextQueueItemId()),
+          enqueuedAtMs(QDateTime::currentMSecsSinceEpoch())
     {
     }
     QueueItem& operator=(QueueItem const& q)
@@ -80,6 +124,7 @@ struct QueueItem
         receiver = q.receiver;
         recurring = q.recurring;
         id = q.id;
+        enqueuedAtMs = q.enqueuedAtMs;
         return *this;
     }
     Funcs command;
@@ -87,6 +132,7 @@ struct QueueItem
     uchar receiver;
     bool recurring;
     qint64 id;
+    qint64 enqueuedAtMs;
 
     bool operator==(const QueueItem& rhs) const
     {
@@ -121,9 +167,20 @@ struct CacheItem
     }
 };
 
+struct CachingQueueDiagnostics
+{
+    qsizetype depth{0};
+    qsizetype highWaterMark{0};
+    qint64 oldestItemAgeMs{0};
+    quint64 dispatched{0};
+    quint64 droppedForCapacity{0};
+    QMap<QueuePriority, qsizetype> depthByPriority;
+};
+
 class CachingQueue : public QObject
 {
     Q_OBJECT
+    friend class CachingQueueTest;
 
   signals:
     void haveCommand(Funcs func, QVariant param, uchar receiver);
@@ -146,6 +203,7 @@ class CachingQueue : public QObject
     QMultiMap<Funcs, CacheItem> cache;
     QQueue<CacheItem> items;
     QQueue<QString> messages;
+    QHash<quint64, qint64> m_cacheRefreshRequests;
     std::condition_variable waiting;
 
     void startWorker();
@@ -162,11 +220,18 @@ class CachingQueue : public QObject
     // this to distinguish a command wake from a value/message wake so queued
     // readbacks run immediately without accelerating periodic cache traffic.
     bool m_queueWakeRequested{false};
+    qsizetype m_queueHighWaterMark{0};
+    quint64 m_dispatchedCommands{0};
+    quint64 m_droppedForCapacity{0};
+    static constexpr qsizetype kMaximumQueueDepth = 512;
+    static constexpr quint64 kMaximumImmediateBurst = 8;
 
     radioCapabilities* radioCaps = nullptr; // Set after IC-9700 capabilities are loaded.
 
     void run();
     Funcs checkCommandAvailable(Funcs cmd) const;
+    void enforceQueueLimit();
+    static quint64 cacheRefreshKey(Funcs func, uchar receiver);
     std::optional<CacheItem> updateCache(bool reply, QueueItem item);
     std::optional<CacheItem> updateCache(bool reply, Funcs func, QVariant value = QVariant(), uchar receiver = 0);
     RadioStateType radioState;
@@ -192,6 +257,7 @@ class CachingQueue : public QObject
     void clear();
     void resetSessionState();
     CacheItem getCache(Funcs func, uchar receiver = 0);
+    CachingQueueDiagnostics diagnostics();
 
     void setRadioCaps(radioCapabilities* caps);
     void recordLocalRoutingState(Funcs func, QVariant value, uchar receiver);

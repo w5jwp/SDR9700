@@ -1,5 +1,6 @@
 #include "ConnectionRetryPolicy.h"
 #include "MemorySyncPolicy.h"
+#include "MainSubExchangePolicy.h"
 #include "PttConfirmationPolicy.h"
 #include "SpectrumTuningPolicy.h"
 #include "TransmitSafetyPolicy.h"
@@ -28,7 +29,33 @@ class OfflinePoliciesTest : public QObject
     void keepsPttActiveUntilRadioConfirmsUnkey();
     void validatesDuplexTransmitFrequency();
     void blocksPttUntilTransmitConfigurationIsConfirmed();
+    void serializesRepeatedMainSubExchanges();
 };
+
+void OfflinePoliciesTest::serializesRepeatedMainSubExchanges()
+{
+    sdr9700::MainSubExchangePolicy policy;
+    bool mainContainsVhf = true;
+
+    for (int exchange = 0; exchange < 500; ++exchange)
+    {
+        QVERIFY(policy.request());
+        QCOMPARE(policy.state(), sdr9700::MainSubExchangePolicy::State::AwaitingRadio);
+        for (int duplicateClick = 0; duplicateClick < 10; ++duplicateClick)
+        {
+            QVERIFY(!policy.request());
+        }
+        QVERIFY(policy.confirmRadio());
+        QCOMPARE(policy.state(), sdr9700::MainSubExchangePolicy::State::AwaitingScope);
+        QVERIFY(!policy.request());
+        QVERIFY(!policy.confirmRadio());
+        QVERIFY(policy.confirmScope());
+        mainContainsVhf = !mainContainsVhf;
+        QVERIFY(!policy.pending());
+    }
+
+    QVERIFY(mainContainsVhf);
+}
 
 void OfflinePoliciesTest::clampsMemoryPollingInterval()
 {

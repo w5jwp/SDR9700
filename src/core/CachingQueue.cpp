@@ -4,11 +4,17 @@
 #include <QMetaType>
 #include <QThread>
 
+#include <algorithm>
+#include <array>
+
 namespace
 {
 const QMap<QString, int> kPriorityMap = {{"None", 0},        {"Immediate", 1},   {"Highest", 2},
                                          {"High", 3},        {"Medium High", 5}, {"Medium", 7},
                                          {"Medium Low", 11}, {"Low", 19},        {"Lowest", 23}};
+constexpr std::array<QueuePriority, 7> kFairPriorities = {kPriorityHighest, kPriorityHigh,      kPriorityMediumHigh,
+                                                          kPriorityMedium,  kPriorityMediumLow, kPriorityLow,
+                                                          kPriorityLowest};
 
 } // namespace
 
@@ -91,6 +97,8 @@ void CachingQueue::run()
     QDeadlineTimer deadline(queueInterval);
 
     quint64 counter = kPriorityImmediate;
+    quint64 immediateDispatchStreak = 0;
+    qsizetype fairnessCursor = 0;
 
     while (!aborted.load(std::memory_order_acquire))
     {
@@ -127,9 +135,28 @@ void CachingQueue::run()
         if (commandDispatchDue)
         {
             QueuePriority prio = kPriorityImmediate;
+            const bool lowerPriorityWorkPending = queue.upperBound(kPriorityImmediate) != queue.cend();
+
+            // Immediate work is latency-sensitive, but an unlimited stream of
+            // it must not permanently starve recurring radio-state polls.
+            if (queue.contains(kPriorityImmediate) && lowerPriorityWorkPending &&
+                immediateDispatchStreak >= kMaximumImmediateBurst)
+            {
+                for (qsizetype offset = 0; offset < qsizetype(kFairPriorities.size()); ++offset)
+                {
+                    const qsizetype index = (fairnessCursor + offset) % qsizetype(kFairPriorities.size());
+                    const QueuePriority candidate = kFairPriorities.at(index);
+                    if (queue.contains(candidate))
+                    {
+                        prio = candidate;
+                        fairnessCursor = (index + 1) % qsizetype(kFairPriorities.size());
+                        break;
+                    }
+                }
+            }
 
             // If no immediate commands are queued, rotate through lower priorities.
-            if (!queue.contains(prio))
+            if (prio == kPriorityImmediate && !queue.contains(prio))
             {
                 if (counter % kPriorityHighest == 0)
                 {
@@ -182,6 +209,7 @@ void CachingQueue::run()
                 {
                     QueueItem recurringItem = item;
                     recurringItem.id = nextQueueItemId();
+                    recurringItem.enqueuedAtMs = QDateTime::currentMSecsSinceEpoch();
                     queue.insert(prio, recurringItem);
                 }
 
@@ -190,6 +218,8 @@ void CachingQueue::run()
                     changedCacheItem = updateCache(false, item.command, item.param, item.receiver);
                 }
                 haveCommandToEmit = true;
+                ++m_dispatchedCommands;
+                immediateDispatchStreak = prio == kPriorityImmediate ? immediateDispatchStreak + 1 : 0;
             }
 
             // Cache and message updates wake this thread so UI state can be
@@ -307,10 +337,53 @@ void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
                 queue.insert(queue.cend(), kPriorityImmediate, it);
             }
             queue.insert(prio, item);
+            enforceQueueLimit();
+            m_queueHighWaterMark = qMax(m_queueHighWaterMark, queue.size());
             m_queueWakeRequested = true;
             waiting.notify_one();
         }
     }
+}
+
+void CachingQueue::enforceQueueLimit()
+{
+    while (queue.size() > kMaximumQueueDepth)
+    {
+        auto victim = queue.end();
+        for (auto candidate = queue.begin(); candidate != queue.end(); ++candidate)
+        {
+            if (candidate->recurring)
+            {
+                continue;
+            }
+            if (victim == queue.end() || candidate.key() > victim.key() ||
+                (candidate.key() == victim.key() && candidate->id < victim->id))
+            {
+                victim = candidate;
+            }
+        }
+        if (victim == queue.end())
+        {
+            victim = std::min_element(queue.begin(), queue.end(),
+                                      [](const QueueItem& lhs, const QueueItem& rhs) { return lhs.id < rhs.id; });
+        }
+
+        const bool shouldLog = m_droppedForCapacity == 0 || (m_droppedForCapacity & (m_droppedForCapacity - 1)) == 0;
+        if (shouldLog)
+        {
+            qCritical(logRadio()).noquote()
+                << "CachingQueue capacity exceeded; dropped=" << (m_droppedForCapacity + 1)
+                << "command=" << funcString[victim->command] << "receiver=" << victim->receiver
+                << "priority=" << victim.key() << "depth=" << queue.size();
+        }
+        queue.erase(victim);
+        ++m_droppedForCapacity;
+    }
+}
+
+quint64 CachingQueue::cacheRefreshKey(Funcs func, uchar receiver)
+{
+    return (quint64(static_cast<quint32>(func)) << 8U) | receiver;
 }
 
 VfoCommandType CachingQueue::getVfoCommand(vfo_t vfo, uchar rx, bool set)
@@ -416,7 +489,11 @@ void CachingQueue::resetSessionState()
         cache.clear();
         items.clear();
         messages.clear();
+        m_cacheRefreshRequests.clear();
         radioState = RadioStateType();
+        m_queueHighWaterMark = 0;
+        m_dispatchedCommands = 0;
+        m_droppedForCapacity = 0;
     }
 
     if (previousCaps != nullptr)
@@ -424,6 +501,28 @@ void CachingQueue::resetSessionState()
         emit radioCapsUpdated(nullptr);
     }
     waiting.notify_all();
+}
+
+CachingQueueDiagnostics CachingQueue::diagnostics()
+{
+    std::lock_guard locker(mutex);
+    CachingQueueDiagnostics result;
+    result.depth = queue.size();
+    result.highWaterMark = m_queueHighWaterMark;
+    result.dispatched = m_dispatchedCommands;
+    result.droppedForCapacity = m_droppedForCapacity;
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    qint64 oldestEnqueuedAtMs = nowMs;
+    for (auto item = queue.cbegin(); item != queue.cend(); ++item)
+    {
+        ++result.depthByPriority[item.key()];
+        oldestEnqueuedAtMs = qMin(oldestEnqueuedAtMs, item->enqueuedAtMs);
+    }
+    if (!queue.isEmpty())
+    {
+        result.oldestItemAgeMs = qMax<qint64>(0, nowMs - oldestEnqueuedAtMs);
+    }
+    return result;
 }
 
 void CachingQueue::setRadioCaps(radioCapabilities* caps)
@@ -478,6 +577,7 @@ std::optional<CacheItem> CachingQueue::updateCache(bool reply, QueueItem item)
 
     if (reply)
     {
+        m_cacheRefreshRequests.remove(cacheRefreshKey(item.command, item.receiver));
         // Track radio state changes that affect later command routing.
         if (item.command == funcSatelliteMode && item.param.value<bool>())
         {
@@ -603,6 +703,7 @@ void CachingQueue::recordLocalRoutingState(Funcs func, QVariant value, uchar rec
 CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
 {
     CacheItem ret;
+    bool requestRefresh = false;
     if (func != funcNone)
     {
         std::lock_guard locker(mutex);
@@ -616,18 +717,32 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
             }
             ++it;
         }
+
+        const bool stale =
+            func != funcPowerControl && func != funcSelectVFO &&
+            (!ret.value.isValid() || ret.command == funcSWRMeter || ret.command == funcALCMeter ||
+             ret.reply.addSecs(QRandomGenerator::global()->bounded(5, 20)) <= QDateTime::currentDateTime());
+        if (stale)
+        {
+            const quint64 key = cacheRefreshKey(func, receiver);
+            const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+            const auto pending = m_cacheRefreshRequests.constFind(key);
+            if (pending == m_cacheRefreshRequests.cend() || nowMs - pending.value() >= 5000)
+            {
+                m_cacheRefreshRequests.insert(key, nowMs);
+                requestRefresh = true;
+            }
+        }
     }
     // Re-request stale values after a small randomized window so periodic
     // refresh traffic does not synchronize into bursts. Keep this below
     // kPriorityHighest; raising it makes the S-meter visibly lag while command
     // intensive workflows are active.
-    if (func != funcNone && func != funcPowerControl && func != funcSelectVFO &&
-        (!ret.value.isValid() || ret.command == funcSWRMeter || ret.command == funcALCMeter ||
-         ret.reply.addSecs(QRandomGenerator::global()->bounded(5, 20)) <= QDateTime::currentDateTime()))
+    if (requestRefresh)
     {
         qDebug(logRadio()).noquote() << "No (or expired) cache found for" << funcString[func] << "requesting"
                                      << ret.reply;
-        add(kPriorityImmediate, func, false, receiver);
+        addUnique(kPriorityImmediate, func, false, receiver);
     }
     return ret;
 }
