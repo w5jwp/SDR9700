@@ -263,6 +263,10 @@ void Commander::shutdownComm()
     m_replyDrainTimer->stop();
     m_rttEstimator.reset();
     resetScheduledCommands();
+    mainScopeData = {};
+    subScopeData = {};
+    m_scopeAssemblyClocks[0].invalidate();
+    m_scopeAssemblyClocks[1].invalidate();
     m_expectedScopeSequences[0] = 0;
     m_expectedScopeSequences[1] = 0;
     udp = nullptr;
@@ -290,6 +294,10 @@ void Commander::commonSetup()
     m_schedulerDiagnostics = {};
     m_lastLoggedSchedulerDiagnostics = {};
     m_schedulerDiagnosticsTimer->start();
+    mainScopeData = {};
+    subScopeData = {};
+    m_scopeAssemblyClocks[0].invalidate();
+    m_scopeAssemblyClocks[1].invalidate();
     m_expectedScopeSequences[0] = 0;
     m_expectedScopeSequences[1] = 0;
     m_pendingCommandClock.start();

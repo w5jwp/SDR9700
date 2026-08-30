@@ -16,6 +16,7 @@ class CivSequenceGateTest : public QObject
     void handlesRollover();
     void boundsDuplicateHistory();
     void survivesSeededLossDuplicateAndReorderSoak();
+    void resetStartsIndependentSession();
 };
 
 void CivSequenceGateTest::deliversInOrder()
@@ -117,6 +118,20 @@ void CivSequenceGateTest::survivesSeededLossDuplicateAndReorderSoak()
     QCOMPARE(gate.diagnostics().duplicatesSuppressed, injectedDuplicates);
     QVERIFY(gate.diagnostics().reordered > 0);
     QVERIFY(gate.diagnostics().highWaterMark <= CivSequenceGate::kRecentSequenceWindow);
+}
+
+void CivSequenceGateTest::resetStartsIndependentSession()
+{
+    CivSequenceGate gate;
+    QCOMPARE(gate.accept(42, QByteArrayLiteral("old-session"), 0).payloads.size(), 1);
+    QVERIFY(gate.accept(42, QByteArrayLiteral("duplicate"), 1).payloads.isEmpty());
+
+    gate.reset();
+
+    QCOMPARE(gate.diagnostics().delivered, quint64(0));
+    QCOMPARE(gate.diagnostics().duplicatesSuppressed, quint64(0));
+    QCOMPARE(gate.accept(42, QByteArrayLiteral("new-session"), 0).payloads,
+             QVector<QByteArray>({QByteArrayLiteral("new-session")}));
 }
 
 QTEST_GUILESS_MAIN(CivSequenceGateTest)

@@ -52,6 +52,7 @@ class CommanderCodecTest : public QObject
     void pacesInteractiveConfirmationAfterSet();
     void reportsMeterTransmissionAtWireDispatch();
     void survivesCombinedTransportAndSchedulerFaultSoak();
+    void sessionResetCancelsTransactionalAndScopeState();
 
   private:
     Commander m_commander;
@@ -400,6 +401,52 @@ void CommanderCodecTest::survivesCombinedTransportAndSchedulerFaultSoak()
     QVERIFY(gate.diagnostics().duplicatesSuppressed > 0);
     QVERIFY(gate.diagnostics().reordered > 0);
     QVERIFY(gate.diagnostics().highWaterMark <= CivSequenceGate::kRecentSequenceWindow);
+}
+
+void CommanderCodecTest::sessionResetCancelsTransactionalAndScopeState()
+{
+    m_commander.rememberPendingReply(funcFreqGet, 1);
+    m_commander.m_deferredReplyReads.append({funcModeGet, 1});
+    m_commander.m_replyFamilyDrains.append({funcFreqGet, 5000});
+    m_commander.m_mainSubExchangeQueued = true;
+    m_commander.m_mainSubExchangeConfirmationPending = true;
+    m_commander.scheduleInteractiveAction(funcRfGain, 1, []() {});
+    m_commander.mainScopeData.valid = true;
+    m_commander.mainScopeData.data = QByteArrayLiteral("main-old-session");
+    m_commander.subScopeData.valid = true;
+    m_commander.subScopeData.data = QByteArrayLiteral("sub-old-session");
+    m_commander.m_scopeAssemblyClocks[0].start();
+    m_commander.m_scopeAssemblyClocks[1].start();
+    m_commander.m_expectedScopeSequences[0] = 2;
+    m_commander.m_expectedScopeSequences[1] = 3;
+
+    m_commander.shutdownComm();
+
+    QVERIFY(m_commander.m_pendingReplies.isEmpty());
+    QVERIFY(m_commander.m_deferredReplyReads.isEmpty());
+    QVERIFY(m_commander.m_replyFamilyDrains.isEmpty());
+    QVERIFY(m_commander.m_scheduledCommands.isEmpty());
+    QVERIFY(!m_commander.m_mainSubExchangeQueued);
+    QVERIFY(!m_commander.m_mainSubExchangeConfirmationPending);
+    QVERIFY(!m_commander.mainScopeData.valid);
+    QVERIFY(m_commander.mainScopeData.data.isEmpty());
+    QVERIFY(!m_commander.subScopeData.valid);
+    QVERIFY(m_commander.subScopeData.data.isEmpty());
+    QVERIFY(!m_commander.m_scopeAssemblyClocks[0].isValid());
+    QVERIFY(!m_commander.m_scopeAssemblyClocks[1].isValid());
+    QCOMPARE(m_commander.m_expectedScopeSequences[0], quint8(0));
+    QCOMPARE(m_commander.m_expectedScopeSequences[1], quint8(0));
+    QCOMPARE(m_commander.queue->diagnostics().depth, qsizetype(0));
+
+    // A fresh session starts with independent diagnostics and no state from
+    // the cancelled transaction generation.
+    m_commander.m_shutdownComplete = false;
+    m_commander.commonSetup();
+    QCOMPARE(m_commander.correlationDiagnostics().pendingReplies, qsizetype(0));
+    QCOMPARE(m_commander.schedulerDiagnostics().queuedCommands, qsizetype(0));
+    QCOMPARE(m_commander.schedulerDiagnostics().highWaterMark, qsizetype(0));
+    QVERIFY(!m_commander.mainScopeData.valid);
+    QVERIFY(!m_commander.subScopeData.valid);
 }
 
 void CommanderCodecTest::correlatesEquivalentFrequencyAndModeReplyCommands()
