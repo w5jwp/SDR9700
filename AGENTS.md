@@ -87,6 +87,10 @@ cppcheck --enable=all --inconclusive --std=c++20 \
   -I src -i src/build src
 ```
 
+Use cppcheck 2.21.0 for this command. Linux CI builds that exact upstream
+release from its checksum-verified source archive; developers must not use a
+different analyzer version when adding or removing suppressions.
+
 Do not scan `src/build` with cppcheck. It contains generated CMake, Qt MOC,
 and resource files, which wastes review time and obscures source findings.
 The command suppresses only missing external/include-model details and analyzer

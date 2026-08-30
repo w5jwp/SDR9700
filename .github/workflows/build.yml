@@ -26,9 +26,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends \
             build-essential cmake ninja-build pkg-config \
-            clang-format-23 cppcheck \
+            clang-format-23 \
             qt6-base-dev qt6-multimedia-dev libssl-dev libopus-dev \
             libspeexdsp-dev libxkbcommon-dev libeigen3-dev libhidapi-dev
+      - name: Build cppcheck 2.21.0
+        run: |
+          wget -q https://github.com/cppcheck-opensource/cppcheck/archive/refs/tags/2.21.0.tar.gz \
+            -O "$RUNNER_TEMP/cppcheck-2.21.0.tar.gz"
+          echo "f028ff75ca5372738f3737c8b3e8611426a6526b6aea2ef01301ab0f5902f044  $RUNNER_TEMP/cppcheck-2.21.0.tar.gz" \
+            | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/cppcheck-2.21.0.tar.gz" -C "$RUNNER_TEMP"
+          cmake -S "$RUNNER_TEMP/cppcheck-2.21.0" -B "$RUNNER_TEMP/cppcheck-build" \
+            -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --build "$RUNNER_TEMP/cppcheck-build" -j2
+          echo "$RUNNER_TEMP/cppcheck-build/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/cppcheck-build/bin/cppcheck" --version | grep -F "Cppcheck 2.21.0"
       - name: Build
         run: make release
       - name: Verify formatting
