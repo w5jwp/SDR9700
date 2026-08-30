@@ -13,6 +13,7 @@
 #include "TransmitSafetyPolicy.h"
 #include "PttConfirmationPolicy.h"
 #include "TransmitConfigurationPolicy.h"
+#include "SameBandRefreshPolicy.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -118,6 +119,8 @@ class RadioBackend : public IRadioBackend
     void handleTransmitSwr(double swr);
     static void selectMainVfoForCommand(Commander* commandSession);
     static void requestSubVfoStateForCommand(Commander* commandSession);
+    static void requestVfoFrequenciesForCommand(Commander* commandSession);
+    void observeVfoFrequency(quint64 hz, uchar receiver);
     static void selectMemoryBandForCommand(Commander* commandSession, quint16 group);
     static void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
                                        bool prepareBand = true);
@@ -185,6 +188,8 @@ class RadioBackend : public IRadioBackend
     QElapsedTimer m_mainSubExchangeClock;
     int m_currentBandKey{-1};
     quint64 m_currentMainFrequencyHz{0};
+    quint64 m_currentSubFrequencyHz{0};
+    sdr9700::SameBandRefreshPolicy m_sameBandRefreshPolicy;
     Vfo m_activeVfo{Vfo::Main};
     bool m_dualWatchEnabled{false};
     bool m_mainSubExchangePending{false};

@@ -34,6 +34,7 @@ class CommanderCodecTest : public QObject
     void correlatesEquivalentFrequencyAndModeReplyCommands();
     void discardsPendingRepliesByCanonicalFamily();
     void serializesReceiverlessReadsByCanonicalFamily();
+    void doesNotDeferMainSubSwapActions();
     void discardsLateReplyDuringFamilyDrain();
     void adaptsReplyDrainWindowsToMeasuredRtt();
     void rejectsShortSpectrumFrames();
@@ -60,6 +61,22 @@ void CommanderCodecTest::init()
     sdr9700::populateRadioCapabilities(m_commander.radioCaps);
     m_commander.haveRadioCaps = true;
     m_commander.setCIVAddr(0xA2);
+}
+
+void CommanderCodecTest::doesNotDeferMainSubSwapActions()
+{
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+
+    m_commander.receiveCommand(funcVFOSwapMS, QVariant(), 0);
+    m_commander.receiveCommand(funcVFOSwapMS, QVariant(), 0);
+
+    QCOMPARE(wireSpy.count(), 2);
+    for (const QList<QVariant>& emission : wireSpy)
+    {
+        QVERIFY(emission.at(0).toByteArray().contains(QByteArray::fromHex("07b0")));
+    }
+    QCOMPARE(m_commander.m_pendingReplies.size(), 0);
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), 0);
 }
 
 void CommanderCodecTest::schedulerCoalescesAndBoundsReads()

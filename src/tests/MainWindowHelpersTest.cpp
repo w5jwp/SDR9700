@@ -79,6 +79,8 @@ void MainWindowHelpersTest::formatsRadioValues()
     QCOMPARE(offsetModeLabel(dmSimplex, 0), QStringLiteral("SIMPLEX"));
     QCOMPARE(offsetModeLabel(dmDupMinus, 600000), QStringLiteral("-0.600"));
     QCOMPARE(offsetModeLabel(dmDupPlus, 5000000), QStringLiteral("+5.000"));
+    QCOMPARE(offsetModeLabel(dmDupMinus, 0), QStringLiteral("SIMPLEX"));
+    QCOMPARE(offsetModeLabel(dmDupPlus, 0), QStringLiteral("SIMPLEX"));
     QCOMPARE(toneFrequencyLabel(1000), QStringLiteral("100.0"));
     QCOMPARE(dtcsCodeLabel(23), QStringLiteral("023"));
     QCOMPARE(toneOptionLabel(ratrTN), QStringLiteral("TONE"));

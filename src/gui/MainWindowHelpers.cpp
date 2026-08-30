@@ -356,6 +356,11 @@ QString formatOffsetMhz(quint64 hz)
 
 QString offsetModeLabel(duplexMode_t mode, quint64 offsetHz)
 {
+    if (offsetHz == 0 && (mode == dmDupMinus || mode == dmDupPlus))
+    {
+        return QStringLiteral("SIMPLEX");
+    }
+
     switch (mode)
     {
     case dmDupMinus:

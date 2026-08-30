@@ -1,5 +1,6 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "IRadioBackend.h"
+#include "SameBandRefreshPolicy.h"
 #include "VfoReceiverCommandRoute.h"
 #include "VfoModel.h"
 
@@ -124,7 +125,26 @@ class VfoBackendTest : public QObject
     void alternatesInactiveMeterSamplesDuringDualWatch();
     void suppressesReceiverMeterPollingDuringContextTransitions();
     void survivesRepeatedExchangeAndTunePressure();
+    void sameBandRefreshIsEdgeTriggered();
 };
+
+void VfoBackendTest::sameBandRefreshIsEdgeTriggered()
+{
+    sdr9700::SameBandRefreshPolicy policy;
+
+    QVERIFY(!policy.observe(0, 0));
+    QVERIFY(!policy.observe(144200000, 432100000));
+    QVERIFY(!policy.observe(144200000, 145000000));
+    QVERIFY(policy.observe(144200000, 144200000));
+    QVERIFY(!policy.observe(144200000, 144200000));
+
+    QVERIFY(!policy.observe(432100000, 145100000));
+    QVERIFY(!policy.observe(432100000, 433000000));
+    QVERIFY(policy.observe(432100000, 432100000));
+
+    policy.reset();
+    QVERIFY(policy.observe(1296100000, 1296100000));
+}
 
 void VfoBackendTest::radioBackedRequestsWaitForConfirmation()
 {

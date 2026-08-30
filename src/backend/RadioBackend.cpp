@@ -222,6 +222,11 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_radioRouter, &RadioRouter::radioValueUpdated, this,
             [this](Funcs func, const QVariant& value, uchar receiver)
             {
+                if (func == funcFreqGet || func == funcFreqSet || func == funcSelectedFreq ||
+                    func == funcUnselectedFreq)
+                {
+                    observeVfoFrequency(value.value<Frequency>().Hz, receiver);
+                }
                 if (func == funcVFOBandMS && receiver == 0)
                 {
                     m_activeVfo = value.toBool() ? Vfo::Sub : Vfo::Main;
@@ -946,6 +951,8 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_initialStateRequested = false;
     m_currentBandKey = -1;
     m_currentMainFrequencyHz = 0;
+    m_currentSubFrequencyHz = 0;
+    m_sameBandRefreshPolicy.reset();
     m_currentDuplexMode = dmSimplex;
     m_currentRepeaterOffsetHz = 0;
     m_transmitConfiguration.reset();
@@ -988,8 +995,8 @@ void RadioBackend::setFrequencyHz(quint64 hz)
                 selectMainVfoForCommand(commandSession);
             }
             commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(f), 0);
-            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
-            commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
+            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+            commandSession->receiveCommand(funcModeGet, QVariant(), 0);
         });
 }
 
@@ -1023,7 +1030,7 @@ void RadioBackend::setMode(const QString& mode)
                 selectMainVfoForCommand(commandSession);
             }
             commandSession->receiveCommandNoReadback(funcModeSet, QVariant::fromValue(mi), 0);
-            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
             commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
         });
 }
@@ -1122,6 +1129,12 @@ void RadioBackend::selectVfo(Vfo vfo)
 
 void RadioBackend::exchangeMainSub()
 {
+    if (m_mainSubExchangePending)
+    {
+        qWarning(logRadio()).noquote() << "Ignoring MAIN/SUB exchange while previous exchange is pending";
+        return;
+    }
+
     m_meterPollTuneHoldoff.restart();
     m_mainSubExchangeClock.restart();
     qInfo(logRadio()).noquote() << "MAIN/SUB exchange requested";
@@ -1139,8 +1152,8 @@ void RadioBackend::exchangeMainSub()
             // this command rather than assuming 07 B0 exchanges them.
             commandSession->receiveCommand(funcVFOSwapMS, QVariant(), 0);
             commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
-            commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
             requestSubVfoStateForCommand(commandSession);
             // Suppress the setters' asynchronous CachingQueue readbacks and
             // issue the completion reads explicitly below. This preserves a
@@ -1151,7 +1164,7 @@ void RadioBackend::exchangeMainSub()
             // pre-exchange band and leaving the display blank for seconds.
             commandSession->receiveCommandNoReadback(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
             commandSession->receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
-            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
             commandSession->receiveCommand(funcVFOBandMS, QVariant(), 0);
             commandSession->receiveCommand(funcScopeMainSub, QVariant(), 0);
         });
@@ -1532,6 +1545,61 @@ void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
         commandSession->receiveCommand(func, QVariant(), 1);
     }
     commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+}
+
+void RadioBackend::requestVfoFrequenciesForCommand(Commander* commandSession)
+{
+    if (!commandSession)
+    {
+        return;
+    }
+
+    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+    commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
+    commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
+    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+}
+
+void RadioBackend::observeVfoFrequency(quint64 hz, uchar receiver)
+{
+    if (hz == 0)
+    {
+        return;
+    }
+
+    if (receiver == 0)
+    {
+        m_currentMainFrequencyHz = hz;
+    }
+    else if (receiver == 1)
+    {
+        m_currentSubFrequencyHz = hz;
+    }
+    else
+    {
+        return;
+    }
+
+    // An exchange necessarily passes through a transient where one cached
+    // frequency has moved and the other has not. Do not mistake that expected
+    // intermediate state for duplicated VFO contents or inject another
+    // receiver-selection sequence into the exchange. The first frequency
+    // report after the exchange settles evaluates the pair normally.
+    if (m_mainSubExchangePending)
+    {
+        m_sameBandRefreshPolicy.reset();
+        return;
+    }
+
+    if (!m_sameBandRefreshPolicy.observe(m_currentMainFrequencyHz, m_currentSubFrequencyHz))
+    {
+        return;
+    }
+
+    qWarning(logRadio()).noquote() << "Duplicate VFO frequency detected; refreshing frequencies main_hz="
+                                   << m_currentMainFrequencyHz << "sub_hz=" << m_currentSubFrequencyHz;
+    invokeOnCurrentCommander([](Commander* commandSession) { requestVfoFrequenciesForCommand(commandSession); });
 }
 
 void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16 group)

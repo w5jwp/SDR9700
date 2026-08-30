@@ -124,6 +124,7 @@ void RadioRouterTest::routesOnlyMainReceiverFrequencyAndMode()
     QCOMPARE(valueSpy.count(), 1);
     QCOMPARE(valueSpy.at(0).at(2).toUInt(), uint(1));
     router.route(CacheItem(funcUnselectedFreq, QVariant::fromValue(frequency), 0));
+    QCOMPARE(valueSpy.count(), 1);
     QCOMPARE(frequencySpy.count(), 0);
     router.route(CacheItem(funcSelectedFreq, QVariant::fromValue(frequency), 0));
     QCOMPARE(frequencySpy.count(), 1);
@@ -132,6 +133,9 @@ void RadioRouterTest::routesOnlyMainReceiverFrequencyAndMode()
     ModeInfo mode;
     mode.mk = modeFM;
     mode.filter = 2;
+    router.route(CacheItem(funcUnselectedMode, QVariant::fromValue(mode), 0));
+    QCOMPARE(valueSpy.count(), 2);
+    QCOMPARE(modeSpy.count(), 0);
     router.route(CacheItem(funcSelectedMode, QVariant::fromValue(mode), 0));
     QCOMPARE(modeSpy.count(), 1);
     QCOMPARE(modeSpy.at(0).at(0).toString(), QStringLiteral("FM"));

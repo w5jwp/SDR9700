@@ -50,10 +50,23 @@ bool repliesMatch(Funcs pending, Funcs incoming)
     return canonicalReplyFunc(pending) == canonicalReplyFunc(incoming);
 }
 
-bool replyIdentifiesReceiver(Funcs func)
+bool replyDoesNotRequireReceiverCorrelation(Funcs func)
 {
-    return func == funcSelectedFreq || func == funcSelectedMode || func == funcUnselectedFreq ||
-           func == funcUnselectedMode;
+    switch (func)
+    {
+    case funcSelectedFreq:
+    case funcSelectedMode:
+    case funcUnselectedFreq:
+    case funcUnselectedMode:
+        // The opcode identifies selected versus unselected receiver state.
+        return true;
+    case funcVFOBandMS:
+    case funcScopeMainSub:
+        // These are global MAIN/SUB state values, not receiver-scoped reads.
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool commandExpectsCorrelatedReply(Funcs func)
@@ -62,11 +75,13 @@ bool commandExpectsCorrelatedReply(Funcs func)
     {
     case funcVFOASelect:
     case funcVFOBSelect:
+    case funcVFOSwapMS:
     case funcVFOMainSelect:
     case funcVFOSubSelect:
-        // The IC-9700 does not provide a useful value reply for VFO-select.
-        // These commands update local routing state and must not occupy the
-        // receiver-less reply gate until an unrelated frame expires them.
+        // The IC-9700 does not provide a useful value reply for VFO-select or
+        // MAIN/SUB swap actions. These commands must not occupy the
+        // receiver-less reply gate until an unrelated frame expires them, and
+        // repeated swaps must never be coalesced into one delayed action.
         return false;
     default:
         return true;
@@ -1778,7 +1793,7 @@ void Commander::parseCommand(FrameOrigin origin)
     }
 
     const Funcs correlationFunc = func;
-    const bool explicitlyIdentifiesReceiver = radioCaps.hasCommand29 || replyIdentifiesReceiver(func);
+    const bool explicitlyIdentifiesReceiver = radioCaps.hasCommand29 || replyDoesNotRequireReceiverCorrelation(func);
     bool pendingCorrelationFound = false;
 
     // When CI-V 29h is unavailable, most IC-9700 replies do not identify MAIN
@@ -4061,7 +4076,7 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
     if (cmd.cmd != funcNone)
     {
         if (!value.isValid() && cmd.getCmd && commandExpectsCorrelatedReply(func) && !radioCaps.hasCommand29 &&
-            !replyIdentifiesReceiver(func))
+            !replyDoesNotRequireReceiverCorrelation(func))
         {
             discardExpiredPendingReplies();
             if (deferReplyReadIfBlocked(func, receiver))
@@ -4107,7 +4122,7 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
             }
         }
         if (!value.isValid() && cmd.getCmd && commandExpectsCorrelatedReply(func) && !radioCaps.hasCommand29 &&
-            !replyIdentifiesReceiver(func))
+            !replyDoesNotRequireReceiverCorrelation(func))
         {
             rememberPendingReply(func, receiver);
         }
