@@ -1,6 +1,7 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "AppPaths.h"
 #include "AppSettings.h"
+#include "MemoryDatabase.h"
 #include "RadioProfile.h"
 
 #include <QDir>
@@ -36,12 +37,14 @@ void SettingsProfileTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
     QDir(sdr9700::configDirectory()).removeRecursively();
+    QDir(sdr9700::dataDirectory()).removeRecursively();
     RadioProfileStore::instance().load();
 }
 
 void SettingsProfileTest::cleanupTestCase()
 {
     QDir(sdr9700::configDirectory()).removeRecursively();
+    QDir(sdr9700::dataDirectory()).removeRecursively();
 }
 
 QJsonObject SettingsProfileTest::settingsDocument()
@@ -221,6 +224,12 @@ void SettingsProfileTest::managesProfileLifecycleAndLastSelection()
     QVERIFY(store.setLastProfileId(second.id));
     QCOMPARE(store.lastProfileId(), second.id);
 
+    MemoryDatabase memoryDatabase;
+    QString databaseError;
+    QVERIFY2(memoryDatabase.open(&databaseError), qPrintable(databaseError));
+    QVERIFY2(memoryDatabase.applySyncSnapshot(second.id, {MemoryType{}}, 1, &databaseError), qPrintable(databaseError));
+    QCOMPARE(memoryDatabase.memories(second.id, &databaseError).size(), 1);
+
     second.name = QStringLiteral("Updated");
     second.port = 50003;
     QVERIFY(store.updateProfile(second));
@@ -233,6 +242,8 @@ void SettingsProfileTest::managesProfileLifecycleAndLastSelection()
     QVERIFY(store.removeProfile(second.id));
     QVERIFY(store.profileById(second.id) == nullptr);
     QVERIFY(store.lastProfileId().isNull());
+    QVERIFY(memoryDatabase.memories(second.id, &databaseError).isEmpty());
+    QVERIFY(!memoryDatabase.syncState(second.id, &databaseError).completedAt.isValid());
     QVERIFY(store.removeProfile(QUuid::createUuid()));
 
     store.load();

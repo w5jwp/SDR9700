@@ -446,3 +446,65 @@ MemoryDatabaseSyncState MemoryDatabase::syncState(const QUuid& profileId, QStrin
     }
     return state;
 }
+
+bool MemoryDatabase::removeProfile(const QUuid& profileId, QString* error)
+{
+    if (!isOpen() || profileId.isNull())
+    {
+        setError(error, QStringLiteral("The memory database or radio profile is not available."));
+        return false;
+    }
+    if (!m_database.transaction())
+    {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+    auto rollbackWithError = [&](const QSqlError& sqlError)
+    {
+        const QString operationError = sqlError.text();
+        if (!m_database.rollback())
+        {
+            setError(error, QStringLiteral("%1; profile-cache rollback also failed: %2")
+                                .arg(operationError, m_database.lastError().text()));
+            return false;
+        }
+        setError(error, operationError);
+        return false;
+    };
+
+    const QString profileKey = profileId.toString(QUuid::WithoutBraces);
+    QSqlQuery removeMemories(m_database);
+    if (!removeMemories.prepare(QStringLiteral("DELETE FROM radio_memories WHERE profile_id = ?")))
+    {
+        return rollbackWithError(removeMemories.lastError());
+    }
+    removeMemories.addBindValue(profileKey);
+    if (!removeMemories.exec())
+    {
+        return rollbackWithError(removeMemories.lastError());
+    }
+
+    QSqlQuery removeSyncState(m_database);
+    if (!removeSyncState.prepare(QStringLiteral("DELETE FROM memory_sync_state WHERE profile_id = ?")))
+    {
+        return rollbackWithError(removeSyncState.lastError());
+    }
+    removeSyncState.addBindValue(profileKey);
+    if (!removeSyncState.exec())
+    {
+        return rollbackWithError(removeSyncState.lastError());
+    }
+    if (!m_database.commit())
+    {
+        const QString commitError = m_database.lastError().text();
+        if (!m_database.rollback())
+        {
+            setError(error, QStringLiteral("%1; profile-cache rollback also failed: %2")
+                                .arg(commitError, m_database.lastError().text()));
+            return false;
+        }
+        setError(error, commitError);
+        return false;
+    }
+    return true;
+}

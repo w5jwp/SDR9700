@@ -2,6 +2,7 @@
 #include "AppPaths.h"
 #include "AppSettings.h"
 #include "LogCategories.h"
+#include "MemoryDatabase.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -440,6 +441,19 @@ bool RadioProfileStore::removeProfile(const QUuid& id)
         m_unreadablePasswords = previousUnreadablePasswords;
         m_lastProfileId = previousLastProfileId;
         return false;
+    }
+
+    // The profile settings are the primary record. Once their durable removal
+    // succeeds, remove the associated radio-memory mirror and sync metadata as
+    // one SQLite transaction. Cache cleanup is deliberately best-effort: an
+    // unavailable database must not resurrect or prevent deletion of a radio
+    // profile, but the failure remains visible for diagnosis.
+    MemoryDatabase memoryDatabase;
+    QString databaseError;
+    if (!memoryDatabase.open(&databaseError) || !memoryDatabase.removeProfile(id, &databaseError))
+    {
+        qWarning(logSystem()).noquote() << "Could not remove cached memories for deleted radio profile"
+                                        << id.toString(QUuid::WithoutBraces) << ':' << databaseError;
     }
     return true;
 }

@@ -15,6 +15,7 @@ class MemoryDatabaseTest : public QObject
     void completeNativePayloadRoundTrips();
     void partialSnapshotPreservesUnansweredSlotsAtomically();
     void completeSnapshotHandlesFullRadioVolume();
+    void profileRemovalIsIsolatedAndBounded();
 };
 
 namespace
@@ -309,6 +310,43 @@ void MemoryDatabaseTest::completeSnapshotHandlesFullRadioVolume()
     QCOMPARE(state.expectedSlotCount, 297);
     QCOMPARE(state.receivedSlotCount, 297);
     QVERIFY(state.complete);
+}
+
+void MemoryDatabaseTest::profileRemovalIsIsolatedAndBounded()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    MemoryDatabase database(directory.filePath(QStringLiteral("memories.sqlite3")));
+    QString error;
+    QVERIFY2(database.open(&error), qPrintable(error));
+    const QUuid retainedProfile = QUuid::createUuid();
+    QVERIFY(database.applySyncSnapshot(retainedProfile, {testMemory(1, 1, 145000000)}, 1, &error));
+
+    // Repeated profile creation/removal exercises both tables and ensures the
+    // cleanup cost and retained database size remain bounded by live profiles,
+    // not by the number of profiles ever configured on this installation.
+    for (int profileIndex = 0; profileIndex < 200; ++profileIndex)
+    {
+        const QUuid removedProfile = QUuid::createUuid();
+        QVector<MemoryType> replies;
+        replies.reserve(297);
+        for (quint16 group = 1; group <= 3; ++group)
+        {
+            for (quint16 channel = 1; channel <= 99; ++channel)
+            {
+                replies.append(testMemory(group, channel, 144000000ULL + channel));
+            }
+        }
+        QVERIFY2(database.applySyncSnapshot(removedProfile, replies, replies.size(), &error), qPrintable(error));
+        QCOMPARE(database.memories(removedProfile, &error).size(), 297);
+        QVERIFY(database.syncState(removedProfile, &error).complete);
+        QVERIFY2(database.removeProfile(removedProfile, &error), qPrintable(error));
+        QVERIFY(database.memories(removedProfile, &error).isEmpty());
+        QVERIFY(!database.syncState(removedProfile, &error).completedAt.isValid());
+    }
+
+    QCOMPARE(database.memories(retainedProfile, &error).size(), 1);
+    QVERIFY(database.syncState(retainedProfile, &error).complete);
 }
 
 QTEST_GUILESS_MAIN(MemoryDatabaseTest)

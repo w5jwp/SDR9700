@@ -43,6 +43,7 @@ class MemoryDatabase
     bool applySyncSnapshot(const QUuid& profileId, const QVector<MemoryType>& replies, int expectedSlotCount,
                            QString* error = nullptr);
     MemoryDatabaseSyncState syncState(const QUuid& profileId, QString* error = nullptr) const;
+    bool removeProfile(const QUuid& profileId, QString* error = nullptr);
 
   private:
     bool ensureSchema(QString* error);
