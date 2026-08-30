@@ -149,9 +149,12 @@ Linux: ~/.config/SDR9700/sdr9700.json
 macOS: ~/Library/Preferences/SDR9700/sdr9700.json
 ```
 
-Memory records are synchronized with the IC-9700 and are not persisted in a
-separate application-owned memory file. CSV import/export is the supported
-offline interchange format.
+Memory records are synchronized with the IC-9700 and mirrored per radio profile
+in an application-owned SQLite database beneath
+`QStandardPaths::GenericDataLocation`. The database is a last-known cache, not
+an independent source of radio truth: live radio replies remain authoritative
+for slot availability and write verification. CSV import/export is the
+supported offline interchange format.
 
 The settings file is JSON. Boolean settings are stored as `"True"` / `"False"`
 strings for compatibility with existing code. Use camel-case keys, with

@@ -671,6 +671,7 @@ void MainWindow::onConnectToProfile(const RadioProfile& profile)
 {
     m_connectedAudioOutputChannels = qBound(1, AppSettings::instance().value("audioOutputChannels", 2).toInt(), 2);
     m_pendingProfileId = profile.id;
+    m_memoryController->setRadioProfileId(profile.id);
     m_radioHost = profile.host;
     m_radioPort = profile.port;
     m_radioUsername = profile.username;

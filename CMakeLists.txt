@@ -64,6 +64,7 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS
     Network
     Multimedia
     MultimediaWidgets
+    Sql
 )
 if(BUILD_TESTING)
     find_package(Qt6 6.2 REQUIRED COMPONENTS Test)

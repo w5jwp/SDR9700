@@ -3,8 +3,10 @@
 #include <QObject>
 #include <QHash>
 #include <QString>
+#include <QUuid>
 #include <QVector>
 #include <functional>
+#include <memory>
 
 #include "MemoryStore.h"
 #include "Types.h"
@@ -13,6 +15,7 @@ class MainWindow;
 class MemoryCsvController;
 class MemoryEditorController;
 class MemoryEditorForm;
+class MemoryDatabase;
 class MemorySyncController;
 class MemorySelectionController;
 class MemoryViewController;
@@ -25,6 +28,7 @@ class MemoryController : public QObject
 
   public:
     explicit MemoryController(MainWindow* window);
+    ~MemoryController() override;
 
     void buildMemoryWindow();
     void showMemoryWindow();
@@ -44,6 +48,7 @@ class MemoryController : public QObject
     bool exportRadioMemories();
     void importRadioMemories();
     bool initialMemorySyncComplete() const;
+    void setRadioProfileId(const QUuid& profileId);
 
     bool memoryRefreshInProgress() const;
     bool memoryOperationInProgress() const;
@@ -95,5 +100,7 @@ class MemoryController : public QObject
     MemorySelectionController* m_memorySelectionController{nullptr};
     MemoryViewController* m_memoryViewController{nullptr};
     MemoryWriteController* m_memoryWriteController{nullptr};
+    std::unique_ptr<MemoryDatabase> m_memoryDatabase;
+    QUuid m_radioProfileId;
     QHash<quint32, MemoryType> m_radioMemoriesByKey;
 };

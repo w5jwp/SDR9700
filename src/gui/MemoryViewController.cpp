@@ -172,10 +172,12 @@ void MemoryViewController::buildMemoryWindow()
 
     const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(panel);
     m_owner->m_window->m_memoryCountLabel = new QLabel(panel);
+    m_owner->m_window->m_memoryCountLabel->setObjectName(QStringLiteral("memoryManagerStatusLabel"));
     m_owner->m_window->m_memoryCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_owner->m_window->m_memoryCountLabel->setContentsMargins(kMemoryFooterTextLeftPadding, 0, 0, 0);
     m_owner->m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
     m_owner->m_window->m_memoryProgressBar = new QProgressBar(panel);
+    m_owner->m_window->m_memoryProgressBar->setObjectName(QStringLiteral("memoryManagerProgressBar"));
     m_owner->m_window->m_memoryProgressBar->setFixedWidth(220);
     m_owner->m_window->m_memoryProgressBar->setTextVisible(false);
     m_owner->m_window->m_memoryProgressBar->setVisible(false);

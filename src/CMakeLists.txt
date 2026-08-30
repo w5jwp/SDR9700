@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Multimedia Sql)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 find_package(PkgConfig REQUIRED)
 
@@ -61,6 +61,8 @@ set(SDR9700_CORE_SOURCES
     core/Ax25Decoder.h
     core/Ax25Decoder.cpp
     core/AppPaths.cpp
+    core/MemoryDatabase.h
+    core/MemoryDatabase.cpp
     core/LogCategories.cpp
     core/LoggingConfiguration.h
     core/LoggingConfiguration.cpp
@@ -106,6 +108,7 @@ target_link_libraries(SDR9700_core PUBLIC
     Qt6::Core
     Qt6::Network
     Qt6::Multimedia
+    Qt6::Sql
     OpenSSL::Crypto
     PkgConfig::OPUS
     PkgConfig::SPEEXDSP
@@ -365,6 +368,10 @@ if(BUILD_TESTING)
         Qt6::Test
     )
     add_test(NAME MemoryStoreTest COMMAND MemoryStoreTest)
+
+    add_executable(MemoryDatabaseTest tests/MemoryDatabaseTest.cpp)
+    target_link_libraries(MemoryDatabaseTest PRIVATE SDR9700_core Qt6::Test)
+    add_test(NAME MemoryDatabaseTest COMMAND MemoryDatabaseTest)
 
     add_executable(MainWindowHelpersTest
         tests/MainWindowHelpersTest.cpp

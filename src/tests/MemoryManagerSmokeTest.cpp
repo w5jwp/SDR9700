@@ -4,6 +4,8 @@
 #include "AppInfo.h"
 #include "AppPaths.h"
 #include "MemoryEditorPolicy.h"
+#include "MemoryController.h"
+#include "MemoryDatabase.h"
 #include "RadioChooserDialog.h"
 #include "RadioCommandController.h"
 #include "RadioProfile.h"
@@ -25,6 +27,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QPointer>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QMenu>
 #include <QScrollBar>
@@ -44,6 +47,7 @@ class MemoryManagerSmokeTest : public QObject
     void initTestCase();
     void newInstallationCanAddRadioProfile();
     void constructsMemoryManagerUi();
+    void memoryManagerShowsCachedVerificationAndLiveSyncProgress();
     void mainWindowRetainsFixedFramelessDesign();
     void fileMenuTracksRadioConnection();
     void selectorButtonsAvoidDynamicStyleSheets();
@@ -57,6 +61,64 @@ void MemoryManagerSmokeTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
     QVERIFY(QDir(sdr9700::configDirectory()).removeRecursively() || !QDir(sdr9700::configDirectory()).exists());
+    QVERIFY(QDir(sdr9700::dataDirectory()).removeRecursively() || !QDir(sdr9700::dataDirectory()).exists());
+}
+
+void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProgress()
+{
+    const QUuid profileId = QUuid::createUuid();
+    MemoryType storedMemory;
+    storedMemory.group = 1;
+    storedMemory.channel = 1;
+    storedMemory.frequency.Hz = 145000000;
+    std::copy_n("DATABASE TEST", 13, storedMemory.name);
+
+    MemoryDatabase database;
+    QString databaseError;
+    QVERIFY2(database.open(&databaseError), qPrintable(databaseError));
+    QVERIFY2(database.store(profileId, storedMemory, &databaseError), qPrintable(databaseError));
+
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+    auto* controller = window.findChild<MemoryController*>();
+    auto* statusLabel = window.findChild<QLabel*>(QStringLiteral("memoryManagerStatusLabel"));
+    auto* progressBar = window.findChild<QProgressBar*>(QStringLiteral("memoryManagerProgressBar"));
+    QVERIFY(controller != nullptr);
+    QVERIFY(statusLabel != nullptr);
+    QVERIFY(progressBar != nullptr);
+
+    controller->setRadioProfileId(profileId);
+    QCOMPARE(statusLabel->text(), QStringLiteral("Waiting to verify 1 cached memory with the radio (0/297)"));
+    QVERIFY(!progressBar->isHidden());
+    QCOMPARE(progressBar->value(), 0);
+    QCOMPARE(progressBar->maximum(), 297);
+
+    QVERIFY(QMetaObject::invokeMethod(&model, "onBackendConnected"));
+    QVERIFY(QMetaObject::invokeMethod(&model, "onBackendReadyChanged", Q_ARG(bool, true)));
+    QVERIFY(statusLabel->text().startsWith(QStringLiteral("Syncing 2M channel 001")));
+
+    // Exercise the complete 297-slot response volume rather than short-cutting
+    // controller state. The first stored response preserves the cached row;
+    // every other response authoritatively confirms an empty radio slot.
+    for (quint16 group = 1; group <= 3; ++group)
+    {
+        for (quint16 channel = 1; channel <= 99; ++channel)
+        {
+            MemoryType reply;
+            reply.group = group;
+            reply.channel = channel;
+            reply.del = true;
+            if (group == storedMemory.group && channel == storedMemory.channel)
+            {
+                reply = storedMemory;
+            }
+            model.radioMemoryReceived(reply);
+            QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
+        }
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 memory total"), 1000);
+    QVERIFY(progressBar->isHidden());
 }
 
 void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()

@@ -14,4 +14,14 @@ QString configDirectory()
     }
     return QDir(root).filePath(QStringLiteral("SDR9700"));
 }
+
+QString dataDirectory()
+{
+    QString root = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    if (root.isEmpty())
+    {
+        root = QDir::homePath() + QStringLiteral("/.local/share");
+    }
+    return QDir(root).filePath(QStringLiteral("SDR9700"));
+}
 } // namespace sdr9700

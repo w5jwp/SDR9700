@@ -1,5 +1,6 @@
 #include "MemoryController.h"
 #include "MemoryConstants.h"
+#include "MemoryDatabase.h"
 #include "MemoryRecordHelpers.h"
 
 #include "MainWindow.h"
@@ -22,8 +23,14 @@ using namespace sdr9700::ui::main_window;
 using namespace sdr9700::memory;
 
 
-MemoryController::MemoryController(MainWindow* window) : QObject(window), m_window(window)
+MemoryController::MemoryController(MainWindow* window)
+    : QObject(window), m_window(window), m_memoryDatabase(std::make_unique<MemoryDatabase>())
 {
+    QString databaseError;
+    if (!m_memoryDatabase->open(&databaseError))
+    {
+        qWarning(logGui()).noquote() << "Memory database unavailable:" << databaseError;
+    }
     m_memoryCsvController = new MemoryCsvController(this);
     m_memoryEditorController = new MemoryEditorController(this);
     m_memorySelectionController = new MemorySelectionController(this);
@@ -35,6 +42,55 @@ MemoryController::MemoryController(MainWindow* window) : QObject(window), m_wind
             Qt::QueuedConnection);
     connect(m_window->m_model, &RadioModel::readyChanged, m_memorySyncController,
             &MemorySyncController::handleRadioReadyChanged);
+}
+
+MemoryController::~MemoryController() = default;
+
+void MemoryController::setRadioProfileId(const QUuid& profileId)
+{
+    if (m_radioProfileId == profileId)
+    {
+        return;
+    }
+
+    m_radioProfileId = profileId;
+    m_radioMemoriesByKey.clear();
+    int cachedMemoryCount = 0;
+    if (m_memoryDatabase && m_memoryDatabase->isOpen() && !profileId.isNull())
+    {
+        QString databaseError;
+        const QVector<MemoryType> cached = m_memoryDatabase->memories(profileId, &databaseError);
+        if (!databaseError.isEmpty())
+        {
+            qWarning(logGui()).noquote() << "Could not load cached radio memories:" << databaseError;
+        }
+        else
+        {
+            for (const MemoryType& memory : cached)
+            {
+                if (radioMemoryIsStored(memory))
+                {
+                    m_radioMemoriesByKey.insert(radioMemoryKey(memory.group, memory.channel), memory);
+                }
+            }
+            cachedMemoryCount = m_radioMemoriesByKey.size();
+            qInfo(logGui()).noquote() << "Loaded" << cached.size() << "cached memories for radio profile"
+                                      << profileId.toString(QUuid::WithoutBraces);
+        }
+    }
+    // Profile selection precedes the radio-ready signal that starts the live
+    // 297-slot sweep. Preserve that distinction in Memory Manager instead of
+    // briefly presenting the cached row count as though synchronization had
+    // already completed. requestNextRadioMemory replaces this waiting state
+    // with exact group/channel progress as soon as the radio becomes ready.
+    if (!profileId.isNull())
+    {
+        setMemoryProgress(QStringLiteral("Waiting to verify %1 cached %2 with the radio")
+                              .arg(cachedMemoryCount)
+                              .arg(cachedMemoryCount == 1 ? QStringLiteral("memory") : QStringLiteral("memories")),
+                          0, kRadioMemorySyncTotal);
+    }
+    rebuildMemoryViews();
 }
 
 void MemoryController::forceRadioMemorySync()
@@ -138,6 +194,15 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
     if (radioMemoryIsStored(memory))
     {
         m_radioMemoriesByKey.insert(key, memory);
+        if (m_memoryDatabase && m_memoryDatabase->isOpen() && !m_radioProfileId.isNull())
+        {
+            QString databaseError;
+            if (!m_memoryDatabase->store(m_radioProfileId, memory, &databaseError))
+            {
+                qWarning(logGui()).noquote()
+                    << "Could not cache radio memory" << memory.group << memory.channel << ':' << databaseError;
+            }
+        }
         if (m_window->m_activeMemoryId == radioMemoryId(memory.group, memory.channel))
         {
             const MemoryRecord activeMemory = recordFromRadioMemory(memory);
@@ -157,6 +222,15 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
             }
         }
         m_radioMemoriesByKey.remove(key);
+        if (m_memoryDatabase && m_memoryDatabase->isOpen() && !m_radioProfileId.isNull())
+        {
+            QString databaseError;
+            if (!m_memoryDatabase->remove(m_radioProfileId, memory.group, memory.channel, &databaseError))
+            {
+                qWarning(logGui()).noquote()
+                    << "Could not remove cached radio memory" << memory.group << memory.channel << ':' << databaseError;
+            }
+        }
     }
     m_memorySyncController->handleRadioMemoryReceived(key);
     scheduleMemoryViewsRebuild();

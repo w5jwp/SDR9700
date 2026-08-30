@@ -97,7 +97,10 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
         m_initialSyncComplete = false;
         emit m_owner->initialMemorySyncChanged(false);
     }
-    m_owner->m_radioMemoriesByKey.clear();
+    // Preserve the last radio-confirmed snapshot for offline viewing and for a
+    // fast reconnect. m_receivedMemoryKeys is still cleared below, so cached
+    // rows cannot be mistaken for current-session proof that a slot is empty
+    // or used to bypass the normal radio write/readback verification.
     clearReceivedMemories();
     m_owner->rebuildMemoryViews();
 }
