@@ -72,12 +72,10 @@ class UdpHandler : public UdpBase
     void haveSetVolume(quint8 value);
     void haveNetworkStatus(networkStatus);
     void haveNetworkAudioLevels(networkAudioLevels);
-    void haveBaudRate(quint32 baudrate);
     void requestRadioSelection(QList<radio_cap_packet> radios);
     void setRadioUsage(quint8, bool admin, quint8 busy, QString name, QString mac);
     void streamReady();
     void sessionHeartbeat();
-    void shutdownFinished();
 
   private:
     void sendAreYouThere();

@@ -12,18 +12,18 @@ validated with live CI-V logs before being treated as final behavior.
 | Mode | `04`, `06` | VFO-specific by selected MAIN/SUB | Select target VFO, set/read mode, then restore TX side if needed. |
 | MAIN-only selected/unselected frequency | `25 00`, `25 01` | MAIN VFO A/B only, not SUB | Do not use for VFO B/SUB. The CI-V manual says SUB frequency cannot be set this way. |
 | MAIN-only selected/unselected mode | `26 00`, `26 01` | MAIN VFO A/B only, not SUB | Do not use for VFO B/SUB. The CI-V manual says SUB mode/filter cannot be set this way. |
-| VOL / AF gain | `14 01` | Inferred selected-side/VFO-specific | Should be target-VFO aware if live logs confirm independent MAIN/SUB volume behavior. |
-| RF gain | `14 02` | Inferred selected-side/VFO-specific | Should live under each VFO if confirmed independent. |
-| SQL | `14 03` | Inferred selected-side/VFO-specific | Should be target-VFO aware if confirmed independent. |
-| S-meter | `15 02` | Selected/active receiver read | Display on active/selected VFO unless SDR9700 adds alternating MAIN/SUB polling. |
-| Scope / Spectrum Scope | `27 xx`, especially `27 12` | Receiver-selectable, currently active-side UX | Current plan: Spectrum Scope follows TX/active VFO only. |
+| VOL / AF gain | `14 01` | Selected-side/VFO-specific | SDR9700 targets and caches the value independently for MAIN and SUB. |
+| RF gain | `14 02` | Selected-side/VFO-specific | SDR9700 targets and caches the value independently for MAIN and SUB. |
+| SQL | `14 03` | Selected-side/VFO-specific | SDR9700 targets and caches the value independently for MAIN and SUB. |
+| S-meter | `15 02` | Selected receiver read | SDR9700 alternates receiver-targeted polling while dualwatch is active so both receiver panels remain current. |
+| Scope / Spectrum Scope | `27 xx`, especially `27 12` | Receiver-selectable | The displayed scope follows the operator-selected MAIN or SUB receiver. Receiver changes are coordinated with scope routing so delayed data cannot silently retarget the display. |
 | TX PWR | `14 0A` | Unconfirmed: likely transmitter/global or per-band radio state | Current code treats it global. Validate before making it VFO-specific. |
 | MIC gain | `14 0B` | Global TX audio path | Keep global. |
 | PTT | transceiver status | Global transmitter state | GUI PTT is momentary. TX side determines which VFO transmits. |
-| AGC | `16 12` | Inferred selected-side/VFO-specific | Current UI treats it global; candidate for VFO-specific cleanup if confirmed. |
-| ATT / PRE | `11`, `16 02` | Inferred selected-side/band-specific | Current UI treats them global; candidate for VFO-specific cleanup if confirmed. |
-| NR / NB / Notch | `16 40`, `16 22`, `16 41` | Inferred selected-side/DSP-chain-specific | Current UI treats them global; candidate for VFO-specific cleanup if confirmed. |
-| Split / offset / tone / DCS | `0F`, `0C`/`0D`, `16 5D`, `1B xx` | VFO/channel operating state, not whole app | Current UI treats most of these as global; audit before final layout. |
+| AGC | `16 12` | Selected-side/VFO-specific | SDR9700 targets and caches the value independently for MAIN and SUB. |
+| ATT / PRE | `11`, `16 02` | Selected-side/band-specific | SDR9700 targets and caches these values independently for MAIN and SUB. |
+| NR / NB / Notch | `16 40`, `16 22`, `16 41` | Selected-side/DSP-chain-specific | SDR9700 targets and caches these values independently for MAIN and SUB. |
+| Split / offset / tone / DCS | `0F`, `0C`/`0D`, `16 5D`, `1B xx` | VFO/channel operating state, not whole app | SDR9700 keeps receiver-scoped values separate where the radio exposes a usable readback path. |
 | Dualwatch | `16 59` | Global radio mode | Keep global. |
 | Satellite mode | `16 5A` | Global radio mode | Keep global. |
 
@@ -31,4 +31,5 @@ validated with live CI-V logs before being treated as final behavior.
 
 - Command definitions: `src/radio/RadioCapabilities.h`
 - Explicit VFO frequency/mode targeting: `src/backend/RadioBackend.cpp`
-- Current non-targeted gain/power/squelch implementation: `src/backend/RadioBackend.cpp`
+- Receiver-targeted control, polling, and MAIN/SUB synchronization: `src/backend/RadioBackend.cpp`
+- Parsed-value routing and receiver-specific cache state: `src/core/CachingQueue.cpp`

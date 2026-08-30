@@ -900,7 +900,6 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     static constexpr quint8 kLpcmMono16 = 0x04;
     static constexpr quint8 kLpcmStereo16 = 0x10;
     static constexpr quint16 kIc9700CivAddress = 0xA2;
-    static constexpr quint16 kUnusedTcpPort = 0;
     const int outputChannels = qBound(1, AppSettings::instance().value("audioOutputChannels", 2).toInt(), 2);
     m_rxChannelCount = outputChannels;
     const int outputVolume = qBound(0, AppSettings::instance().value("volumeLevel", 128).toInt(), 255);
@@ -934,8 +933,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
             {
                 return;
             }
-            commandSession->commSetup(kIc9700CivAddress, udpSettings, rxSetup, txSetup, QString(), kUnusedTcpPort);
-            commandSession->process();
+            commandSession->commSetup(kIc9700CivAddress, udpSettings, rxSetup, txSetup);
         },
         Qt::QueuedConnection);
 }

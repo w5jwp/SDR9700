@@ -67,8 +67,6 @@ class CivRttEstimator
     }
 
     quint64 sampleCount() const { return m_sampleCount; }
-    double estimateMs() const { return m_estimateMs; }
-    double jitterMs() const { return m_jitterMs; }
 
   private:
     double m_estimateMs{0.0};

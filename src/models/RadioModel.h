@@ -20,7 +20,6 @@ class RadioModel : public QObject
     Q_PROPERTY(bool connected READ isConnected NOTIFY connectionChanged)
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)
     Q_PROPERTY(bool transmitting READ isTransmitting NOTIFY transmittingChanged)
-    Q_PROPERTY(QString radioName READ radioName NOTIFY infoChanged)
     Q_PROPERTY(int smeter READ smeter NOTIFY smeterChanged)
 
   public:
@@ -30,7 +29,7 @@ class RadioModel : public QObject
     bool isConnected() const { return m_connected; }
     bool isReady() const { return m_ready; }
     bool isTransmitting() const { return m_transmitting; }
-    const QString& radioName() const { return m_radioName; }
+    QString radioName() const { return QStringLiteral("IC-9700"); }
     int smeter() const { return m_smeter; }
 
     VfoModel* vfo() const { return m_vfo; }
@@ -55,7 +54,6 @@ class RadioModel : public QObject
     void connectionChanged(bool connected);
     void readyChanged(bool ready);
     void scopeSyncDegradedChanged(bool degraded);
-    void infoChanged();
     void smeterChanged(int value);
     void powerMeterChanged(double watts);
     void swrChanged(double swr);
@@ -95,6 +93,5 @@ class RadioModel : public QObject
     bool m_connected{false};
     bool m_ready{false};
     bool m_transmitting{false};
-    QString m_radioName{"IC-9700"};
     int m_smeter{0};
 };

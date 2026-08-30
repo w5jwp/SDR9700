@@ -184,11 +184,11 @@ class CachingQueue : public QObject
 
   signals:
     void haveCommand(Funcs func, QVariant param, uchar receiver);
-    void sendValue(CacheItem item);
+    // Cache changes cross the worker-thread boundary as one batch per wake.
+    // RadioBackend coalesces that batch again before posting it to RadioRouter,
+    // which bounds queued Qt events when the GUI or radio-data thread stalls.
     void sendValues(QVector<CacheItem> items);
-    void sendMessage(QString msg);
     void cacheUpdated(CacheItem item);
-    void radioCapsUpdated(radioCapabilities* caps);
 
   public slots:
     void receiveValue(Funcs func, QVariant value, uchar receiver);
@@ -202,13 +202,11 @@ class CachingQueue : public QObject
     QMultiMap<QueuePriority, QueueItem> queue;
     QMultiMap<Funcs, CacheItem> cache;
     QQueue<CacheItem> items;
-    QQueue<QString> messages;
     QHash<quint64, qint64> m_cacheRefreshRequests;
     std::condition_variable waiting;
 
     void startWorker();
     void stopWorker();
-    void setCache(Funcs func, QVariant val, uchar receiver = 0);
     QueuePriority isRecurring(Funcs func, uchar receiver = 0);
     std::atomic_bool aborted{false};
     std::thread m_worker;
@@ -217,7 +215,7 @@ class CachingQueue : public QObject
     // positive unless intentionally backing out queued command scheduling.
     qint64 queueInterval = 50;
     // Set while holding mutex when add() inserts command work. The worker uses
-    // this to distinguish a command wake from a value/message wake so queued
+    // this to distinguish a command wake from a cache-value wake so queued
     // readbacks run immediately without accelerating periodic cache traffic.
     bool m_queueWakeRequested{false};
     qsizetype m_queueHighWaterMark{0};
@@ -247,11 +245,9 @@ class CachingQueue : public QObject
     static CachingQueue* getInstance();
     static void shutdownInstance();
     static bool cacheValuesDiffer(const QVariant& a, const QVariant& b);
-    void message(QString msg);
     void add(QueuePriority prio, Funcs func, bool recurring = false, uchar receiver = 0);
     void add(QueuePriority prio, QueueItem item, bool unique = false);
     void addUnique(QueuePriority prio, Funcs func, bool recurring = false, uchar receiver = 0);
-    void addUnique(QueuePriority prio, QueueItem item);
 
     QueuePriority del(Funcs func, uchar receiver = 0);
     void clear();

@@ -124,7 +124,6 @@ void AudioHandlerBase::dispose()
 void AudioHandlerBase::reportError(const QString& msg)
 {
     qCritical(logAudio()).noquote() << role() << msg;
-    emit audioMessage(QString("%1: %2").arg(role(), msg));
 }
 
 bool AudioHandlerBase::negotiateFormat(int minSampleRate)

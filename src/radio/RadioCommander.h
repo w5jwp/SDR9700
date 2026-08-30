@@ -35,21 +35,23 @@ class RadioCommander : public QObject
     void radioUsage(quint8 radio, bool admin, quint8 busy, const QString& name, const QString& ip);
     void setCurrentRadio(quint8 radio);
 
-    virtual void process();
+    // RadioCommander owns the common LAN-status and audio signal surface, but
+    // it is not a usable radio session by itself. Keeping the session methods
+    // abstract prevents a partially initialized base object from accepting
+    // commands and merely logging "not implemented" while the caller assumes
+    // that work reached the IC-9700.
     virtual void commSetup(quint16 radioCivAddr, UdpConnectionSettings connectionSettings, audioSetup rxAudioSetup,
-                           audioSetup txAudioSetup, QString vsp, quint16 tcp);
-    virtual void closeComm();
+                           audioSetup txAudioSetup) = 0;
+    virtual void closeComm() = 0;
 
-    virtual void setRadioID(quint16 radioID);
-    virtual void setCIVAddr(quint16 civAddr);
+    virtual void setRadioID(quint16 radioID) = 0;
+    virtual void setCIVAddr(quint16 civAddr) = 0;
 
-    virtual void handleNewData(const QByteArray& data);
-    virtual void receiveBaudRate(quint32 baudrate);
+    virtual void handleNewData(const QByteArray& data) = 0;
 
-    virtual void receiveCommand(Funcs func, QVariant value, uchar receiver);
+    virtual void receiveCommand(Funcs func, QVariant value, uchar receiver) = 0;
 
   signals:
-    void commReady();
     void lanReady();
 
     void havePortError(errorType err);
@@ -58,42 +60,16 @@ class RadioCommander : public QObject
 
     void haveNetworkAudioLevels(const networkAudioLevels l);
     void dataForComm(const QByteArray& outData);
-    void haveDataFromRadio(const QByteArray& outData);
-
-    void setHalfDuplex(bool en);
-
     void haveChangeLatency(quint16 value);
-    void haveDataForServer(QByteArray outData);
     void haveAudioData(audioPacket data);
     void initUdpHandler();
     void requestEnableAudio();
     void haveSetVolume(quint8 level);
-    void haveBaudRate(quint32 baudrate);
-
-    void haveSpectrumData(QByteArray spectrum, double startFreq, double endFreq);
-    void haveSpectrumBounds();
-    void haveScopeSpan(Frequency span, bool isSub);
-    void haveSpectrumMode(uchar spectmode);
-    void haveScopeEdge(char edge);
-
-    void haveRadioID(radioCapabilities radioCaps);
-    void discoveredRadioID(radioCapabilities radioCaps);
-
-    void haveDuplexMode(duplexMode_t);
-    void haveTone(quint16 tone);
-    void haveTSQL(quint16 tsql);
-    void haveDTCS(quint16 dcscode, bool tinv, bool rinv);
-    void haveRptOffsetFrequency(Frequency f);
-    void haveMemory(MemoryType mem);
 
     void requestRadioSelection(QList<radio_cap_packet> radios);
     void setRadioUsage(quint8 radio, bool admin, quint8 busy, QString user, QString ip);
     void selectedRadio(quint8 radio);
-    void finished();
-    void haveReceivedValue(Funcs func, QVariant value);
     void radioReplyReceived(Funcs func, QVariant value, uchar receiver);
-    void sidetone(QString text);
-    void stopsidetone();
 
   protected:
     CachingQueue* queue;

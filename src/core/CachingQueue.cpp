@@ -102,8 +102,8 @@ void CachingQueue::run()
 
     while (!aborted.load(std::memory_order_acquire))
     {
-        // With no queued commands, wait indefinitely for a cache/message update
-        // or a new command. When commands exist, wake on the normal queue
+        // With no queued commands, wait indefinitely for a cache update or a
+        // new command. When commands exist, wake on the normal queue
         // interval so recurring polls keep their pacing.
         bool woke = true;
         if (queue.isEmpty())
@@ -121,9 +121,7 @@ void CachingQueue::run()
         }
 
         QQueue<CacheItem> pendingItems;
-        QQueue<QString> pendingMessages;
         pendingItems.swap(items);
-        pendingMessages.swap(messages);
 
         const bool commandWakeRequested = m_queueWakeRequested;
         m_queueWakeRequested = false;
@@ -222,14 +220,14 @@ void CachingQueue::run()
                 immediateDispatchStreak = prio == kPriorityImmediate ? immediateDispatchStreak + 1 : 0;
             }
 
-            // Cache and message updates wake this thread so UI state can be
-            // delivered promptly, but they must not move the next command
+            // Cache updates wake this thread so UI state can be delivered
+            // promptly, but they must not move the next command
             // deadline. During a busy memory sync or radio status burst,
             // resetting the deadline on every non-command wake can starve
             // recurring polls indefinitely.
             deadline.setRemainingTime(queueInterval);
         }
-        if (!pendingItems.isEmpty() || !pendingMessages.isEmpty() || haveCommandToEmit || changedCacheItem.has_value())
+        if (!pendingItems.isEmpty() || haveCommandToEmit || changedCacheItem.has_value())
         {
             locker.unlock();
             if (changedCacheItem.has_value())
@@ -245,17 +243,6 @@ void CachingQueue::run()
                     batch.append(pendingItems.dequeue());
                 }
                 emit sendValues(batch);
-                if (receivers(SIGNAL(sendValue(CacheItem))) > 0)
-                {
-                    for (const CacheItem& cacheItem : batch)
-                    {
-                        emit sendValue(cacheItem);
-                    }
-                }
-            }
-            while (!pendingMessages.isEmpty())
-            {
-                emit sendMessage(pendingMessages.dequeue());
             }
             if (haveCommandToEmit)
             {
@@ -285,11 +272,6 @@ void CachingQueue::addUnique(QueuePriority prio, Funcs func, bool recurring, uch
 {
     QueueItem q(func, recurring, receiver);
     add(prio, q, true);
-}
-
-void CachingQueue::addUnique(QueuePriority prio, QueueItem item)
-{
-    add(prio, item, true);
 }
 
 void CachingQueue::add(QueuePriority prio, QueueItem item, bool unique)
@@ -480,15 +462,12 @@ void CachingQueue::clear()
 
 void CachingQueue::resetSessionState()
 {
-    const radioCapabilities* previousCaps = nullptr;
     {
         std::lock_guard locker(mutex);
-        previousCaps = radioCaps;
         radioCaps = nullptr;
         queue.clear();
         cache.clear();
         items.clear();
-        messages.clear();
         m_cacheRefreshRequests.clear();
         radioState = RadioStateType();
         m_queueHighWaterMark = 0;
@@ -496,10 +475,6 @@ void CachingQueue::resetSessionState()
         m_droppedForCapacity = 0;
     }
 
-    if (previousCaps != nullptr)
-    {
-        emit radioCapsUpdated(nullptr);
-    }
     waiting.notify_all();
 }
 
@@ -527,30 +502,8 @@ CachingQueueDiagnostics CachingQueue::diagnostics()
 
 void CachingQueue::setRadioCaps(radioCapabilities* caps)
 {
-    bool changed = false;
-    {
-        std::lock_guard locker(mutex);
-        if (radioCaps != caps)
-        {
-            radioCaps = caps;
-            changed = true;
-        }
-    }
-
-    if (changed)
-    {
-        emit radioCapsUpdated(caps);
-    }
-}
-
-void CachingQueue::message(QString msg)
-{
-    {
-        std::lock_guard locker(mutex);
-        messages.append(msg);
-    }
-    qDebug(logRadio()).noquote() << "Received:" << msg;
-    waiting.notify_one();
+    std::lock_guard locker(mutex);
+    radioCaps = caps;
 }
 
 void CachingQueue::receiveValue(Funcs func, QVariant value, uchar receiver)

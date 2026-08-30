@@ -57,16 +57,14 @@ class Commander : public RadioCommander
     vfo_t currentRoutingVfo() const;
 
   public slots:
-    void process() override;
-    void commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup,
-                   QString vsp, quint16 tcp) override;
+    void commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup,
+                   audioSetup txSetup) override;
     void closeComm() override;
 
     void setRadioID(quint16 radioID) override;
     void setCIVAddr(quint16 newCivAddr) override;
 
     void handleNewData(const QByteArray& data) override;
-    void receiveBaudRate(quint32 baudrate) override;
 
     void receiveCommand(Funcs func, QVariant value, uchar receiver) override;
     void receiveCommandNoReadback(Funcs func, QVariant value, uchar receiver);
@@ -185,33 +183,22 @@ class Commander : public RadioCommander
     QByteArray getACCAddr(quint8 ab);
     void sendDataOut();
     void prepDataAndSend(QByteArray data);
-    void debugMe();
-
-    centerSpanData createScopeCenter(uchar s, QString name);
 
     UdpHandler* udp = nullptr;
     QThread* udpHandlerThread = nullptr;
 
     void determineRadioCaps();
     QByteArray payloadIn;
-    QByteArray echoPrefix;
-    QByteArray replyPrefix;
-    QByteArray genericReplyPrefix;
 
     QByteArray payloadPrefix;
     QByteArray payloadSuffix;
 
-    QByteArray radioData;
-
-    QByteArray spectrumLine;
     quint16 model = 0;
     quint8 spectSeqMax{0};
-    quint16 spectAmpMax{0};
     quint16 spectLenMax{0};
     uchar oldScopeMode{0};
 
     bool lookingForRadio{false};
-    bool foundRadio{false};
 
     double frequencyMhz{0.0};
     quint16 civAddr{0};
@@ -258,14 +245,6 @@ class Commander : public RadioCommander
     ScopeData subScopeData;
     QElapsedTimer m_scopeAssemblyClocks[2];
     quint8 m_expectedScopeSequences[2]{0, 0};
-
-    QString ip;
-    int cport{0};
-    int sport{0};
-    int aport{0};
-    QString username;
-
-    quint8 localVolume = 0;
 
     // 12 entries cover 10^0–10^11; BCD frequency data is at most 5 bytes (10 nibbles, indices 0–9).
     static constexpr quint64 kPow10[12] = {1,       10,       100,       1000,       10000,       100000,

@@ -1,8 +1,8 @@
 # Icom IC-9700 CI-V Command Audit
 
-Source: Icom IC-9700 CI-V Reference Guide, version shown by the PDF metadata as modified 2023-03-30: `/home/w5jwp/Downloads/IC-9700_ENG_CI-V_4.pdf`.
+Source: Icom IC-9700 CI-V Reference Guide, version shown by the PDF metadata as modified 2023-03-30. The repository research copy is `resources/radio/IC-9700_ENG_CI-V_4.pdf`.
 
-This audit compares the manual command table against SDR9700's compiled IC-9700 command table in `src/radio/RadioCapabilities.h`. The **Implemented** column means the exact CI-V command prefix, or at least one command under that family, is present in `kRadioCommands`. `Partial` means SDR9700 implements only some subcommands/registers under that manual command family.
+This audit compares the manual command table against SDR9700's compiled IC-9700 command table in `src/radio/RadioCapabilities.h` and command translations in `src/radio/Commander.cpp`. The **Implemented** column means the exact CI-V command prefix, or at least one command under that family, has an active encoding or decoding path. `Partial` means SDR9700 implements only some subcommands/registers under that manual command family. This is an implementation inventory, not a hardware-verification record; radio behavior still requires logs, captures, or direct testing.
 
 Extraction notes:
 
@@ -31,9 +31,9 @@ Extraction notes:
 | `07 D1` | - | Select sub band | Yes | `funcVFOSubSelect` |
 | `07 D2` | 00 or 01 | Send/read main/sub band selection | Yes | `funcVFOBandMS` |
 | `08` | channel data | Memory mode and memory/channel selection | Yes | `funcMemoryMode` |
-| `09` | - | Memory write | No | - |
-| `0A` | - | Memory copy to VFO | No | - |
-| `0B` | - | Memory clear | No | - |
+| `09` | - | Memory write | Yes | `funcMemoryWrite` |
+| `0A` | - | Memory copy to VFO | Yes | `funcMemoryToVFO` |
+| `0B` | - | Memory clear | Yes | `funcMemoryClear` |
 | `0C` | See p. 13 | Read frequency offset | Yes | `funcReadFreqOffset` |
 | `0D` | See p. 13 | Send frequency offset | Yes | `funcSendFreqOffset` |
 | `0E` | subcommands | Scan cancel/start, Delta-F scan span, select-channel marking, and scan resume | Yes | `funcScanning` |
@@ -48,7 +48,7 @@ Extraction notes:
 | `18` | 00 or 01 | Turn transceiver off/on | Yes | `funcPowerControl` |
 | `19 00` | - | Read transceiver ID | Yes | `funcTransceiverId` |
 | `1A 00` | See pp. 14, 15 | Send/read memory contents | Yes | `funcMemoryContents` |
-| `1A 01` | See p. 15 | Send/read band-stacking register contents | No | - |
+| `1A 01` | See p. 15 | Send/read band-stacking register contents | Yes | `funcBandStackReg` |
 | `1A 02` | See pp. 15, 16 | Send/read memory keyer contents | No | - |
 | `1A 03` | See p. 16 | Send/read selected IF filter width | Yes | `funcFilterWidth` |
 | `1A 04` | See p. 16 | Send/read selected AGC time constant | No | - |

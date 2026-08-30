@@ -139,12 +139,8 @@ Commander::~Commander()
     qDebug(logRadio()).noquote() << "[SHUTDOWN] ~Commander complete";
 }
 
-void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup,
-                          QString vsp, quint16 tcp)
+void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup, audioSetup txSetup)
 {
-    Q_UNUSED(vsp)
-    Q_UNUSED(tcp)
-
     this->settings = settings;
     civAddr = radioCivAddr;
 
@@ -173,7 +169,6 @@ void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, 
 
     connect(this, &Commander::haveChangeLatency, udp, &UdpHandler::changeLatency);
     connect(this, &Commander::haveSetVolume, udp, &UdpHandler::setVolume);
-    connect(udp, &UdpHandler::haveBaudRate, this, &Commander::receiveBaudRate);
     connect(udp, &UdpHandler::haveNetworkError, this, &Commander::handlePortError);
     connect(udp, &UdpHandler::haveNetworkStatus, this, &Commander::handleStatusUpdate);
     connect(udp, &UdpHandler::haveNetworkStatus, this,
@@ -282,7 +277,6 @@ void Commander::commonSetup()
     payloadSuffix = QByteArray("\xFD");
 
     lookingForRadio = true;
-    foundRadio = false;
     m_pendingReplies.clear();
     m_deferredReplyReads.clear();
     m_mainSubExchangeQueued = false;
@@ -317,11 +311,7 @@ void Commander::commonSetup()
 
     connect(queue, &CachingQueue::haveCommand, this, &Commander::receiveCommand, Qt::UniqueConnection);
     oldScopeMode = 0xff;
-
-    emit commReady();
 }
-
-void Commander::process() {}
 
 CommanderSchedulerDiagnostics Commander::schedulerDiagnostics() const
 {
@@ -528,12 +518,6 @@ void Commander::resetScheduledCommands()
     m_consecutiveInteractiveDispatches = 0;
     m_dispatchingScheduledCommand = false;
     m_mainSubExchangeConfirmationPending = false;
-}
-
-void Commander::receiveBaudRate(quint32 baudrate)
-{
-    radioCaps.baudRate = baudrate;
-    emit haveBaudRate(baudrate);
 }
 
 void Commander::prepDataAndSend(QByteArray data)
@@ -1087,8 +1071,7 @@ void Commander::handleNewData(const QByteArray& data)
     // Spectrum Scope frames arrive continuously and are hundreds of bytes long.
     // Logging every frame hides startup and memory-sync evidence, which is
     // exactly what we need when diagnosing radio readiness hangs. Suppress only
-    // the log line; parsing and routing still receive the complete frame.
-    emit haveDataForServer(data);
+    // the log line; the parser still receives the complete frame.
     parseData(data);
 }
 
@@ -1168,7 +1151,7 @@ void Commander::parseData(const QByteArray& dataInput)
                 if (radioPoweredOn)
                 {
                     qDebug(logRadio()).noquote() << "Echo caught:" << data.toHex(' ');
-                    queue->message("Radio is available but may be powered-off");
+                    qWarning(logRadio()).noquote() << "Radio is available but may be powered-off";
                     queue->receiveValue(funcPowerControl, QVariant::fromValue<bool>(false), 0);
                     radioPoweredOn = false;
                 }
@@ -2554,9 +2537,6 @@ void Commander::determineRadioCaps()
     qInfo(logRadio()).noquote()
         << QString("Loading Radio: %1 from built-in IC-9700 capabilities").arg(radioCaps.modelName);
 
-    // Publish half-duplex capability before the queue starts normal polling.
-    emit setHalfDuplex(!radioCaps.hasFDcomms);
-
     // Compile memory parser formats from the built-in IC-9700 table.
     static QRegularExpression memFmtEx("%(?<flags>[-+#0])?(?<pos>\\d+|\\*)?(?:\\.(?<width>\\d+|\\*))?(?<spec>["
                                        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+])");
@@ -2595,7 +2575,6 @@ void Commander::determineRadioCaps()
     if (lookingForRadio)
     {
         lookingForRadio = false;
-        foundRadio = true;
 
         qDebug(logRadio()).noquote() << "---Radio FOUND from broadcast query:";
         this->civAddr = incomingCIVAddr & 0xff; // Override and use immediately.
@@ -2604,16 +2583,6 @@ void Commander::determineRadioCaps()
         payloadPrefix.append((char)compCivAddr);
         qInfo(logRadio()).noquote() << "Using incomingCIVAddr: (int): " << this->civAddr
                                     << " hex: " << QString("0x%1").arg(this->civAddr, 0, 16);
-        emit discoveredRadioID(radioCaps);
-    }
-    else
-    {
-        if (!foundRadio)
-        {
-            emit discoveredRadioID(radioCaps);
-            foundRadio = true;
-        }
-        emit haveRadioID(radioCaps);
     }
 }
 
@@ -3531,7 +3500,6 @@ void Commander::setRadioID(quint16 radioID)
     qInfo(logRadio()).noquote() << QString("Setting radio ID to: 0x%1").arg(radioID & 0xff, 1, 16);
 
     lookingForRadio = true;
-    foundRadio = false;
 
     // A forced ID has no incoming frame; use the configured CI-V address.
     this->incomingCIVAddr = this->civAddr & 0xff;
@@ -3757,12 +3725,10 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
             }
             if (textData.isEmpty())
             {
-                emit stopsidetone();
                 payload.append(uchar(0xff));
             }
             else
             {
-                emit sidetone(QString(textData));
                 payload.append(textData);
                 qDebug(logRadio()).noquote() << "CW output::" << textData;
             }

@@ -25,58 +25,6 @@ RadioCommander::~RadioCommander()
     qInfo(logRadio()).noquote() << "closing instance of RadioCommander()";
 }
 
-void RadioCommander::commSetup(quint16 radioCivAddr, UdpConnectionSettings connectionSettings, audioSetup rxAudioSetup,
-                               audioSetup txAudioSetup, QString vsp, quint16 tcp)
-{
-    Q_UNUSED(radioCivAddr)
-    Q_UNUSED(connectionSettings)
-    Q_UNUSED(rxAudioSetup)
-    Q_UNUSED(txAudioSetup)
-    Q_UNUSED(vsp)
-    Q_UNUSED(tcp)
-    qWarning(logRadio()).noquote() << "commSetup() (network) not implemented";
-}
-
-void RadioCommander::closeComm()
-{
-    qWarning(logRadio()).noquote() << "closeComm() not implemented";
-}
-
-void RadioCommander::process()
-{
-    qWarning(logRadio()).noquote() << "process() not implemented";
-}
-
-void RadioCommander::setRadioID(quint16 radioID)
-{
-    Q_UNUSED(radioID)
-
-    qWarning(logRadio()).noquote() << "setRadioID() not implemented";
-}
-
-void RadioCommander::receiveBaudRate(quint32 baudrate)
-{
-    Q_UNUSED(baudrate)
-
-    qWarning(logRadio()).noquote() << "receiveBaudRate() not implemented";
-}
-
-void RadioCommander::setCIVAddr(quint16 civAddr)
-{
-    Q_UNUSED(civAddr)
-
-    qWarning(logRadio()).noquote() << "setCIVAddr() not implemented";
-}
-
-void RadioCommander::receiveCommand(Funcs func, QVariant value, uchar receiver)
-{
-    Q_UNUSED(func)
-    Q_UNUSED(value)
-    Q_UNUSED(receiver)
-
-    qWarning(logRadio()).noquote() << "receiveCommand() not implemented";
-}
-
 void RadioCommander::handlePortError(errorType err)
 {
     qInfo(logRadio()).noquote().nospace() << "Radio error device=" << err.device << " message=" << err.message;
@@ -91,11 +39,6 @@ void RadioCommander::handleStatusUpdate(const networkStatus& status)
 void RadioCommander::handleNetworkAudioLevels(const networkAudioLevels& levels)
 {
     emit haveNetworkAudioLevels(levels);
-}
-
-void RadioCommander::handleNewData(const QByteArray& data)
-{
-    emit haveDataForServer(data);
 }
 
 void RadioCommander::receiveAudioData(const audioPacket& data)

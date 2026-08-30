@@ -223,7 +223,6 @@ void UdpHandler::shutdown()
                                         << " radioConfirmed=" << radioConfirmed
                                         << " tokenAcknowledged=" << m_tokenRemovalAcknowledged
                                         << " disconnectStatusReceived=" << m_disconnectStatusReceived;
-    emit shutdownFinished();
 }
 
 UdpHandler::~UdpHandler()
@@ -1202,9 +1201,11 @@ void UdpHandler::setCurrentRadio(quint8 radio)
     {
         return;
     }
-    int baudrate = qFromBigEndian(radios[radio].baudrate);
-    emit haveBaudRate(baudrate);
-
+    // The radio advertises a nominal CI-V baud rate in its discovery record,
+    // but LAN CI-V transport is not paced from that serial-port value. The
+    // command path uses LAN-specific pacing and derives correlation recovery
+    // deadlines from measured RTT and jitter, so no serial-rate state is
+    // propagated into Commander.
     if (radios[radio].commoncap == 0x8010)
     {
         memcpy(&macaddress, radios[radio].macaddress, sizeof(macaddress));

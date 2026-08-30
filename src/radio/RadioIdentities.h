@@ -274,7 +274,6 @@ struct radioCapabilities
 
     QByteArray transceiveCommand;
     quint8 guid[GUIDLEN]{};
-    quint32 baudRate{0};
     quint16 memGroups{0};
     quint16 memories{0};
     quint16 memStart{0};

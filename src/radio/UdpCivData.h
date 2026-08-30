@@ -33,8 +33,6 @@ class UdpCivData : public UdpBase
 
     void closeStream();
     void requestDataRestart();
-    // cppcheck-suppress unusedFunction
-    CivSequenceGateDiagnostics sequenceDiagnostics() const { return m_sequenceGate.diagnostics(); }
 
   signals:
     void receive(QByteArray);
