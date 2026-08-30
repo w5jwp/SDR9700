@@ -30,6 +30,7 @@
 
 namespace
 {
+constexpr int kMaxMainSubExchangeRetries = 8;
 constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 3000;
 constexpr int kMaxSyncReconnectAttempts = 1;
@@ -270,37 +271,59 @@ RadioBackend::RadioBackend(QObject* parent)
     m_mainSubExchangeRetryTimer = new QTimer(this);
     m_mainSubExchangeRetryTimer->setSingleShot(true);
     m_mainSubExchangeRetryTimer->setInterval(150);
-    connect(m_mainSubExchangeRetryTimer, &QTimer::timeout, this,
-            [this]()
+    connect(
+        m_mainSubExchangeRetryTimer, &QTimer::timeout, this,
+        [this]()
+        {
+            if (!m_mainSubExchangePending)
             {
-                if (!m_mainSubExchangePending)
-                {
-                    return;
-                }
-                const quint8 missing = static_cast<quint8>(kExchangeAllConfirmed & ~m_mainSubExchangeConfirmations);
-                qInfo(logRadio()).noquote() << "Retrying missing MAIN/SUB exchange confirmations mask=" << missing;
+                return;
+            }
+            const quint8 missing = static_cast<quint8>(kExchangeAllConfirmed & ~m_mainSubExchangeConfirmations);
+            if (++m_mainSubExchangeRetryCount > kMaxMainSubExchangeRetries)
+            {
+                qCritical(logRadio()).noquote().nospace()
+                    << "MAIN/SUB exchange confirmation failed missing=" << missing
+                    << " elapsedMs=" << (m_mainSubExchangeClock.isValid() ? m_mainSubExchangeClock.elapsed() : -1);
+                m_mainSubExchangePending = false;
+                m_mainSubExchangeDispatched = false;
                 invokeOnCurrentCommander(
-                    [missing](Commander* commandSession)
+                    [](Commander* commandSession)
                     {
-                        if (missing & kExchangeMainStatusConfirmed)
-                        {
-                            commandSession->receiveCommand(funcVFOBandMS, QVariant(), 0);
-                        }
-                        if (missing & kExchangeScopeStatusConfirmed)
-                        {
-                            commandSession->receiveCommand(funcScopeMainSub, QVariant(), 0);
-                        }
-                        if (missing & kExchangeSubFrequencyConfirmed)
-                        {
-                            commandSession->requestReceiverScopedRead(funcFreqGet, kSubReceiver);
-                        }
-                        if (missing & kExchangeSubModeConfirmed)
-                        {
-                            commandSession->requestReceiverScopedRead(funcModeGet, kSubReceiver);
-                        }
+                        commandSession->finishMainSubExchangeConfirmation();
+                        commandSession->receiveCommandNoReadback(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+                        commandSession->receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
                     });
-                m_mainSubExchangeRetryTimer->start();
-            });
+                requestVfoState(Vfo::Main);
+                requestVfoState(Vfo::Sub);
+                emit mainSubExchangeFailed();
+                return;
+            }
+            qInfo(logRadio()).noquote() << "Retrying missing MAIN/SUB exchange confirmations mask=" << missing;
+            invokeOnCurrentCommander(
+                [missing](Commander* commandSession)
+                {
+                    if (missing & kExchangeMainStatusConfirmed)
+                    {
+                        commandSession->receiveCommandNoReadback(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+                        commandSession->receiveCommand(funcVFOBandMS, QVariant(), 0);
+                    }
+                    if (missing & kExchangeScopeStatusConfirmed)
+                    {
+                        commandSession->receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
+                        commandSession->receiveCommand(funcScopeMainSub, QVariant(), 0);
+                    }
+                    if (missing & kExchangeSubFrequencyConfirmed)
+                    {
+                        commandSession->requestReceiverScopedRead(funcFreqGet, kSubReceiver);
+                    }
+                    if (missing & kExchangeSubModeConfirmed)
+                    {
+                        commandSession->requestReceiverScopedRead(funcModeGet, kSubReceiver);
+                    }
+                });
+            m_mainSubExchangeRetryTimer->start();
+        });
 
     m_vfoStatePollTimer = new QTimer(this);
     m_vfoStatePollTimer->setInterval(kVfoStatePollIntervalMs);
@@ -660,6 +683,9 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                     m_mainSubExchangePending = false;
                     m_mainSubExchangeDispatched = false;
                     m_mainSubExchangeRetryTimer->stop();
+                    m_mainSubExchangeRetryCount = 0;
+                    invokeOnCurrentCommander([](Commander* commandSession)
+                                             { commandSession->finishMainSubExchangeConfirmation(); });
                     m_meterPollTuneHoldoff.restart();
                     qInfo(logRadio()).noquote()
                         << "MAIN/SUB exchange confirmed on physical MAIN elapsedMs="
@@ -676,6 +702,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 }
                 m_mainSubExchangeDispatched = true;
                 m_mainSubExchangeConfirmations = 0;
+                m_mainSubExchangeRetryCount = 0;
                 m_mainSubExchangeRetryTimer->start();
                 qInfo(logRadio()).noquote()
                     << "MAIN/SUB exchange dispatched after gate waitMs="
@@ -920,6 +947,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_mainSubExchangePending = false;
     m_mainSubExchangeDispatched = false;
     m_mainSubExchangeConfirmations = 0;
+    m_mainSubExchangeRetryCount = 0;
     m_mainSubExchangeClock.invalidate();
     if (m_mainSubExchangeRetryTimer)
     {
@@ -1143,13 +1171,8 @@ void RadioBackend::setAttenuatorEnabled(bool on)
 
 void RadioBackend::setAfGain(int level)
 {
-    invokeOnCurrentCommander(
-        [level](Commander* commandSession)
-        {
-            commandSession->scheduleInteractiveAction(
-                funcAfGain, 0xff,
-                [commandSession, level]() { commandSession->receiveCommand(funcAfGain, QVariant(level), 0xff); });
-        });
+    invokeOnCurrentCommander([level](Commander* commandSession)
+                             { commandSession->receiveCommand(funcAfGain, QVariant(level), 0xff); });
 }
 
 void RadioBackend::setRfGain(int level)
@@ -1183,7 +1206,7 @@ void RadioBackend::selectVfo(Vfo vfo)
 
 void RadioBackend::exchangeMainSub()
 {
-    if (m_mainSubExchangePending)
+    if (!m_commander || m_mainSubExchangePending)
     {
         qWarning(logRadio()).noquote() << "Ignoring MAIN/SUB exchange while previous exchange is pending";
         return;
@@ -1195,6 +1218,7 @@ void RadioBackend::exchangeMainSub()
     m_mainSubExchangePending = true;
     m_mainSubExchangeDispatched = false;
     m_mainSubExchangeConfirmations = 0;
+    m_mainSubExchangeRetryCount = 0;
     invokeOnCurrentCommander(
         [](Commander* commandSession)
         {
@@ -1266,10 +1290,10 @@ void RadioBackend::requestVfoState(Vfo vfo)
 
 void RadioBackend::routeVfoReceiverCommand(Vfo vfo, const std::function<void(Commander*, uchar)>& command)
 {
-    const Vfo restoreVfo = m_activeVfo;
     invokeOnCurrentCommander(
-        [vfo, restoreVfo, command](Commander* commandSession)
+        [vfo, command](Commander* commandSession)
         {
+            const Vfo restoreVfo = commandSession->currentRoutingVfo() == vfoSub ? Vfo::Sub : Vfo::Main;
             sdr9700::backend::routeVfoReceiverCommand(
                 vfo, restoreVfo,
                 [commandSession](Vfo selected)
@@ -1284,15 +1308,15 @@ void RadioBackend::routeVfoReceiverCommand(Vfo vfo, const std::function<void(Com
 void RadioBackend::scheduleVfoReceiverCommand(Vfo vfo, Funcs func,
                                               const std::function<void(Commander*, uchar)>& command)
 {
-    const Vfo restoreVfo = m_activeVfo;
     const uchar receiver = sdr9700::backend::receiverForVfo(vfo);
     invokeOnCurrentCommander(
-        [vfo, restoreVfo, func, receiver, command](Commander* commandSession)
+        [vfo, func, receiver, command](Commander* commandSession)
         {
             commandSession->scheduleInteractiveAction(
                 func, receiver,
-                [vfo, restoreVfo, commandSession, command]()
+                [vfo, commandSession, command]()
                 {
+                    const Vfo restoreVfo = commandSession->currentRoutingVfo() == vfoSub ? Vfo::Sub : Vfo::Main;
                     sdr9700::backend::routeVfoReceiverCommand(
                         vfo, restoreVfo,
                         [commandSession](Vfo selected)

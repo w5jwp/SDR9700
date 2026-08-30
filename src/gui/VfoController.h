@@ -28,6 +28,7 @@ class VfoController : public QObject
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
     void captureExchangeableControlState();
+    void discardCapturedExchangeableControlState();
     void applyCapturedControlExchange(VfoController* other);
     availableBands band() const { return m_band; }
     quint64 frequencyHz() const { return m_confirmedFrequencyHz.value_or(0); }

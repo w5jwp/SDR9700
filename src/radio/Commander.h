@@ -35,6 +35,7 @@ struct CommanderSchedulerDiagnostics
     quint64 coalescedCommands{0};
     quint64 droppedCommands{0};
     quint64 dispatchedCommands{0};
+    quint64 transmittedFrames{0};
 };
 
 class Commander : public RadioCommander
@@ -49,6 +50,8 @@ class Commander : public RadioCommander
     CommanderCorrelationDiagnostics correlationDiagnostics() const;
     CommanderSchedulerDiagnostics schedulerDiagnostics() const;
     void scheduleInteractiveAction(Funcs func, uchar receiver, std::function<void()> action);
+    void finishMainSubExchangeConfirmation();
+    vfo_t currentRoutingVfo() const;
 
   public slots:
     void process() override;
@@ -227,6 +230,7 @@ class Commander : public RadioCommander
     };
     QVector<DeferredReplyRead> m_deferredReplyReads;
     bool m_mainSubExchangeQueued{false};
+    bool m_mainSubExchangeConfirmationPending{false};
     QVector<ReplyFamilyDrain> m_replyFamilyDrains;
     QTimer* m_replyDrainTimer{nullptr};
     CivRttEstimator m_rttEstimator;
@@ -236,6 +240,7 @@ class Commander : public RadioCommander
     QTimer* m_scheduledCommandTimer{nullptr};
     QTimer* m_schedulerDiagnosticsTimer{nullptr};
     CommanderSchedulerDiagnostics m_schedulerDiagnostics;
+    CommanderSchedulerDiagnostics m_lastLoggedSchedulerDiagnostics;
     int m_consecutiveMeterDispatches{0};
     int m_consecutiveInteractiveDispatches{0};
     bool m_suppressReadbackForCurrentCommand{false};

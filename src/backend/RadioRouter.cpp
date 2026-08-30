@@ -3,13 +3,15 @@
 #include "CachingQueue.h"
 #include "LogCategories.h"
 
-#include <QtGlobal>
+#include <QDateTime>
 #include <QThread>
+#include <QtGlobal>
 
 namespace
 {
 constexpr uchar kMainReceiver = 0;
 constexpr uchar kSubReceiver = 1;
+constexpr qint64 kDiagnosticsIntervalMs = 30000;
 } // namespace
 
 RadioRouter::RadioRouter(QObject* parent) : QObject(parent) {}
@@ -39,7 +41,12 @@ quint64 RadioRouter::beginQueueSession()
     m_pendingItems.clear();
     m_drainScheduled = false;
     m_scopeReceiver.store(kMainReceiver, std::memory_order_release);
+    m_pendingHighWaterMark = 0;
+    m_coalescedItems = 0;
+    m_drainEvents = 0;
+    m_backpressureWaits = 0;
     const quint64 session = ++m_queueSession;
+    m_lastDiagnosticsLogMs = QDateTime::currentMSecsSinceEpoch();
     m_pendingSpaceAvailable.notify_all();
     return session;
 }
@@ -79,8 +86,7 @@ void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
                     {
                         break;
                     }
-                    const bool sameKey = pending->command == item.command &&
-                                         (item.command == funcScopeWaveData || pending->receiver == item.receiver);
+                    const bool sameKey = pending->command == item.command && pending->receiver == item.receiver;
                     if (sameKey)
                     {
                         *pending = item;
@@ -141,6 +147,7 @@ void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
 void RadioRouter::drainPendingBatch(quint64 session)
 {
     QVector<CacheItem> items;
+    bool logDiagnostics = false;
     {
         std::lock_guard locker(m_pendingMutex);
         if (session != m_queueSession)
@@ -150,9 +157,23 @@ void RadioRouter::drainPendingBatch(quint64 session)
         items.swap(m_pendingItems);
         m_drainScheduled = false;
         ++m_drainEvents;
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        if (m_lastDiagnosticsLogMs == 0 || nowMs - m_lastDiagnosticsLogMs >= kDiagnosticsIntervalMs)
+        {
+            m_lastDiagnosticsLogMs = nowMs;
+            logDiagnostics = true;
+        }
     }
     m_pendingSpaceAvailable.notify_all();
     routeBatch(items);
+    if (logDiagnostics)
+    {
+        const RadioRouterQueueDiagnostics diagnostics = queueDiagnostics();
+        qInfo(logRadio()).noquote().nospace()
+            << "Radio router metrics pending=" << diagnostics.pendingItems << " highWater=" << diagnostics.highWaterMark
+            << " coalesced=" << diagnostics.coalescedItems << " drains=" << diagnostics.drainEvents
+            << " backpressureWaits=" << diagnostics.backpressureWaits;
+    }
 }
 
 RadioRouterQueueDiagnostics RadioRouter::queueDiagnostics() const

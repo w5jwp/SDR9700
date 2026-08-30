@@ -198,6 +198,7 @@ class RadioBackend : public IRadioBackend
     bool m_mainSubExchangePending{false};
     bool m_mainSubExchangeDispatched{false};
     quint8 m_mainSubExchangeConfirmations{0};
+    int m_mainSubExchangeRetryCount{0};
     duplexMode_t m_currentDuplexMode{dmSimplex};
     quint64 m_currentRepeaterOffsetHz{0};
     sdr9700::TransmitConfigurationPolicy m_transmitConfiguration;

@@ -131,6 +131,7 @@ class IRadioBackend : public QObject
     void radioMemoryReceived(MemoryType memory);
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
     void mainSubExchangeCompleted();
+    void mainSubExchangeFailed();
 
     void spectrumDataReady(const QVector<float>& levels, double startMhz, double endMhz, bool outOfRange);
 

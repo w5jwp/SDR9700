@@ -9,6 +9,7 @@
 class MainWindow;
 class QComboBox;
 class QVBoxLayout;
+class QTimer;
 
 class SpectrumScopeController : public QObject
 {
@@ -55,6 +56,7 @@ class SpectrumScopeController : public QObject
     bool m_scopeFramesEnabled{false};
     bool m_exchangeScopeSyncPending{false};
     int m_exchangeRejectedFrames{0};
+    QTimer* m_exchangeScopeSyncTimer{nullptr};
     QElapsedTimer m_tuneIntentClock;
     quint64 m_tuneIntentHz{0};
     quint64 m_tuneIntentGeneration{0};

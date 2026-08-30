@@ -4,9 +4,16 @@
 #include "VfoSelectionPanel.h"
 #include "MainWindowHelpers.h"
 #include "backend/IRadioBackend.h"
+#include "core/LogCategories.h"
 
 #include <QAction>
 #include <QMenu>
+#include <QTimer>
+
+namespace
+{
+constexpr int kSelectionConfirmationTimeoutMs = 1000;
+}
 
 VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoController* mainController,
                                                VfoController* subController, QWidget* displayParent, QObject* parent)
@@ -16,6 +23,29 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
       m_subController(subController),
       m_panel(new VfoSelectionPanel(displayParent))
 {
+    m_selectionTimeoutTimer = new QTimer(this);
+    m_selectionTimeoutTimer->setSingleShot(true);
+    m_selectionTimeoutTimer->setInterval(kSelectionConfirmationTimeoutMs);
+    connect(m_selectionTimeoutTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (!m_selectionPending)
+                {
+                    return;
+                }
+                if (m_selectionRetryCount++ == 0 && m_backend)
+                {
+                    qWarning(logRadio()).noquote() << "VFO selection confirmation timed out; retrying";
+                    m_backend->selectVfo(m_requestedVfo);
+                    m_selectionTimeoutTimer->start();
+                    return;
+                }
+                qCritical(logRadio()).noquote() << "VFO selection confirmation failed; releasing controls";
+                m_selectionPending = false;
+                m_selectionRetryCount = 0;
+                m_selectedAction = {};
+                setPttReady(!m_exchangePolicy.pending());
+            });
     auto showBandMenu = [this](Vfo vfo, const QPoint& position)
     {
         VfoController* target = vfo == Vfo::Main ? m_mainController : m_subController;
@@ -85,6 +115,15 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                         emit selectedVfoChanged(Vfo::Main);
                     }
                 });
+        connect(m_backend, &IRadioBackend::mainSubExchangeFailed, this,
+                [this]()
+                {
+                    m_mainController->discardCapturedExchangeableControlState();
+                    m_subController->discardCapturedExchangeableControlState();
+                    m_exchangePolicy.reset();
+                    m_panel->setExchangePending(false);
+                    setPttReady(true);
+                });
         connect(m_backend, &IRadioBackend::pttChanged, this,
                 [this](bool transmitting)
                 {
@@ -108,6 +147,8 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                         if (m_selectionPending)
                         {
                             m_selectionPending = false;
+                            m_selectionRetryCount = 0;
+                            m_selectionTimeoutTimer->stop();
                             setPttReady(true);
                         }
                         m_requestedVfo = selected;
@@ -174,8 +215,10 @@ void VfoSelectionController::requestSelection(Vfo vfo)
     }
     m_requestedVfo = vfo;
     m_selectionPending = true;
+    m_selectionRetryCount = 0;
     setPttReady(false);
     m_backend->selectVfo(vfo);
+    m_selectionTimeoutTimer->start();
 }
 
 void VfoSelectionController::runWhenSelected(Vfo vfo, std::function<void()> action)
@@ -208,6 +251,8 @@ void VfoSelectionController::reset()
     m_selectedVfo = Vfo::Main;
     m_requestedVfo = Vfo::Main;
     m_selectionPending = false;
+    m_selectionRetryCount = 0;
+    m_selectionTimeoutTimer->stop();
     m_exchangePolicy.reset();
     m_selectedAction = {};
     m_panel->setExchangePending(false);

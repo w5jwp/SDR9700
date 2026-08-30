@@ -94,4 +94,5 @@ class RadioRouter : public QObject
     quint64 m_backpressureWaits{0};
     quint64 m_queueSession{0};
     std::atomic<uchar> m_scopeReceiver{0};
+    qint64 m_lastDiagnosticsLogMs{0};
 };

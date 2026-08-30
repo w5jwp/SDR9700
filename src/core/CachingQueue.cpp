@@ -629,7 +629,7 @@ std::optional<CacheItem> CachingQueue::updateCache(bool reply, QueueItem item)
             radioState.vfo = vfo_t::vfoSub;
             radioState.receiver = 1;
         }
-        else if (item.command == funcVFOBandMS)
+        else if (item.command == funcVFOBandMS && item.param.isValid())
         {
             radioState.receiver = item.param.toBool() ? 1 : 0;
         }

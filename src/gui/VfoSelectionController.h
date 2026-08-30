@@ -10,6 +10,7 @@ class IRadioBackend;
 class VfoController;
 class VfoSelectionPanel;
 class QWidget;
+class QTimer;
 
 class VfoSelectionController : public QObject
 {
@@ -47,4 +48,6 @@ class VfoSelectionController : public QObject
     bool m_pttReady{true};
     bool m_transmitting{false};
     std::function<void()> m_selectedAction;
+    QTimer* m_selectionTimeoutTimer{nullptr};
+    int m_selectionRetryCount{0};
 };

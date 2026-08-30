@@ -2,6 +2,7 @@
 #include <QDebug>
 #include <QMetaType>
 #include <QSemaphore>
+#include <QSet>
 #include <QThread>
 #include <QTimer>
 #include <algorithm>
@@ -65,6 +66,9 @@ bool replyDoesNotRequireReceiverCorrelation(Funcs func)
     case funcScopeMainSub:
         // These are global MAIN/SUB state values, not receiver-scoped reads.
         return true;
+    case funcScopeWaveData:
+        // Scope payloads carry their receiver identity in the decoded frame.
+        return true;
     default:
         return false;
     }
@@ -92,6 +96,7 @@ bool commandExpectsCorrelatedReply(Funcs func)
 
 Commander::Commander(RadioCommander* parent) : RadioCommander(parent)
 {
+    m_pendingCommandClock.start();
     m_scheduledCommandTimer = new QTimer(this);
     m_scheduledCommandTimer->setSingleShot(true);
     m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
@@ -110,6 +115,7 @@ Commander::Commander(quint8 guid[GUIDLEN], RadioCommander* parent) : RadioComman
     Q_ASSERT(guid != nullptr);
     qInfo(logRadio()).noquote() << "creating instance of Commander() with GUID";
     memcpy(this->guid, guid, GUIDLEN);
+    m_pendingCommandClock.start();
     m_scheduledCommandTimer = new QTimer(this);
     m_scheduledCommandTimer->setSingleShot(true);
     m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
@@ -252,6 +258,7 @@ void Commander::shutdownComm()
     m_pendingReplies.clear();
     m_deferredReplyReads.clear();
     m_mainSubExchangeQueued = false;
+    m_mainSubExchangeConfirmationPending = false;
     m_replyFamilyDrains.clear();
     m_replyDrainTimer->stop();
     m_rttEstimator.reset();
@@ -281,6 +288,7 @@ void Commander::commonSetup()
     m_correlationDiagnostics = {};
     resetScheduledCommands();
     m_schedulerDiagnostics = {};
+    m_lastLoggedSchedulerDiagnostics = {};
     m_schedulerDiagnosticsTimer->start();
     m_expectedScopeSequences[0] = 0;
     m_expectedScopeSequences[1] = 0;
@@ -312,6 +320,11 @@ CommanderSchedulerDiagnostics Commander::schedulerDiagnostics() const
     CommanderSchedulerDiagnostics diagnostics = m_schedulerDiagnostics;
     diagnostics.queuedCommands = m_scheduledCommands.size();
     return diagnostics;
+}
+
+vfo_t Commander::currentRoutingVfo() const
+{
+    return queue && queue->getState().receiver == 1 ? vfoSub : vfoMain;
 }
 
 void Commander::scheduleMeterRead(Funcs func, uchar receiver)
@@ -357,10 +370,13 @@ void Commander::scheduleInteractiveAction(Funcs func, uchar receiver, std::funct
 void Commander::enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs func, uchar receiver)
 {
     const Funcs canonicalFunc = canonicalReplyFunc(func);
-    const auto duplicate =
-        std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(),
-                     [canonicalFunc, receiver](const ScheduledCommand& command)
-                     { return canonicalReplyFunc(command.func) == canonicalFunc && command.receiver == receiver; });
+    const auto duplicate = std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(),
+                                        [commandClass, canonicalFunc, receiver](const ScheduledCommand& command)
+                                        {
+                                            return command.commandClass == commandClass &&
+                                                   canonicalReplyFunc(command.func) == canonicalFunc &&
+                                                   command.receiver == receiver;
+                                        });
     if (duplicate != m_scheduledCommands.cend())
     {
         ++m_schedulerDiagnostics.coalescedCommands;
@@ -397,7 +413,12 @@ void Commander::dispatchNextScheduledCommand()
     const auto nonInteractive =
         std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
                      { return command.commandClass != ScheduledCommandClass::InteractiveSet; });
-    if (interactive != m_scheduledCommands.cend() &&
+    if (m_mainSubExchangeConfirmationPending)
+    {
+        m_scheduledCommandTimer->start();
+        return;
+    }
+    if (!m_mainSubExchangeConfirmationPending && interactive != m_scheduledCommands.cend() &&
         (m_consecutiveInteractiveDispatches < kMaxConsecutiveInteractiveDispatches ||
          nonInteractive == m_scheduledCommands.cend()))
     {
@@ -456,10 +477,26 @@ void Commander::dispatchNextScheduledCommand()
 void Commander::logSchedulerDiagnostics()
 {
     const CommanderSchedulerDiagnostics diagnostics = schedulerDiagnostics();
+    const CommanderCorrelationDiagnostics correlation = correlationDiagnostics();
+    const CachingQueueDiagnostics cacheQueue = queue->diagnostics();
     qInfo(logRadio()).noquote().nospace()
         << "CI-V scheduler metrics queued=" << diagnostics.queuedCommands << " highWater=" << diagnostics.highWaterMark
         << " dispatched=" << diagnostics.dispatchedCommands << " coalesced=" << diagnostics.coalescedCommands
-        << " dropped=" << diagnostics.droppedCommands;
+        << " dropped=" << diagnostics.droppedCommands << " pendingReplies=" << correlation.pendingReplies
+        << " pendingHighWater=" << correlation.pendingReplyHighWaterMark
+        << " pendingOverflows=" << correlation.pendingReplyOverflows
+        << " pendingExpirations=" << correlation.pendingReplyExpirations
+        << " unmatchedReplies=" << correlation.unmatchedReplyFrames
+        << " deferredReads=" << correlation.deferredReplyReads
+        << " droppedDeferredReads=" << correlation.droppedReplyReads << " cacheQueueDepth=" << cacheQueue.depth
+        << " cacheQueueHighWater=" << cacheQueue.highWaterMark << " cacheQueueOldestMs=" << cacheQueue.oldestItemAgeMs
+        << " cacheQueueDropped=" << cacheQueue.droppedForCapacity
+        << " transmittedFrames=" << diagnostics.transmittedFrames << " intervalDispatched="
+        << (diagnostics.dispatchedCommands - m_lastLoggedSchedulerDiagnostics.dispatchedCommands)
+        << " intervalCoalesced=" << (diagnostics.coalescedCommands - m_lastLoggedSchedulerDiagnostics.coalescedCommands)
+        << " intervalDropped=" << (diagnostics.droppedCommands - m_lastLoggedSchedulerDiagnostics.droppedCommands)
+        << " intervalFrames=" << (diagnostics.transmittedFrames - m_lastLoggedSchedulerDiagnostics.transmittedFrames);
+    m_lastLoggedSchedulerDiagnostics = diagnostics;
 }
 
 void Commander::resetScheduledCommands()
@@ -469,6 +506,7 @@ void Commander::resetScheduledCommands()
     m_scheduledCommands.clear();
     m_consecutiveMeterDispatches = 0;
     m_consecutiveInteractiveDispatches = 0;
+    m_mainSubExchangeConfirmationPending = false;
 }
 
 void Commander::receiveBaudRate(quint32 baudrate)
@@ -487,6 +525,7 @@ void Commander::prepDataAndSend(QByteArray data)
         // Meter polling is high-volume; keep CI-V traffic useful by suppressing it.
         qInfo(logRadioTraffic()).noquote() << "CI-V TX" << data.toHex(' ');
     }
+    ++m_schedulerDiagnostics.transmittedFrames;
     emit dataForComm(data);
 }
 
@@ -688,14 +727,25 @@ void Commander::dispatchDeferredReplyReads()
         return;
     }
 
-    for (qsizetype index = 0; index < m_deferredReplyReads.size(); ++index)
+    QSet<Funcs> dispatchedFamilies;
+    for (qsizetype index = 0; index < m_deferredReplyReads.size();)
     {
         const DeferredReplyRead read = m_deferredReplyReads.at(index);
-        if (replyFamilyBlocked(read.func))
+        const Funcs family = canonicalReplyFunc(read.func);
+        const bool exchangeConfirmationRead = read.receiver == 1 && (family == canonicalReplyFunc(funcFreqGet) ||
+                                                                     family == canonicalReplyFunc(funcModeGet));
+        if (m_mainSubExchangeConfirmationPending && !exchangeConfirmationRead)
         {
+            ++index;
+            continue;
+        }
+        if (replyFamilyBlocked(read.func) || dispatchedFamilies.contains(family))
+        {
+            ++index;
             continue;
         }
         m_deferredReplyReads.removeAt(index);
+        dispatchedFamilies.insert(family);
         const vfo_t targetVfo = read.receiver == 1 ? vfoSub : vfoMain;
         receiveCommand(funcSelectVFO, QVariant::fromValue(targetVfo), 0);
         receiveCommand(read.func, QVariant(), read.receiver);
@@ -703,7 +753,6 @@ void Commander::dispatchDeferredReplyReads()
         {
             receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
         }
-        break;
     }
 
     if (!m_deferredReplyReads.isEmpty() || m_mainSubExchangeQueued)
@@ -748,6 +797,7 @@ void Commander::dispatchMainSubExchange()
     Q_ASSERT(!replyFamilyBlocked(funcFreqGet));
     Q_ASSERT(!replyFamilyBlocked(funcModeGet));
     m_mainSubExchangeQueued = false;
+    m_mainSubExchangeConfirmationPending = true;
 
     receiveCommand(funcVFOSwapMS, QVariant(), 0);
     receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
@@ -763,6 +813,28 @@ void Commander::dispatchMainSubExchange()
     receiveCommand(funcVFOBandMS, QVariant(), 0);
     receiveCommand(funcScopeMainSub, QVariant(), 0);
     emit mainSubExchangeDispatched();
+}
+
+void Commander::finishMainSubExchangeConfirmation()
+{
+    m_mainSubExchangeConfirmationPending = false;
+    m_deferredReplyReads.erase(std::remove_if(m_deferredReplyReads.begin(), m_deferredReplyReads.end(),
+                                              [](const DeferredReplyRead& read)
+                                              {
+                                                  const Funcs family = canonicalReplyFunc(read.func);
+                                                  return read.receiver == 1 &&
+                                                         (family == canonicalReplyFunc(funcFreqGet) ||
+                                                          family == canonicalReplyFunc(funcModeGet));
+                                              }),
+                               m_deferredReplyReads.end());
+    if (!m_scheduledCommands.isEmpty() && !m_scheduledCommandTimer->isActive())
+    {
+        m_scheduledCommandTimer->start();
+    }
+    if (!m_deferredReplyReads.isEmpty() || m_mainSubExchangeQueued)
+    {
+        m_replyDrainTimer->start(static_cast<int>(m_rttEstimator.resolvedDrainMs()));
+    }
 }
 
 CommanderCorrelationDiagnostics Commander::correlationDiagnostics() const

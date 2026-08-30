@@ -292,6 +292,11 @@ void VfoController::captureExchangeableControlState()
         m_toneAccessMode, m_toneFrequency,     m_dtcsCode};
 }
 
+void VfoController::discardCapturedExchangeableControlState()
+{
+    m_capturedExchangeState.reset();
+}
+
 void VfoController::applyCapturedControlExchange(VfoController* other)
 {
     if (!other || !m_capturedExchangeState.has_value() || !other->m_capturedExchangeState.has_value())

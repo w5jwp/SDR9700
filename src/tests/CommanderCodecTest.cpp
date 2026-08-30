@@ -37,6 +37,7 @@ class CommanderCodecTest : public QObject
     void doesNotDeferMainSubSwapActions();
     void defersWholeMainSubExchangeUntilReplyFamiliesAreIdle();
     void receiverScopedRetrySelectsOnlyWhenReadCanDispatch();
+    void exchangeGateAllowsOnlyConfirmationRetries();
     void discardsLateReplyDuringFamilyDrain();
     void adaptsReplyDrainWindowsToMeasuredRtt();
     void rejectsShortSpectrumFrames();
@@ -60,7 +61,10 @@ void CommanderCodecTest::init()
     m_commander.m_correlationDiagnostics = {};
     m_commander.resetScheduledCommands();
     m_commander.m_schedulerDiagnostics = {};
+    m_commander.m_lastLoggedSchedulerDiagnostics = {};
     m_commander.m_shutdownComplete = false;
+    m_commander.m_mainSubExchangeQueued = false;
+    m_commander.m_mainSubExchangeConfirmationPending = false;
     sdr9700::populateRadioCapabilities(m_commander.radioCaps);
     m_commander.haveRadioCaps = true;
     m_commander.setCIVAddr(0xA2);
@@ -101,6 +105,14 @@ void CommanderCodecTest::defersWholeMainSubExchangeUntilReplyFamiliesAreIdle()
     QCOMPARE(dispatchedSpy.count(), 1);
     QVERIFY(wireSpy.count() > 0);
     QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07b0")));
+
+    int interactiveDispatches = 0;
+    m_commander.scheduleInteractiveAction(funcRfGain, 0, [&interactiveDispatches]() { ++interactiveDispatches; });
+    m_commander.dispatchNextScheduledCommand();
+    QCOMPARE(interactiveDispatches, 0);
+    m_commander.finishMainSubExchangeConfirmation();
+    m_commander.dispatchNextScheduledCommand();
+    QCOMPARE(interactiveDispatches, 1);
 }
 
 void CommanderCodecTest::receiverScopedRetrySelectsOnlyWhenReadCanDispatch()
@@ -120,6 +132,39 @@ void CommanderCodecTest::receiverScopedRetrySelectsOnlyWhenReadCanDispatch()
     QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07d1")));
     QVERIFY(wireSpy.at(1).at(0).toByteArray().contains(QByteArray::fromHex("04")));
     QVERIFY(wireSpy.at(2).at(0).toByteArray().contains(QByteArray::fromHex("07d0")));
+
+    wireSpy.clear();
+    m_commander.m_pendingReplies.clear();
+    m_commander.m_replyFamilyDrains.clear();
+    m_commander.m_deferredReplyReads.append({funcFreqGet, 1});
+    m_commander.m_deferredReplyReads.append({funcModeGet, 1});
+    m_commander.m_deferredReplyReads.append({funcRfGain, 1});
+    m_commander.dispatchDeferredReplyReads();
+    QCOMPARE(wireSpy.count(), 9);
+}
+
+void CommanderCodecTest::exchangeGateAllowsOnlyConfirmationRetries()
+{
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+    m_commander.m_mainSubExchangeConfirmationPending = true;
+    m_commander.m_deferredReplyReads.append({funcFreqGet, 1});
+    m_commander.m_deferredReplyReads.append({funcRfGain, 0});
+
+    m_commander.dispatchDeferredReplyReads();
+
+    QCOMPARE(wireSpy.count(), 3);
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), 1);
+    QCOMPARE(m_commander.m_deferredReplyReads.first().func, funcRfGain);
+    QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07d1")));
+    QVERIFY(wireSpy.at(1).at(0).toByteArray().contains(QByteArray::fromHex("03")));
+    QVERIFY(wireSpy.at(2).at(0).toByteArray().contains(QByteArray::fromHex("07d0")));
+
+    m_commander.scheduleStartupRead(funcAttenuator, 0);
+    m_commander.scheduleInteractiveAction(funcSquelch, 0, []() {});
+    m_commander.m_scheduledCommandTimer->stop();
+    m_commander.dispatchNextScheduledCommand();
+    QCOMPARE(m_commander.m_scheduledCommands.size(), 2);
+    QVERIFY(m_commander.m_scheduledCommandTimer->isActive());
 }
 
 void CommanderCodecTest::schedulerCoalescesAndBoundsReads()
@@ -171,6 +216,9 @@ void CommanderCodecTest::schedulerCoalescesInteractiveActionsAndPreservesReadPro
 
     int interactiveCount = 0;
     m_commander.scheduleInteractiveAction(funcRfGain, 0, [&interactiveCount]() { ++interactiveCount; });
+    m_commander.scheduleStartupRead(funcRfGain, 0);
+    QCOMPARE(m_commander.m_scheduledCommands.size(), 2);
+    m_commander.m_scheduledCommands.removeLast();
     m_commander.scheduleInteractiveAction(funcSquelch, 0, [&interactiveCount]() { ++interactiveCount; });
     m_commander.scheduleInteractiveAction(funcNRLevel, 0, [&interactiveCount]() { ++interactiveCount; });
     m_commander.scheduleInteractiveAction(funcNBLevel, 0, [&interactiveCount]() { ++interactiveCount; });

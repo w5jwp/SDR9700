@@ -32,9 +32,40 @@ using namespace sdr9700::ui::main_window;
 namespace
 {
 constexpr int kSpectrumToolbarHeight = 29;
-}
+constexpr int kExchangeScopeSyncTimeoutMs = 2000;
+} // namespace
 
-SpectrumScopeController::SpectrumScopeController(MainWindow* window) : QObject(window), m_window(window) {}
+SpectrumScopeController::SpectrumScopeController(MainWindow* window) : QObject(window), m_window(window)
+{
+    m_exchangeScopeSyncTimer = new QTimer(this);
+    m_exchangeScopeSyncTimer->setSingleShot(true);
+    m_exchangeScopeSyncTimer->setInterval(kExchangeScopeSyncTimeoutMs);
+    connect(m_exchangeScopeSyncTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (!m_exchangeScopeSyncPending)
+                {
+                    return;
+                }
+                qCritical(logSpectrumScope()).noquote()
+                    << "Exchange scope synchronization timed out; releasing exchange controls";
+                m_exchangeScopeSyncPending = false;
+                m_exchangeRejectedFrames = 0;
+                if (m_window->m_vfoSelectionController)
+                {
+                    const Vfo selected = m_window->m_vfoSelectionController->selectedVfo();
+                    const VfoController* selectedController =
+                        selected == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController;
+                    m_activeVfoStatePublished = selectedController && selectedController->hasPublishedState();
+                    if (auto* backend = m_window->m_model ? m_window->m_model->backend() : nullptr)
+                    {
+                        backend->setScopeVfo(selected);
+                    }
+                    updateScopeFrameGate();
+                    m_window->m_vfoSelectionController->completeExchangeScopeSync();
+                }
+            });
+}
 
 void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
 {
@@ -158,6 +189,25 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                     resetScopeFrameGate();
                     m_exchangeScopeSyncPending = true;
                     m_exchangeRejectedFrames = 0;
+                    m_exchangeScopeSyncTimer->start();
+                    const Vfo selected = m_window->m_vfoSelectionController->selectedVfo();
+                    const VfoController* selectedController =
+                        selected == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController;
+                    m_activeVfoStatePublished = selectedController && selectedController->hasPublishedState();
+                    backend->setScopeVfo(selected);
+                    updateScopeFrameGate();
+                });
+        connect(backend, &IRadioBackend::mainSubExchangeFailed, this,
+                [this, backend]()
+                {
+                    if (!m_window->m_vfoSelectionController)
+                    {
+                        return;
+                    }
+                    resetScopeFrameGate();
+                    m_exchangeScopeSyncPending = true;
+                    m_exchangeRejectedFrames = 0;
+                    m_exchangeScopeSyncTimer->start();
                     const Vfo selected = m_window->m_vfoSelectionController->selectedVfo();
                     const VfoController* selectedController =
                         selected == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController;
@@ -172,6 +222,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                     {
                         resetScopeFrameGate();
                         m_exchangeScopeSyncPending = false;
+                        m_exchangeScopeSyncTimer->stop();
                         m_exchangeRejectedFrames = 0;
                         m_hasCenteredActiveVfo = false;
                         m_pendingMainRecenterHz = 0;
@@ -764,6 +815,7 @@ void SpectrumScopeController::onSpectrumReady(const QVector<float>& levels, doub
             << "Exchange scope synchronized rejectedFrames=" << m_exchangeRejectedFrames
             << " referenceHz=" << referenceHz << " frameStart=" << start << " frameEnd=" << end;
         m_exchangeScopeSyncPending = false;
+        m_exchangeScopeSyncTimer->stop();
         m_exchangeRejectedFrames = 0;
         if (m_window->m_vfoSelectionController)
         {

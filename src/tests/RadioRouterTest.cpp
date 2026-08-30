@@ -140,7 +140,8 @@ void RadioRouterTest::routesOnlyConfirmedScopeReceiver()
     QSignalSpy queuedScopeSpy(&queuedRouter, &RadioRouter::scopeDataReady);
     queuedRouter.enqueueBatch({CacheItem(funcScopeWaveData, QVariant::fromValue(subFrame), 1)});
     queuedRouter.enqueueBatch({CacheItem(funcScopeWaveData, QVariant::fromValue(mainFrame), 0)});
-    QCOMPARE(queuedRouter.queueDiagnostics().pendingItems, qsizetype(1));
+    QCOMPARE(queuedRouter.queueDiagnostics().pendingItems, qsizetype(2));
+    QCOMPARE(queuedRouter.queueDiagnostics().coalescedItems, quint64(0));
     QTRY_COMPARE(queuedScopeSpy.size(), 1);
     QCOMPARE(queuedScopeSpy.at(0).at(0).value<ScopeData>().receiver, uchar(0));
 }

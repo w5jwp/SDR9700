@@ -24,6 +24,7 @@ class CachingQueueTest : public QObject
     void comparesRegisteredValueTypes();
     void deliversUnsupportedPayloadTypesConservatively();
     void resetClearsSessionState();
+    void vfoBandReadDoesNotChangeRoutingState();
     void emitsCacheChangesWithoutHoldingMutex();
     void restartsAfterExplicitShutdown();
     void reportsQueueDiagnostics();
@@ -120,6 +121,18 @@ void CachingQueueTest::resetClearsSessionState()
     QCOMPARE(queue->getState().receiver, uchar(0));
     const CacheItem cached = queue->getCache(funcVFOBandMS, 0);
     QVERIFY(!cached.value.isValid());
+}
+
+void CachingQueueTest::vfoBandReadDoesNotChangeRoutingState()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    QSignalSpy dispatched(queue, &CachingQueue::haveCommand);
+    queue->recordLocalRoutingState(funcVFOBandMS, true, 0);
+
+    queue->add(kPriorityImmediate, funcVFOBandMS);
+
+    QTRY_COMPARE(dispatched.size(), 1);
+    QCOMPARE(queue->getState().receiver, uchar(1));
 }
 
 void CachingQueueTest::emitsCacheChangesWithoutHoldingMutex()
