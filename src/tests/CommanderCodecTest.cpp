@@ -177,6 +177,8 @@ void CommanderCodecTest::repeatedExchangesDrainScheduledPressure()
 {
     constexpr int kExchangeCount = 500;
     constexpr int kUpdatesPerExchange = 20;
+    // Exercise ten thousand replaceable updates across hundreds of complete
+    // exchange state-machine cycles.
     int dispatchedExchanges = 0;
     int deliveredInteractiveValue = -1;
     connect(&m_commander, &Commander::mainSubExchangeDispatched, this,
@@ -222,12 +224,15 @@ void CommanderCodecTest::repeatedExchangesDrainScheduledPressure()
 
 void CommanderCodecTest::schedulerCoalescesAndBoundsReads()
 {
-    for (int i = 0; i < 100; ++i)
+    constexpr int kRepeatedMeterReads = 10000;
+    // A five-digit burst protects against queue growth that only appears after
+    // sustained, same-key meter pressure.
+    for (int i = 0; i < kRepeatedMeterReads; ++i)
     {
         m_commander.scheduleMeterRead(funcSMeter, 0);
     }
     QCOMPARE(m_commander.m_scheduledCommands.size(), 1);
-    QCOMPARE(m_commander.schedulerDiagnostics().coalescedCommands, quint64(99));
+    QCOMPARE(m_commander.schedulerDiagnostics().coalescedCommands, quint64(kRepeatedMeterReads - 1));
 
     for (int i = 0; i < 100; ++i)
     {
@@ -318,6 +323,14 @@ void CommanderCodecTest::reportsMeterTransmissionAtWireDispatch()
     QCOMPARE(transmittedSpy.size(), 1);
     QCOMPARE(static_cast<Funcs>(transmittedSpy.at(0).at(0).toInt()), funcSMeter);
     QCOMPARE(transmittedSpy.at(0).at(1).toUInt(), uint(1));
+    QCOMPARE(m_commander.schedulerDiagnostics().transmittedFrames, quint64(1));
+    QCOMPARE(m_commander.schedulerDiagnostics().scheduledFrames, quint64(1));
+    QCOMPARE(m_commander.schedulerDiagnostics().directFrames, quint64(0));
+
+    m_commander.receiveCommandNoReadback(funcRfGain, QVariant::fromValue<ushort>(128), 0);
+    QCOMPARE(m_commander.schedulerDiagnostics().transmittedFrames, quint64(2));
+    QCOMPARE(m_commander.schedulerDiagnostics().scheduledFrames, quint64(1));
+    QCOMPARE(m_commander.schedulerDiagnostics().directFrames, quint64(1));
 }
 
 void CommanderCodecTest::survivesCombinedTransportAndSchedulerFaultSoak()
@@ -326,10 +339,13 @@ void CommanderCodecTest::survivesCombinedTransportAndSchedulerFaultSoak()
     quint16 sequence = 100;
     int latestInteractiveValue = -1;
     constexpr int kCycles = 500;
+    constexpr int kUpdatesPerCycle = 40;
+    // Twenty thousand interactive updates run alongside duplicated, lost, and
+    // reordered CI-V replies.
 
     const auto deliver = [this, &gate](quint16 datagramSequence, const QByteArray& frame)
     {
-        const CivSequenceGateResult result = gate.accept(datagramSequence, frame, datagramSequence);
+        const CivSequenceGateResult result = gate.accept(datagramSequence, frame);
         for (const QByteArray& payload : result.payloads)
         {
             m_commander.handleNewData(payload);
@@ -342,9 +358,9 @@ void CommanderCodecTest::survivesCombinedTransportAndSchedulerFaultSoak()
         // Hold the same scheduler gate used by an active MAIN/SUB exchange;
         // every logical key must remain bounded to one latest queued value.
         m_commander.m_mainSubExchangeConfirmationPending = true;
-        for (int update = 0; update < 40; ++update)
+        for (int update = 0; update < kUpdatesPerCycle; ++update)
         {
-            const int value = cycle * 40 + update;
+            const int value = cycle * kUpdatesPerCycle + update;
             m_commander.scheduleInteractiveAction(funcRfGain, cycle % 2, [&latestInteractiveValue, value]()
                                                   { latestInteractiveValue = value; });
             m_commander.scheduleMeterRead(funcSMeter, 0);
@@ -383,7 +399,7 @@ void CommanderCodecTest::survivesCombinedTransportAndSchedulerFaultSoak()
         {
             m_commander.dispatchNextScheduledCommand();
         }
-        QCOMPARE(latestInteractiveValue, cycle * 40 + 39);
+        QCOMPARE(latestInteractiveValue, (cycle + 1) * kUpdatesPerCycle - 1);
 
         // Advance the deterministic soak beyond any real-time drain without
         // sleeping; drain timing behavior has dedicated timer-based tests.

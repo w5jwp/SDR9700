@@ -276,12 +276,15 @@ void VfoBackendTest::suppressesReceiverMeterPollingDuringContextTransitions()
 
 void VfoBackendTest::survivesRepeatedExchangeAndTunePressure()
 {
+    constexpr int kIterationCount = 10000;
+    // A five-digit mixed-pressure run covers many overlapping exchange,
+    // tuning-holdoff, PTT-transition, and dual-watch meter phases.
     Vfo activeVfo = Vfo::Main;
     int pollTick = 0;
     int activeSamples = 0;
     int inactiveSamples = 0;
 
-    for (int iteration = 0; iteration < 500; ++iteration)
+    for (int iteration = 0; iteration < kIterationCount; ++iteration)
     {
         const bool exchangePending = iteration % 7 == 0;
         const bool tuningHoldoff = iteration % 11 == 0;

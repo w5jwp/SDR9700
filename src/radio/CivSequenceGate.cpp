@@ -5,9 +5,8 @@ qint16 CivSequenceGate::distance(quint16 from, quint16 to)
     return static_cast<qint16>(to - from);
 }
 
-CivSequenceGateResult CivSequenceGate::accept(quint16 sequence, const QByteArray& payload, qint64 receivedAtMs)
+CivSequenceGateResult CivSequenceGate::accept(quint16 sequence, const QByteArray& payload)
 {
-    Q_UNUSED(receivedAtMs)
     CivSequenceGateResult result;
     if (m_recentSequences.contains(sequence))
     {

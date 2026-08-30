@@ -33,7 +33,6 @@ UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, qui
     idleTimer = new QTimer(this);
     areYouThereTimer = new QTimer(this);
     startCivDataTimer = new QTimer(this);
-    m_sequenceClock.start();
 
     connect(pingTimer, &QTimer::timeout, this, &UdpBase::sendPing);
     connect(idleTimer, &QTimer::timeout, this, std::bind(&UdpBase::sendControl, this, true, 0, 0));
@@ -154,8 +153,8 @@ void UdpCivData::dataReceived()
         }
         QByteArray r = datagram.data();
         // Update loss/retransmit bookkeeping before any accepted payload can
-        // reach Commander. The CI-V sequence gate below then enforces delivery
-        // order and suppresses duplicates at the parser boundary.
+        // reach Commander. The CI-V sequence gate suppresses duplicate
+        // sequence numbers and records reordering without delaying delivery.
         UdpBase::dataReceived(r);
 
         const bool scopeDataDatagram = isScopeDataDatagram(r);
@@ -181,7 +180,6 @@ void UdpCivData::dataReceived()
                 if (remoteId != in->sentid)
                 {
                     m_sequenceGate.reset();
-                    m_sequenceClock.restart();
                 }
                 remoteId = in->sentid;
                 // Request the CI-V data stream until the radio starts sending
@@ -244,8 +242,7 @@ void UdpCivData::dataReceived()
                         qDebug(logUdp()).noquote().nospace() << "UdpCivData: RX len=" << r.length()
                                                              << " hex=" << QString::fromLatin1(r.left(16).toHex(' '));
                     }
-                    const CivSequenceGateResult gateResult =
-                        m_sequenceGate.accept(in->seq, r.mid(DATA_SIZE), m_sequenceClock.elapsed());
+                    const CivSequenceGateResult gateResult = m_sequenceGate.accept(in->seq, r.mid(DATA_SIZE));
                     deliverSequencedPayloads(gateResult);
                 }
             }
@@ -259,15 +256,6 @@ void UdpCivData::dataReceived()
 
 void UdpCivData::deliverSequencedPayloads(const CivSequenceGateResult& result)
 {
-    if (result.discontinuity)
-    {
-        const CivSequenceGateDiagnostics diagnostics = sequenceDiagnostics();
-        qWarning(logUdp()).noquote().nospace()
-            << "CI-V sequence discontinuity firstMissing=" << result.firstMissing
-            << " lastMissing=" << result.lastMissing << " duplicatesSuppressed=" << diagnostics.duplicatesSuppressed
-            << " reordered=" << diagnostics.reordered << " highWaterMark=" << diagnostics.highWaterMark;
-        emit sequenceDiscontinuity(result.firstMissing, result.lastMissing);
-    }
     for (const QByteArray& payload : result.payloads)
     {
         emit receive(payload);

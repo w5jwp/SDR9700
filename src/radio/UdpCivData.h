@@ -39,7 +39,6 @@ class UdpCivData : public UdpBase
   signals:
     void receive(QByteArray);
     void ready();
-    void sequenceDiscontinuity(quint16 firstMissing, quint16 lastMissing);
 
   public slots:
     void send(QByteArray d);
@@ -55,5 +54,4 @@ class UdpCivData : public UdpBase
     bool m_readyEmitted = false;
     int m_openStartRequestCount = 0;
     CivSequenceGate m_sequenceGate;
-    QElapsedTimer m_sequenceClock;
 };

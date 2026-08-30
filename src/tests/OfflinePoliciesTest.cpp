@@ -34,14 +34,18 @@ class OfflinePoliciesTest : public QObject
 
 void OfflinePoliciesTest::serializesRepeatedMainSubExchanges()
 {
+    constexpr int kExchangeCount = 500;
+    constexpr int kDuplicateClicksPerExchange = 10;
+    // Five thousand rejected duplicate clicks intentionally pressure hundreds
+    // of complete exchange cycles.
     sdr9700::MainSubExchangePolicy policy;
     bool mainContainsVhf = true;
 
-    for (int exchange = 0; exchange < 500; ++exchange)
+    for (int exchange = 0; exchange < kExchangeCount; ++exchange)
     {
         QVERIFY(policy.request());
         QCOMPARE(policy.state(), sdr9700::MainSubExchangePolicy::State::AwaitingRadio);
-        for (int duplicateClick = 0; duplicateClick < 10; ++duplicateClick)
+        for (int duplicateClick = 0; duplicateClick < kDuplicateClicksPerExchange; ++duplicateClick)
         {
             QVERIFY(!policy.request());
         }

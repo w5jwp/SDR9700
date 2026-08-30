@@ -184,10 +184,13 @@ void CachingQueueTest::reportsQueueDiagnostics()
 
 void CachingQueueTest::deduplicatesRepeatedCacheRefreshes()
 {
+    // Keep this as a five-digit request burst so the test exercises sustained
+    // duplicate pressure, not only a handful of coincident callers.
+    constexpr int kRefreshRequestCount = 10000;
     CachingQueue* queue = CachingQueue::getInstance();
     const quint64 dispatchedBefore = queue->diagnostics().dispatched;
 
-    for (int i = 0; i < 100; ++i)
+    for (int i = 0; i < kRefreshRequestCount; ++i)
     {
         queue->getCache(funcRfGain, 0);
     }

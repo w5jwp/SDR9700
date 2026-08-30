@@ -435,7 +435,7 @@ void Commander::dispatchNextScheduledCommand()
         m_scheduledCommandTimer->start();
         return;
     }
-    if (!m_mainSubExchangeConfirmationPending && interactive != m_scheduledCommands.cend() &&
+    if (interactive != m_scheduledCommands.cend() &&
         (m_consecutiveInteractiveDispatches < kMaxConsecutiveInteractiveDispatches ||
          nonInteractive == m_scheduledCommands.cend()))
     {
@@ -476,6 +476,7 @@ void Commander::dispatchNextScheduledCommand()
         m_consecutiveMeterDispatches = 0;
     }
     ++m_schedulerDiagnostics.dispatchedCommands;
+    m_dispatchingScheduledCommand = true;
     if (command.action)
     {
         command.action();
@@ -484,6 +485,7 @@ void Commander::dispatchNextScheduledCommand()
     {
         receiveCommand(command.func, QVariant(), command.receiver);
     }
+    m_dispatchingScheduledCommand = false;
 
     if (!m_scheduledCommands.isEmpty())
     {
@@ -508,7 +510,8 @@ void Commander::logSchedulerDiagnostics()
         << " droppedDeferredReads=" << correlation.droppedReplyReads << " cacheQueueDepth=" << cacheQueue.depth
         << " cacheQueueHighWater=" << cacheQueue.highWaterMark << " cacheQueueOldestMs=" << cacheQueue.oldestItemAgeMs
         << " cacheQueueDropped=" << cacheQueue.droppedForCapacity
-        << " transmittedFrames=" << diagnostics.transmittedFrames << " intervalDispatched="
+        << " transmittedFrames=" << diagnostics.transmittedFrames << " scheduledFrames=" << diagnostics.scheduledFrames
+        << " directFrames=" << diagnostics.directFrames << " intervalDispatched="
         << (diagnostics.dispatchedCommands - m_lastLoggedSchedulerDiagnostics.dispatchedCommands)
         << " intervalCoalesced=" << (diagnostics.coalescedCommands - m_lastLoggedSchedulerDiagnostics.coalescedCommands)
         << " intervalDropped=" << (diagnostics.droppedCommands - m_lastLoggedSchedulerDiagnostics.droppedCommands)
@@ -523,6 +526,7 @@ void Commander::resetScheduledCommands()
     m_scheduledCommands.clear();
     m_consecutiveMeterDispatches = 0;
     m_consecutiveInteractiveDispatches = 0;
+    m_dispatchingScheduledCommand = false;
     m_mainSubExchangeConfirmationPending = false;
 }
 
@@ -543,6 +547,14 @@ void Commander::prepDataAndSend(QByteArray data)
         qInfo(logRadioTraffic()).noquote() << "CI-V TX" << data.toHex(' ');
     }
     ++m_schedulerDiagnostics.transmittedFrames;
+    if (m_dispatchingScheduledCommand)
+    {
+        ++m_schedulerDiagnostics.scheduledFrames;
+    }
+    else
+    {
+        ++m_schedulerDiagnostics.directFrames;
+    }
     emit dataForComm(data);
 }
 

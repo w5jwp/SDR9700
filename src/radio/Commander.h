@@ -36,6 +36,8 @@ struct CommanderSchedulerDiagnostics
     quint64 droppedCommands{0};
     quint64 dispatchedCommands{0};
     quint64 transmittedFrames{0};
+    quint64 scheduledFrames{0};
+    quint64 directFrames{0};
 };
 
 class Commander : public RadioCommander
@@ -248,6 +250,7 @@ class Commander : public RadioCommander
     CommanderSchedulerDiagnostics m_lastLoggedSchedulerDiagnostics;
     int m_consecutiveMeterDispatches{0};
     int m_consecutiveInteractiveDispatches{0};
+    bool m_dispatchingScheduledCommand{false};
     bool m_suppressReadbackForCurrentCommand{false};
     bool m_shutdownComplete{false};
 

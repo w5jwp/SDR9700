@@ -51,6 +51,10 @@ void RadioRouterTest::coalescesReplaceableBacklogAcrossOneQueuedDrain()
 
 void RadioRouterTest::boundsReplaceableTrafficWhileConsumerIsStalled()
 {
+    constexpr int kBatchCount = 5000;
+    constexpr int kItemsPerBatch = 4;
+    // Twenty thousand replaceable items intentionally arrive while the
+    // consumer event loop is stalled.
     RadioRouter router;
     QSignalSpy meterSpy(&router, &RadioRouter::smeterChanged);
     QSignalSpy scopeSpy(&router, &RadioRouter::scopeDataReady);
@@ -64,7 +68,7 @@ void RadioRouterTest::boundsReplaceableTrafficWhileConsumerIsStalled()
     std::thread producer(
         [&router, &mainFrame, &subFrame, &producerFinished]()
         {
-            for (int value = 0; value < 5000; ++value)
+            for (int value = 0; value < kBatchCount; ++value)
             {
                 mainFrame.data = QByteArray::number(value);
                 subFrame.data = QByteArray::number(value);
@@ -85,14 +89,14 @@ void RadioRouterTest::boundsReplaceableTrafficWhileConsumerIsStalled()
     const RadioRouterQueueDiagnostics stalled = router.queueDiagnostics();
     QCOMPARE(stalled.pendingItems, qsizetype(4));
     QCOMPARE(stalled.highWaterMark, qsizetype(4));
-    QCOMPARE(stalled.coalescedItems, quint64(19996));
+    QCOMPARE(stalled.coalescedItems, quint64(kBatchCount * kItemsPerBatch - kItemsPerBatch));
     QCOMPARE(stalled.backpressureWaits, quint64(0));
 
     QTRY_COMPARE(router.queueDiagnostics().pendingItems, qsizetype(0));
     QCOMPARE(meterSpy.size(), 1);
     QCOMPARE(meterSpy.at(0).at(0).toInt(), 255);
     QCOMPARE(scopeSpy.size(), 1);
-    QCOMPARE(scopeSpy.at(0).at(0).value<ScopeData>().data, QByteArrayLiteral("4999"));
+    QCOMPARE(scopeSpy.at(0).at(0).value<ScopeData>().data, QByteArray::number(kBatchCount - 1));
 }
 
 void RadioRouterTest::preservesOrderingAcrossLosslessBarriers()
@@ -132,11 +136,14 @@ void RadioRouterTest::rejectsBatchesFromCancelledSessions()
 
 void RadioRouterTest::boundsLosslessBacklogWithProducerBackpressure()
 {
+    constexpr int kRecordCount = 600;
+    // This is a capacity-boundary test: exceed the 512-item limit enough to
+    // prove producer backpressure without adding unrelated runtime.
     RadioRouter router;
     QSignalSpy memorySpy(&router, &RadioRouter::radioMemoryReceived);
     QVector<CacheItem> records;
-    records.reserve(600);
-    for (int index = 0; index < 600; ++index)
+    records.reserve(kRecordCount);
+    for (int index = 0; index < kRecordCount; ++index)
     {
         MemoryType memory;
         memory.channel = static_cast<quint16>(index);
@@ -160,7 +167,7 @@ void RadioRouterTest::boundsLosslessBacklogWithProducerBackpressure()
     QCOMPARE(router.queueDiagnostics().highWaterMark, qsizetype(512));
     QTRY_VERIFY_WITH_TIMEOUT(producerFinished.load(std::memory_order_acquire), 2000);
     producer.join();
-    QTRY_COMPARE_WITH_TIMEOUT(memorySpy.size(), 600, 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(memorySpy.size(), kRecordCount, 2000);
 
     const RadioRouterQueueDiagnostics diagnostics = router.queueDiagnostics();
     QCOMPARE(diagnostics.highWaterMark, qsizetype(512));

@@ -22,33 +22,33 @@ class CivSequenceGateTest : public QObject
 void CivSequenceGateTest::deliversInOrder()
 {
     CivSequenceGate gate;
-    QCOMPARE(gate.accept(10, QByteArrayLiteral("a"), 0).payloads, QVector<QByteArray>({QByteArrayLiteral("a")}));
-    QCOMPARE(gate.accept(11, QByteArrayLiteral("b"), 1).payloads, QVector<QByteArray>({QByteArrayLiteral("b")}));
+    QCOMPARE(gate.accept(10, QByteArrayLiteral("a")).payloads, QVector<QByteArray>({QByteArrayLiteral("a")}));
+    QCOMPARE(gate.accept(11, QByteArrayLiteral("b")).payloads, QVector<QByteArray>({QByteArrayLiteral("b")}));
 }
 
 void CivSequenceGateTest::suppressesDuplicates()
 {
     CivSequenceGate gate;
-    QCOMPARE(gate.accept(10, QByteArrayLiteral("a"), 0).payloads.size(), 1);
-    QVERIFY(gate.accept(10, QByteArrayLiteral("a"), 1).payloads.isEmpty());
+    QCOMPARE(gate.accept(10, QByteArrayLiteral("a")).payloads.size(), 1);
+    QVERIFY(gate.accept(10, QByteArrayLiteral("a")).payloads.isEmpty());
     QCOMPARE(gate.diagnostics().duplicatesSuppressed, quint64(1));
 }
 
 void CivSequenceGateTest::deliversOutOfOrderWithoutBlocking()
 {
     CivSequenceGate gate;
-    QCOMPARE(gate.accept(10, QByteArrayLiteral("a"), 0).payloads.size(), 1);
-    QCOMPARE(gate.accept(12, QByteArrayLiteral("c"), 1).payloads, QVector<QByteArray>({QByteArrayLiteral("c")}));
-    QCOMPARE(gate.accept(11, QByteArrayLiteral("b"), 2).payloads, QVector<QByteArray>({QByteArrayLiteral("b")}));
+    QCOMPARE(gate.accept(10, QByteArrayLiteral("a")).payloads.size(), 1);
+    QCOMPARE(gate.accept(12, QByteArrayLiteral("c")).payloads, QVector<QByteArray>({QByteArrayLiteral("c")}));
+    QCOMPARE(gate.accept(11, QByteArrayLiteral("b")).payloads, QVector<QByteArray>({QByteArrayLiteral("b")}));
     QCOMPARE(gate.diagnostics().reordered, quint64(1));
 }
 
 void CivSequenceGateTest::handlesRollover()
 {
     CivSequenceGate gate;
-    QCOMPARE(gate.accept(0xffff, QByteArrayLiteral("a"), 0).payloads.size(), 1);
-    QCOMPARE(gate.accept(0, QByteArrayLiteral("b"), 1).payloads.size(), 1);
-    QCOMPARE(gate.accept(1, QByteArrayLiteral("c"), 2).payloads.size(), 1);
+    QCOMPARE(gate.accept(0xffff, QByteArrayLiteral("a")).payloads.size(), 1);
+    QCOMPARE(gate.accept(0, QByteArrayLiteral("b")).payloads.size(), 1);
+    QCOMPARE(gate.accept(1, QByteArrayLiteral("c")).payloads.size(), 1);
 }
 
 void CivSequenceGateTest::boundsDuplicateHistory()
@@ -56,10 +56,10 @@ void CivSequenceGateTest::boundsDuplicateHistory()
     CivSequenceGate gate;
     for (qsizetype sequence = 0; sequence <= CivSequenceGate::kRecentSequenceWindow; ++sequence)
     {
-        QCOMPARE(gate.accept(static_cast<quint16>(sequence), QByteArrayLiteral("data"), sequence).payloads.size(), 1);
+        QCOMPARE(gate.accept(static_cast<quint16>(sequence), QByteArrayLiteral("data")).payloads.size(), 1);
     }
     QCOMPARE(gate.diagnostics().highWaterMark, CivSequenceGate::kRecentSequenceWindow);
-    QCOMPARE(gate.accept(0, QByteArrayLiteral("new rollover"), 1000).payloads.size(), 1);
+    QCOMPARE(gate.accept(0, QByteArrayLiteral("new rollover")).payloads.size(), 1);
 }
 
 void CivSequenceGateTest::survivesSeededLossDuplicateAndReorderSoak()
@@ -78,6 +78,8 @@ void CivSequenceGateTest::survivesSeededLossDuplicateAndReorderSoak()
 
     constexpr int kDatagramCount = 20000;
     constexpr int kBatchSize = 8;
+    // Twenty thousand source datagrams intentionally cross sequence rollover
+    // exposure while repeatedly injecting loss, duplication, and reordering.
     for (int batchStart = 0; batchStart < kDatagramCount; batchStart += kBatchSize)
     {
         QVector<Datagram> arrivals;
@@ -103,7 +105,7 @@ void CivSequenceGateTest::survivesSeededLossDuplicateAndReorderSoak()
         std::shuffle(arrivals.begin(), arrivals.end(), random);
         for (const Datagram& datagram : arrivals)
         {
-            const CivSequenceGateResult result = gate.accept(datagram.sequence, datagram.payload, batchStart);
+            const CivSequenceGateResult result = gate.accept(datagram.sequence, datagram.payload);
             for (const QByteArray& payload : result.payloads)
             {
                 const quint16 delivered = payload.toUShort();
@@ -123,14 +125,14 @@ void CivSequenceGateTest::survivesSeededLossDuplicateAndReorderSoak()
 void CivSequenceGateTest::resetStartsIndependentSession()
 {
     CivSequenceGate gate;
-    QCOMPARE(gate.accept(42, QByteArrayLiteral("old-session"), 0).payloads.size(), 1);
-    QVERIFY(gate.accept(42, QByteArrayLiteral("duplicate"), 1).payloads.isEmpty());
+    QCOMPARE(gate.accept(42, QByteArrayLiteral("old-session")).payloads.size(), 1);
+    QVERIFY(gate.accept(42, QByteArrayLiteral("duplicate")).payloads.isEmpty());
 
     gate.reset();
 
     QCOMPARE(gate.diagnostics().delivered, quint64(0));
     QCOMPARE(gate.diagnostics().duplicatesSuppressed, quint64(0));
-    QCOMPARE(gate.accept(42, QByteArrayLiteral("new-session"), 0).payloads,
+    QCOMPARE(gate.accept(42, QByteArrayLiteral("new-session")).payloads,
              QVector<QByteArray>({QByteArrayLiteral("new-session")}));
 }
 

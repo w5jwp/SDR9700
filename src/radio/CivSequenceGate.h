@@ -10,18 +10,12 @@ struct CivSequenceGateDiagnostics
     quint64 delivered{0};
     quint64 duplicatesSuppressed{0};
     quint64 reordered{0};
-    quint64 discontinuities{0};
-    quint64 missingSequences{0};
-    qsizetype buffered{0};
     qsizetype highWaterMark{0};
 };
 
 struct CivSequenceGateResult
 {
     QVector<QByteArray> payloads;
-    bool discontinuity{false};
-    quint16 firstMissing{0};
-    quint16 lastMissing{0};
 };
 
 class CivSequenceGate
@@ -29,7 +23,7 @@ class CivSequenceGate
   public:
     static constexpr qsizetype kRecentSequenceWindow = 512;
 
-    CivSequenceGateResult accept(quint16 sequence, const QByteArray& payload, qint64 receivedAtMs);
+    CivSequenceGateResult accept(quint16 sequence, const QByteArray& payload);
     void reset();
     const CivSequenceGateDiagnostics& diagnostics() const;
 
