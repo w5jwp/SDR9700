@@ -177,18 +177,21 @@ On macOS:
 - `src/radio/`: IC-9700 LAN and CI-V radio protocol code.
 - `src/audio/`: Qt Multimedia audio handlers and conversion utilities.
 - `src/core/`: settings, profile storage, queues, and shared types.
+- `docs/`: architecture, development, protocol, and implementation research
+  documentation.
 - `resources/`: shared images, Qt resources, and platform-specific packaging
   assets under `resources/packaging/`.
 
-## Root Documentation
+## Documentation
+
+The [documentation index](docs/README.md) links the architecture, development,
+release, radio-protocol, and research material maintained with the source.
+
+Repository-level policy and community documents remain at the project root:
 
 - `AGENTS.md`: canonical AI-agent project guide.
 - `CONVENTIONS.md`: coding standards and engineering rules.
 - `CONTRIBUTING.md`: contributor workflow.
-- `DEBUG.md`: developer diagnostics.
-- `ARCHITECTURE.md`: current technical architecture.
-- `NETWORK_SHUTDOWN.md`: verified IC-9700 LAN teardown sequence and regression
-  history.
 - `SECURITY.md`: vulnerability reporting.
 - `CODE_OF_CONDUCT.md`: community behavior expectations.
 

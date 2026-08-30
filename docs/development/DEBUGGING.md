@@ -4,18 +4,37 @@ Use the debug build when you need debug symbols or debugger-friendly behavior:
 
 ```bash
 make debug
+```
+
+Launch the debug executable directly on Linux:
+
+```bash
 ./src/build/bin/SDR9700
+```
+
+On macOS, the executable is inside the application bundle:
+
+```bash
+./src/build/bin/SDR9700.app/Contents/MacOS/SDR9700
 ```
 
 `make debug` cleans and reconfigures `src/build` with CMake's `Debug` build
 type. Debug builds default to `--log=all` when no explicit log option is
 supplied.
 
-Runtime logging can also be enabled in release builds:
+Runtime logging can also be enabled in release builds. On Linux:
 
 ```bash
 ./src/build/bin/SDR9700 --log=radio,udp,ci-v
 ./src/build/bin/SDR9700 --log=all --log-file=/tmp/sdr9700.log
+```
+
+On macOS, use the corresponding bundled executable:
+
+```bash
+./src/build/bin/SDR9700.app/Contents/MacOS/SDR9700 --log=radio,udp,ci-v
+./src/build/bin/SDR9700.app/Contents/MacOS/SDR9700 --log=all \
+  --log-file=/tmp/sdr9700.log
 ```
 
 Supported logging categories:

@@ -1,8 +1,9 @@
-# IC-9700 LAN Shutdown Protocol
+# IC-9700 Radio Disconnect Process
 
-This document records SDR9700's verified shutdown sequence for an authenticated
-IC-9700 LAN session. Treat the ordering below as a protocol invariant. Changes
-to it require an IC-9700 log or packet capture and a close/reopen stress test.
+This document records SDR9700's verified disconnect and shutdown sequence for
+an authenticated IC-9700 LAN session. Treat the ordering below as a protocol
+invariant. Changes to it require an IC-9700 log or packet capture and a
+close/reopen stress test.
 
 ## Why orderly shutdown matters
 

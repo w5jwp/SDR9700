@@ -128,7 +128,8 @@ Run it before submitting source changes.
 - Do not change the basic VFO RX flow unless the task explicitly requires it
   and the behavior is tested.
 - Preserve the authenticated LAN teardown order documented in
-  `NETWORK_SHUTDOWN.md`. In particular, send the control-port departure while
+  `docs/radio/RADIO_DISCONNECT_PROCESS.md`. In particular, send the control-port
+  departure while
   its socket is still open and after token-removal acknowledgement.
 
 ## Logging
