@@ -305,10 +305,6 @@ bool AudioConverter::convert(audioPacket audio)
                 return false;
             }
 
-            if (receivers(SIGNAL(floatAudio(Eigen::VectorXf))) > 0)
-            {
-                emit floatAudio(samplesF);
-            }
             audio.amplitudePeak = samplesF.array().abs().maxCoeff();
             audio.amplitudeRMS = std::sqrt((samplesF.array() * samplesF.array()).mean());
 

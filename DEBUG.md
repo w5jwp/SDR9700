@@ -27,10 +27,10 @@ Supported logging categories:
 - `gui`
 - `icom-rc-28`
 - `radio`
-- `repeater`
-- `sdr9700-radio-control`
+- `spectrumScope`
 - `system`
 - `udp`
+- `waterfall`
 
 `--log-file=<path>` appends the same formatted console output to a file.
 Each line includes a conventional severity name: `DEBUG`, `INFO`, `WARN`,

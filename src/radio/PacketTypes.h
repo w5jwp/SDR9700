@@ -249,7 +249,7 @@ typedef union status_packet
         quint16 civport;              // 0x42 // Sent bigendian
         quint16 unusedi;              // 0x44 // Sent bigendian
         quint16 audioport;            // 0x46 // Sent bigendian
-        char unusedj[7];              // 0x49
+        char unusedj[7];              // 0x48; struct data ends at 0x4e and the packet union supplies byte 0x4f
     };
     char packet[STATUS_SIZE];
 }* status_packet_t;
@@ -350,7 +350,7 @@ typedef union conninfo_packet
                 char computer[16]; // 0x64
                 char unusedi[16];  // 0x74
                 quint32 ipaddress; // 0x84
-                char unusedj[8];   // 0x78
+                char unusedj[8];   // 0x88
             };
             struct
             {

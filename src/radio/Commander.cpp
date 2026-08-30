@@ -11,6 +11,7 @@
 
 #include "RadioCapabilities.h"
 #include "RadioIdentities.h"
+#include "ShutdownTiming.h"
 #include "LogCategories.h"
 
 // Parses IC-9700 CI-V frames and forms outbound CI-V commands.
@@ -212,21 +213,23 @@ void Commander::shutdownComm()
                     shutdownDone->release();
                 },
                 Qt::QueuedConnection);
-            if (!invoked || !shutdownDone->tryAcquire(1, 11000))
+            if (!invoked || !shutdownDone->tryAcquire(1, sdr9700::shutdownTiming::kUdpHandlerShutdownTimeoutMs))
             {
-                qWarning(logRadio()).noquote() << "[SHUTDOWN] UdpHandler shutdown did not finish within 11000 ms";
+                qWarning(logRadio()).noquote().nospace()
+                    << "[SHUTDOWN] UdpHandler shutdown did not finish within "
+                    << sdr9700::shutdownTiming::kUdpHandlerShutdownTimeoutMs << " ms";
             }
         }
         qDebug(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread->quit()";
         udpHandlerThread->quit();
         qDebug(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread->wait(3000)";
-        if (!udpHandlerThread->wait(3000))
+        if (!udpHandlerThread->wait(sdr9700::shutdownTiming::kUdpThreadStopTimeoutMs))
         {
             qWarning(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread did not stop within 3000 ms; "
                                               "requesting interruption";
             udpHandlerThread->requestInterruption();
             udpHandlerThread->quit();
-            if (!udpHandlerThread->wait(1000))
+            if (!udpHandlerThread->wait(sdr9700::shutdownTiming::kUdpThreadInterruptTimeoutMs))
             {
                 qCritical(logRadio()).noquote() << "[SHUTDOWN] closeComm() udpHandlerThread did not stop after bounded "
                                                    "shutdown; leaving thread detached";
@@ -272,8 +275,6 @@ void Commander::commonSetup()
 {
 
     setCIVAddr(civAddr);
-    spectSeqMax = 0;
-
     payloadSuffix = QByteArray("\xFD");
 
     lookingForRadio = true;
@@ -2637,6 +2638,30 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
     }
     const int assemblyIndex = receiver ? 1 : 0;
 
+    if (sequenceMax > radioCaps.spectSeqMax)
+    {
+        qWarning(logSpectrumScope()).noquote().nospace()
+            << "Ignoring scope sequence outside radio capabilities receiver=" << receiver << " sequence=" << sequence
+            << " sequenceMax=" << sequenceMax << " supportedMax=" << radioCaps.spectSeqMax;
+        m_expectedScopeSequences[assemblyIndex] = 0;
+        d.data.clear();
+        d.valid = false;
+        return false;
+    }
+
+    // Append only pixels that fit the IC-9700's advertised completed-frame
+    // size. Limiting the slice before QByteArray creates it avoids a transient
+    // allocation proportional to an untrusted UDP payload, not merely an
+    // oversized retained ScopeData buffer.
+    const auto appendScopePixels = [this, &d](int payloadOffset)
+    {
+        const int remaining = qMax(0, static_cast<int>(radioCaps.spectLenMax) - d.data.size());
+        if (remaining > 0 && payloadOffset < payloadIn.size())
+        {
+            d.data.append(payloadIn.mid(payloadOffset, remaining));
+        }
+    };
+
     constexpr int freqLen = 5;
     constexpr int sequenceHeaderBytes = 2;
     constexpr int waveInfoBytes = sequenceHeaderBytes + 2 + (freqLen * 2);
@@ -2749,12 +2774,6 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
             d.endFreq = d.startFreq + (2 * halfSpanMhz);
         }
 
-        if (sequence == sequenceMax)
-        {
-            d.data.append(payloadIn.right(payloadIn.length() - 4 - (freqLen * 2)));
-            ret = true;
-        }
-
         qInfo(logSpectrumScope()).noquote()
             << "Spectrum seq 1/" << sequenceMax << "start:" << d.startFreq << "end:" << d.endFreq << "mode:" << d.mode
             << "oor:" << d.oor << "payloadLen:" << payloadIn.length();
@@ -2774,7 +2793,7 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
             return false;
         }
         // Intermediate scope chunks carry 50 pixels each.
-        d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
+        appendScopePixels(2);
         m_expectedScopeSequences[assemblyIndex] = sequence + 1;
         ret = false;
         qInfo(logSpectrumScope()).noquote() << "Spectrum seq" << sequence << "/" << sequenceMax
@@ -2795,7 +2814,7 @@ bool Commander::parseSpectrum(ScopeData& d, uchar receiver)
             return false;
         }
         // Final IC-9700 scope chunk carries the remaining waveform pixels.
-        d.data.insert(d.data.length(), payloadIn.right(payloadIn.length() - 2));
+        appendScopePixels(2);
         m_expectedScopeSequences[assemblyIndex] = 0;
         ret = true;
         qInfo(logSpectrumScope()).noquote()
@@ -3662,13 +3681,6 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
         qDebug(logRadio()).noquote() << "Removing unsupported set command from queue" << funcString[func] << "VFO"
                                      << receiver;
         queue->del(func, receiver);
-        return false;
-    }
-
-    if (!isRadioAdmin && cmd.admin)
-    {
-        qWarning(logRadio()).noquote() << "Admin permission required for set command" << funcString[func]
-                                       << "access denied";
         return false;
     }
 

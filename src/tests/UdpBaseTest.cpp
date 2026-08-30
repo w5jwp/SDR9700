@@ -100,6 +100,8 @@ void UdpBaseTest::parsesNullTerminatedPacketText()
 {
     QCOMPARE(parseNullTerminatedString(QByteArray("prefix\0suffix", 13), 0), QByteArrayLiteral("prefix"));
     QCOMPARE(parseNullTerminatedString(QByteArrayLiteral("prefix"), 3), QByteArrayLiteral("fix"));
+    const QByteArray fullWidthField(32, 'x');
+    QCOMPARE(parseNullTerminatedString(fullWidthField, 0), fullWidthField);
     QCOMPARE(parseNullTerminatedString(QByteArrayLiteral("short"), 20), QByteArray());
 }
 

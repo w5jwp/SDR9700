@@ -44,6 +44,7 @@ class CommanderCodecTest : public QObject
     void adaptsReplyDrainWindowsToMeasuredRtt();
     void rejectsShortSpectrumFrames();
     void assemblesMultiPacketSpectrum();
+    void boundsMultiPacketSpectrum();
     void rejectsBrokenAndExpiredSpectrumAssemblies();
     void parserToleratesDeterministicArbitraryInput();
     void schedulerCoalescesAndBoundsReads();
@@ -914,6 +915,37 @@ void CommanderCodecTest::assemblesMultiPacketSpectrum()
     QCOMPARE(scope.startFreq, 144.0);
     QCOMPARE(scope.endFreq, 148.0);
     QCOMPARE(scope.data, QByteArray::fromHex("aabbccdd"));
+    QVERIFY(scope.valid);
+}
+
+void CommanderCodecTest::boundsMultiPacketSpectrum()
+{
+    m_commander.radioCaps.spectSeqMax = 3;
+    m_commander.radioCaps.spectLenMax = 4;
+
+    Frequency start;
+    start.Hz = 144000000;
+    Frequency end;
+    end.Hz = 148000000;
+    const QByteArray first = QByteArray::fromHex("010301") + m_commander.makeFreqPayload(start) +
+                             m_commander.makeFreqPayload(end) + QByteArray::fromHex("0000");
+
+    ScopeData scope;
+    m_commander.payloadIn = QByteArray::fromHex("010401") + m_commander.makeFreqPayload(start) +
+                            m_commander.makeFreqPayload(end) + QByteArray::fromHex("0000");
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("Ignoring scope sequence.*")));
+    QVERIFY(!m_commander.parseSpectrum(scope, 0));
+    QVERIFY(scope.data.isEmpty());
+    QVERIFY(!scope.valid);
+
+    m_commander.payloadIn = first;
+    QVERIFY(!m_commander.parseSpectrum(scope, 0));
+    m_commander.payloadIn = QByteArray::fromHex("0203112233445566");
+    QVERIFY(!m_commander.parseSpectrum(scope, 0));
+    QCOMPARE(scope.data, QByteArray::fromHex("11223344"));
+    m_commander.payloadIn = QByteArray::fromHex("0303778899aa");
+    QVERIFY(m_commander.parseSpectrum(scope, 0));
+    QCOMPARE(scope.data, QByteArray::fromHex("11223344"));
     QVERIFY(scope.valid);
 }
 

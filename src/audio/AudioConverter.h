@@ -74,7 +74,6 @@ class AudioConverter : public QObject
   signals:
     void converted(audioPacket audio);
     void conversionCycleFinished();
-    void floatAudio(Eigen::VectorXf audio);
     void initFailed(QString message);
 
   protected:

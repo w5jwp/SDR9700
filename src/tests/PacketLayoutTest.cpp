@@ -47,8 +47,10 @@ void PacketLayoutTest::variableHeaderOffsetsAreStable()
     QCOMPARE(offsetof(audio_packet, datalen), size_t(0x16));
     QCOMPARE(offsetof(login_packet, username), size_t(0x40));
     QCOMPARE(offsetof(login_packet, password), size_t(0x50));
+    QCOMPARE(offsetof(status_packet, unusedj), size_t(0x48));
     QCOMPARE(offsetof(conninfo_packet, rxsample), size_t(0x74));
     QCOMPARE(offsetof(conninfo_packet, audioport), size_t(0x80));
+    QCOMPARE(offsetof(conninfo_packet, unusedj), size_t(0x88));
 }
 
 void PacketLayoutTest::endianConversionsRoundTrip()

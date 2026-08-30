@@ -14,10 +14,14 @@
 namespace
 {
 constexpr auto kICOMRC28ButtonMappingKey = "ICOMRC28ButtonMapping";
-// RC-28 HID report byte 5 values observed for the three physical buttons.
-constexpr uint8_t kIcomRC28ButtonF1 = 0x05;
-constexpr uint8_t kIcomRC28ButtonF2 = 0x03;
-constexpr uint8_t kIcomRC28ButtonPtt = 0x06;
+// RC-28 HID report byte 5 is an active-low button mask. These bit positions
+// are established by the observed single-button values: idle=0x07, F1=0x05,
+// F2=0x03, and PTT=0x06. Parsing changed bits rather than comparing the whole
+// byte preserves releases when an operator rolls directly between buttons or
+// holds PTT while using F1/F2.
+constexpr uint8_t kIcomRC28ButtonBitPtt = 0x01;
+constexpr uint8_t kIcomRC28ButtonBitF1 = 0x02;
+constexpr uint8_t kIcomRC28ButtonBitF2 = 0x04;
 
 QString readIcomRC28SettingsJson()
 {
@@ -75,7 +79,28 @@ QString IcomRC28Manager::detectDevice()
     return {};
 }
 
-bool IcomRC28Manager::parseIcomRC28Report(const uint8_t* buf, size_t len, int* steps, int* button, int* action)
+QVector<IcomRC28Manager::ButtonTransition> IcomRC28Manager::buttonTransitions(uint8_t previous, uint8_t current)
+{
+    QVector<ButtonTransition> transitions;
+    const auto appendIfChanged = [&transitions, previous, current](uint8_t bit, int button)
+    {
+        const bool wasPressed = (previous & bit) == 0;
+        const bool isPressed = (current & bit) == 0;
+        if (wasPressed != isPressed)
+        {
+            transitions.append(ButtonTransition{button, isPressed ? 0 : 1});
+        }
+    };
+
+    // Process PTT first so a release cannot be delayed behind a simultaneous
+    // function-button transition.
+    appendIfChanged(kIcomRC28ButtonBitPtt, 3);
+    appendIfChanged(kIcomRC28ButtonBitF1, 1);
+    appendIfChanged(kIcomRC28ButtonBitF2, 2);
+    return transitions;
+}
+
+bool IcomRC28Manager::parseIcomRC28TuningReport(const uint8_t* buf, size_t len, int* steps) const
 {
     if (len < 6 || buf[0] != kIcomRC28ReportGuard)
     {
@@ -84,58 +109,7 @@ bool IcomRC28Manager::parseIcomRC28Report(const uint8_t* buf, size_t len, int* s
 
     const uint8_t speed = buf[1];
     const uint8_t dir = buf[3];
-    const uint8_t btns = buf[5];
-
-    if (btns != m_prevButtons)
-    {
-        const uint8_t prev = m_prevButtons;
-        m_prevButtons = btns;
-
-        if (btns == kIcomRC28ButtonsIdle)
-        {
-            if (prev == kIcomRC28ButtonF1)
-            {
-                *button = 1;
-                *action = 1;
-                return true;
-            }
-            if (prev == kIcomRC28ButtonF2)
-            {
-                *button = 2;
-                *action = 1;
-                return true;
-            }
-            if (prev == kIcomRC28ButtonPtt)
-            {
-                *button = 3;
-                *action = 1;
-                return true;
-            }
-        }
-        else
-        {
-            if (btns == kIcomRC28ButtonF1)
-            {
-                *button = 1;
-                *action = 0;
-                return true;
-            }
-            if (btns == kIcomRC28ButtonF2)
-            {
-                *button = 2;
-                *action = 0;
-                return true;
-            }
-            if (btns == kIcomRC28ButtonPtt)
-            {
-                *button = 3;
-                *action = 0;
-                return true;
-            }
-        }
-    }
-
-    if (btns == kIcomRC28ButtonsIdle && speed > 0 && (dir == 0x01 || dir == 0x02))
+    if (buf[5] == kIcomRC28ButtonsIdle && speed > 0 && (dir == 0x01 || dir == 0x02))
     {
         *steps = (dir == 0x01) ? static_cast<int>(speed) : -static_cast<int>(speed);
         return true;
@@ -226,9 +200,23 @@ void IcomRC28Manager::close()
 {
     m_pollTimer->stop();
     m_hotplugTimer->stop();
-    m_prevButtons = kIcomRC28ButtonsIdle;
 
+    // Publish the closed state before release handlers run. A release can
+    // update LED state through the controller; isOpen() must already be false
+    // so that path never writes to a HID handle whose preceding read failed.
     hid_device* device = m_device.exchange(nullptr);
+
+    // A USB removal can make hid_read fail before the device reports its
+    // final active-low release state. Synthesize every outstanding release
+    // before forgetting the mask; PTT is deliberately first in the transition
+    // list so loss of the controller cannot leave the radio keyed.
+    const QVector<ButtonTransition> releases = buttonTransitions(m_prevButtons, kIcomRC28ButtonsIdle);
+    m_prevButtons = kIcomRC28ButtonsIdle;
+    for (const ButtonTransition& release : releases)
+    {
+        emit buttonPressed(release.button, release.action);
+    }
+
     if (device)
     {
         if (!writeLeds(device, kIcomRC28LedsOff))
@@ -307,18 +295,19 @@ void IcomRC28Manager::poll()
         }
 
         int steps = 0;
-        int button = 0;
-        int action = 0;
-        if (parseIcomRC28Report(m_buf, static_cast<size_t>(res), &steps, &button, &action))
+        if (static_cast<size_t>(res) >= 6 && m_buf[0] == kIcomRC28ReportGuard)
         {
-            if (steps != 0)
+            const uint8_t buttons = m_buf[5];
+            const QVector<ButtonTransition> transitions = buttonTransitions(m_prevButtons, buttons);
+            m_prevButtons = buttons;
+            for (const ButtonTransition& transition : transitions)
             {
-                emit tuneSteps(steps);
+                emit buttonPressed(transition.button, transition.action);
             }
-            else if (button != 0)
-            {
-                emit buttonPressed(button, action);
-            }
+        }
+        if (parseIcomRC28TuningReport(m_buf, static_cast<size_t>(res), &steps))
+        {
+            emit tuneSteps(steps);
         }
     }
 }

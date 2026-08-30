@@ -822,6 +822,7 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     const bool controlsEnabled = enabled && !m_controlsLocked;
     if (m_vfoSelectionController)
     {
+        m_vfoSelectionController->setRadioReady(enabled);
         m_vfoSelectionController->setControlsEnabled(controlsEnabled);
     }
     if (m_mainVfoController)

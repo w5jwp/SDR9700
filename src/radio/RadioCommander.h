@@ -87,10 +87,6 @@ class RadioCommander : public QObject
 
     struct radioCapabilities radioCaps{};
     bool haveRadioCaps = false;
-    // Capability entries can mark commands as administrator-only. Commander
-    // checks this session-access flag before encoding such a command so a
-    // non-administrator session does not knowingly send unsupported traffic.
-    bool isRadioAdmin = true;
 
   private:
 };

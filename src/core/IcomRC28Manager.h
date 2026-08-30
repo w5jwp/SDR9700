@@ -5,12 +5,14 @@
 #include <QTimer>
 #include <QByteArray>
 #include <QString>
+#include <QVector>
 #include <atomic>
 #include <hidapi.h>
 
 class IcomRC28Manager : public QObject
 {
     Q_OBJECT
+    friend class IcomRC28ManagerTest;
 
   public:
     explicit IcomRC28Manager(QObject* parent = nullptr);
@@ -54,7 +56,16 @@ class IcomRC28Manager : public QObject
     bool sendLeds(uint8_t ledByte);
     static bool writeLeds(hid_device* device, uint8_t ledByte);
 
-    bool parseIcomRC28Report(const uint8_t* buf, size_t len, int* steps, int* button, int* action);
+    struct ButtonTransition
+    {
+        int button{0};
+        int action{0};
+
+        bool operator==(const ButtonTransition&) const = default;
+    };
+
+    static QVector<ButtonTransition> buttonTransitions(uint8_t previous, uint8_t current);
+    bool parseIcomRC28TuningReport(const uint8_t* buf, size_t len, int* steps) const;
 
     std::atomic<hid_device*> m_device{nullptr};
     QString m_deviceName;

@@ -636,7 +636,10 @@ void UdpHandler::dataReceived()
             else if (in->type == 0x06)
             {
                 qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Received I am ready";
-                sendLogin();
+                if (!m_shuttingDown)
+                {
+                    sendLogin();
+                }
             }
             break;
         }
@@ -700,6 +703,14 @@ void UdpHandler::dataReceived()
             const token_packet* in = &*decoded;
             if (in->requesttype == 0x05 && in->requestreply == 0x02 && in->type != 0x01)
             {
+                // During ordered teardown only token-removal acknowledgement
+                // traffic remains actionable. A delayed renewal response must
+                // not restart the renewal timer, reopen streams, or begin a
+                // fresh login while shutdown is trying to retire this token.
+                if (m_shuttingDown)
+                {
+                    break;
+                }
                 if (in->response == 0x0000)
                 {
                     qDebug(logUdp()).noquote() << this->metaObject()->className() << ": Token renewal successful";
@@ -743,6 +754,14 @@ void UdpHandler::dataReceived()
             const status_packet* in = &*decoded;
             if (in->type != 0x01)
             {
+                // A disconnect acknowledgement is part of the documented
+                // shutdown handshake. All other status replies are stale
+                // stream-negotiation traffic once shutdown begins and must not
+                // create CI-V/audio handlers again.
+                if (m_shuttingDown && !(in->error == 0x00000000 && in->disc == 0x01))
+                {
+                    break;
+                }
                 if (in->error == 0xffffffff && !streamOpened)
                 {
                     emit haveNetworkError(errorType(
@@ -872,8 +891,20 @@ void UdpHandler::dataReceived()
             const login_response_packet* in = &*decoded;
             if (in->type != 0x01)
             {
+                if (m_shuttingDown)
+                {
+                    // A login completion can race with teardown. Preserve a
+                    // matching token so releaseAuthenticationToken() can
+                    // retire it, but do not continue authentication, restart
+                    // renewal, or request streams.
+                    if (in->error != kLoginErrorInvalidCredentials && in->tokrequest == tokRequest)
+                    {
+                        token = in->token;
+                    }
+                    break;
+                }
 
-                m_connectionType = in->connection;
+                m_connectionType = boundedLatin1(in->connection, sizeof(in->connection));
                 qInfo(logUdp()).noquote().nospace() << "Connection type=" << m_connectionType;
                 // IC-9700 accepts mono LPCM16 for LAN audio; Qt audio handlers
                 // convert to/from the local device channel layout.
@@ -929,13 +960,22 @@ void UdpHandler::dataReceived()
                 }
 
                 qInfo(logUdp()).noquote()
-                    << this->metaObject()->className() << ": Detected connection speed " << in->connection;
+                    << this->metaObject()->className() << ": Detected connection speed " << m_connectionType;
             }
             break;
         }
         case (CONNINFO_SIZE):
         {
             // Connection status for one radio advertised by the IC-9700 LAN server.
+
+            // Connection-info broadcasts are discovery/session-establishment
+            // traffic, never teardown acknowledgements. A reordered idle
+            // advertisement after closeStreams() must not reserve ports and
+            // request a fresh stream while shutdown is removing the token.
+            if (m_shuttingDown)
+            {
+                break;
+            }
 
             const auto decoded = decodePacket<conninfo_packet>(r);
             const conninfo_packet* in = &*decoded;
@@ -1217,8 +1257,8 @@ void UdpHandler::setCurrentRadio(quint8 radio)
         memcpy(&guid, radios[radio].guid, GUIDLEN);
     }
 
-    devName = radios[radio].name;
-    audioType = radios[radio].audio;
+    devName = boundedLatin1(radios[radio].name, sizeof(radios[radio].name));
+    audioType = boundedLatin1(radios[radio].audio, sizeof(radios[radio].audio));
     civId = radios[radio].civ;
     rxSampleRates = radios[radio].rxsample;
     txSampleRates = radios[radio].txsample;

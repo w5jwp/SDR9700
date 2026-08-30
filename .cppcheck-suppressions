@@ -4,6 +4,7 @@ unusedFunction:src/models/VfoModel.h
 // QtTest invokes private test slots through generated meta-object code.
 unusedFunction:src/tests/AudioConverterTest.cpp
 unusedFunction:src/tests/CachingQueueTest.cpp
+unusedFunction:src/tests/CivSequenceGateTest.cpp
 unusedFunction:src/tests/CommanderCodecTest.cpp
 unusedFunction:src/tests/DtmfDialogTest.cpp
 unusedFunction:src/tests/DtmfGeneratorTest.cpp
@@ -39,10 +40,9 @@ unusedFunction:src/tests/WaterfallScopeTest.cpp
 unusedFunction:src/tests/OfflinePoliciesTest.cpp
 functionConst:src/tests/OfflinePoliciesTest.cpp
 unusedFunction:src/tests/VfoBackendTest.cpp
+functionConst:src/tests/VfoBackendTest.cpp
 unusedFunction:src/tests/VfoDisplayTest.cpp
 unusedFunction:src/tests/VfoModelTest.cpp
 functionConst:src/tests/SystemStatsTest.cpp
-// shadowFunction FP: Q_EMIT/emit macros expand to the signal function name,
-// which cppcheck incorrectly flags as a local variable shadowing that function.
 syntaxError:src/build/*
 unmatchedSuppression

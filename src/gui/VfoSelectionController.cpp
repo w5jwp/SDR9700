@@ -107,7 +107,7 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                     m_selectedVfo = Vfo::Main;
                     m_requestedVfo = Vfo::Main;
                     m_panel->setSelectedVfo(Vfo::Main);
-                    m_mainController->setSelected(true);
+                    m_mainController->setSelected(m_radioReady);
                     m_subController->setSelected(false);
                     updateTransmitIndicators();
                     if (changed)
@@ -161,8 +161,8 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                         const bool changed = m_selectedVfo != selected;
                         m_selectedVfo = selected;
                         m_panel->setSelectedVfo(selected);
-                        m_mainController->setSelected(selected == Vfo::Main);
-                        m_subController->setSelected(selected == Vfo::Sub);
+                        m_mainController->setSelected(m_radioReady && selected == Vfo::Main);
+                        m_subController->setSelected(m_radioReady && selected == Vfo::Sub);
                         updateTransmitIndicators();
                         if (changed)
                         {
@@ -247,6 +247,14 @@ void VfoSelectionController::setControlsEnabled(bool enabled)
     m_panel->setEnabled(enabled);
 }
 
+void VfoSelectionController::setRadioReady(bool ready)
+{
+    m_radioReady = ready;
+    m_panel->setRadioReady(ready);
+    m_mainController->setSelected(ready && m_selectedVfo == Vfo::Main);
+    m_subController->setSelected(ready && m_selectedVfo == Vfo::Sub);
+}
+
 void VfoSelectionController::setReceiverContextReady(bool ready)
 {
     m_panel->setReceiverContextReady(ready);
@@ -266,7 +274,7 @@ void VfoSelectionController::reset()
     setPttReady(true);
     m_transmitting = false;
     m_panel->setSelectedVfo(Vfo::Main);
-    m_mainController->setSelected(true);
+    m_mainController->setSelected(m_radioReady);
     m_subController->setSelected(false);
     m_panel->setDualWatchEnabled(false);
     m_mainController->setOperatingEnabled(true);

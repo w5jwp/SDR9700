@@ -87,11 +87,8 @@ class UdpBase : public QObject
     bool init(quint16 bindPort);
     bool isSocketBound() const;
 
-    void reconnect();
-
     void dataReceived(const QByteArray& r);
     void sendPing();
-    void sendRetransmitRange(quint16 first, quint16 second, quint16 third, quint16 fourth);
 
     void sendControl(bool tracked, quint8 type, quint16 seq);
     void sendDeparture();
@@ -164,8 +161,6 @@ class UdpBase : public QObject
 
     quint16 seqPrefix = 0;
     QString m_connectionType;
-    int congestion = 0;
-
     qint64 elapsedMs() const { return mono.isValid() ? mono.elapsed() : 0; }
     // Watchdogs call this against the same monotonic clock used by
     // markPacketReceived(); do not mix this value with wall-clock time.

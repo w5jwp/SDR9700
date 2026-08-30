@@ -63,6 +63,16 @@ void IcomRC28Controller::initialize()
                 {
                     updateIcomRC28Leds();
                 }
+                else if (m_window->m_icomRC28PttLatched)
+                {
+                    // A latched PTT request can remain active after the
+                    // physical button has already returned to idle, so the
+                    // manager's synthesized held-button releases cannot see
+                    // it. Losing the accessory must always fail safe and
+                    // explicitly unkey the radio.
+                    m_window->m_icomRC28PttLatched = false;
+                    setIcomRC28Ptt(false);
+                }
                 m_window->showToast(connected ? QStringLiteral("Accessory connected (%1)").arg(deviceName)
                                               : QStringLiteral("Accessory disconnected (%1)").arg(deviceName),
                                     4000, connected ? MainWindow::ToastKind::Info : MainWindow::ToastKind::Warning);

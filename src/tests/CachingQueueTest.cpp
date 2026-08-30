@@ -1,6 +1,7 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "CachingQueue.h"
 
+#include <QSemaphore>
 #include <QtTest>
 
 struct UnsupportedCachePayload
@@ -26,6 +27,7 @@ class CachingQueueTest : public QObject
     void resetClearsSessionState();
     void vfoBandReadDoesNotChangeRoutingState();
     void emitsCacheChangesWithoutHoldingMutex();
+    void deliversValueArrivingDuringBatchEmission();
     void restartsAfterExplicitShutdown();
     void reportsQueueDiagnostics();
     void deduplicatesRepeatedCacheRefreshes();
@@ -155,6 +157,39 @@ void CachingQueueTest::emitsCacheChangesWithoutHoldingMutex()
     queue->receiveValue(funcRfGain, 101, 0);
     disconnect(connection);
     QVERIFY(signalObserved);
+}
+
+void CachingQueueTest::deliversValueArrivingDuringBatchEmission()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    QSemaphore firstEmissionEntered;
+    QSemaphore allowFirstEmissionToReturn;
+    std::atomic_int emissionCount{0};
+
+    const QMetaObject::Connection connection = connect(
+        queue, &CachingQueue::sendValues, this,
+        [&firstEmissionEntered, &allowFirstEmissionToReturn, &emissionCount](const QVector<CacheItem>&)
+        {
+            const int count = emissionCount.fetch_add(1, std::memory_order_acq_rel) + 1;
+            if (count == 1)
+            {
+                firstEmissionEntered.release();
+                allowFirstEmissionToReturn.acquire();
+            }
+        },
+        Qt::DirectConnection);
+
+    queue->receiveValue(funcRfGain, 100, 0);
+    QVERIFY(firstEmissionEntered.tryAcquire(1, 1000));
+
+    // The worker is outside its condition-variable wait while the direct
+    // receiver above holds the first emission. This notification is therefore
+    // deliberately sent during the historical lost-wakeup window.
+    queue->receiveValue(funcRfGain, 101, 0);
+    allowFirstEmissionToReturn.release();
+
+    QTRY_COMPARE(emissionCount.load(std::memory_order_acquire), 2);
+    disconnect(connection);
 }
 
 void CachingQueueTest::restartsAfterExplicitShutdown()

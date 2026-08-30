@@ -108,7 +108,14 @@ void CachingQueue::run()
         bool woke = true;
         if (queue.isEmpty())
         {
-            waiting.wait(locker);
+            // A value can arrive while this worker has dropped the mutex to
+            // emit the preceding batch. condition_variable notifications are
+            // not retained when no thread is waiting, so always inspect the
+            // protected state before sleeping. Without this predicate, the
+            // final radio reply in a quiet period can remain stranded until a
+            // later value or command happens to wake the worker.
+            waiting.wait(locker, [this]()
+                         { return aborted.load(std::memory_order_acquire) || !items.isEmpty() || !queue.isEmpty(); });
         }
         else
         {

@@ -18,10 +18,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends \
             build-essential cmake ninja-build pkg-config \
+            clang-format-18 cppcheck \
             qt6-base-dev qt6-multimedia-dev libssl-dev libopus-dev \
             libspeexdsp-dev libxkbcommon-dev libeigen3-dev libhidapi-dev
       - name: Build
         run: make release
+      - name: Verify formatting
+        run: >-
+          find src -path src/build -prune -o \( -name '*.cpp' -o -name '*.h' \) -print0 |
+          xargs -0 clang-format-18 --dry-run --Werror
+      - name: Static analysis
+        run: |
+          cppcheck --error-exitcode=1 --enable=all --inconclusive --std=c++20 \
+            --library=qt \
+            --suppress=missingIncludeSystem \
+            --suppress=missingInclude \
+            --suppress=unknownMacro \
+            --suppress=noValidConfiguration \
+            --suppress=toomanyconfigs \
+            --suppress=preprocessorErrorDirective \
+            --suppress=normalCheckLevelMaxBranches \
+            --suppress=checkersReport \
+            --suppressions-list=.cppcheck-suppressions \
+            -I src -i src/build src
       - name: Test
         run: ctest --test-dir src/build --output-on-failure
 

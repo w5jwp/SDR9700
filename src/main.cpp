@@ -35,14 +35,13 @@
 #include "ApplicationLog.h"
 #include "LoggingConfiguration.h"
 #include "LogCategories.h"
+#include "ShutdownTiming.h"
 #if defined(Q_OS_MAC)
 #include "platform/MacWindowRestoration.h"
 #endif
 
 namespace
 {
-constexpr int kSignalForcedExitSeconds = 15;
-
 int signalPipe[2] = {-1, -1};
 volatile sig_atomic_t shutdownSignalCount = 0;
 volatile sig_atomic_t shutdownSignalNumber = 0;
@@ -368,7 +367,7 @@ void handleUnixSignal(int signalNumber)
     {
         write(signalPipe[1], &byte, sizeof(byte));
     }
-    alarm(kSignalForcedExitSeconds);
+    alarm(sdr9700::shutdownTiming::kSignalForcedExitSeconds);
     errno = savedErrno;
 }
 
@@ -522,7 +521,7 @@ int main(int argc, char* argv[])
                 }
                 QApplication::closeAllWindows();
                 QTimer::singleShot(
-                    kSignalForcedExitSeconds * 1000, &app,
+                    sdr9700::shutdownTiming::kSignalForcedExitSeconds * 1000, &app,
                     []() { QCoreApplication::exit(128 + int(shutdownSignalNumber ? shutdownSignalNumber : SIGTERM)); });
             });
     }

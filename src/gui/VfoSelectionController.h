@@ -23,6 +23,7 @@ class VfoSelectionController : public QObject
     VfoSelectionPanel* panel() const { return m_panel; }
     Vfo selectedVfo() const { return m_selectedVfo; }
     void setControlsEnabled(bool enabled);
+    void setRadioReady(bool ready);
     void setReceiverContextReady(bool ready);
     void runWhenSelected(Vfo vfo, std::function<void()> action);
     void completeExchangeScopeSync();
@@ -47,6 +48,7 @@ class VfoSelectionController : public QObject
     sdr9700::MainSubExchangePolicy m_exchangePolicy;
     bool m_pttReady{true};
     bool m_transmitting{false};
+    bool m_radioReady{false};
     std::function<void()> m_selectedAction;
     QTimer* m_selectionTimeoutTimer{nullptr};
     int m_selectionRetryCount{0};

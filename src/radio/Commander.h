@@ -194,8 +194,6 @@ class Commander : public RadioCommander
     QByteArray payloadSuffix;
 
     quint16 model = 0;
-    quint8 spectSeqMax{0};
-    quint16 spectLenMax{0};
     uchar oldScopeMode{0};
 
     bool lookingForRadio{false};

@@ -354,11 +354,15 @@ void UdpAudio::dataReceived()
                         << "Audio latency high:"
                         << "lateness" << pingLatenessMs << "baseline" << pingBaselineMs << "excess" << excess;
 
-                    if (++latencyCounter > 5)
+                    if (latencyCounter < 6 && ++latencyCounter == 6)
                     {
-                        qInfo(logUdp()).noquote() << "Latency sustained -> flushing audio";
-                        latencyCounter = 0;
-                        break;
+                        // Continue delivering audio during a latency episode.
+                        // The former pseudo-flush dropped every sixth packet
+                        // without resetting any buffer, producing periodic
+                        // audible gaps while leaving the latency condition
+                        // unchanged. Log once per episode and let the output
+                        // handler's bounded buffer perform normal recovery.
+                        qInfo(logUdp()).noquote() << "Audio latency remains elevated; continuing bounded delivery";
                     }
                 }
                 else

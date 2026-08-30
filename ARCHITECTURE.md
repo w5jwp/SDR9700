@@ -27,10 +27,24 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
   device selection.
 - `Commander` / `RadioCommander`: parse IC-9700 CI-V responses and dispatch
   radio commands.
+- `CachingQueue`: maintains the thread-safe radio-value cache and dispatches
+  bounded, deduplicated cache-refresh work. It is not the authoritative path
+  for every outbound command.
 - `UdpHandler`, `UdpCivData`, `UdpAudio`, `UdpBase`: handle IC-9700 LAN UDP
   control, CI-V data, audio, scope, and network status packets.
-- `ScopeAdapter`: namespace that converts raw IC-9700 scope bytes (0–159) to
-  calibrated dBm float values.
+- `CivSequenceGate`: suppresses duplicate CI-V UDP payload delivery while
+  recording out-of-order arrivals. It does not delay payloads to reorder them.
+- `RadioRouter`: converts parsed cache batches into receiver-specific model and
+  UI signals while preserving MAIN/SUB routing.
+- `ScopeController`: coalesces complete scope frames before forwarding them to
+  the GUI thread.
+- `RadioSessionWatchdog`: evaluates CI-V command/reply liveness independently
+  from continuous UDP audio traffic.
+- `AudioConverter`: performs bounded sample-format and sample-rate conversion
+  for the Qt audio handlers.
+- `Ax25Decoder`: decodes AX.25 frames for the data-inspection UI.
+- `ScopeAdapter`: converts raw IC-9700 scope bytes to clamped native display
+  levels in the range 0–160.
 - `RadioModel`: app-level connection and radio state.
 - `VfoModel`: active VFO state exposed to the UI.
 - `SpectrumScopeModel`: spectrum range and waterfall/scope data exposed to the UI.
@@ -48,12 +62,18 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
   controller; emits tuning step and button events, and accepts LED state.
 - `AppSettings`: JSON-backed client settings at
   `~/.config/SDR9700/sdr9700.json` on Linux and
-  `~/Library/Application Support/SDR9700/sdr9700.json` on macOS.
+  `~/Library/Preferences/SDR9700/sdr9700.json` on macOS.
 
 ## Threading
 
 - GUI and models live on the main thread.
 - The radio commander runs on a worker thread owned by `RadioBackend`.
+- `CachingQueue` owns a dedicated `std::thread` for cache batching and queued
+  refresh work.
+- `RadioRouter` and `ScopeController` live on the radio-data thread so complete
+  scope frames can be coalesced before crossing to the GUI.
+- Network control, CI-V, and LAN-audio stream objects live on the UDP-handler
+  thread. Qt audio input/output and conversion use their own worker threads.
 - Cross-thread communication should use queued Qt signals or
   `QMetaObject::invokeMethod` with `Qt::QueuedConnection`.
 - Audio callbacks must not block on locks or perform expensive work.
@@ -69,21 +89,23 @@ persistence.
 
 ## Spectrum Data
 
-IC-9700 scope data is converted to display bins by `ScopeAdapter::toDbm` before
-it is emitted to the models/UI. The IC-9700 encodes each point as a byte in the
-range 0–159, where 0 maps to `minDbm` and 159 maps to `maxDbm`:
+IC-9700 scope data is converted to display bins by `ScopeAdapter::toLevels`
+before it is emitted to the models/UI. The adapter preserves native values in
+the range 0–160 and clamps larger bytes to 160:
 
 ```cpp
-bins[i] = minDbm + (byte / 159.0f) * (maxDbm - minDbm);
+levels[i] = std::min(byte, 160);
 ```
 
-The UI treats those values as display-ready dBm bins for the current scope
-range.
+The scope and waterfall renderers interpret those values against their own
+display geometry; they are not calibrated dBm measurements.
 
 ## Current Constraints
 
-- The application is currently centered on one IC-9700 session and the active
-  VFO flow.
+- The application controls one IC-9700 session while maintaining distinct MAIN
+  and SUB receiver state. Receiver-less CI-V replies require serialized
+  receiver-context operations because the radio does not identify MAIN/SUB in
+  those payloads.
 - Imported design documents may describe features that do not exist in SDR9700.
   They are not architecture until they are validated and promoted.
 - `resources/manuals/` is research material only.

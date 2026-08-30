@@ -12,6 +12,7 @@
 #include "LogCategories.h"
 #include "RadioCapabilities.h"
 #include "RadioIdentities.h"
+#include "ShutdownTiming.h"
 #include "TransmitFrequencyPolicy.h"
 
 #include <QMediaDevices>
@@ -990,7 +991,7 @@ void RadioBackend::stopLocalAudio()
             stopDone->release();
         },
         Qt::QueuedConnection);
-    if (!queued || !stopDone->tryAcquire(1, 3000))
+    if (!queued || !stopDone->tryAcquire(1, sdr9700::shutdownTiming::kStopLocalAudioTimeoutMs))
     {
         qWarning(logAudio()).noquote() << "Timed out waiting for local audio playback to stop";
         return;
@@ -1112,10 +1113,11 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
                 closeDone->release();
             },
             Qt::QueuedConnection);
-        if (!queued || !closeDone->tryAcquire(1, 14000))
+        if (!queued || !closeDone->tryAcquire(1, sdr9700::shutdownTiming::kConnectionShutdownTimeoutMs))
         {
-            qWarning(logRadio()).noquote()
-                << "[SHUTDOWN] closeComm() did not finish within 14000 ms; continuing disconnect";
+            qWarning(logRadio()).noquote().nospace()
+                << "[SHUTDOWN] closeComm() did not finish within "
+                << sdr9700::shutdownTiming::kConnectionShutdownTimeoutMs << " ms; continuing disconnect";
         }
     }
     commandSession->deleteLater();

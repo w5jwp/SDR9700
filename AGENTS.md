@@ -15,6 +15,7 @@ audio routing, and station workflows.
 - UDP/TCP radio control through the IC-9700 LAN ports.
 - VFO frequency and mode control with configurable step sizes.
 - Scope/waterfall display.
+- AX.25 packet decoding and data inspection.
 - RX/TX audio routing through Qt Multimedia.
 - AF/RF/TX gain, squelch, PTT, and DTMF send with PTT gating.
 - Radio-backed IC-9700 memory management with synchronization and CSV

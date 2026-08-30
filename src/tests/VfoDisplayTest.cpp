@@ -175,6 +175,7 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
 
     QCOMPARE(panel.selectedVfo(), Vfo::Main);
     QVERIFY(!panel.dualWatchEnabled());
+    panel.setRadioReady(true);
 
     const auto buttons = panel.findChildren<QPushButton*>();
     QCOMPARE(buttons.size(), 4);
@@ -240,6 +241,16 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
     QVERIFY(subButton != nullptr);
     QVERIFY(dualWatchButton != nullptr);
     QVERIFY(exchangeButton != nullptr);
+    panel.setRadioReady(false);
+    QVERIFY(!mainButton->property("active").toBool());
+    QVERIFY(!subButton->property("active").toBool());
+    QVERIFY(!dualWatchButton->property("active").toBool());
+    QVERIFY(!mainButton->isEnabled());
+    QVERIFY(!subButton->isEnabled());
+    panel.setRadioReady(true);
+    QVERIFY(!mainButton->property("active").toBool());
+    QVERIFY(subButton->property("active").toBool());
+    QVERIFY(dualWatchButton->property("active").toBool());
     panel.setReceiverContextReady(false);
     QVERIFY(!exchangeButton->isEnabled());
     QVERIFY(!mainButton->isEnabled());

@@ -81,10 +81,8 @@ set(SDR9700_CORE_SOURCES
 )
 
 if(HIDAPI_FOUND)
-    list(APPEND SDR9700_MOC_HEADERS
-        core/IcomRC28Manager.h
-    )
     list(APPEND SDR9700_CORE_SOURCES
+        core/IcomRC28Manager.h
         core/IcomRC28Manager.cpp
     )
 endif()

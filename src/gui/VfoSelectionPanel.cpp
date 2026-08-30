@@ -112,6 +112,13 @@ void VfoSelectionPanel::setReceiverContextReady(bool ready)
     updateControlsEnabled();
 }
 
+void VfoSelectionPanel::setRadioReady(bool ready)
+{
+    m_radioReady = ready;
+    updateControlsEnabled();
+    updateButtonStyles();
+}
+
 void VfoSelectionPanel::setDualWatchPending(bool pending)
 {
     m_dualWatchPending = pending;
@@ -120,7 +127,7 @@ void VfoSelectionPanel::setDualWatchPending(bool pending)
 
 void VfoSelectionPanel::updateControlsEnabled()
 {
-    const bool contextAvailable = m_receiverContextReady && !m_exchangePending && !m_dualWatchPending;
+    const bool contextAvailable = m_radioReady && m_receiverContextReady && !m_exchangePending && !m_dualWatchPending;
     m_mainButton->setEnabled(contextAvailable);
     m_subButton->setEnabled(contextAvailable);
     m_dualWatchButton->setEnabled(contextAvailable);
@@ -171,9 +178,12 @@ void VfoSelectionPanel::setDualWatchEnabled(bool enabled)
 
 void VfoSelectionPanel::updateButtonStyles()
 {
-    m_mainButton->setProperty("active", m_selectedVfo == Vfo::Main);
-    m_subButton->setProperty("active", m_selectedVfo == Vfo::Sub);
-    m_dualWatchButton->setProperty("active", m_dualWatchEnabled);
+    // Selection is meaningful only after the backend and initial radio-state
+    // synchronization are ready. Retaining an active highlight while
+    // disconnected makes the last local belief look like live radio state.
+    m_mainButton->setProperty("active", m_radioReady && m_selectedVfo == Vfo::Main);
+    m_subButton->setProperty("active", m_radioReady && m_selectedVfo == Vfo::Sub);
+    m_dualWatchButton->setProperty("active", m_radioReady && m_dualWatchEnabled);
     refreshStyle(m_mainButton);
     refreshStyle(m_subButton);
     refreshStyle(m_exchangeButton);

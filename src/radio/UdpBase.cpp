@@ -6,18 +6,6 @@
 
 #include <utility>
 
-namespace
-{
-int congestionPercent(quint32 packetsSent, quint32 packetsLost)
-{
-    if (packetsLost == 0 || packetsSent == 0)
-    {
-        return 0;
-    }
-    return int(static_cast<double>(packetsLost) / static_cast<double>(packetsSent) * 100.0);
-}
-} // namespace
-
 bool UdpBase::init(quint16 bindPort)
 {
     departureSent = false;
@@ -106,7 +94,6 @@ void UdpBase::dataReceived(const QByteArray& r)
         if (in.type == 0x01 && in.len == 0x10)
         {
             packetsLost++;
-            congestion = congestionPercent(packetsSent, packetsLost);
             {
                 QByteArray retransmitData;
                 QMutexLocker txLocker(&txBufferMutex);
@@ -295,7 +282,6 @@ void UdpBase::dataReceived(const QByteArray& r)
                     match->retransmitCount++;
                     retransmitData.append(match->data);
                     packetsLost++;
-                    congestion = congestionPercent(packetsSent, packetsLost);
                 }
             }
             txLocker.unlock();
@@ -567,7 +553,6 @@ void UdpBase::sendTrackedPacket(QByteArray d)
         {
             // Sequence rollover starts a new retransmit window.
             txSeqBuf.clear();
-            congestion = 0;
         }
         if (txSeqBuf.size() > BUFSIZE)
         {
