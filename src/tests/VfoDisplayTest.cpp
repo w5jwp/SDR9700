@@ -178,6 +178,7 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
 
     const auto buttons = panel.findChildren<QPushButton*>();
     QCOMPARE(buttons.size(), 4);
+    QPushButton* exchangeButton = nullptr;
     for (QPushButton* button : buttons)
     {
         if (button->text() == QStringLiteral("SUB"))
@@ -190,14 +191,17 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
         }
         else if (button->text() == QStringLiteral("MAIN ↔ SUB"))
         {
+            exchangeButton = button;
             button->click();
         }
     }
 
+    QVERIFY(exchangeButton != nullptr);
+    QVERIFY(!exchangeButton->isEnabled());
     QCOMPARE(vfoSpy.count(), 1);
     QCOMPARE(vfoSpy.takeFirst().at(0).value<Vfo>(), Vfo::Sub);
     QCOMPARE(dualWatchSpy.count(), 1);
-    QCOMPARE(exchangeSpy.count(), 1);
+    QCOMPARE(exchangeSpy.count(), 0);
     QCOMPARE(dualWatchSpy.takeFirst().at(0).toBool(), true);
     QCOMPARE(panel.selectedVfo(), Vfo::Main);
     QVERIFY(!panel.dualWatchEnabled());
@@ -206,11 +210,13 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
     panel.setDualWatchEnabled(true);
     QCOMPARE(panel.selectedVfo(), Vfo::Sub);
     QVERIFY(panel.dualWatchEnabled());
+    QVERIFY(exchangeButton->isEnabled());
+    exchangeButton->click();
+    QCOMPARE(exchangeSpy.count(), 1);
 
     QPushButton* mainButton = nullptr;
     QPushButton* subButton = nullptr;
     QPushButton* dualWatchButton = nullptr;
-    QPushButton* exchangeButton = nullptr;
     for (QPushButton* button : buttons)
     {
         if (button->text() == QStringLiteral("MAIN"))

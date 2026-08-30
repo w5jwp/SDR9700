@@ -96,6 +96,7 @@ VfoSelectionPanel::VfoSelectionPanel(QWidget* parent) : QWidget(parent)
     connect(m_subButton, &QPushButton::clicked, this, [this]() { emit vfoRequested(Vfo::Sub); });
     connect(m_exchangeButton, &QPushButton::clicked, this, &VfoSelectionPanel::exchangeRequested);
     connect(m_dualWatchButton, &QPushButton::clicked, this, [this]() { emit dualWatchRequested(!m_dualWatchEnabled); });
+    updateControlsEnabled();
     updateButtonStyles();
 }
 
@@ -119,10 +120,14 @@ void VfoSelectionPanel::setDualWatchPending(bool pending)
 
 void VfoSelectionPanel::updateControlsEnabled()
 {
-    for (QPushButton* button : {m_mainButton, m_subButton, m_exchangeButton, m_dualWatchButton})
-    {
-        button->setEnabled(m_receiverContextReady && !m_exchangePending && !m_dualWatchPending);
-    }
+    const bool contextAvailable = m_receiverContextReady && !m_exchangePending && !m_dualWatchPending;
+    m_mainButton->setEnabled(contextAvailable);
+    m_subButton->setEnabled(contextAvailable);
+    m_dualWatchButton->setEnabled(contextAvailable);
+    // Exchanging the two operating sides is only meaningful while both are
+    // active. It also avoids starting a receiver-context transaction while
+    // SUB is intentionally unavailable.
+    m_exchangeButton->setEnabled(contextAvailable && m_dualWatchEnabled);
 }
 
 void VfoSelectionPanel::setPttButton(QPushButton* button)
@@ -160,6 +165,7 @@ void VfoSelectionPanel::setSelectedVfo(Vfo vfo)
 void VfoSelectionPanel::setDualWatchEnabled(bool enabled)
 {
     m_dualWatchEnabled = enabled;
+    updateControlsEnabled();
     updateButtonStyles();
 }
 

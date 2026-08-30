@@ -1317,9 +1317,12 @@ void RadioBackend::selectVfo(Vfo vfo)
 
 void RadioBackend::exchangeMainSub()
 {
-    if (!m_commander || m_mainSubExchangePending || m_dualWatchTransition.pending())
+    if (!m_commander || !m_dualWatchEnabled || m_mainSubExchangePending || m_dualWatchTransition.pending())
     {
-        qWarning(logRadio()).noquote() << "Ignoring MAIN/SUB exchange while previous exchange is pending";
+        qWarning(logRadio()).noquote()
+            << "Ignoring MAIN/SUB exchange commanderAvailable=" << (m_commander != nullptr)
+            << " dualWatchEnabled=" << m_dualWatchEnabled << " exchangePending=" << m_mainSubExchangePending
+            << " dualWatchTransitionPending=" << m_dualWatchTransition.pending();
         return;
     }
 
