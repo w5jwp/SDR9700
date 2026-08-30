@@ -339,12 +339,21 @@ void Commander::scheduleStartupRead(Funcs func, uchar receiver)
 
 void Commander::scheduleInteractiveAction(Funcs func, uchar receiver, std::function<void()> action)
 {
-    const auto existing = std::find_if(m_scheduledCommands.begin(), m_scheduledCommands.end(),
-                                       [func, receiver](const ScheduledCommand& command)
-                                       {
-                                           return command.commandClass == ScheduledCommandClass::InteractiveSet &&
-                                                  command.func == func && command.receiver == receiver;
-                                       });
+    enqueueScheduledAction(ScheduledCommandClass::InteractiveSet, func, receiver, std::move(action));
+}
+
+void Commander::scheduleConfirmatoryAction(Funcs func, uchar receiver, std::function<void()> action)
+{
+    enqueueScheduledAction(ScheduledCommandClass::ConfirmatoryRead, func, receiver, std::move(action));
+}
+
+void Commander::enqueueScheduledAction(ScheduledCommandClass commandClass, Funcs func, uchar receiver,
+                                       std::function<void()> action)
+{
+    const auto existing = std::find_if(
+        m_scheduledCommands.begin(), m_scheduledCommands.end(),
+        [commandClass, func, receiver](const ScheduledCommand& command)
+        { return command.commandClass == commandClass && command.func == func && command.receiver == receiver; });
     if (existing != m_scheduledCommands.end())
     {
         existing->action = std::move(action);
@@ -359,7 +368,7 @@ void Commander::scheduleInteractiveAction(Funcs func, uchar receiver, std::funct
             << " dropping interactive=" << funcString[func] << " receiver=" << receiver;
         return;
     }
-    m_scheduledCommands.append({ScheduledCommandClass::InteractiveSet, func, receiver, std::move(action)});
+    m_scheduledCommands.append({commandClass, func, receiver, std::move(action)});
     m_schedulerDiagnostics.highWaterMark = std::max(m_schedulerDiagnostics.highWaterMark, m_scheduledCommands.size());
     if (!m_scheduledCommandTimer->isActive())
     {
@@ -4348,6 +4357,7 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
         // production connections are queued across threads, but this ordering
         // also remains correct for direct test or diagnostic connections that
         // can deliver an immediate reply synchronously.
+        emit commandTransmitted(func, receiver);
         prepDataAndSend(payload);
     }
     else

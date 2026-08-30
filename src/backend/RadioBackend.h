@@ -122,6 +122,7 @@ class RadioBackend : public IRadioBackend
                                                 bool requestFrequency = true, bool requestMode = true);
     static void requestSubVfoStateForCommand(Commander* commandSession);
     static void requestVfoFrequenciesForCommand(Commander* commandSession);
+    static void scheduleVfoReceiverReadForCommand(Commander* commandSession, Vfo vfo, Funcs func);
     void observeVfoFrequency(quint64 hz, uchar receiver);
     static void selectMemoryBandForCommand(Commander* commandSession, quint16 group);
     static void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
@@ -182,6 +183,7 @@ class RadioBackend : public IRadioBackend
     QTimer* m_vfoStatePollTimer{nullptr};
     qsizetype m_vfoStatePollPhase{0};
     bool m_smeterPollPending{false};
+    bool m_smeterPollQueued{false};
     uchar m_smeterPollPendingReceiver{0};
     int m_smeterPollPendingTicks{0};
     int m_smeterPollTick{0};

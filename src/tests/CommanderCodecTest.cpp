@@ -48,6 +48,8 @@ class CommanderCodecTest : public QObject
     void schedulerCoalescesAndBoundsReads();
     void schedulerMakesStartupProgressUnderMeterPressure();
     void schedulerCoalescesInteractiveActionsAndPreservesReadProgress();
+    void pacesInteractiveConfirmationAfterSet();
+    void reportsMeterTransmissionAtWireDispatch();
 
   private:
     Commander m_commander;
@@ -275,6 +277,44 @@ void CommanderCodecTest::schedulerCoalescesInteractiveActionsAndPreservesReadPro
     m_commander.dispatchNextScheduledCommand();
     QCOMPARE(interactiveCount, 0);
     QCOMPARE(m_commander.m_scheduledCommands.size(), 4);
+}
+
+void CommanderCodecTest::pacesInteractiveConfirmationAfterSet()
+{
+    int setDispatches = 0;
+    int confirmationDispatches = 0;
+    m_commander.scheduleInteractiveAction(funcFreqSet, 0,
+                                          [this, &setDispatches, &confirmationDispatches]()
+                                          {
+                                              ++setDispatches;
+                                              m_commander.scheduleConfirmatoryAction(funcFreqGet, 0,
+                                                                                     [&confirmationDispatches]()
+                                                                                     { ++confirmationDispatches; });
+                                          });
+
+    m_commander.dispatchNextScheduledCommand();
+
+    QCOMPARE(setDispatches, 1);
+    QCOMPARE(confirmationDispatches, 0);
+    QCOMPARE(m_commander.m_scheduledCommands.size(), qsizetype(1));
+    QCOMPARE(m_commander.m_scheduledCommands.first().commandClass, Commander::ScheduledCommandClass::ConfirmatoryRead);
+
+    m_commander.dispatchNextScheduledCommand();
+    QCOMPARE(confirmationDispatches, 1);
+    QCOMPARE(m_commander.m_scheduledCommands.size(), qsizetype(0));
+}
+
+void CommanderCodecTest::reportsMeterTransmissionAtWireDispatch()
+{
+    QSignalSpy transmittedSpy(&m_commander, &Commander::commandTransmitted);
+    m_commander.scheduleMeterRead(funcSMeter, 1);
+
+    QCOMPARE(transmittedSpy.size(), 0);
+    m_commander.dispatchNextScheduledCommand();
+
+    QCOMPARE(transmittedSpy.size(), 1);
+    QCOMPARE(static_cast<Funcs>(transmittedSpy.at(0).at(0).toInt()), funcSMeter);
+    QCOMPARE(transmittedSpy.at(0).at(1).toUInt(), uint(1));
 }
 
 void CommanderCodecTest::correlatesEquivalentFrequencyAndModeReplyCommands()

@@ -50,6 +50,7 @@ class Commander : public RadioCommander
     CommanderCorrelationDiagnostics correlationDiagnostics() const;
     CommanderSchedulerDiagnostics schedulerDiagnostics() const;
     void scheduleInteractiveAction(Funcs func, uchar receiver, std::function<void()> action);
+    void scheduleConfirmatoryAction(Funcs func, uchar receiver, std::function<void()> action);
     void finishMainSubExchangeConfirmation();
     vfo_t currentRoutingVfo() const;
 
@@ -82,6 +83,7 @@ class Commander : public RadioCommander
 
   signals:
     void mainSubExchangeDispatched();
+    void commandTransmitted(Funcs func, uchar receiver);
 
   private:
     enum class FrameOrigin
@@ -104,6 +106,7 @@ class Commander : public RadioCommander
     {
         Meter,
         StartupRead,
+        ConfirmatoryRead,
         InteractiveSet
     };
 
@@ -116,6 +119,8 @@ class Commander : public RadioCommander
     };
 
     void enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs func, uchar receiver);
+    void enqueueScheduledAction(ScheduledCommandClass commandClass, Funcs func, uchar receiver,
+                                std::function<void()> action);
     void dispatchNextScheduledCommand();
     void logSchedulerDiagnostics();
     void resetScheduledCommands();

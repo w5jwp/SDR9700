@@ -242,7 +242,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 {
                     m_dualWatchEnabled = value.toBool();
                 }
-                else if (func == funcSMeter && m_smeterPollPending)
+                else if (func == funcSMeter && (m_smeterPollPending || m_smeterPollQueued))
                 {
                     if (receiver != m_smeterPollPendingReceiver)
                     {
@@ -252,6 +252,7 @@ RadioBackend::RadioBackend(QObject* parent)
                     }
 
                     m_smeterPollPending = false;
+                    m_smeterPollQueued = false;
                     m_smeterPollPendingTicks = 0;
                 }
                 emit radioValueUpdated(func, value, receiver);
@@ -332,7 +333,7 @@ RadioBackend::RadioBackend(QObject* parent)
             [this]()
             {
                 if (!m_commander || !m_radioReady || m_pttState.safetyActive() || m_mainSubExchangePending ||
-                    m_smeterPollPending)
+                    m_smeterPollPending || m_smeterPollQueued)
                 {
                     return;
                 }
@@ -708,6 +709,18 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                     << "MAIN/SUB exchange dispatched after gate waitMs="
                     << (m_mainSubExchangeClock.isValid() ? m_mainSubExchangeClock.elapsed() : -1);
             });
+    connect(m_commander, &Commander::commandTransmitted, this,
+            [this, session, commandSession](Funcs func, uchar receiver)
+            {
+                if (!isCurrentSession(session, commandSession) || func != funcSMeter || !m_smeterPollQueued ||
+                    receiver != m_smeterPollPendingReceiver)
+                {
+                    return;
+                }
+                m_smeterPollQueued = false;
+                m_smeterPollPending = true;
+                m_smeterPollPendingTicks = 0;
+            });
     connect(m_commander, &RadioCommander::haveAudioData, this,
             [this, session, commandSession](audioPacket pkt)
             {
@@ -942,6 +955,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_dualWatchEnabled = false;
     m_vfoStatePollPhase = 0;
     m_smeterPollPending = false;
+    m_smeterPollQueued = false;
     m_smeterPollPendingTicks = 0;
     m_smeterPollTick = 0;
     m_mainSubExchangePending = false;
@@ -1064,15 +1078,14 @@ void RadioBackend::setFrequencyHz(quint64 hz)
                 commandSession->receiveCommand(funcModeGet, QVariant(), 0);
                 return;
             }
-            commandSession->scheduleInteractiveAction(funcFreqSet, 0,
-                                                      [commandSession, f]()
-                                                      {
-                                                          selectMainVfoForCommand(commandSession);
-                                                          commandSession->receiveCommandNoReadback(
-                                                              funcFreqSet, QVariant::fromValue(f), 0);
-                                                          commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
-                                                          commandSession->receiveCommand(funcModeGet, QVariant(), 0);
-                                                      });
+            commandSession->scheduleInteractiveAction(
+                funcFreqSet, 0,
+                [commandSession, f]()
+                {
+                    selectMainVfoForCommand(commandSession);
+                    commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(f), 0);
+                    scheduleVfoReceiverReadForCommand(commandSession, Vfo::Main, funcFreqGet);
+                });
         });
 }
 
@@ -1254,9 +1267,28 @@ void RadioBackend::setVfoFrequencyHz(Vfo vfo, quint64 hz)
                                {
                                    commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency),
                                                                             receiver);
-                                   commandSession->receiveCommand(funcFreqGet, QVariant(), receiver);
-                                   commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
+                                   scheduleVfoReceiverReadForCommand(commandSession, Vfo::Sub, funcFreqGet);
                                });
+}
+
+void RadioBackend::scheduleVfoReceiverReadForCommand(Commander* commandSession, Vfo vfo, Funcs func)
+{
+    const uchar receiver = sdr9700::backend::receiverForVfo(vfo);
+    commandSession->scheduleConfirmatoryAction(
+        func, receiver,
+        [commandSession, vfo, func]()
+        {
+            const Vfo restoreVfo = commandSession->currentRoutingVfo() == vfoSub ? Vfo::Sub : Vfo::Main;
+            sdr9700::backend::routeVfoReceiverCommand(
+                vfo, restoreVfo,
+                [commandSession](Vfo selected)
+                {
+                    commandSession->receiveCommand(
+                        funcSelectVFO, QVariant::fromValue<vfo_t>(selected == Vfo::Sub ? vfoSub : vfoMain), 0);
+                },
+                [commandSession, func](uchar routedReceiver)
+                { commandSession->receiveCommand(func, QVariant(), routedReceiver); });
+        });
 }
 
 void RadioBackend::requestVfoState(Vfo vfo)
@@ -2680,6 +2712,10 @@ void RadioBackend::onLanReady()
                     qWarning(logRadio()).noquote() << "S-meter poll timed out";
                     return;
                 }
+                if (m_smeterPollQueued)
+                {
+                    return;
+                }
 
                 static constexpr qint64 kPostTuneMeterHoldoffMs = 250;
                 const bool tuningHoldoffActive =
@@ -2694,7 +2730,7 @@ void RadioBackend::onLanReady()
                 const Vfo targetVfo =
                     sdr9700::backend::meterPollTarget(activeVfo, m_dualWatchEnabled, m_smeterPollTick++);
                 const uchar receiver = sdr9700::backend::receiverForVfo(targetVfo);
-                m_smeterPollPending = true;
+                m_smeterPollQueued = true;
                 m_smeterPollPendingReceiver = receiver;
                 m_smeterPollPendingTicks = 0;
                 if (targetVfo == activeVfo)
