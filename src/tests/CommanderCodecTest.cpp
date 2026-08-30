@@ -35,6 +35,8 @@ class CommanderCodecTest : public QObject
     void discardsPendingRepliesByCanonicalFamily();
     void serializesReceiverlessReadsByCanonicalFamily();
     void doesNotDeferMainSubSwapActions();
+    void defersWholeMainSubExchangeUntilReplyFamiliesAreIdle();
+    void receiverScopedRetrySelectsOnlyWhenReadCanDispatch();
     void discardsLateReplyDuringFamilyDrain();
     void adaptsReplyDrainWindowsToMeasuredRtt();
     void rejectsShortSpectrumFrames();
@@ -77,6 +79,46 @@ void CommanderCodecTest::doesNotDeferMainSubSwapActions()
     }
     QCOMPARE(m_commander.m_pendingReplies.size(), 0);
     QCOMPARE(m_commander.m_deferredReplyReads.size(), 0);
+}
+
+void CommanderCodecTest::defersWholeMainSubExchangeUntilReplyFamiliesAreIdle()
+{
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+    QSignalSpy dispatchedSpy(&m_commander, &Commander::mainSubExchangeDispatched);
+
+    m_commander.rememberPendingReply(funcModeGet, 0);
+    m_commander.requestMainSubExchange();
+
+    QCOMPARE(wireSpy.count(), 0);
+    QCOMPARE(dispatchedSpy.count(), 0);
+    QVERIFY(m_commander.m_mainSubExchangeQueued);
+
+    m_commander.m_pendingReplies.clear();
+    m_commander.dispatchDeferredReplyReads();
+
+    QVERIFY(!m_commander.m_mainSubExchangeQueued);
+    QCOMPARE(dispatchedSpy.count(), 1);
+    QVERIFY(wireSpy.count() > 0);
+    QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07b0")));
+}
+
+void CommanderCodecTest::receiverScopedRetrySelectsOnlyWhenReadCanDispatch()
+{
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+
+    m_commander.rememberPendingReply(funcModeGet, 1);
+    m_commander.requestReceiverScopedRead(funcModeGet, 1);
+
+    QCOMPARE(wireSpy.count(), 0);
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), 1);
+
+    m_commander.m_pendingReplies.clear();
+    m_commander.dispatchDeferredReplyReads();
+
+    QCOMPARE(wireSpy.count(), 3);
+    QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07d1")));
+    QVERIFY(wireSpy.at(1).at(0).toByteArray().contains(QByteArray::fromHex("04")));
+    QVERIFY(wireSpy.at(2).at(0).toByteArray().contains(QByteArray::fromHex("07d0")));
 }
 
 void CommanderCodecTest::schedulerCoalescesAndBoundsReads()
@@ -204,11 +246,13 @@ void CommanderCodecTest::adaptsReplyDrainWindowsToMeasuredRtt()
     CivRttEstimator estimator;
     QCOMPARE(estimator.resolvedDrainMs(), qint64(50));
     QCOMPARE(estimator.abandonedDrainMs(), qint64(500));
+    QCOMPARE(estimator.replyTimeoutMs(), qint64(1000));
 
     estimator.observe(40);
     QCOMPARE(estimator.sampleCount(), quint64(1));
     QCOMPARE(estimator.resolvedDrainMs(), qint64(60));
     QCOMPARE(estimator.abandonedDrainMs(), qint64(120));
+    QCOMPARE(estimator.replyTimeoutMs(), qint64(300));
 
     for (int sample = 0; sample < 20; ++sample)
     {
@@ -224,12 +268,15 @@ void CommanderCodecTest::adaptsReplyDrainWindowsToMeasuredRtt()
     QVERIFY(estimator.abandonedDrainMs() > settledAbandoned);
     QVERIFY(estimator.resolvedDrainMs() <= 250);
     QVERIFY(estimator.abandonedDrainMs() <= 2000);
+    QVERIFY(estimator.replyTimeoutMs() > 300);
+    QVERIFY(estimator.replyTimeoutMs() <= 3000);
 
     m_commander.m_rttEstimator = estimator;
     const CommanderCorrelationDiagnostics diagnostics = m_commander.correlationDiagnostics();
     QCOMPARE(diagnostics.rttSampleCount, estimator.sampleCount());
     QCOMPARE(diagnostics.resolvedReplyDrainMs, estimator.resolvedDrainMs());
     QCOMPARE(diagnostics.abandonedReplyDrainMs, estimator.abandonedDrainMs());
+    QCOMPARE(diagnostics.replyTimeoutMs, estimator.replyTimeoutMs());
 }
 
 void CommanderCodecTest::encodesAndDecodesPackedBcd()

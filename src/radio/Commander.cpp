@@ -17,7 +17,6 @@
 
 namespace
 {
-constexpr qint64 kPendingReplyLifetimeMs = 5000;
 constexpr qsizetype kMaxDeferredReplyReads = 64;
 // Startup status reads are already bounded and coalesced, so a 10 ms cadence
 // keeps visible controls responsive without restoring the former unpaced burst.
@@ -244,6 +243,7 @@ void Commander::shutdownComm()
     }
     m_pendingReplies.clear();
     m_deferredReplyReads.clear();
+    m_mainSubExchangeQueued = false;
     m_replyFamilyDrains.clear();
     m_replyDrainTimer->stop();
     m_rttEstimator.reset();
@@ -266,6 +266,7 @@ void Commander::commonSetup()
     foundRadio = false;
     m_pendingReplies.clear();
     m_deferredReplyReads.clear();
+    m_mainSubExchangeQueued = false;
     m_replyFamilyDrains.clear();
     m_replyDrainTimer->stop();
     m_rttEstimator.reset();
@@ -416,7 +417,9 @@ void Commander::rememberPendingReply(Funcs func, uchar receiver)
     }
 
     discardExpiredPendingReplies();
-    m_pendingReplies.append(PendingReply{func, receiver, m_pendingCommandClock.elapsed()});
+    const qint64 now = m_pendingCommandClock.elapsed();
+    const qint64 lifetimeMs = m_rttEstimator.replyTimeoutMs();
+    m_pendingReplies.append(PendingReply{func, receiver, now, now + lifetimeMs});
     m_correlationDiagnostics.pendingReplies = m_pendingReplies.size();
     m_correlationDiagnostics.pendingReplyHighWaterMark =
         qMax(m_correlationDiagnostics.pendingReplyHighWaterMark, m_pendingReplies.size());
@@ -430,7 +433,7 @@ void Commander::rememberPendingReply(Funcs func, uchar receiver)
             << "CI-V pending reply overflow dropped=" << dropped << " depth=" << m_pendingReplies.size();
     }
 
-    QTimer::singleShot(kPendingReplyLifetimeMs + 1, this, [this]() { discardExpiredPendingReplies(); });
+    QTimer::singleShot(lifetimeMs + 1, this, [this]() { discardExpiredPendingReplies(); });
 }
 
 bool Commander::pendingReplyReceiver(Funcs func, uchar* receiver)
@@ -492,7 +495,7 @@ void Commander::discardPendingReplies(Funcs func)
 
 void Commander::discardExpiredPendingReplies()
 {
-    const qint64 oldestAllowed = m_pendingCommandClock.elapsed() - kPendingReplyLifetimeMs;
+    const qint64 now = m_pendingCommandClock.elapsed();
 
     // A command reply that arrives after this window can no longer be routed
     // confidently to MAIN or SUB. Discarding stale hints is safer than applying
@@ -500,9 +503,9 @@ void Commander::discardExpiredPendingReplies()
     const qsizetype previousSize = m_pendingReplies.size();
     QVector<Funcs> expiredFamilies;
     m_pendingReplies.erase(std::remove_if(m_pendingReplies.begin(), m_pendingReplies.end(),
-                                          [oldestAllowed, &expiredFamilies](const PendingReply& reply)
+                                          [now, &expiredFamilies](const PendingReply& reply)
                                           {
-                                              if (reply.createdAtMs >= oldestAllowed)
+                                              if (reply.expiresAtMs > now)
                                               {
                                                   return false;
                                               }
@@ -596,6 +599,12 @@ void Commander::dispatchDeferredReplyReads()
                                              [now](const ReplyFamilyDrain& drain) { return drain.untilMs <= now; }),
                               m_replyFamilyDrains.end());
 
+    if (m_mainSubExchangeQueued && !replyFamilyBlocked(funcFreqGet) && !replyFamilyBlocked(funcModeGet))
+    {
+        dispatchMainSubExchange();
+        return;
+    }
+
     for (qsizetype index = 0; index < m_deferredReplyReads.size(); ++index)
     {
         const DeferredReplyRead read = m_deferredReplyReads.at(index);
@@ -614,10 +623,63 @@ void Commander::dispatchDeferredReplyReads()
         break;
     }
 
-    if (!m_deferredReplyReads.isEmpty())
+    if (!m_deferredReplyReads.isEmpty() || m_mainSubExchangeQueued)
     {
         m_replyDrainTimer->start(static_cast<int>(m_rttEstimator.resolvedDrainMs()));
     }
+}
+
+void Commander::requestMainSubExchange()
+{
+    if (m_mainSubExchangeQueued)
+    {
+        return;
+    }
+    m_mainSubExchangeQueued = true;
+    if (!replyFamilyBlocked(funcFreqGet) && !replyFamilyBlocked(funcModeGet))
+    {
+        dispatchMainSubExchange();
+    }
+}
+
+void Commander::requestReceiverScopedRead(Funcs func, uchar receiver)
+{
+    discardExpiredPendingReplies();
+    if (deferReplyReadIfBlocked(func, receiver))
+    {
+        return;
+    }
+
+    const vfo_t targetVfo = receiver == 1 ? vfoSub : vfoMain;
+    receiveCommand(funcSelectVFO, QVariant::fromValue(targetVfo), 0);
+    receiveCommand(func, QVariant(), receiver);
+    if (targetVfo == vfoSub)
+    {
+        receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+    }
+}
+
+void Commander::dispatchMainSubExchange()
+{
+    Q_ASSERT(m_mainSubExchangeQueued);
+    Q_ASSERT(!replyFamilyBlocked(funcFreqGet));
+    Q_ASSERT(!replyFamilyBlocked(funcModeGet));
+    m_mainSubExchangeQueued = false;
+
+    receiveCommand(funcVFOSwapMS, QVariant(), 0);
+    receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+    receiveCommand(funcSelectedFreq, QVariant(), 0);
+    receiveCommand(funcSelectedMode, QVariant(), 0);
+    receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
+    receiveCommand(funcFreqGet, QVariant(), 1);
+    receiveCommand(funcModeGet, QVariant(), 1);
+    receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+    receiveCommandNoReadback(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
+    receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
+    receiveCommand(funcSelectedFreq, QVariant(), 0);
+    receiveCommand(funcVFOBandMS, QVariant(), 0);
+    receiveCommand(funcScopeMainSub, QVariant(), 0);
+    emit mainSubExchangeDispatched();
 }
 
 CommanderCorrelationDiagnostics Commander::correlationDiagnostics() const
@@ -626,6 +688,7 @@ CommanderCorrelationDiagnostics Commander::correlationDiagnostics() const
     diagnostics.pendingReplies = m_pendingReplies.size();
     diagnostics.resolvedReplyDrainMs = m_rttEstimator.resolvedDrainMs();
     diagnostics.abandonedReplyDrainMs = m_rttEstimator.abandonedDrainMs();
+    diagnostics.replyTimeoutMs = m_rttEstimator.replyTimeoutMs();
     diagnostics.rttSampleCount = m_rttEstimator.sampleCount();
     return diagnostics;
 }

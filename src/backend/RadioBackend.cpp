@@ -42,6 +42,12 @@ constexpr uchar kHardwareTxTimeoutTimer = 1; // 3 minutes, the IC-9700's shortes
 constexpr uchar kMainReceiver = 0;
 constexpr uchar kSubReceiver = 1;
 constexpr quint32 kTxAudioSampleRate = 16000;
+constexpr quint8 kExchangeMainStatusConfirmed = 0x01;
+constexpr quint8 kExchangeScopeStatusConfirmed = 0x02;
+constexpr quint8 kExchangeSubFrequencyConfirmed = 0x04;
+constexpr quint8 kExchangeSubModeConfirmed = 0x08;
+constexpr quint8 kExchangeAllConfirmed = kExchangeMainStatusConfirmed | kExchangeScopeStatusConfirmed |
+                                         kExchangeSubFrequencyConfirmed | kExchangeSubModeConfirmed;
 
 struct VfoStatePollItem
 {
@@ -271,18 +277,26 @@ RadioBackend::RadioBackend(QObject* parent)
                 {
                     return;
                 }
-                const quint8 missing = static_cast<quint8>(0x03 & ~m_mainSubExchangeConfirmations);
+                const quint8 missing = static_cast<quint8>(kExchangeAllConfirmed & ~m_mainSubExchangeConfirmations);
                 qInfo(logRadio()).noquote() << "Retrying missing MAIN/SUB exchange confirmations mask=" << missing;
                 invokeOnCurrentCommander(
                     [missing](Commander* commandSession)
                     {
-                        if (missing & 0x01)
+                        if (missing & kExchangeMainStatusConfirmed)
                         {
                             commandSession->receiveCommand(funcVFOBandMS, QVariant(), 0);
                         }
-                        if (missing & 0x02)
+                        if (missing & kExchangeScopeStatusConfirmed)
                         {
                             commandSession->receiveCommand(funcScopeMainSub, QVariant(), 0);
+                        }
+                        if (missing & kExchangeSubFrequencyConfirmed)
+                        {
+                            commandSession->requestReceiverScopedRead(funcFreqGet, kSubReceiver);
+                        }
+                        if (missing & kExchangeSubModeConfirmed)
+                        {
+                            commandSession->requestReceiverScopedRead(funcModeGet, kSubReceiver);
                         }
                     });
                 m_mainSubExchangeRetryTimer->start();
@@ -616,22 +630,35 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     connect(m_commander, &RadioCommander::radioReplyReceived, this,
             [this, session, commandSession](Funcs func, const QVariant& value, uchar receiver)
             {
-                if (!isCurrentSession(session, commandSession) || !m_mainSubExchangePending)
+                if (!isCurrentSession(session, commandSession) || !m_mainSubExchangePending ||
+                    !m_mainSubExchangeDispatched)
                 {
                     return;
                 }
-                Q_UNUSED(receiver)
                 if (func == funcVFOBandMS && !value.toBool())
                 {
-                    m_mainSubExchangeConfirmations |= 0x01;
+                    m_mainSubExchangeConfirmations |= kExchangeMainStatusConfirmed;
                 }
                 else if (func == funcScopeMainSub && !value.toBool())
                 {
-                    m_mainSubExchangeConfirmations |= 0x02;
+                    m_mainSubExchangeConfirmations |= kExchangeScopeStatusConfirmed;
                 }
-                if (m_mainSubExchangeConfirmations == 0x03)
+                else if ((func == funcFreq || func == funcFreqTR || func == funcFreqGet || func == funcFreqSet ||
+                          func == funcSelectedFreq) &&
+                         receiver == kSubReceiver)
+                {
+                    m_mainSubExchangeConfirmations |= kExchangeSubFrequencyConfirmed;
+                }
+                else if ((func == funcMode || func == funcModeTR || func == funcModeGet || func == funcModeSet ||
+                          func == funcSelectedMode || func == funcDataModeWithFilter) &&
+                         receiver == kSubReceiver)
+                {
+                    m_mainSubExchangeConfirmations |= kExchangeSubModeConfirmed;
+                }
+                if (m_mainSubExchangeConfirmations == kExchangeAllConfirmed)
                 {
                     m_mainSubExchangePending = false;
+                    m_mainSubExchangeDispatched = false;
                     m_mainSubExchangeRetryTimer->stop();
                     m_meterPollTuneHoldoff.restart();
                     qInfo(logRadio()).noquote()
@@ -639,6 +666,20 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                         << (m_mainSubExchangeClock.isValid() ? m_mainSubExchangeClock.elapsed() : -1);
                     emit mainSubExchangeCompleted();
                 }
+            });
+    connect(m_commander, &Commander::mainSubExchangeDispatched, this,
+            [this, session, commandSession]()
+            {
+                if (!isCurrentSession(session, commandSession) || !m_mainSubExchangePending)
+                {
+                    return;
+                }
+                m_mainSubExchangeDispatched = true;
+                m_mainSubExchangeConfirmations = 0;
+                m_mainSubExchangeRetryTimer->start();
+                qInfo(logRadio()).noquote()
+                    << "MAIN/SUB exchange dispatched after gate waitMs="
+                    << (m_mainSubExchangeClock.isValid() ? m_mainSubExchangeClock.elapsed() : -1);
             });
     connect(m_commander, &RadioCommander::haveAudioData, this,
             [this, session, commandSession](audioPacket pkt)
@@ -877,6 +918,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_smeterPollPendingTicks = 0;
     m_smeterPollTick = 0;
     m_mainSubExchangePending = false;
+    m_mainSubExchangeDispatched = false;
     m_mainSubExchangeConfirmations = 0;
     m_mainSubExchangeClock.invalidate();
     if (m_mainSubExchangeRetryTimer)
@@ -1139,8 +1181,8 @@ void RadioBackend::exchangeMainSub()
     m_mainSubExchangeClock.restart();
     qInfo(logRadio()).noquote() << "MAIN/SUB exchange requested";
     m_mainSubExchangePending = true;
+    m_mainSubExchangeDispatched = false;
     m_mainSubExchangeConfirmations = 0;
-    m_mainSubExchangeRetryTimer->start();
     invokeOnCurrentCommander(
         [](Commander* commandSession)
         {
@@ -1150,23 +1192,11 @@ void RadioBackend::exchangeMainSub()
             // future design wants RF gain to follow the logical VFO boxes, it
             // must explicitly snapshot and restore both receiver values after
             // this command rather than assuming 07 B0 exchanges them.
-            commandSession->receiveCommand(funcVFOSwapMS, QVariant(), 0);
-            commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
-            commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
-            requestSubVfoStateForCommand(commandSession);
-            // Suppress the setters' asynchronous CachingQueue readbacks and
-            // issue the completion reads explicitly below. This preserves a
-            // single wire order: restore MAIN, publish its exchanged
-            // frequency, then collect the two confirmations that unlock the
-            // UI. Previously those queued confirmation reads could overtake
-            // the final frequency reply, reopening the scope gate with the
-            // pre-exchange band and leaving the display blank for seconds.
-            commandSession->receiveCommandNoReadback(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-            commandSession->receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
-            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
-            commandSession->receiveCommand(funcVFOBandMS, QVariant(), 0);
-            commandSession->receiveCommand(funcScopeMainSub, QVariant(), 0);
+            // Commander owns the whole receiver-context transaction. It will
+            // not exchange the radio until both ambiguous reply families are
+            // idle, so the SUB identity reads cannot be stranded behind an
+            // older request after the physical swap has already happened.
+            commandSession->requestMainSubExchange();
         });
 }
 
@@ -1532,12 +1562,10 @@ void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
     {
         return;
     }
-    // IC-9700 CI-V has no direct MAIN/SUB receiver prefix. Select SUB,
-    // correlate the current-frequency/mode replies as receiver 1, and restore
-    // MAIN before other application commands continue.
-    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
-    commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
-    commandSession->receiveCommand(funcModeGet, QVariant(), 1);
+    requestSubVfoIdentityForCommand(commandSession, false);
+
+    // Continue reading the receiver controls needed during startup or an
+    // explicit full state refresh while SUB remains selected.
     for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
                              funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus,
                              funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
@@ -1545,6 +1573,31 @@ void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
         commandSession->receiveCommand(func, QVariant(), 1);
     }
     commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+}
+
+void RadioBackend::requestSubVfoIdentityForCommand(Commander* commandSession, bool restoreMain, bool requestFrequency,
+                                                   bool requestMode)
+{
+    if (!commandSession)
+    {
+        return;
+    }
+    // IC-9700 CI-V has no direct MAIN/SUB receiver prefix. Select SUB,
+    // correlate the current-frequency/mode replies as receiver 1, and restore
+    // MAIN before other application commands continue.
+    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
+    if (requestFrequency)
+    {
+        commandSession->receiveCommand(funcFreqGet, QVariant(), 1);
+    }
+    if (requestMode)
+    {
+        commandSession->receiveCommand(funcModeGet, QVariant(), 1);
+    }
+    if (restoreMain)
+    {
+        commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+    }
 }
 
 void RadioBackend::requestVfoFrequenciesForCommand(Commander* commandSession)
@@ -2310,6 +2363,14 @@ void RadioBackend::handleReportedFrequency(quint64 hz)
 
     const bool hadKnownBand = m_currentBandKey != -1;
     m_currentBandKey = bandKey;
+
+    // MAIN/SUB exchange already performs its own ordered MAIN and SUB
+    // identity refresh. Its MAIN frequency necessarily crosses bands; do not
+    // turn that expected result into a second, full startup-style state poll.
+    if (m_mainSubExchangePending)
+    {
+        return;
+    }
 
     if (!hadKnownBand || bandKey == -1 || !m_radioReady || !m_bandStateRefreshTimer)
     {

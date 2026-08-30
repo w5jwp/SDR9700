@@ -23,6 +23,7 @@ struct CommanderCorrelationDiagnostics
     quint64 drainedReplyFrames{0};
     qint64 resolvedReplyDrainMs{0};
     qint64 abandonedReplyDrainMs{0};
+    qint64 replyTimeoutMs{0};
     quint64 rttSampleCount{0};
 };
 
@@ -63,6 +64,8 @@ class Commander : public RadioCommander
     void receiveCommandNoReadback(Funcs func, QVariant value, uchar receiver);
     void scheduleMeterRead(Funcs func, uchar receiver);
     void scheduleStartupRead(Funcs func, uchar receiver);
+    void requestMainSubExchange();
+    void requestReceiverScopedRead(Funcs func, uchar receiver);
     void discardPendingReplies(Funcs func);
     void readCurrentFrequencyAndMode();
     void setPttActive(bool active);
@@ -71,6 +74,9 @@ class Commander : public RadioCommander
     void setRxAudioDevice(const QAudioDevice& device);
     void setTxAudioDevice(const QAudioDevice& device);
     bool stopLocalAudio();
+
+  signals:
+    void mainSubExchangeDispatched();
 
   private:
     enum class FrameOrigin
@@ -156,6 +162,7 @@ class Commander : public RadioCommander
     bool deferReplyReadIfBlocked(Funcs func, uchar receiver);
     void beginReplyFamilyDrain(Funcs func, qint64 durationMs);
     void dispatchDeferredReplyReads();
+    void dispatchMainSubExchange();
     bool replyFamilyBlocked(Funcs func) const;
     bool replyFamilyDraining(Funcs func) const;
 
@@ -200,6 +207,7 @@ class Commander : public RadioCommander
         Funcs func{funcNone};
         uchar receiver{0};
         qint64 createdAtMs{0};
+        qint64 expiresAtMs{0};
     };
     QVector<PendingReply> m_pendingReplies;
     struct DeferredReplyRead
@@ -213,6 +221,7 @@ class Commander : public RadioCommander
         qint64 untilMs{0};
     };
     QVector<DeferredReplyRead> m_deferredReplyReads;
+    bool m_mainSubExchangeQueued{false};
     QVector<ReplyFamilyDrain> m_replyFamilyDrains;
     QTimer* m_replyDrainTimer{nullptr};
     CivRttEstimator m_rttEstimator;

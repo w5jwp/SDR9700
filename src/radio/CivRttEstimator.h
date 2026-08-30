@@ -53,6 +53,19 @@ class CivRttEstimator
         return std::clamp<qint64>(static_cast<qint64>(std::ceil(m_estimateMs + m_jitterMs * 4.0)), 100, 2000);
     }
 
+    qint64 replyTimeoutMs() const
+    {
+        if (m_sampleCount == 0)
+        {
+            return 1000;
+        }
+        // A reply timeout must tolerate ordinary jitter without retaining a
+        // lost receiver-less correlation for several seconds. Eight jitter
+        // widths gives VM scheduling spikes substantial room while keeping
+        // recovery bounded on a healthy local connection.
+        return std::clamp<qint64>(static_cast<qint64>(std::ceil(m_estimateMs + m_jitterMs * 8.0)), 300, 3000);
+    }
+
     quint64 sampleCount() const { return m_sampleCount; }
     double estimateMs() const { return m_estimateMs; }
     double jitterMs() const { return m_jitterMs; }

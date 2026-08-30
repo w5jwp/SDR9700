@@ -118,6 +118,8 @@ class RadioBackend : public IRadioBackend
     void forcePttOffForSafety(const QString& message);
     void handleTransmitSwr(double swr);
     static void selectMainVfoForCommand(Commander* commandSession);
+    static void requestSubVfoIdentityForCommand(Commander* commandSession, bool restoreMain = true,
+                                                bool requestFrequency = true, bool requestMode = true);
     static void requestSubVfoStateForCommand(Commander* commandSession);
     static void requestVfoFrequenciesForCommand(Commander* commandSession);
     void observeVfoFrequency(quint64 hz, uchar receiver);
@@ -193,6 +195,7 @@ class RadioBackend : public IRadioBackend
     Vfo m_activeVfo{Vfo::Main};
     bool m_dualWatchEnabled{false};
     bool m_mainSubExchangePending{false};
+    bool m_mainSubExchangeDispatched{false};
     quint8 m_mainSubExchangeConfirmations{0};
     duplexMode_t m_currentDuplexMode{dmSimplex};
     quint64 m_currentRepeaterOffsetHz{0};
