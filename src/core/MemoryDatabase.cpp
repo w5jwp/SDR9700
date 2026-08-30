@@ -7,11 +7,13 @@
 #include <QFileInfo>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSet>
 
 namespace
 {
 constexpr quint32 kPayloadMagic = 0x5344524dU; // "SDRM"
 constexpr quint16 kPayloadVersion = 1;
+constexpr int kSchemaVersion = 2;
 
 void setError(QString* destination, const QString& message)
 {
@@ -173,7 +175,7 @@ bool MemoryDatabase::ensureSchema(QString* error)
         return false;
     }
     const int schemaVersion = query.value(0).toInt();
-    if (schemaVersion > kPayloadVersion)
+    if (schemaVersion > kSchemaVersion)
     {
         setError(error, QStringLiteral("The memory database was created by a newer SDR9700 version."));
         return false;
@@ -186,7 +188,15 @@ bool MemoryDatabase::ensureSchema(QString* error)
         setError(error, query.lastError().text());
         return false;
     }
-    if (schemaVersion == 0 && !query.exec(QStringLiteral("PRAGMA user_version = 1")))
+    if (!query.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS memory_sync_state ("
+                                   "profile_id TEXT NOT NULL PRIMARY KEY, completed_at TEXT NOT NULL, "
+                                   "expected_slot_count INTEGER NOT NULL, received_slot_count INTEGER NOT NULL, "
+                                   "complete INTEGER NOT NULL)")))
+    {
+        setError(error, query.lastError().text());
+        return false;
+    }
+    if (schemaVersion < kSchemaVersion && !query.exec(QStringLiteral("PRAGMA user_version = %1").arg(kSchemaVersion)))
     {
         setError(error, query.lastError().text());
         return false;
@@ -284,4 +294,155 @@ bool MemoryDatabase::remove(const QUuid& profileId, quint16 group, quint16 chann
         return false;
     }
     return true;
+}
+
+bool MemoryDatabase::applySyncSnapshot(const QUuid& profileId, const QVector<MemoryType>& replies,
+                                       int expectedSlotCount, QString* error)
+{
+    if (!isOpen() || profileId.isNull() || expectedSlotCount < 0 || replies.size() > expectedSlotCount)
+    {
+        setError(error, QStringLiteral("The memory sync snapshot is invalid or the database is unavailable."));
+        return false;
+    }
+
+    struct SerializedReply
+    {
+        MemoryType memory;
+        QByteArray payload;
+    };
+    QVector<SerializedReply> serialized;
+    serialized.reserve(replies.size());
+    QSet<quint32> replyKeys;
+    for (const MemoryType& memory : replies)
+    {
+        const quint32 key = (static_cast<quint32>(memory.group) << 16U) | memory.channel;
+        if (replyKeys.contains(key))
+        {
+            setError(error, QStringLiteral("The memory sync snapshot contains a duplicate slot reply."));
+            return false;
+        }
+        replyKeys.insert(key);
+        QByteArray payload;
+        if (!memory.del)
+        {
+            payload = serializeMemory(memory);
+            if (payload.isEmpty())
+            {
+                setError(error, QStringLiteral("A radio memory reply could not be serialized."));
+                return false;
+            }
+        }
+        serialized.append({memory, std::move(payload)});
+    }
+
+    if (!m_database.transaction())
+    {
+        setError(error, m_database.lastError().text());
+        return false;
+    }
+    auto rollbackWithError = [&](const QSqlError& sqlError)
+    {
+        const QString operationError = sqlError.text();
+        if (!m_database.rollback())
+        {
+            setError(error, QStringLiteral("%1; transaction rollback also failed: %2")
+                                .arg(operationError, m_database.lastError().text()));
+            return false;
+        }
+        setError(error, operationError);
+        return false;
+    };
+
+    QSqlQuery upsert(m_database);
+    if (!upsert.prepare(QStringLiteral("INSERT INTO radio_memories(profile_id, memory_group, channel, payload) "
+                                       "VALUES(?, ?, ?, ?) ON CONFLICT(profile_id, memory_group, channel) DO UPDATE "
+                                       "SET payload=excluded.payload, updated_at=CURRENT_TIMESTAMP")))
+    {
+        return rollbackWithError(upsert.lastError());
+    }
+    QSqlQuery removeReply(m_database);
+    if (!removeReply.prepare(
+            QStringLiteral("DELETE FROM radio_memories WHERE profile_id = ? AND memory_group = ? AND channel = ?")))
+    {
+        return rollbackWithError(removeReply.lastError());
+    }
+
+    const QString profileKey = profileId.toString(QUuid::WithoutBraces);
+    for (const SerializedReply& reply : serialized)
+    {
+        QSqlQuery& query = reply.memory.del ? removeReply : upsert;
+        query.bindValue(0, profileKey);
+        query.bindValue(1, reply.memory.group);
+        query.bindValue(2, reply.memory.channel);
+        if (!reply.memory.del)
+        {
+            query.bindValue(3, reply.payload);
+        }
+        if (!query.exec())
+        {
+            return rollbackWithError(query.lastError());
+        }
+    }
+
+    QSqlQuery syncStateQuery(m_database);
+    if (!syncStateQuery.prepare(QStringLiteral(
+            "INSERT INTO memory_sync_state(profile_id, completed_at, expected_slot_count, received_slot_count, "
+            "complete) VALUES(?, ?, ?, ?, ?) ON CONFLICT(profile_id) DO UPDATE SET "
+            "completed_at=excluded.completed_at, expected_slot_count=excluded.expected_slot_count, "
+            "received_slot_count=excluded.received_slot_count, complete=excluded.complete")))
+    {
+        return rollbackWithError(syncStateQuery.lastError());
+    }
+    syncStateQuery.addBindValue(profileKey);
+    syncStateQuery.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+    syncStateQuery.addBindValue(expectedSlotCount);
+    syncStateQuery.addBindValue(replies.size());
+    syncStateQuery.addBindValue(replies.size() == expectedSlotCount ? 1 : 0);
+    if (!syncStateQuery.exec())
+    {
+        return rollbackWithError(syncStateQuery.lastError());
+    }
+    if (!m_database.commit())
+    {
+        const QString commitError = m_database.lastError().text();
+        if (!m_database.rollback())
+        {
+            setError(error, QStringLiteral("%1; transaction rollback also failed: %2")
+                                .arg(commitError, m_database.lastError().text()));
+            return false;
+        }
+        setError(error, commitError);
+        return false;
+    }
+    return true;
+}
+
+MemoryDatabaseSyncState MemoryDatabase::syncState(const QUuid& profileId, QString* error) const
+{
+    MemoryDatabaseSyncState state;
+    if (!isOpen() || profileId.isNull())
+    {
+        return state;
+    }
+    QSqlQuery query(m_database);
+    if (!query.prepare(QStringLiteral("SELECT completed_at, expected_slot_count, received_slot_count, complete "
+                                      "FROM memory_sync_state WHERE profile_id = ?")))
+    {
+        setError(error, query.lastError().text());
+        return state;
+    }
+    query.addBindValue(profileId.toString(QUuid::WithoutBraces));
+    if (!query.exec())
+    {
+        setError(error, query.lastError().text());
+        return state;
+    }
+    if (query.next())
+    {
+        state.completedAt = QDateTime::fromString(query.value(0).toString(), Qt::ISODateWithMs);
+        state.expectedSlotCount = query.value(1).toInt();
+        state.receivedSlotCount = query.value(2).toInt();
+        state.complete = query.value(3).toBool();
+    }
+    return state;
 }

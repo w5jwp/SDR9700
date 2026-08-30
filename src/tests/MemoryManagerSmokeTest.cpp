@@ -106,6 +106,9 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     QVERIFY(QMetaObject::invokeMethod(&model, "onBackendConnected"));
     QVERIFY(QMetaObject::invokeMethod(&model, "onBackendReadyChanged", Q_ARG(bool, true)));
     QVERIFY(statusLabel->text().startsWith(QStringLiteral("Syncing 2M channel 001")));
+    MemoryType liveMemory = storedMemory;
+    liveMemory.frequency.Hz = 145500000;
+    liveMemory.frequency.MHzDouble = 145.5;
 
     // Exercise the complete 297-slot response volume rather than short-cutting
     // controller state. The first stored response preserves the cached row;
@@ -124,10 +127,17 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
             reply.del = true;
             if (group == storedMemory.group && channel == storedMemory.channel)
             {
-                reply = storedMemory;
+                reply = liveMemory;
             }
             model.radioMemoryReceived(reply);
             QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
+            if (group == storedMemory.group && channel == storedMemory.channel)
+            {
+                // The table may reflect live replies immediately, but the
+                // durable generation remains unchanged until finalization.
+                QCOMPARE(database.memories(profileId, &databaseError).constFirst().frequency.Hz,
+                         storedMemory.frequency.Hz);
+            }
         }
     }
     QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().startsWith(QStringLiteral("Finalizing radio memory sync")), 500);
@@ -145,6 +155,8 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     QVERIFY(progressBar->isHidden());
     QCOMPARE(memoryTable->rowCount(), 1);
     QVERIFY(memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
+    QCOMPARE(database.memories(profileId, &databaseError).constFirst().frequency.Hz, liveMemory.frequency.Hz);
+    QVERIFY(database.syncState(profileId, &databaseError).complete);
 
     // A later sweep that never receives the occupied slot must retry only the
     // missing key, finish after the bounded retry budget, and downgrade the
@@ -170,6 +182,10 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 total (0 verified, 1 cached; 1 slot unanswered)"),
                               3500);
     QVERIFY(!memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
+    QCOMPARE(database.memories(profileId, &databaseError).constFirst().frequency.Hz, liveMemory.frequency.Hz);
+    const MemoryDatabaseSyncState partialState = database.syncState(profileId, &databaseError);
+    QCOMPARE(partialState.receivedSlotCount, 296);
+    QVERIFY(!partialState.complete);
 }
 
 void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()

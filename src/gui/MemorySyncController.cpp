@@ -151,6 +151,7 @@ void MemorySyncController::requestRadioMemoryRefresh()
     m_missingRetryRound = 0;
     m_lastUnansweredSlotCount = 0;
     m_refreshInProgress = true;
+    m_owner->beginMemoryDatabaseSync();
     m_receivedMemoryKeys.clear();
     m_expectedMemoryKeys.clear();
     for (quint16 group = kRadioMemoryFirstGroup; group <= kRadioMemoryLastGroup; ++group)
@@ -328,6 +329,15 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
         m_owner->clearMemoryProgress();
         requestRadioMemoryRefresh();
         return;
+    }
+
+    if (completedPollPass && !timedOut)
+    {
+        m_owner->finishMemoryDatabaseSync(m_expectedMemoryKeys.size());
+    }
+    else
+    {
+        m_owner->cancelMemoryDatabaseSync();
     }
 
     m_refreshInProgress = false;

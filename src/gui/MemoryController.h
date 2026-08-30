@@ -77,6 +77,11 @@ class MemoryController : public QObject
 
     void requestRadioMemoryRefresh();
     void handleRadioMemoryReceived(MemoryType memory);
+    void beginMemoryDatabaseSync();
+    void finishMemoryDatabaseSync(int expectedSlotCount);
+    void cancelMemoryDatabaseSync();
+    void persistRadioMemoryReply(const MemoryType& memory);
+    void restoreCommittedMemoryDatabaseSnapshot();
     void scheduleMemoryViewsRebuild();
     void rebuildMemoryViews();
     QVector<MemoryRecord> currentMemories() const;
@@ -103,4 +108,5 @@ class MemoryController : public QObject
     std::unique_ptr<MemoryDatabase> m_memoryDatabase;
     QUuid m_radioProfileId;
     QHash<quint32, MemoryType> m_radioMemoriesByKey;
+    QHash<quint32, MemoryType> m_pendingDatabaseReplies;
 };

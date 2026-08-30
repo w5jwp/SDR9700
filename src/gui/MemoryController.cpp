@@ -186,6 +186,15 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
     }
 
     const quint32 key = radioMemoryKey(memory.group, memory.channel);
+    const bool syncReply = m_memorySyncController->refreshInProgress();
+    if (syncReply)
+    {
+        // Keep the durable snapshot unchanged until the sweep reaches a
+        // bounded terminal result. Duplicate/late replies replace the same
+        // slot in this staging map, so the transaction contains one final
+        // authoritative disposition for each slot that actually answered.
+        m_pendingDatabaseReplies.insert(key, memory);
+    }
     if (m_memorySyncController->refreshInProgress() && (memory.channel <= 5 || (memory.channel % 25) == 0))
     {
         qInfo(logGui()).noquote() << "Radio memory sync received" << memoryBandLabelForGroup(memory.group) << "channel"
@@ -194,15 +203,6 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
     if (radioMemoryIsStored(memory))
     {
         m_radioMemoriesByKey.insert(key, memory);
-        if (m_memoryDatabase && m_memoryDatabase->isOpen() && !m_radioProfileId.isNull())
-        {
-            QString databaseError;
-            if (!m_memoryDatabase->store(m_radioProfileId, memory, &databaseError))
-            {
-                qWarning(logGui()).noquote()
-                    << "Could not cache radio memory" << memory.group << memory.channel << ':' << databaseError;
-            }
-        }
         if (m_window->m_activeMemoryId == radioMemoryId(memory.group, memory.channel))
         {
             const MemoryRecord activeMemory = recordFromRadioMemory(memory);
@@ -222,19 +222,97 @@ void MemoryController::handleRadioMemoryReceived(MemoryType memory)
             }
         }
         m_radioMemoriesByKey.remove(key);
-        if (m_memoryDatabase && m_memoryDatabase->isOpen() && !m_radioProfileId.isNull())
-        {
-            QString databaseError;
-            if (!m_memoryDatabase->remove(m_radioProfileId, memory.group, memory.channel, &databaseError))
-            {
-                qWarning(logGui()).noquote()
-                    << "Could not remove cached radio memory" << memory.group << memory.channel << ':' << databaseError;
-            }
-        }
+    }
+    if (!syncReply)
+    {
+        // A write/readback or other solicited single-slot response is already
+        // a terminal operation and does not belong to a sweep transaction.
+        persistRadioMemoryReply(memory);
     }
     m_memorySyncController->handleRadioMemoryReceived(key);
     scheduleMemoryViewsRebuild();
     m_memoryWriteController->handleReadback(key, memory);
+}
+
+void MemoryController::beginMemoryDatabaseSync()
+{
+    m_pendingDatabaseReplies.clear();
+}
+
+void MemoryController::finishMemoryDatabaseSync(int expectedSlotCount)
+{
+    if (m_memoryDatabase && m_memoryDatabase->isOpen() && !m_radioProfileId.isNull())
+    {
+        QVector<MemoryType> replies;
+        replies.reserve(m_pendingDatabaseReplies.size());
+        for (const MemoryType& memory : std::as_const(m_pendingDatabaseReplies))
+        {
+            replies.append(memory);
+        }
+        QString databaseError;
+        if (!m_memoryDatabase->applySyncSnapshot(m_radioProfileId, replies, expectedSlotCount, &databaseError))
+        {
+            qWarning(logGui()).noquote() << "Could not commit radio memory sync snapshot:" << databaseError;
+            restoreCommittedMemoryDatabaseSnapshot();
+        }
+    }
+    m_pendingDatabaseReplies.clear();
+}
+
+void MemoryController::cancelMemoryDatabaseSync()
+{
+    // A disconnected, cancelled, or globally timed-out sweep has no stable
+    // completion boundary. Discard its staged rows so the prior committed
+    // generation remains intact on the next application start.
+    const bool hadStagedReplies = !m_pendingDatabaseReplies.isEmpty();
+    m_pendingDatabaseReplies.clear();
+    if (hadStagedReplies)
+    {
+        restoreCommittedMemoryDatabaseSnapshot();
+    }
+}
+
+void MemoryController::persistRadioMemoryReply(const MemoryType& memory)
+{
+    if (!m_memoryDatabase || !m_memoryDatabase->isOpen() || m_radioProfileId.isNull())
+    {
+        return;
+    }
+    QString databaseError;
+    const bool persisted =
+        radioMemoryIsStored(memory)
+            ? m_memoryDatabase->store(m_radioProfileId, memory, &databaseError)
+            : m_memoryDatabase->remove(m_radioProfileId, memory.group, memory.channel, &databaseError);
+    if (!persisted)
+    {
+        qWarning(logGui()).noquote() << "Could not persist radio memory reply for" << memory.group << memory.channel
+                                     << ':' << databaseError;
+    }
+}
+
+void MemoryController::restoreCommittedMemoryDatabaseSnapshot()
+{
+    if (!m_memoryDatabase || !m_memoryDatabase->isOpen() || m_radioProfileId.isNull())
+    {
+        return;
+    }
+    QString databaseError;
+    const QVector<MemoryType> committed = m_memoryDatabase->memories(m_radioProfileId, &databaseError);
+    if (!databaseError.isEmpty())
+    {
+        qWarning(logGui()).noquote() << "Could not restore the committed radio memory snapshot:" << databaseError;
+        return;
+    }
+    QHash<quint32, MemoryType> restored;
+    restored.reserve(committed.size());
+    for (const MemoryType& memory : committed)
+    {
+        if (radioMemoryIsStored(memory))
+        {
+            restored.insert(radioMemoryKey(memory.group, memory.channel), memory);
+        }
+    }
+    m_radioMemoriesByKey = std::move(restored);
 }
 
 QVector<MemoryRecord> MemoryController::currentMemories() const
