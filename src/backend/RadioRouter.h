@@ -9,6 +9,7 @@
 #include <QVector>
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 
 struct RadioRouterQueueDiagnostics
@@ -17,6 +18,7 @@ struct RadioRouterQueueDiagnostics
     qsizetype highWaterMark{0};
     quint64 coalescedItems{0};
     quint64 drainEvents{0};
+    quint64 backpressureWaits{0};
 };
 
 class RadioRouter : public QObject
@@ -79,13 +81,17 @@ class RadioRouter : public QObject
     static bool isReplaceable(const CacheItem& item);
     void drainPendingBatch(quint64 session);
 
+    static constexpr qsizetype kMaxPendingItems = 512;
+
     std::array<rptAccessTxRx_t, 2> m_toneAccessModes{ratrNN, ratrNN};
     mutable std::mutex m_pendingMutex;
+    std::condition_variable m_pendingSpaceAvailable;
     QVector<CacheItem> m_pendingItems;
     bool m_drainScheduled{false};
     qsizetype m_pendingHighWaterMark{0};
     quint64 m_coalescedItems{0};
     quint64 m_drainEvents{0};
+    quint64 m_backpressureWaits{0};
     quint64 m_queueSession{0};
     std::atomic<uchar> m_scopeReceiver{0};
 };

@@ -4,6 +4,7 @@
 #include "LogCategories.h"
 
 #include <QtGlobal>
+#include <QThread>
 
 namespace
 {
@@ -38,7 +39,9 @@ quint64 RadioRouter::beginQueueSession()
     m_pendingItems.clear();
     m_drainScheduled = false;
     m_scopeReceiver.store(kMainReceiver, std::memory_order_release);
-    return ++m_queueSession;
+    const quint64 session = ++m_queueSession;
+    m_pendingSpaceAvailable.notify_all();
+    return session;
 }
 
 void RadioRouter::cancelQueueSession(quint64 session)
@@ -51,6 +54,7 @@ void RadioRouter::cancelQueueSession(quint64 session)
     m_pendingItems.clear();
     m_drainScheduled = false;
     ++m_queueSession;
+    m_pendingSpaceAvailable.notify_all();
 }
 
 void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
@@ -58,7 +62,7 @@ void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
     bool scheduleDrain = false;
     quint64 scheduledSession = 0;
     {
-        std::lock_guard locker(m_pendingMutex);
+        std::unique_lock locker(m_pendingMutex);
         if (session != 0 && session != m_queueSession)
         {
             return;
@@ -88,6 +92,33 @@ void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
             }
             if (!replaced)
             {
+                // The production path enters here directly from
+                // CachingQueue's worker thread. Apply backpressure rather
+                // than dropping lossless events or allowing an unbounded
+                // vector while the router thread is stalled. Same-thread
+                // callers cannot wait for their own event loop; they are not
+                // an event-queue backlog and may finish their current batch.
+                while (m_pendingItems.size() >= kMaxPendingItems && QThread::currentThread() != thread())
+                {
+                    if (!m_drainScheduled)
+                    {
+                        m_drainScheduled = true;
+                        const quint64 drainSession = m_queueSession;
+                        QMetaObject::invokeMethod(
+                            this, [this, drainSession]() { drainPendingBatch(drainSession); }, Qt::QueuedConnection);
+                    }
+                    ++m_backpressureWaits;
+                    m_pendingSpaceAvailable.wait(locker,
+                                                 [this, session]()
+                                                 {
+                                                     return m_pendingItems.size() < kMaxPendingItems ||
+                                                            (session != 0 && session != m_queueSession);
+                                                 });
+                    if (session != 0 && session != m_queueSession)
+                    {
+                        return;
+                    }
+                }
                 m_pendingItems.append(item);
             }
         }
@@ -120,13 +151,14 @@ void RadioRouter::drainPendingBatch(quint64 session)
         m_drainScheduled = false;
         ++m_drainEvents;
     }
+    m_pendingSpaceAvailable.notify_all();
     routeBatch(items);
 }
 
 RadioRouterQueueDiagnostics RadioRouter::queueDiagnostics() const
 {
     std::lock_guard locker(m_pendingMutex);
-    return {m_pendingItems.size(), m_pendingHighWaterMark, m_coalescedItems, m_drainEvents};
+    return {m_pendingItems.size(), m_pendingHighWaterMark, m_coalescedItems, m_drainEvents, m_backpressureWaits};
 }
 
 void RadioRouter::routeBatch(const QVector<CacheItem>& items)

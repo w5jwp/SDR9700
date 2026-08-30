@@ -4,6 +4,8 @@
 
 #include <QSignalSpy>
 #include <QTest>
+#include <atomic>
+#include <thread>
 
 class RadioRouterTest : public QObject
 {
@@ -23,6 +25,7 @@ class RadioRouterTest : public QObject
     void coalescesReplaceableBacklogAcrossOneQueuedDrain();
     void preservesOrderingAcrossLosslessBarriers();
     void rejectsBatchesFromCancelledSessions();
+    void boundsLosslessBacklogWithProducerBackpressure();
     void routesOnlyConfirmedScopeReceiver();
     void ignoresUnknownCommands();
 };
@@ -77,6 +80,37 @@ void RadioRouterTest::rejectsBatchesFromCancelledSessions()
 
     QTRY_COMPARE(meterSpy.size(), 1);
     QCOMPARE(meterSpy.at(0).at(0).toInt(), 30);
+}
+
+void RadioRouterTest::boundsLosslessBacklogWithProducerBackpressure()
+{
+    RadioRouter router;
+    QSignalSpy memorySpy(&router, &RadioRouter::radioMemoryReceived);
+    QVector<CacheItem> records;
+    records.reserve(600);
+    for (int index = 0; index < 600; ++index)
+    {
+        MemoryType memory;
+        memory.channel = static_cast<quint16>(index);
+        records.append(CacheItem(funcMemoryContents, QVariant::fromValue(memory), 0));
+    }
+
+    std::atomic_bool producerFinished{false};
+    std::thread producer(
+        [&router, &records, &producerFinished]()
+        {
+            router.enqueueBatch(records);
+            producerFinished.store(true, std::memory_order_release);
+        });
+
+    QTRY_VERIFY_WITH_TIMEOUT(producerFinished.load(std::memory_order_acquire), 2000);
+    producer.join();
+    QTRY_COMPARE_WITH_TIMEOUT(memorySpy.size(), 600, 2000);
+
+    const RadioRouterQueueDiagnostics diagnostics = router.queueDiagnostics();
+    QVERIFY(diagnostics.highWaterMark <= 512);
+    QVERIFY(diagnostics.backpressureWaits > 0);
+    QCOMPARE(diagnostics.coalescedItems, quint64(0));
 }
 
 void RadioRouterTest::routesOnlyConfirmedScopeReceiver()
