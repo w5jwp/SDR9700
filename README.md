@@ -8,22 +8,24 @@ SDR9700 is a native Qt GUI for controlling the Icom IC-9700 amateur radio
 transceiver over the radio's LAN interface. Supported operating systems
 include Linux and macOS (Apple Silicon).
 
-The project provides radio connection profiles, VFO control, spectrum and
-waterfall display, gain/PTT controls, and RX/TX audio routing through Qt
+The project provides radio connection profiles, independent MAIN and SUB VFO
+control, spectrum and waterfall display, gain/PTT controls, radio-backed memory
+management, optional RC-28 integration, and RX/TX audio routing through Qt
 Multimedia.
 
 ![Icom IC-9700 Transceiver](resources/images/radio/ic-9700.webp)
 
 ## Screenshots
 
-![SDR9700 Main Window (Spectrum Scope and Waterfall)](resources/images/screenshots/SDR9700_Screenshot1.png)
+![SDR9700 Main Window with Dual VFO Controls, Spectrum Scope, and Waterfall](resources/images/screenshots/SDR9700_Screenshot1.png)
 
 ## Status
 
-SDR9700 is early-stage software. The current codebase is shaped into a clean
-IC-9700 project. The application builds and provides a
-usable IC-9700 LAN control surface, but some workflows still need broader
-hardware testing and polish before a stable release.
+SDR9700 is beta software. It provides a usable, IC-9700-focused LAN control
+surface on Linux and Apple Silicon macOS, backed by automated protocol,
+scheduler, routing, model, and GUI tests. Broader hardware coverage—especially
+across different LAN conditions, Linux audio systems, and optional USB
+controllers—is still needed before a stable release.
 
 ## Implemented Functionality
 
@@ -33,18 +35,24 @@ hardware testing and polish before a stable release.
   device selection.
 - IC-9700 LAN connection over the radio UDP ports, with connection status,
   network quality reporting, and user-facing connection error messages.
-- VFO frequency and mode display/control for the active operating flow.
-- Radio-backed controls for RF gain, squelch, RF power, mic gain, noise
-  reduction, noise blanker, preamp, attenuator, offset, tone mode, CTCSS tone,
-  and DCS/DTCS code.
+- Independent MAIN and SUB VFO displays with receiver-specific frequency, mode,
+  S-meter, squelch, AGC, attenuator, noise blanker, notch, noise reduction,
+  preamp, and RF-gain state.
+- MAIN/SUB selection, transactional MAIN ↔ SUB exchange, and dual-watch control
+  with startup gating, transition lockout, recovery, and repeated-exchange
+  stress coverage.
+- Radio-backed controls for RF power, mic gain, duplex/offset, tone mode, CTCSS
+  tone, and DCS/DTCS code in addition to the receiver-specific controls above.
 - Local AF gain and mute controls.
 - PTT control and LAN transmit audio support, including LAN MOD level control
   and transmit audio ramping.
-- Spectrum and waterfall display from IC-9700 scope data, with zoom controls and
-  mouse interaction for frequency movement.
-- S-meter display and network/status bar indicators, including CPU and memory
-  usage.
-- VFO step selector for configurable tuning step sizes.
+- Spectrum and waterfall display from IC-9700 scope data, with frequency-step
+  and span selectors, click-to-tune, recentering, and configurable peak hold of
+  0, 1, 2, or 5 seconds.
+- Receiver-aware scope and meter routing so MAIN/SUB activity follows the
+  selected radio context without conflating the two receiver states.
+- Network and status indicators for radio connectivity, LAN quality, CPU use,
+  memory use, and transmit state.
 - DTMF send panel with PTT gating.
 - Receive-only AX.25 packet decoding from 1200-baud Bell 202 radio audio, with
   live decode-health indicators and text export in the Data Decoder window.
@@ -57,7 +65,28 @@ hardware testing and polish before a stable release.
 - Main-window lock mode that prevents accidental radio-control changes while
   leaving PTT, mute, and AF gain usable.
 - Icom RC-28 rotary controller support for step tuning and button mapping,
-  including LED feedback (requires `libhidapi` when building from source).
+  including active-low button handling, disconnect-safe PTT release, and LED
+  feedback (requires `libhidapi` when building from source).
+
+### Reliability and Diagnostics
+
+- Duplicate CI-V LAN datagrams are suppressed before parser delivery, while
+  packet loss and out-of-order arrival remain observable through transport
+  diagnostics.
+- Receiver-less CI-V frequency and mode replies are serialized by reply family
+  so delayed responses cannot silently cross between overlapping MAIN/SUB
+  requests under ordinary operation.
+- High-rate tuning, polling, cache refresh, and UI routing paths use bounded
+  queues, deduplication, coalescing, and backpressure to keep latency and memory
+  use stable during sustained input.
+- Startup radio reads are paced, and controls that can create conflicting radio
+  work remain unavailable until the required VFO state is ready.
+- Radio-session teardown follows the verified IC-9700 token-removal sequence,
+  keeps required control traffic alive through shutdown, and preserves an
+  unconditional PTT release path.
+- Runtime logging can be enabled selectively with `--log=radio,udp,ci-v`, or in
+  full with `--log=all`; `--log-file=<path>` writes the same diagnostics to a
+  file.
 
 ## Installation
 
@@ -120,6 +149,24 @@ Debug CMake configurations are supported:
 
 ```bash
 make debug
+```
+
+Run the complete automated test suite after either build:
+
+```bash
+ctest --test-dir src/build --output-on-failure
+```
+
+The built application can also be launched with diagnostics enabled. On Linux:
+
+```bash
+./src/build/bin/SDR9700 --log=radio,udp,ci-v
+```
+
+On macOS:
+
+```bash
+./src/build/bin/SDR9700.app/Contents/MacOS/SDR9700 --log=radio,udp,ci-v
 ```
 
 ## Repository Layout
