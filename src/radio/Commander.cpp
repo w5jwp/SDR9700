@@ -21,6 +21,7 @@ constexpr qsizetype kMaxDeferredReplyReads = 64;
 // Startup status reads are already bounded and coalesced, so a 10 ms cadence
 // keeps visible controls responsive without restoring the former unpaced burst.
 constexpr int kScheduledCommandIntervalMs = 10;
+constexpr int kSchedulerDiagnosticsIntervalMs = 30000;
 constexpr qsizetype kMaxScheduledCommands = 64;
 constexpr int kMaxConsecutiveMeterDispatches = 3;
 constexpr int kMaxConsecutiveInteractiveDispatches = 3;
@@ -95,6 +96,9 @@ Commander::Commander(RadioCommander* parent) : RadioCommander(parent)
     m_scheduledCommandTimer->setSingleShot(true);
     m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
     connect(m_scheduledCommandTimer, &QTimer::timeout, this, &Commander::dispatchNextScheduledCommand);
+    m_schedulerDiagnosticsTimer = new QTimer(this);
+    m_schedulerDiagnosticsTimer->setInterval(kSchedulerDiagnosticsIntervalMs);
+    connect(m_schedulerDiagnosticsTimer, &QTimer::timeout, this, &Commander::logSchedulerDiagnostics);
     m_replyDrainTimer = new QTimer(this);
     m_replyDrainTimer->setSingleShot(true);
     connect(m_replyDrainTimer, &QTimer::timeout, this, &Commander::dispatchDeferredReplyReads);
@@ -110,6 +114,9 @@ Commander::Commander(quint8 guid[GUIDLEN], RadioCommander* parent) : RadioComman
     m_scheduledCommandTimer->setSingleShot(true);
     m_scheduledCommandTimer->setInterval(kScheduledCommandIntervalMs);
     connect(m_scheduledCommandTimer, &QTimer::timeout, this, &Commander::dispatchNextScheduledCommand);
+    m_schedulerDiagnosticsTimer = new QTimer(this);
+    m_schedulerDiagnosticsTimer->setInterval(kSchedulerDiagnosticsIntervalMs);
+    connect(m_schedulerDiagnosticsTimer, &QTimer::timeout, this, &Commander::logSchedulerDiagnostics);
     m_replyDrainTimer = new QTimer(this);
     m_replyDrainTimer->setSingleShot(true);
     connect(m_replyDrainTimer, &QTimer::timeout, this, &Commander::dispatchDeferredReplyReads);
@@ -274,6 +281,7 @@ void Commander::commonSetup()
     m_correlationDiagnostics = {};
     resetScheduledCommands();
     m_schedulerDiagnostics = {};
+    m_schedulerDiagnosticsTimer->start();
     m_expectedScopeSequences[0] = 0;
     m_expectedScopeSequences[1] = 0;
     m_pendingCommandClock.start();
@@ -445,9 +453,19 @@ void Commander::dispatchNextScheduledCommand()
     }
 }
 
+void Commander::logSchedulerDiagnostics()
+{
+    const CommanderSchedulerDiagnostics diagnostics = schedulerDiagnostics();
+    qInfo(logRadio()).noquote().nospace()
+        << "CI-V scheduler metrics queued=" << diagnostics.queuedCommands << " highWater=" << diagnostics.highWaterMark
+        << " dispatched=" << diagnostics.dispatchedCommands << " coalesced=" << diagnostics.coalescedCommands
+        << " dropped=" << diagnostics.droppedCommands;
+}
+
 void Commander::resetScheduledCommands()
 {
     m_scheduledCommandTimer->stop();
+    m_schedulerDiagnosticsTimer->stop();
     m_scheduledCommands.clear();
     m_consecutiveMeterDispatches = 0;
     m_consecutiveInteractiveDispatches = 0;

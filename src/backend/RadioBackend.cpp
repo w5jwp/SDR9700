@@ -1143,8 +1143,13 @@ void RadioBackend::setAttenuatorEnabled(bool on)
 
 void RadioBackend::setAfGain(int level)
 {
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcAfGain, QVariant(level), 0xff); });
+    invokeOnCurrentCommander(
+        [level](Commander* commandSession)
+        {
+            commandSession->scheduleInteractiveAction(
+                funcAfGain, 0xff,
+                [commandSession, level]() { commandSession->receiveCommand(funcAfGain, QVariant(level), 0xff); });
+        });
 }
 
 void RadioBackend::setRfGain(int level)
@@ -1489,8 +1494,13 @@ void RadioBackend::setRitEnabled(bool on)
 void RadioBackend::setRitOffset(short hz)
 {
     const short bounded = qBound(static_cast<short>(-999), hz, static_cast<short>(999));
-    invokeOnCurrentCommander([=](Commander* commandSession)
-                             { commandSession->receiveCommand(funcRitFreq, QVariant::fromValue<short>(bounded), 0); });
+    invokeOnCurrentCommander(
+        [bounded](Commander* commandSession)
+        {
+            commandSession->scheduleInteractiveAction(
+                funcRitFreq, 0, [commandSession, bounded]()
+                { commandSession->receiveCommand(funcRitFreq, QVariant::fromValue<short>(bounded), 0); });
+        });
 }
 
 void RadioBackend::setCompressor(bool on)

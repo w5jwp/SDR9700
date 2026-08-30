@@ -114,6 +114,7 @@ class Commander : public RadioCommander
 
     void enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs func, uchar receiver);
     void dispatchNextScheduledCommand();
+    void logSchedulerDiagnostics();
     void resetScheduledCommands();
 
     void parseData(const QByteArray& dataInput);
@@ -233,6 +234,7 @@ class Commander : public RadioCommander
     CommanderCorrelationDiagnostics m_correlationDiagnostics;
     QVector<ScheduledCommand> m_scheduledCommands;
     QTimer* m_scheduledCommandTimer{nullptr};
+    QTimer* m_schedulerDiagnosticsTimer{nullptr};
     CommanderSchedulerDiagnostics m_schedulerDiagnostics;
     int m_consecutiveMeterDispatches{0};
     int m_consecutiveInteractiveDispatches{0};
