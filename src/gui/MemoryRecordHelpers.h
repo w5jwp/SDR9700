@@ -5,6 +5,7 @@
 #include "MemoryStore.h"
 #include "RadioCapabilities.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace sdr9700::memory
@@ -17,7 +18,58 @@ inline quint32 radioMemoryKey(quint16 group, quint16 channel)
 
 inline QString radioMemoryId(quint16 group, quint16 channel)
 {
-    return QStringLiteral("radio:%1:%2").arg(group).arg(channel, 3, 10, QLatin1Char('0'));
+    return group == kRadioMemorySatelliteGroup
+               ? QStringLiteral("satellite:%1").arg(channel, 2, 10, QLatin1Char('0'))
+               : QStringLiteral("radio:%1:%2").arg(group).arg(channel, 3, 10, QLatin1Char('0'));
+}
+
+inline bool radioMemoryIsEditable(quint16 group, quint16 channel)
+{
+    return group >= kRadioMemoryFirstGroup && group <= kRadioMemoryLastGroup && channel >= kRadioMemoryFirstChannel &&
+           channel <= kRadioMemoryLastUserChannel;
+}
+
+inline QString radioMemoryChannelLabel(quint16 group, quint16 channel)
+{
+    if (group == kRadioMemorySatelliteGroup)
+    {
+        return QStringLiteral("SAT-%1").arg(channel, 2, 10, QLatin1Char('0'));
+    }
+    if (channel >= 100 && channel <= 105)
+    {
+        const int scanPair = ((channel - 100) / 2) + 1;
+        const QChar edge = ((channel - 100) % 2) == 0 ? QLatin1Char('A') : QLatin1Char('B');
+        return QStringLiteral("%1-%2%3").arg(memoryBandLabelForGroup(group)).arg(scanPair).arg(edge);
+    }
+    if (channel == 106 || channel == 107)
+    {
+        return QStringLiteral("%1-C%2").arg(memoryBandLabelForGroup(group)).arg(channel - 105);
+    }
+    return QStringLiteral("%1-%2").arg(memoryBandLabelForGroup(group)).arg(channel, 3, 10, QLatin1Char('0'));
+}
+
+inline QString radioMemoryBandLabel(quint16 group)
+{
+    return group == kRadioMemorySatelliteGroup ? QStringLiteral("SAT") : memoryBandLabelForGroup(group);
+}
+
+inline QString radioMemorySlotLabel(quint16 group, quint16 channel)
+{
+    if (group == kRadioMemorySatelliteGroup)
+    {
+        return QStringLiteral("%1").arg(channel, 2, 10, QLatin1Char('0'));
+    }
+    if (channel >= 100 && channel <= 105)
+    {
+        const int scanPair = ((channel - 100) / 2) + 1;
+        const QChar edge = ((channel - 100) % 2) == 0 ? QLatin1Char('A') : QLatin1Char('B');
+        return QStringLiteral("%1%2").arg(scanPair).arg(edge);
+    }
+    if (channel == 106 || channel == 107)
+    {
+        return QStringLiteral("C%1").arg(channel - 105);
+    }
+    return QStringLiteral("%1").arg(channel, 3, 10, QLatin1Char('0'));
 }
 
 inline QString radioMemoryName(const MemoryType& memory)
@@ -45,17 +97,25 @@ inline bool radioMemoryIsStored(const MemoryType& memory)
     return !memory.del && memory.frequency.Hz > 0;
 }
 
-inline quint16 radioMemoryGroupForHz(quint64 hz)
+inline MemoryType radioMemoryWithLocalNameFallback(MemoryType memory)
 {
-    const availableBands band = sdr9700::radioBandForFrequency(hz);
-    if (const sdr9700::RadioBandDef* def = sdr9700::radioBandDefinition(band))
+    // The IC-9700 permits an occupied memory channel to have an empty name.
+    // SDR9700 still needs a stable, useful label for that record in its local
+    // database, table, editor, and CSV output. Normalize a copy at the radio
+    // ingest boundary so every local consumer sees the same value. This
+    // normalization does not itself issue a radio write; a later explicit edit
+    // and Save remains an ordinary operator-requested radio write. Deleted or
+    // otherwise empty slots deliberately retain an empty name because they do
+    // not represent database records.
+    if (!radioMemoryIsStored(memory) || !radioMemoryName(memory).isEmpty())
     {
-        if (def->memGroup >= kRadioMemoryFirstGroup && def->memGroup <= kRadioMemoryLastGroup)
-        {
-            return static_cast<quint16>(def->memGroup);
-        }
+        return memory;
     }
-    return kRadioMemoryFirstGroup;
+
+    std::fill_n(memory.name, sizeof(memory.name), '\0');
+    const QByteArray fallback = memoryFrequencyLabel(memory.frequency.Hz).toLatin1().left(sizeof(memory.name));
+    std::copy(fallback.cbegin(), fallback.cend(), memory.name);
+    return memory;
 }
 
 inline int recordDuplexModeFromRadio(quint8 duplex)
@@ -219,6 +279,7 @@ inline MemoryRecord recordFromRadioMemory(const MemoryType& radioMemory)
     memory.id = radioMemoryId(radioMemory.group, radioMemory.channel);
     memory.group = radioMemory.group;
     memory.channel = radioMemory.channel;
+    memory.readOnly = !radioMemoryIsEditable(radioMemory.group, radioMemory.channel);
     memory.name = radioMemoryName(radioMemory);
     if (memory.name.isEmpty())
     {
@@ -329,7 +390,7 @@ inline QVector<MemoryType> deletedStoredRadioMemories(const QVector<MemoryType>&
     {
         if (radioMemoryIsStored(memory) && memory.group >= kRadioMemoryFirstGroup &&
             memory.group <= kRadioMemoryLastGroup && memory.channel >= kRadioMemoryFirstChannel &&
-            memory.channel <= kRadioMemoryLastChannel)
+            memory.channel <= kRadioMemoryLastUserChannel)
         {
             deletes.append(deletedRadioMemory(memory.group, memory.channel));
         }

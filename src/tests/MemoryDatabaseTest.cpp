@@ -293,22 +293,29 @@ void MemoryDatabaseTest::completeSnapshotHandlesFullRadioVolume()
     QVERIFY2(database.open(&error), qPrintable(error));
     const QUuid profile = QUuid::createUuid();
     QVector<MemoryType> replies;
-    replies.reserve(297);
+    replies.reserve(420);
     for (quint16 group = 1; group <= 3; ++group)
     {
-        for (quint16 channel = 1; channel <= 99; ++channel)
+        for (quint16 channel = 1; channel <= 107; ++channel)
         {
             MemoryType memory = testMemory(group, channel, 144000000ULL + group * 100000000ULL + channel);
             memory.del = (channel % 10) != 0;
             replies.append(memory);
         }
     }
-    QCOMPARE(replies.size(), 297);
+    for (quint16 channel = 1; channel <= 99; ++channel)
+    {
+        MemoryType memory = testMemory(0, channel, 145000000ULL + channel);
+        memory.sat = true;
+        memory.del = (channel % 10) != 0;
+        replies.append(memory);
+    }
+    QCOMPARE(replies.size(), 420);
     QVERIFY2(database.applySyncSnapshot(profile, replies, replies.size(), &error), qPrintable(error));
-    QCOMPARE(database.memories(profile, &error).size(), 27);
+    QCOMPARE(database.memories(profile, &error).size(), 39);
     const MemoryDatabaseSyncState state = database.syncState(profile, &error);
-    QCOMPARE(state.expectedSlotCount, 297);
-    QCOMPARE(state.receivedSlotCount, 297);
+    QCOMPARE(state.expectedSlotCount, 420);
+    QCOMPARE(state.receivedSlotCount, 420);
     QVERIFY(state.complete);
 }
 
@@ -329,16 +336,22 @@ void MemoryDatabaseTest::profileRemovalIsIsolatedAndBounded()
     {
         const QUuid removedProfile = QUuid::createUuid();
         QVector<MemoryType> replies;
-        replies.reserve(297);
+        replies.reserve(420);
         for (quint16 group = 1; group <= 3; ++group)
         {
-            for (quint16 channel = 1; channel <= 99; ++channel)
+            for (quint16 channel = 1; channel <= 107; ++channel)
             {
                 replies.append(testMemory(group, channel, 144000000ULL + channel));
             }
         }
+        for (quint16 channel = 1; channel <= 99; ++channel)
+        {
+            MemoryType memory = testMemory(0, channel, 145000000ULL + channel);
+            memory.sat = true;
+            replies.append(memory);
+        }
         QVERIFY2(database.applySyncSnapshot(removedProfile, replies, replies.size(), &error), qPrintable(error));
-        QCOMPARE(database.memories(removedProfile, &error).size(), 297);
+        QCOMPARE(database.memories(removedProfile, &error).size(), 420);
         QVERIFY(database.syncState(removedProfile, &error).complete);
         QVERIFY2(database.removeProfile(removedProfile, &error), qPrintable(error));
         QVERIFY(database.memories(removedProfile, &error).isEmpty());

@@ -81,12 +81,14 @@ constexpr int kSpectrumScopeTuneReleaseDelayMs = 650;
 constexpr quint64 kSpectrumScopeFixedPanMinDeltaHz = 1000;
 constexpr int kMemoryOffsetCustom = -1;
 constexpr auto kMemoryPollIntervalSecondsSettingsKey = "memoryPollIntervalSeconds";
+constexpr auto kMemoryShowSpecialMemoriesSettingsKey = "memoryShowSpecialMemories";
+constexpr auto kMemoryShowSatelliteMemoriesSettingsKey = "memoryShowSatelliteMemories";
 constexpr int kDefaultMemoryPollIntervalSeconds = 600;
 constexpr int kMemoryPollIntervalMinSeconds = 30;
 constexpr int kMemoryPollIntervalMaxSeconds = 3600;
 constexpr int kMemoryTableColumnCount = 7;
-constexpr int kMemoryChannelColumn = 0;
-constexpr int kMemoryNameColumn = 1;
+constexpr int kMemoryBandColumn = 0;
+constexpr int kMemoryChannelColumn = 1;
 constexpr int kMemoryFrequencyColumn = 2;
 constexpr int kMemoryDuplexColumn = 3;
 constexpr int kMemoryModeColumn = 4;
@@ -117,8 +119,8 @@ inline quint64 spectrumTunePendingAfterReadback(quint64 pendingHz, quint64 repor
     return pendingHz > 0 && pendingHz == reportedHz ? 0 : pendingHz;
 }
 constexpr QSize kMemoryWindowSize(980, 620);
-constexpr int kMemoryChannelColumnWidth = 110;
-constexpr int kMemoryNameColumnWidth = 180;
+constexpr int kMemoryBandColumnWidth = 80;
+constexpr int kMemoryChannelColumnWidth = 210;
 constexpr int kMemoryFrequencyColumnWidth = 135;
 constexpr int kMemoryDuplexColumnWidth = 100;
 constexpr int kMemoryModeColumnWidth = 70;

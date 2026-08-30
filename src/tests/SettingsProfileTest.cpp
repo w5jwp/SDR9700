@@ -87,6 +87,8 @@ void SettingsProfileTest::storesAllSettingsGroupsAndValueTypes()
     QVERIFY(settings.setValue(QStringLiteral("spectrumScopeInvertMouseWheel"), false));
     QVERIFY(settings.setValue(QStringLiteral("mainWindowPositionX"), -42));
     QVERIFY(settings.setValue(QStringLiteral("memoryPollIntervalSeconds"), 900));
+    QVERIFY(settings.setValue(QStringLiteral("memoryShowSpecialMemories"), true));
+    QVERIFY(settings.setValue(QStringLiteral("memoryShowSatelliteMemories"), false));
     QVERIFY(settings.setValue(QStringLiteral("LANModLevel"), 127));
     QVERIFY(settings.setValue(QStringLiteral("ICOMRC28ButtonMapping"), QStringLiteral("{\"1\":\"mute\"}")));
 
@@ -101,6 +103,14 @@ void SettingsProfileTest::storesAllSettingsGroupsAndValueTypes()
     QCOMPARE(
         root.value(QStringLiteral("memoryManager")).toObject().value(QStringLiteral("pollIntervalSeconds")).toString(),
         QStringLiteral("900"));
+    QCOMPARE(
+        root.value(QStringLiteral("memoryManager")).toObject().value(QStringLiteral("showSpecialMemories")).toString(),
+        QStringLiteral("True"));
+    QCOMPARE(root.value(QStringLiteral("memoryManager"))
+                 .toObject()
+                 .value(QStringLiteral("showSatelliteMemories"))
+                 .toString(),
+             QStringLiteral("False"));
     QCOMPARE(root.value(QStringLiteral("radio")).toObject().value(QStringLiteral("LANModLevel")).toString(),
              QStringLiteral("127"));
     QCOMPARE(root.value(QStringLiteral("accessories"))

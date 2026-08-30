@@ -38,6 +38,7 @@
 
 #include <QToolBar>
 #include <QAction>
+#include <QApplication>
 #include <QAudioDevice>
 #include <QLabel>
 #include <QLineEdit>
@@ -281,6 +282,95 @@ void MainWindow::buildToolBar()
     viewMenu->addAction("Memory Manager", this, &MainWindow::showMemoryWindow);
     viewMenu->addAction("Meters", this, &MainWindow::showMetersDialog);
 
+    auto* windowMenu = new QMenu(QStringLiteral("&Window"), this);
+    windowMenu->setObjectName(QStringLiteral("windowMenu"));
+    // macOS omits an empty native top-level menu when QMenuBar registers it.
+    // Seed the one entry that is always valid; aboutToShow rebuilds the same
+    // action with live checked state and appends visible utility windows.
+    windowMenu->addAction(QStringLiteral("Main Window"));
+#if !defined(Q_OS_MAC)
+    windowMenu->setStyleSheet(menuStyle);
+#endif
+    connect(windowMenu, &QMenu::aboutToShow, this,
+            [this, windowMenu]()
+            {
+                windowMenu->clear();
+
+                auto addWindowAction = [this, windowMenu](const QString& label, QWidget* target)
+                {
+                    auto* action = windowMenu->addAction(label);
+                    action->setCheckable(true);
+                    action->setChecked(target && target->isActiveWindow());
+                    const QPointer<QWidget> guardedTarget(target);
+                    connect(action, &QAction::triggered, this,
+                            [this, guardedTarget]()
+                            {
+                                if (!guardedTarget)
+                                {
+                                    return;
+                                }
+                                if (guardedTarget == this)
+                                {
+                                    isMinimized() ? showNormal() : show();
+                                    raise();
+                                    activateWindow();
+                                    if (QWindow* handle = windowHandle())
+                                    {
+                                        handle->requestActivate();
+                                    }
+                                    return;
+                                }
+                                bringDialogToFront(guardedTarget);
+                                if (QWindow* handle = guardedTarget->windowHandle())
+                                {
+                                    handle->requestActivate();
+                                }
+                            });
+                };
+
+                addWindowAction(QStringLiteral("Main Window"), this);
+
+                struct OpenWindow
+                {
+                    QString title;
+                    QWidget* widget{nullptr};
+                };
+                QVector<OpenWindow> openWindows;
+                for (QWidget* candidate : QApplication::topLevelWidgets())
+                {
+                    if (!candidate || candidate == this || !candidate->isVisible() || qobject_cast<QMenu*>(candidate))
+                    {
+                        continue;
+                    }
+
+                    bool ownedByMainWindow = false;
+                    for (QWidget* owner = candidate->parentWidget(); owner; owner = owner->parentWidget())
+                    {
+                        if (owner == this)
+                        {
+                            ownedByMainWindow = true;
+                            break;
+                        }
+                    }
+                    const QString title = candidate->windowTitle().trimmed();
+                    if (ownedByMainWindow && !title.isEmpty())
+                    {
+                        openWindows.append({title, candidate});
+                    }
+                }
+
+                std::sort(openWindows.begin(), openWindows.end(), [](const OpenWindow& left, const OpenWindow& right)
+                          { return left.title.localeAwareCompare(right.title) < 0; });
+                if (!openWindows.isEmpty())
+                {
+                    windowMenu->addSeparator();
+                    for (const OpenWindow& openWindow : std::as_const(openWindows))
+                    {
+                        addWindowAction(openWindow.title, openWindow.widget);
+                    }
+                }
+            });
+
     auto* helpMenu = new QMenu(QStringLiteral("&Help"), this);
 #if !defined(Q_OS_MAC)
     helpMenu->setStyleSheet(menuStyle);
@@ -315,6 +405,7 @@ void MainWindow::buildToolBar()
     nativeMenuBar->addMenu(fileMenu);
     nativeMenuBar->addMenu(settingsMenu);
     nativeMenuBar->addMenu(viewMenu);
+    nativeMenuBar->addMenu(windowMenu);
     nativeMenuBar->addMenu(helpMenu);
     nativeMenuBar->setVisible(true);
 #else
@@ -322,6 +413,7 @@ void MainWindow::buildToolBar()
     m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
     m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
+    m_titleBar->addMenu(QStringLiteral("&Window"), windowMenu);
     m_titleBar->addMenu(QStringLiteral("&Help"), helpMenu);
 #endif
 
@@ -425,6 +517,10 @@ void MainWindow::showSettingsDialog()
             &SpectrumScopeDisplay::setGridDensity);
     connect(dlg, &SettingsDialog::memoryPollIntervalSecondsChanged, m_memoryController,
             &MemoryController::setMemoryPollIntervalSeconds);
+    connect(dlg, &SettingsDialog::memoryShowSpecialMemoriesChanged, m_memoryController,
+            &MemoryController::setShowSpecialMemories);
+    connect(dlg, &SettingsDialog::memoryShowSatelliteMemoriesChanged, m_memoryController,
+            &MemoryController::setShowSatelliteMemories);
     connect(dlg, &SettingsDialog::audioSettingsChanged, this, &MainWindow::scheduleAudioSettingsApply);
 #ifdef HAVE_HIDAPI
     connect(dlg, &SettingsDialog::icomRC28EncoderSettingsChanged, this,

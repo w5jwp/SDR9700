@@ -458,6 +458,8 @@ QString memoryBandLabelForGroup(quint16 group)
 {
     switch (group)
     {
+    case 0:
+        return QStringLiteral("SAT");
     case 1:
         return QStringLiteral("2M");
     case 2:

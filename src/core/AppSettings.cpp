@@ -48,6 +48,8 @@ constexpr std::array kSettingDefinitions{
     SettingDefinition{"mainWindowPositionY", "mainWindow", "positionY"},
     SettingDefinition{"statusClockUTC", "mainWindow", "statusClockUTC"},
     SettingDefinition{"memoryPollIntervalSeconds", "memoryManager", "pollIntervalSeconds"},
+    SettingDefinition{"memoryShowSpecialMemories", "memoryManager", "showSpecialMemories"},
+    SettingDefinition{"memoryShowSatelliteMemories", "memoryManager", "showSatelliteMemories"},
     SettingDefinition{"LANModLevel", "radio", "LANModLevel"},
     SettingDefinition{"tuningStepHZ", "radio", "tuningStepHZ"},
     SettingDefinition{"volumeLevel", "radio", "volumeLevel"},

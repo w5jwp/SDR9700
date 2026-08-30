@@ -6,6 +6,7 @@
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
 #include "MemoryEditorPolicy.h"
+#include "MemoryViewHelpers.h"
 #include "MainWindow.h"
 #include "UtilityWindow.h"
 #include "models/RadioModel.h"
@@ -27,6 +28,7 @@
 #include <QPushButton>
 #include <QPointer>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QScreen>
 #include <QSizePolicy>
 #include <QSpinBox>
@@ -36,7 +38,6 @@
 #include <initializer_list>
 
 using namespace sdr9700::memory;
-
 
 MemoryEditorForm::MemoryEditorForm(MemoryController* owner) : QObject(owner), m_owner(owner) {}
 
@@ -121,25 +122,56 @@ void MemoryEditorForm::show(const QString& memoryId)
         configureSectionForm(form);
         return EditorSection{group, form};
     };
+    auto* bandEdit = new QLineEdit(editor);
+    bandEdit->setObjectName(QStringLiteral("memoryEditorBand"));
+    bandEdit->setReadOnly(true);
+    bandEdit->setAlignment(Qt::AlignCenter);
+    bandEdit->setFocusPolicy(Qt::NoFocus);
+    bandEdit->setEnabled(false);
+
     auto* channelCombo = new QComboBox(editor);
     channelCombo->setObjectName(QStringLiteral("memoryEditorChannel"));
-    for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
+    channelCombo->setItemDelegate(
+        new BracketAlignedItemDelegate(channelCombo, QStringLiteral("memoryEditorChannelDelegate")));
+    channelCombo->setEnabled(false);
+    auto setMemoryLocationBand = [this, bandEdit, channelCombo](quint16 group, quint16 preferredChannel = 0)
     {
-        channelCombo->addItem(QString::number(channel).rightJustified(3, QLatin1Char('0')), channel);
-    }
-    auto updateChannelLabels = [channelCombo](quint16 group)
-    {
-        const QString band = memoryBandLabelForGroup(group);
-        for (int index = 0; index < channelCombo->count(); ++index)
+        channelCombo->clear();
+        if (group < kRadioMemoryFirstGroup || group > kRadioMemoryLastGroup)
         {
-            channelCombo->setItemText(index, QStringLiteral("%1-%2").arg(band).arg(
-                                                 channelCombo->itemData(index).toUInt(), 3, 10, QLatin1Char('0')));
+            bandEdit->clear();
+            bandEdit->setProperty("memoryGroup", QVariant());
+            bandEdit->setEnabled(false);
+            channelCombo->setEnabled(false);
+            return;
         }
+        bandEdit->setText(memoryBandLabelForGroup(group));
+        bandEdit->setProperty("memoryGroup", group);
+        bandEdit->setEnabled(true);
+        for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastUserChannel; ++channel)
+        {
+            const auto memoryIt = m_owner->m_radioMemoriesByKey.constFind(radioMemoryKey(group, channel));
+            QString disposition = QStringLiteral("EMPTY");
+            if (memoryIt != m_owner->m_radioMemoriesByKey.cend())
+            {
+                disposition = radioMemoryName(memoryIt.value());
+                if (disposition.isEmpty())
+                {
+                    disposition = QStringLiteral("OCCUPIED");
+                }
+            }
+            channelCombo->addItem(QStringLiteral("%1 [%2]").arg(channel, 3, 10, QLatin1Char('0')).arg(disposition),
+                                  channel);
+        }
+        channelCombo->setEnabled(true);
+        const int preferredIndex = preferredChannel == 0 ? -1 : channelCombo->findData(preferredChannel);
+        channelCombo->setCurrentIndex(preferredIndex >= 0 ? preferredIndex : 0);
     };
     auto* nameEdit = new QLineEdit(editor);
     nameEdit->setMaxLength(kRadioMemoryNameMaxChars);
     nameEdit->setPlaceholderText(QStringLiteral("Maximum %1 characters").arg(kRadioMemoryNameMaxChars));
     auto* frequencyEdit = new QLineEdit(editor);
+    frequencyEdit->setObjectName(QStringLiteral("memoryEditorFrequency"));
     frequencyEdit->setPlaceholderText("145.000000");
     auto* modeCombo = new QComboBox(editor);
     modeCombo->addItem(QStringLiteral("FM"), modeFM);
@@ -252,10 +284,11 @@ void MemoryEditorForm::show(const QString& memoryId)
     auto* dtcsRxPresetBtn = new QPushButton(QStringLiteral("NONE"), editor);
     auto setEditorFieldHeight = [](QWidget* widget) { widget->setMinimumHeight(kMemoryEditorFieldHeight); };
     for (QWidget* widget : std::initializer_list<QWidget*>{
-             channelCombo,   nameEdit,    frequencyEdit,         modeCombo,           filterCombo,     dataModeCombo,
-             scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin,    toneOptionCombo, dsqlCombo,
-             dtcsSpin,       dtcsRxSpin,  dtcsPolarityCombo,     dtcsRxPolarityCombo, dvSqlSpin,       urEdit,
-             r1Edit,         r2Edit,      tonePresetBtn,         ctcssPresetBtn,      dtcsPresetBtn,   dtcsRxPresetBtn})
+             bandEdit,       channelCombo,   nameEdit,    frequencyEdit,         modeCombo,           filterCombo,
+             dataModeCombo,  scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin,    toneOptionCombo,
+             dsqlCombo,      dtcsSpin,       dtcsRxSpin,  dtcsPolarityCombo,     dtcsRxPolarityCombo, dvSqlSpin,
+             urEdit,         r1Edit,         r2Edit,      tonePresetBtn,         ctcssPresetBtn,      dtcsPresetBtn,
+             dtcsRxPresetBtn})
     {
         setEditorFieldHeight(widget);
     }
@@ -424,7 +457,8 @@ void MemoryEditorForm::show(const QString& memoryId)
     memoryGrid->setHorizontalSpacing(10);
     memoryGrid->setVerticalSpacing(6);
     memoryGrid->setColumnStretch(0, 1);
-    memoryGrid->setColumnStretch(1, 1);
+    memoryGrid->setColumnStretch(1, 3);
+    memoryGrid->setColumnStretch(2, 2);
     auto addMemoryField = [memoryFields, memoryGrid](int row, int column, const QString& labelText,
                                                      QWidget* const field, int columnSpan = 1)
     {
@@ -438,11 +472,12 @@ void MemoryEditorForm::show(const QString& memoryId)
         fieldLayout->addWidget(field);
         memoryGrid->addWidget(fieldContainer, row, column, 1, columnSpan);
     };
-    addMemoryField(0, 0, QStringLiteral("Channel"), channelCombo);
-    addMemoryField(0, 1, QStringLiteral("Frequency"), frequencyEdit);
-    addMemoryField(1, 0, QStringLiteral("Name"), nameEdit, 2);
-    memoryGrid->addWidget(modeOffsetRow, 2, 0, 1, 2);
-    memoryGrid->addWidget(customOffsetField, 3, 0, 1, 2);
+    addMemoryField(0, 0, QStringLiteral("Band"), bandEdit);
+    addMemoryField(0, 1, QStringLiteral("Channel"), channelCombo);
+    addMemoryField(0, 2, QStringLiteral("Frequency"), frequencyEdit);
+    addMemoryField(1, 0, QStringLiteral("Name"), nameEdit, 3);
+    memoryGrid->addWidget(modeOffsetRow, 2, 0, 1, 3);
+    memoryGrid->addWidget(customOffsetField, 3, 0, 1, 3);
     memorySection.form->addRow(memoryFields);
     optionsSection.form->addRow(optionsRow);
     toneSection.form->addRow(toneOptionCombo);
@@ -783,20 +818,65 @@ void MemoryEditorForm::show(const QString& memoryId)
                 menu.addAction(action);
                 menu.exec(dtcsRxPresetBtn->mapToGlobal(QPoint(0, dtcsRxPresetBtn->height())));
             });
+    auto updateMemoryLocationFromFrequency = [this, frequencyEdit, bandEdit, channelCombo, setMemoryLocationBand]()
+    {
+        quint64 frequencyHz = 0;
+        if (!parseFrequencyText(frequencyEdit->text(), &frequencyHz))
+        {
+            setMemoryLocationBand(0);
+            return;
+        }
+        const availableBands band = sdr9700::radioBandForFrequency(frequencyHz);
+        const sdr9700::RadioBandDef* definition = sdr9700::radioBandDefinition(band);
+        if (!definition || definition->memGroup < kRadioMemoryFirstGroup ||
+            definition->memGroup > kRadioMemoryLastGroup)
+        {
+            setMemoryLocationBand(0);
+            return;
+        }
+        const quint16 group = static_cast<quint16>(definition->memGroup);
+        quint16 preferredChannel = 0;
+        if (bandEdit->property("memoryGroup").toUInt() == group && channelCombo->currentIndex() >= 0)
+        {
+            preferredChannel = static_cast<quint16>(channelCombo->currentData().toUInt());
+        }
+        else
+        {
+            if (!m_owner->firstOpenChannelForGroup(group, &preferredChannel))
+            {
+                // A newly opened editor can legitimately be populated from
+                // the committed database before the current radio sweep has
+                // verified every slot. The strict controller helper refuses
+                // to call an unverified slot open because write workflows use
+                // that distinction to avoid overwriting unknown radio state.
+                // For presentation, however, the dropdown already labels
+                // locally absent slots as EMPTY. Select the first such row so
+                // the initial choice agrees with the information displayed to
+                // the operator; write-time safeguards remain unchanged.
+                for (quint16 candidate = kRadioMemoryFirstChannel; candidate <= kRadioMemoryLastUserChannel;
+                     ++candidate)
+                {
+                    if (!m_owner->m_radioMemoriesByKey.contains(radioMemoryKey(group, candidate)))
+                    {
+                        preferredChannel = candidate;
+                        break;
+                    }
+                }
+            }
+        }
+        setMemoryLocationBand(group, preferredChannel);
+    };
+    connect(frequencyEdit, &QLineEdit::textChanged, editor,
+            [updateMemoryLocationFromFrequency](const QString&) { updateMemoryLocationFromFrequency(); });
     connect(frequencyEdit, &QLineEdit::editingFinished, editor,
-            [frequencyEdit, populateOffsetOptions, updateCustomOffsetVisibility, updateChannelLabels]()
+            [populateOffsetOptions, updateCustomOffsetVisibility]()
             {
                 populateOffsetOptions();
                 updateCustomOffsetVisibility();
-                quint64 frequencyHz = 0;
-                if (parseFrequencyText(frequencyEdit->text(), &frequencyHz))
-                {
-                    updateChannelLabels(radioMemoryGroupForHz(frequencyHz));
-                }
             });
     connect(offsetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), editor, updateCustomOffsetVisibility);
 
-    auto applyMemoryToForm = [this, channelCombo, updateChannelLabels, nameEdit, frequencyEdit, modeCombo, filterCombo,
+    auto applyMemoryToForm = [this, setMemoryLocationBand, nameEdit, frequencyEdit, modeCombo, filterCombo,
                               dataModeCombo, scanGroupCombo, populateOffsetOptions, setOffsetSelection,
                               updateCustomOffsetVisibility, toneOptionCombo, toneEdit, tsqlEdit, dsqlCombo, dtcsSpin,
                               dtcsRxSpin, dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit,
@@ -806,10 +886,9 @@ void MemoryEditorForm::show(const QString& memoryId)
         quint16 group = kRadioMemoryFirstGroup;
         quint16 channel = kRadioMemoryFirstChannel;
         m_owner->parseRadioMemoryId(memory.id, &group, &channel);
-        updateChannelLabels(group);
-        channelCombo->setCurrentIndex(qMax(0, channelCombo->findData(channel)));
         nameEdit->setText(memory.name);
         frequencyEdit->setText(memoryFrequencyLabel(memory.receiveHz));
+        setMemoryLocationBand(group, channel);
         modeCombo->setCurrentIndex(qMax(0, modeCombo->findData(memory.mode)));
         filterCombo->setCurrentIndex(qMax(0, filterCombo->findData(memory.filter)));
         dataModeCombo->setCurrentIndex(qMax(0, dataModeCombo->findData(memory.dataMode)));
@@ -877,18 +956,6 @@ void MemoryEditorForm::show(const QString& memoryId)
         }
         applyMemoryToForm(memory);
     }
-    else
-    {
-        const quint16 defaultGroup = m_owner->m_window->m_vfo
-                                         ? radioMemoryGroupForHz(m_owner->m_window->m_vfo->frequencyHz())
-                                         : kRadioMemoryFirstGroup;
-        updateChannelLabels(defaultGroup);
-        quint16 firstOpenChannel = kRadioMemoryFirstChannel;
-        if (m_owner->firstOpenChannelForGroup(defaultGroup, &firstOpenChannel))
-        {
-            channelCombo->setCurrentIndex(qMax(0, channelCombo->findData(firstOpenChannel)));
-        }
-    }
 
     updateCustomOffsetVisibility();
     updateConditionalSections();
@@ -920,8 +987,8 @@ void MemoryEditorForm::show(const QString& memoryId)
         saveButton, &QPushButton::clicked, editor,
         [this, editor, frequencyEdit, toneOptionCombo, toneEdit, tsqlEdit, dtcsSpin, dtcsRxSpin, nameEdit, modeCombo,
          filterCombo, dataModeCombo, scanGroupCombo, offsetCombo, customOffsetModeCombo, customOffsetSpin, dsqlCombo,
-         dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, channelCombo, editing, memoryId,
-         parent, dialogGuard, setWriteInProgress]()
+         dtcsPolarityCombo, dtcsRxPolarityCombo, dvSqlSpin, urEdit, r1Edit, r2Edit, bandEdit, channelCombo, editing,
+         memoryId, parent, dialogGuard, setWriteInProgress]()
         {
             quint64 receiveHz = 0;
             if (!parseFrequencyText(frequencyEdit->text(), &receiveHz))
@@ -939,6 +1006,14 @@ void MemoryEditorForm::show(const QString& memoryId)
                 QMessageBox::warning(editor, "Add/Edit Memory", "Enter a frequency in the 2M, 70CM, or 23CM range.");
                 frequencyEdit->setFocus();
                 frequencyEdit->selectAll();
+                return;
+            }
+            const quint16 group = static_cast<quint16>(bandDefinition->memGroup);
+            if (bandEdit->property("memoryGroup").toUInt() != group || channelCombo->currentIndex() < 0)
+            {
+                QMessageBox::warning(editor, "Add/Edit Memory",
+                                     "Choose a valid frequency so Band and Channel can be determined.");
+                frequencyEdit->setFocus();
                 return;
             }
 
@@ -1038,7 +1113,6 @@ void MemoryEditorForm::show(const QString& memoryId)
             memory.r1Call = r1Edit->text().trimmed().toUpper();
             memory.r2Call = r2Edit->text().trimmed().toUpper();
 
-            const quint16 group = static_cast<quint16>(bandDefinition->memGroup);
             const quint16 channel = static_cast<quint16>(channelCombo->currentData().toUInt());
             QVector<MemoryType> writes;
             if (editing)
@@ -1106,5 +1180,16 @@ void MemoryEditorForm::show(const QString& memoryId)
                 });
         });
 
+    // QDialog::exec() maps the native window before UtilityWindow's showEvent
+    // can perform its normal centering pass. On macOS that exposes the window
+    // manager's provisional position for one frame, followed by a small but
+    // visible jump to the centered position. The editor has finished all
+    // content and visibility setup at this point, so polish and center it
+    // before mapping. Mark this fixed-size modal editor as pre-positioned so
+    // UtilityWindow does not schedule its ordinary post-show correction
+    // passes and expose a second movement to the operator.
+    dialog.ensurePolished();
+    dialog.centerOnHost();
+    dialog.setProperty("prepositionedBeforeShow", true);
     dialog.exec();
 }

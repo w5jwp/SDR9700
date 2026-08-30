@@ -79,7 +79,7 @@ void MemoryController::setRadioProfileId(const QUuid& profileId)
         }
     }
     // Profile selection precedes the radio-ready signal that starts the live
-    // 297-slot sweep. Preserve that distinction in Memory Manager instead of
+    // 420-slot sweep. Preserve that distinction in Memory Manager instead of
     // briefly presenting the cached row count as though synchronization had
     // already completed. requestNextRadioMemory replaces this waiting state
     // with exact group/channel progress as soon as the radio becomes ready.
@@ -101,6 +101,16 @@ void MemoryController::forceRadioMemorySync()
 void MemoryController::setMemoryPollIntervalSeconds(int seconds)
 {
     m_memorySyncController->setMemoryPollIntervalSeconds(seconds);
+}
+
+void MemoryController::setShowSpecialMemories(bool show)
+{
+    m_memoryViewController->setShowSpecialMemories(show);
+}
+
+void MemoryController::setShowSatelliteMemories(bool show)
+{
+    m_memoryViewController->setShowSatelliteMemories(show);
 }
 
 bool MemoryController::initialMemorySyncComplete() const
@@ -179,11 +189,22 @@ void MemoryController::showMemoryToast(const QString& message)
 
 void MemoryController::handleRadioMemoryReceived(MemoryType memory)
 {
-    if (memory.group < kRadioMemoryFirstGroup || memory.group > kRadioMemoryLastGroup ||
-        memory.channel < kRadioMemoryFirstChannel || memory.channel > kRadioMemoryLastChannel)
+    const bool normalSlot = memory.group >= kRadioMemoryFirstGroup && memory.group <= kRadioMemoryLastGroup &&
+                            memory.channel >= kRadioMemoryFirstChannel && memory.channel <= kRadioMemoryLastChannel;
+    const bool satelliteSlot = memory.sat && memory.group == kRadioMemorySatelliteGroup &&
+                               memory.channel >= kRadioMemoryFirstSatelliteChannel &&
+                               memory.channel <= kRadioMemoryLastSatelliteChannel;
+    if (!normalSlot && !satelliteSlot)
     {
         return;
     }
+
+    // Normalize unnamed occupied channels before they enter either the live
+    // radio map or the staged database snapshot. This is a local presentation
+    // and persistence fallback only: synchronization sends no write to the
+    // radio. A later explicit edit and Save remains an operator-requested
+    // radio write and can therefore persist the displayed fallback name.
+    memory = radioMemoryWithLocalNameFallback(memory);
 
     const quint32 key = radioMemoryKey(memory.group, memory.channel);
     const bool syncReply = m_memorySyncController->refreshInProgress();
@@ -391,6 +412,25 @@ MemoryType MemoryController::radioMemoryForId(const QString& id, bool* found) co
 bool MemoryController::parseRadioMemoryId(const QString& id, quint16* group, quint16* channel) const
 {
     const QStringList parts = id.split(QLatin1Char(':'));
+    if (parts.size() == 2 && parts.at(0) == QLatin1String("satellite"))
+    {
+        bool channelOk = false;
+        const uint parsedChannel = parts.at(1).toUInt(&channelOk);
+        if (!channelOk || parsedChannel < kRadioMemoryFirstSatelliteChannel ||
+            parsedChannel > kRadioMemoryLastSatelliteChannel)
+        {
+            return false;
+        }
+        if (group)
+        {
+            *group = kRadioMemorySatelliteGroup;
+        }
+        if (channel)
+        {
+            *channel = static_cast<quint16>(parsedChannel);
+        }
+        return true;
+    }
     if (parts.size() != 3 || parts.at(0) != QLatin1String("radio"))
     {
         return false;
@@ -459,7 +499,7 @@ bool MemoryController::firstOpenChannelForGroup(quint16 group, quint16* channel)
         return false;
     }
 
-    for (quint16 candidate = kRadioMemoryFirstChannel; candidate <= kRadioMemoryLastChannel; ++candidate)
+    for (quint16 candidate = kRadioMemoryFirstChannel; candidate <= kRadioMemoryLastUserChannel; ++candidate)
     {
         const quint32 key = radioMemoryKey(group, candidate);
         if (!m_memorySyncController->hasReceivedMemory(key))

@@ -1907,7 +1907,7 @@ void RadioBackend::observeVfoFrequency(quint64 hz, uchar receiver)
     invokeOnCurrentCommander([](Commander* commandSession) { requestVfoFrequenciesForCommand(commandSession); });
 }
 
-void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16 group)
+void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16 group, Vfo targetVfo)
 {
     if (!commandSession)
     {
@@ -1926,10 +1926,13 @@ void RadioBackend::selectMemoryBandForCommand(Commander* commandSession, quint16
     frequency.MHzDouble = hz / 1e6;
     frequency.VFO = activeVFO;
 
-    // IC-9700 memory channels are scoped by band. Select the MAIN VFO and tune
-    // it inside the desired band before entering memory mode so command 08h
-    // resolves channel N against the intended memory group.
-    selectMainVfoForCommand(commandSession);
+    // IC-9700 memory channels are scoped by band. Select the requested VFO and
+    // tune it inside the desired band before entering memory mode so command
+    // 08h resolves channel N against the intended memory group without moving
+    // the other receiver.
+    commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(targetVfo == Vfo::Sub), 0);
+    commandSession->receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(targetVfo == Vfo::Sub ? vfoSub : vfoMain),
+                                   0);
     commandSession->receiveCommand(funcVFOModeSelect, QVariant(), 0);
     commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency), 0);
 }
@@ -1948,7 +1951,10 @@ void RadioBackend::selectMemoryForCommand(Commander* commandSession, quint16 gro
 
     if (prepareBand)
     {
-        selectMemoryBandForCommand(commandSession, group);
+        // The legacy prepareBand path is used only by MAIN-oriented callers.
+        // Target-aware Memory Manager activation prepares its selected VFO
+        // explicitly and passes false here.
+        selectMemoryBandForCommand(commandSession, group, Vfo::Main);
     }
     // Command 08h carries the channel number. When prepareBand is false the
     // caller has already selected the desired band and is avoiding VFO tuning
@@ -2254,36 +2260,39 @@ void RadioBackend::selectVfoMode()
         });
 }
 
-void RadioBackend::selectRadioMemory(quint16 group, quint16 channel)
+void RadioBackend::selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo)
 {
     m_selectedRadioMemory = std::make_pair(group, channel);
     const uint memoryAddress = (static_cast<uint>(group) << 16) | static_cast<uint>(channel);
     bool prepareBand = true;
-    if (m_currentBandKey >= 0)
+    const quint64 targetFrequencyHz = targetVfo == Vfo::Sub ? m_currentSubFrequencyHz : m_currentMainFrequencyHz;
+    if (const sdr9700::RadioBandDef* definition =
+            sdr9700::radioBandDefinition(sdr9700::radioBandForFrequency(targetFrequencyHz)))
     {
-        const auto currentBand = static_cast<availableBands>(m_currentBandKey);
-        if (const sdr9700::RadioBandDef* definition = sdr9700::radioBandDefinition(currentBand))
-        {
-            prepareBand = definition->memGroup != group;
-        }
+        prepareBand = definition->memGroup != group;
     }
+    const uchar receiver = sdr9700::backend::receiverForVfo(targetVfo);
     invokeOnCurrentCommander(
-        [group, channel, memoryAddress, prepareBand](Commander* commandSession)
+        [group, channel, memoryAddress, prepareBand, targetVfo, receiver](Commander* commandSession)
         {
             // Memory channel numbers are band-scoped on the IC-9700. Only use
             // the intermediate band-routing tune when changing bands; within
             // the current band, selecting command 08h directly avoids an
             // unnecessary frequency transition.
-            selectMemoryForCommand(commandSession, group, channel, prepareBand);
-            commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0);
-            commandSession->receiveCommand(funcSelectedFreq, QVariant(), 0);
-            commandSession->receiveCommand(funcSelectedMode, QVariant(), 0);
-            commandSession->receiveCommand(funcSplitStatus, QVariant(), 0);
-            commandSession->receiveCommand(funcReadFreqOffset, QVariant(), 0);
-            commandSession->receiveCommand(funcToneSquelchType, QVariant(), 0);
-            commandSession->receiveCommand(funcToneFreq, QVariant(), 0);
-            commandSession->receiveCommand(funcTSQLFreq, QVariant(), 0);
-            commandSession->receiveCommand(funcDTCSCode, QVariant(), 0);
+            if (prepareBand)
+            {
+                selectMemoryBandForCommand(commandSession, group, targetVfo);
+            }
+            selectMemoryForCommand(commandSession, group, channel, false);
+            commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), receiver);
+            commandSession->receiveCommand(funcFreqGet, QVariant(), receiver);
+            commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
+            commandSession->receiveCommand(funcSplitStatus, QVariant(), receiver);
+            commandSession->receiveCommand(funcReadFreqOffset, QVariant(), receiver);
+            commandSession->receiveCommand(funcToneSquelchType, QVariant(), receiver);
+            commandSession->receiveCommand(funcToneFreq, QVariant(), receiver);
+            commandSession->receiveCommand(funcTSQLFreq, QVariant(), receiver);
+            commandSession->receiveCommand(funcDTCSCode, QVariant(), receiver);
         });
 }
 
@@ -2293,6 +2302,13 @@ void RadioBackend::requestRadioMemory(quint16 group, quint16 channel)
     invokeOnCurrentCommander(
         [memoryAddress](Commander* commandSession)
         { commandSession->receiveCommand(funcMemoryContents, QVariant::fromValue(memoryAddress), 0); });
+}
+
+void RadioBackend::requestSatelliteMemory(quint16 channel)
+{
+    invokeOnCurrentCommander(
+        [channel](Commander* commandSession)
+        { commandSession->receiveCommand(funcSatelliteMemory, QVariant::fromValue(static_cast<uint>(channel)), 0); });
 }
 
 void RadioBackend::writeRadioMemory(MemoryType memory)

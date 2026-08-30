@@ -24,8 +24,10 @@ class MemoryStoreTest : public QObject
     void duplicateBandChannelIsRejected();
     void oversizedUnsignedFieldsAreRejectedBeforeNarrowing();
     void radioMemoryConversionRoundTrips();
+    void unnamedRadioMemoryUsesFrequencyAsLocalName();
     void radioMemoryReadbackNormalizesRepeaterOffsetUnits();
     void onlyStoredRadioMemoriesAreSelectedForDeletion();
+    void specialAndSatelliteMemoriesRemainReadOnly();
     void editorPolicyNormalizesOffsets();
     void exportFileNameIncludesDateAndTime();
     void exportPathUsesRequestedDirectory();
@@ -192,6 +194,21 @@ void MemoryStoreTest::radioMemoryConversionRoundTrips()
     }
 }
 
+void MemoryStoreTest::unnamedRadioMemoryUsesFrequencyAsLocalName()
+{
+    MemoryType unnamed = radioMemoryFromRecord(validMemory(), 1, 5);
+    std::fill_n(unnamed.name, sizeof(unnamed.name), '\0');
+    unnamed.frequency.Hz = 145500000;
+
+    const MemoryType normalized = radioMemoryWithLocalNameFallback(unnamed);
+
+    QCOMPARE(radioMemoryName(normalized), QStringLiteral("145.500.000"));
+    QVERIFY(radioMemoryName(unnamed).isEmpty());
+
+    const MemoryType deleted = deletedRadioMemory(1, 5);
+    QVERIFY(radioMemoryName(radioMemoryWithLocalNameFallback(deleted)).isEmpty());
+}
+
 void MemoryStoreTest::onlyStoredRadioMemoriesAreSelectedForDeletion()
 {
     MemoryType first = radioMemoryFromRecord(validMemory(), 2, 12);
@@ -208,6 +225,33 @@ void MemoryStoreTest::onlyStoredRadioMemoriesAreSelectedForDeletion()
     QCOMPARE(deletes.at(1).group, quint16(2));
     QCOMPARE(deletes.at(1).channel, quint16(12));
     QVERIFY(deletes.at(1).del);
+}
+
+void MemoryStoreTest::specialAndSatelliteMemoriesRemainReadOnly()
+{
+    MemoryType userMemory = radioMemoryFromRecord(validMemory(), 1, 99);
+    MemoryType scanEdge = radioMemoryFromRecord(validMemory(), 1, 100);
+    MemoryType callChannel = radioMemoryFromRecord(validMemory(), 2, 107);
+    MemoryType satellite = radioMemoryFromRecord(validMemory(), 0, 42);
+    satellite.sat = true;
+
+    QVERIFY(!recordFromRadioMemory(userMemory).readOnly);
+    QVERIFY(recordFromRadioMemory(scanEdge).readOnly);
+    QVERIFY(recordFromRadioMemory(callChannel).readOnly);
+    QVERIFY(recordFromRadioMemory(satellite).readOnly);
+    QCOMPARE(radioMemoryChannelLabel(1, 100), QStringLiteral("2M-1A"));
+    QCOMPARE(radioMemoryChannelLabel(2, 107), QStringLiteral("70CM-C2"));
+    QCOMPARE(radioMemoryChannelLabel(0, 42), QStringLiteral("SAT-42"));
+    QCOMPARE(radioMemoryBandLabel(1), QStringLiteral("2M"));
+    QCOMPARE(radioMemoryBandLabel(0), QStringLiteral("SAT"));
+    QCOMPARE(radioMemorySlotLabel(1, 5), QStringLiteral("005"));
+    QCOMPARE(radioMemorySlotLabel(1, 100), QStringLiteral("1A"));
+    QCOMPARE(radioMemorySlotLabel(2, 107), QStringLiteral("C2"));
+    QCOMPARE(radioMemorySlotLabel(0, 7), QStringLiteral("07"));
+
+    const QVector<MemoryType> deletes = deletedStoredRadioMemories({userMemory, scanEdge, callChannel, satellite});
+    QCOMPARE(deletes.size(), 1);
+    QCOMPARE(deletes.constFirst().channel, quint16(99));
 }
 
 void MemoryStoreTest::radioMemoryReadbackNormalizesRepeaterOffsetUnits()

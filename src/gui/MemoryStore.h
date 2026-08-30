@@ -43,6 +43,10 @@ struct MemoryRecord
     // SQLite payload. It describes whether the current radio session has
     // answered for this exact slot, not a durable property of the memory.
     bool verifiedThisSession{false};
+    // Scan-edge, call, and satellite memories are synchronized for complete
+    // radio visibility, but are deliberately read-only until their distinct
+    // write/select semantics have been verified against an IC-9700.
+    bool readOnly{false};
 };
 
 int memoryBandKeyForHz(quint64 hz);

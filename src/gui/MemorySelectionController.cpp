@@ -7,6 +7,7 @@
 #include "MemoryRecordHelpers.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
+#include "VfoSelectionController.h"
 
 #include <QComboBox>
 #include <QMessageBox>
@@ -61,6 +62,16 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
     {
         return;
     }
+    if (memory.group == kRadioMemorySatelliteGroup)
+    {
+        if (showDialogOnFailure)
+        {
+            QMessageBox::information(m_owner->popupParent(), QStringLiteral("Select Memory"),
+                                     QStringLiteral("Satellite memories contain paired receiver/transmitter data and "
+                                                    "cannot yet be activated safely from Memory Manager."));
+        }
+        return;
+    }
     if (!m_owner->m_window->m_model || !m_owner->m_window->m_model->isReady() || !m_owner->m_window->m_vfo)
     {
         if (showDialogOnFailure)
@@ -83,26 +94,46 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
         return;
     }
 
-    m_owner->m_window->m_applyingMemorySelection = true;
-    m_owner->m_window->m_activeMemorySelectionReleaseScheduled = false;
-    const int generation = ++m_owner->m_window->m_memorySelectionGeneration;
-    m_owner->m_window->setActiveMemory(memory.id, memory.receiveHz, memory.mode, memory.duplexMode, memory.offsetHz,
-                                       memory.toneMode, memory.toneValue);
-    m_owner->m_window->m_model->selectRadioMemory(group, channel);
-    m_owner->m_window->checkIfMemorySelectionComplete();
-    // Timeout guard: release the memory-selection protection after 3 s in case
-    // the radio never confirms the selected channel.
-    QTimer::singleShot(3000, this,
-                       [this, generation]()
-                       {
-                           if (m_owner->m_window->m_memorySelectionGeneration != generation)
+    const Vfo targetVfo = m_owner->m_window->m_vfoSelectionController
+                              ? m_owner->m_window->m_vfoSelectionController->selectedVfo()
+                              : Vfo::Main;
+    const bool trackAsMainMemory = targetVfo == Vfo::Main;
+    int generation = 0;
+    if (trackAsMainMemory)
+    {
+        // MainWindow's active-memory fields predate the separate MAIN/SUB VFO
+        // controllers and deliberately describe MAIN only. Retain that
+        // established protection for MAIN selections, but do not populate it
+        // for SUB: doing so would cause the subsequent memory readback to be
+        // applied to the legacy MAIN VfoModel. SUB instead updates from the
+        // receiver-targeted frequency, mode, duplex, offset, and tone replies
+        // requested by RadioBackend::selectRadioMemory().
+        m_owner->m_window->m_applyingMemorySelection = true;
+        m_owner->m_window->m_activeMemorySelectionReleaseScheduled = false;
+        generation = ++m_owner->m_window->m_memorySelectionGeneration;
+        m_owner->m_window->setActiveMemory(memory.id, memory.receiveHz, memory.mode, memory.duplexMode, memory.offsetHz,
+                                           memory.toneMode, memory.toneValue);
+    }
+    m_owner->m_window->m_model->selectRadioMemory(group, channel, targetVfo);
+    if (trackAsMainMemory)
+    {
+        m_owner->m_window->checkIfMemorySelectionComplete();
+        // Timeout guard: release the memory-selection protection after 3 s in
+        // case the radio never confirms the selected MAIN channel.
+        QTimer::singleShot(3000, this,
+                           [this, generation]()
                            {
-                               return;
-                           }
-                           m_owner->m_window->m_applyingMemorySelection = false;
-                           m_owner->m_window->m_activeMemorySelectionReleaseScheduled = false;
-                       });
-    m_owner->m_window->showToast(QStringLiteral("Selected memory: %1").arg(memory.name));
+                               if (m_owner->m_window->m_memorySelectionGeneration != generation)
+                               {
+                                   return;
+                               }
+                               m_owner->m_window->m_applyingMemorySelection = false;
+                               m_owner->m_window->m_activeMemorySelectionReleaseScheduled = false;
+                           });
+    }
+    m_owner->m_window->showToast(
+        QStringLiteral("Selected memory on %1: %2")
+            .arg(targetVfo == Vfo::Sub ? QStringLiteral("SUB") : QStringLiteral("MAIN"), memory.name));
 }
 
 
@@ -134,7 +165,8 @@ void MemorySelectionController::copySelectedMemory()
     const QString id = selectedMemoryId();
     if (id.isEmpty())
     {
-        QMessageBox::information(m_owner->popupParent(), "Copy Memory", "Choose one memory first.");
+        sdr9700::ui::showInformation(m_owner->popupParent(), QStringLiteral("Copy Memory"),
+                                     QStringLiteral("Please select a memory channel."));
         return;
     }
 
@@ -142,6 +174,12 @@ void MemorySelectionController::copySelectedMemory()
     MemoryRecord copy = m_owner->memoryForId(id, &found);
     if (!found)
     {
+        return;
+    }
+    if (copy.readOnly)
+    {
+        QMessageBox::information(m_owner->popupParent(), QStringLiteral("Copy Memory"),
+                                 QStringLiteral("Special and satellite memories cannot be copied yet."));
         return;
     }
 
@@ -173,7 +211,8 @@ void MemorySelectionController::removeSelectedMemory()
     const QString id = selectedMemoryId();
     if (id.isEmpty())
     {
-        QMessageBox::information(m_owner->popupParent(), "Remove Memory", "Choose one memory first.");
+        sdr9700::ui::showInformation(m_owner->popupParent(), QStringLiteral("Remove Memory"),
+                                     QStringLiteral("Please select a memory channel."));
         return;
     }
 
@@ -181,6 +220,12 @@ void MemorySelectionController::removeSelectedMemory()
     const MemoryRecord memory = m_owner->memoryForId(id, &found);
     if (!found)
     {
+        return;
+    }
+    if (memory.readOnly)
+    {
+        QMessageBox::information(m_owner->popupParent(), QStringLiteral("Remove Memory"),
+                                 QStringLiteral("Scan-edge, call, and satellite memories are read-only."));
         return;
     }
 
@@ -213,7 +258,8 @@ void MemorySelectionController::moveSelectedMemory(int direction)
     const QString id = selectedMemoryId();
     if (id.isEmpty())
     {
-        QMessageBox::information(m_owner->popupParent(), "Move Memory", "Choose one memory first.");
+        sdr9700::ui::showInformation(m_owner->popupParent(), QStringLiteral("Move Memory"),
+                                     QStringLiteral("Please select a memory channel."));
         return;
     }
 
@@ -245,6 +291,12 @@ void MemorySelectionController::moveSelectedMemory(int direction)
 
     const MemoryRecord source = memories.at(visiblePosition);
     const MemoryRecord target = memories.at(targetPosition);
+    if (source.readOnly || target.readOnly)
+    {
+        QMessageBox::information(m_owner->popupParent(), QStringLiteral("Move Memory"),
+                                 QStringLiteral("Special and satellite memories cannot be reordered."));
+        return;
+    }
     quint16 sourceGroup = 0;
     quint16 sourceChannel = 0;
     quint16 targetGroup = 0;

@@ -305,13 +305,18 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
             QStringLiteral("application configuration backup restore reset settings"),
             [] { return new ApplicationConfigurationSettingsPanel; });
     addPage(applicationCategory, Page::MemoryManager, QStringLiteral("Memory Manager"),
-            QStringLiteral("Set how often SDR9700 refreshes memory information from the radio."),
-            QStringLiteral("application memory manager memories radio sync poll polling interval refresh"),
+            QStringLiteral("Configure radio synchronization and which IC-9700 memory categories are displayed."),
+            QStringLiteral("application memory manager memories radio sync poll polling interval refresh special "
+                           "scan edge call satellite visibility show hide"),
             [this]()
             {
                 auto* panel = new MemoryManagerSettingsPanel;
                 connect(panel, &MemoryManagerSettingsPanel::pollIntervalSecondsChanged, this,
                         &SettingsDialog::memoryPollIntervalSecondsChanged);
+                connect(panel, &MemoryManagerSettingsPanel::showSpecialMemoriesChanged, this,
+                        &SettingsDialog::memoryShowSpecialMemoriesChanged);
+                connect(panel, &MemoryManagerSettingsPanel::showSatelliteMemoriesChanged, this,
+                        &SettingsDialog::memoryShowSatelliteMemoriesChanged);
                 return panel;
             });
     addPage(applicationCategory, Page::SpectrumScope, QStringLiteral("Spectrum Scope"),

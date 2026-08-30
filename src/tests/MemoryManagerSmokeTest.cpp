@@ -3,6 +3,7 @@
 #include "MainWindowHelpers.h"
 #include "AppInfo.h"
 #include "AppPaths.h"
+#include "AppSettings.h"
 #include "MemoryEditorPolicy.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
@@ -14,10 +15,12 @@
 #include "StatusBarController.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
+#include "backend/IRadioBackend.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
 
 #include <QAction>
+#include <QAbstractItemDelegate>
 #include <QComboBox>
 #include <QCloseEvent>
 #include <QApplication>
@@ -50,6 +53,8 @@ class MemoryManagerSmokeTest : public QObject
     void newInstallationCanAddRadioProfile();
     void constructsMemoryManagerUi();
     void memoryManagerShowsCachedVerificationAndLiveSyncProgress();
+    void unnamedRadioMemoryIsPersistedWithFrequencyName();
+    void memoryVisibilitySettingsHideOptionalCategoriesByDefault();
     void mainWindowRetainsFixedFramelessDesign();
     void fileMenuTracksRadioConnection();
     void selectorButtonsAvoidDynamicStyleSheets();
@@ -93,10 +98,10 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     QVERIFY(memoryTable != nullptr);
 
     controller->setRadioProfileId(profileId);
-    QCOMPARE(statusLabel->text(), QStringLiteral("Waiting to verify 1 cached memory with the radio (0/297)"));
+    QCOMPARE(statusLabel->text(), QStringLiteral("Waiting to verify 1 cached memory with the radio (0/420)"));
     QVERIFY(!progressBar->isHidden());
     QCOMPARE(progressBar->value(), 0);
-    QCOMPARE(progressBar->maximum(), 297);
+    QCOMPARE(progressBar->maximum(), 420);
     QCOMPARE(memoryTable->rowCount(), 1);
     QVERIFY(!memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
     QVERIFY(!memoryTable->item(0, 0)->text().isEmpty());
@@ -110,17 +115,13 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     liveMemory.frequency.Hz = 145500000;
     liveMemory.frequency.MHzDouble = 145.5;
 
-    // Exercise the complete 297-slot response volume rather than short-cutting
+    // Exercise the complete 420-slot response volume rather than short-cutting
     // controller state. The first stored response preserves the cached row;
     // every other response authoritatively confirms an empty radio slot.
     for (quint16 group = 1; group <= 3; ++group)
     {
-        for (quint16 channel = 1; channel <= 99; ++channel)
+        for (quint16 channel = 1; channel <= 107; ++channel)
         {
-            if (group == 3 && channel == 99)
-            {
-                continue;
-            }
             MemoryType reply;
             reply.group = group;
             reply.channel = channel;
@@ -140,14 +141,29 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
             }
         }
     }
+    for (quint16 channel = 1; channel <= 99; ++channel)
+    {
+        if (channel == 99)
+        {
+            continue;
+        }
+        MemoryType reply;
+        reply.group = 0;
+        reply.channel = channel;
+        reply.sat = true;
+        reply.del = true;
+        model.radioMemoryReceived(reply);
+        QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
+    }
     QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().startsWith(QStringLiteral("Finalizing radio memory sync")), 500);
     auto* syncController = controller->findChild<MemorySyncController*>();
     QVERIFY(syncController != nullptr);
     QTRY_COMPARE_WITH_TIMEOUT(syncController->missingRetryRound(), 1, 1500);
 
     MemoryType recoveredReply;
-    recoveredReply.group = 3;
+    recoveredReply.group = 0;
     recoveredReply.channel = 99;
+    recoveredReply.sat = true;
     recoveredReply.del = true;
     model.radioMemoryReceived(recoveredReply);
     QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
@@ -165,7 +181,7 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     controller->forceRadioMemorySync();
     for (quint16 group = 1; group <= 3; ++group)
     {
-        for (quint16 channel = 1; channel <= 99; ++channel)
+        for (quint16 channel = 1; channel <= 107; ++channel)
         {
             if (group == storedMemory.group && channel == storedMemory.channel)
             {
@@ -179,13 +195,180 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
             QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
         }
     }
+    for (quint16 channel = 1; channel <= 99; ++channel)
+    {
+        MemoryType reply;
+        reply.group = 0;
+        reply.channel = channel;
+        reply.sat = true;
+        reply.del = true;
+        model.radioMemoryReceived(reply);
+        QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
+    }
     QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 total (0 verified, 1 cached; 1 slot unanswered)"),
                               3500);
     QVERIFY(!memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
     QCOMPARE(database.memories(profileId, &databaseError).constFirst().frequency.Hz, liveMemory.frequency.Hz);
     const MemoryDatabaseSyncState partialState = database.syncState(profileId, &databaseError);
-    QCOMPARE(partialState.receivedSlotCount, 296);
+    QCOMPARE(partialState.receivedSlotCount, 419);
     QVERIFY(!partialState.complete);
+
+    // A row double-click must activate the memory on the VFO that the radio
+    // currently reports as selected. MAIN is the initial confirmed selection.
+    // Invoke the table signal so this test covers the complete UI connection
+    // rather than calling the memory controller directly.
+    QVERIFY(QMetaObject::invokeMethod(memoryTable, "cellDoubleClicked", Q_ARG(int, 0), Q_ARG(int, 0)));
+    auto* toastLabel = window.findChild<QLabel*>(QStringLiteral("statusToastLabel"));
+    QVERIFY(toastLabel != nullptr);
+    QCOMPARE(toastLabel->text(), QStringLiteral("Selected memory on MAIN: DATABASE TEST"));
+
+    // Now drive the same confirmed-selection signal used by the live backend
+    // and prove that the identical row action follows the main form to SUB.
+    model.backend()->radioValueUpdated(funcVFOBandMS, QVariant::fromValue<bool>(true), 0);
+    QCoreApplication::processEvents();
+    QVERIFY(QMetaObject::invokeMethod(memoryTable, "cellDoubleClicked", Q_ARG(int, 0), Q_ARG(int, 0)));
+    QCOMPARE(toastLabel->text(), QStringLiteral("Selected memory on SUB: DATABASE TEST"));
+}
+
+void MemoryManagerSmokeTest::unnamedRadioMemoryIsPersistedWithFrequencyName()
+{
+    const QUuid profileId = QUuid::createUuid();
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+    auto* controller = window.findChild<MemoryController*>();
+    QVERIFY(controller != nullptr);
+    controller->setRadioProfileId(profileId);
+
+    MemoryType unnamed;
+    unnamed.group = 1;
+    unnamed.channel = 25;
+    unnamed.frequency.Hz = 145500000;
+    model.radioMemoryReceived(unnamed);
+    QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
+
+    MemoryDatabase database;
+    QString error;
+    QVERIFY2(database.open(&error), qPrintable(error));
+    const QVector<MemoryType> stored = database.memories(profileId, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(stored.size(), 1);
+    QCOMPARE(stored.constFirst().group, quint16(1));
+    QCOMPARE(stored.constFirst().channel, quint16(25));
+    QCOMPARE(sdr9700::memory::radioMemoryName(stored.constFirst()), QStringLiteral("145.500.000"));
+}
+
+void MemoryManagerSmokeTest::memoryVisibilitySettingsHideOptionalCategoriesByDefault()
+{
+    AppSettings::instance().remove(QStringLiteral("memoryShowSpecialMemories"));
+    AppSettings::instance().remove(QStringLiteral("memoryShowSatelliteMemories"));
+
+    const QUuid profileId = QUuid::createUuid();
+    MemoryType ordinary;
+    ordinary.group = 1;
+    ordinary.channel = 1;
+    ordinary.frequency.Hz = 145000000;
+    std::copy_n("ORDINARY", 8, ordinary.name);
+    MemoryType special = ordinary;
+    special.channel = 100;
+    std::copy_n("SCAN EDGE", 9, special.name);
+    MemoryType satellite = ordinary;
+    satellite.group = 0;
+    satellite.channel = 1;
+    satellite.sat = true;
+    std::copy_n("SATELLITE", 9, satellite.name);
+
+    MemoryDatabase database;
+    QString error;
+    QVERIFY2(database.open(&error), qPrintable(error));
+    QVERIFY2(database.store(profileId, ordinary, &error), qPrintable(error));
+    QVERIFY2(database.store(profileId, special, &error), qPrintable(error));
+    QVERIFY2(database.store(profileId, satellite, &error), qPrintable(error));
+
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+    auto* controller = window.findChild<MemoryController*>();
+    auto* table = window.findChild<QTableWidget*>(QStringLiteral("memoryManagerTable"));
+    auto* filter = window.findChild<QComboBox*>(QStringLiteral("memoryManagerBandFilter"));
+    QVERIFY(controller != nullptr);
+    QVERIFY(table != nullptr);
+    QVERIFY(filter != nullptr);
+    controller->setRadioProfileId(profileId);
+
+    QCOMPARE(table->rowCount(), 1);
+    QCOMPARE(table->item(0, 0)->text(), QStringLiteral("2M"));
+    QCOMPARE(table->item(0, 1)->text(), QStringLiteral("001 [ORDINARY]"));
+    QCOMPARE(filter->findData(QStringLiteral("special")), -1);
+    QCOMPARE(filter->findData(QStringLiteral("satellite")), -1);
+
+    table->selectRow(0);
+    const QList<QPushButton*> buttons = window.findChildren<QPushButton*>();
+    const auto editButtonIt = std::find_if(buttons.cbegin(), buttons.cend(), [](const QPushButton* button)
+                                           { return button->text() == QLatin1String("Edit"); });
+    QVERIFY(editButtonIt != buttons.cend());
+    QString editBand;
+    QString editChannel;
+    QTimer::singleShot(100, QCoreApplication::instance(),
+                       [&]()
+                       {
+                           auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                           if (!dialog)
+                           {
+                               return;
+                           }
+                           if (auto* band = dialog->findChild<QLineEdit*>(QStringLiteral("memoryEditorBand")))
+                           {
+                               editBand = band->text();
+                               QVERIFY(band->isReadOnly());
+                           }
+                           if (auto* combo = dialog->findChild<QComboBox*>(QStringLiteral("memoryEditorChannel")))
+                           {
+                               editChannel = combo->currentText();
+                           }
+                           dialog->reject();
+                       });
+    (*editButtonIt)->click();
+    QCOMPARE(editBand, QStringLiteral("2M"));
+    QCOMPARE(editChannel, QStringLiteral("001 [ORDINARY]"));
+
+    const auto addButtonIt = std::find_if(buttons.cbegin(), buttons.cend(), [](const QPushButton* button)
+                                          { return button->text() == QLatin1String("Add"); });
+    QVERIFY(addButtonIt != buttons.cend());
+    QString firstEmptyChannel;
+    QTimer::singleShot(100, QCoreApplication::instance(),
+                       [&]()
+                       {
+                           auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                           if (!dialog)
+                           {
+                               return;
+                           }
+                           auto* frequency = dialog->findChild<QLineEdit*>(QStringLiteral("memoryEditorFrequency"));
+                           auto* channel = dialog->findChild<QComboBox*>(QStringLiteral("memoryEditorChannel"));
+                           if (frequency && channel)
+                           {
+                               QVERIFY(channel->findChild<QAbstractItemDelegate*>(
+                                           QStringLiteral("memoryEditorChannelDelegate")) != nullptr);
+                               frequency->setText(QStringLiteral("145.500000"));
+                               firstEmptyChannel = channel->currentText();
+                           }
+                           dialog->reject();
+                       });
+    (*addButtonIt)->click();
+    QCOMPARE(firstEmptyChannel, QStringLiteral("002 [EMPTY]"));
+
+    controller->setShowSpecialMemories(true);
+    QCOMPARE(table->rowCount(), 2);
+    QVERIFY(filter->findData(QStringLiteral("special")) >= 0);
+
+    controller->setShowSatelliteMemories(true);
+    QCOMPARE(table->rowCount(), 3);
+    QVERIFY(filter->findData(QStringLiteral("satellite")) >= 0);
+
+    controller->setShowSpecialMemories(false);
+    controller->setShowSatelliteMemories(false);
+    QCOMPARE(table->rowCount(), 1);
 }
 
 void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()
@@ -246,16 +429,27 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QVERIFY(memoryWindow->windowFlags().testFlag(Qt::FramelessWindowHint));
     QCOMPARE(memoryWindow->minimumSize(), memoryWindow->maximumSize());
     auto* table = memoryWindow->findChild<QTableWidget*>(QStringLiteral("memoryManagerTable"));
+    auto* windowMenu = window.findChild<QMenu*>(QStringLiteral("windowMenu"));
     QVERIFY(table != nullptr);
+    QVERIFY(windowMenu != nullptr);
     QVERIFY(memoryWindow->findChild<QWidget*>(QStringLiteral("memoryEditorPane")) == nullptr);
     QCOMPARE(table->columnCount(), 7);
-    QCOMPARE(table->horizontalHeaderItem(0)->text(), QStringLiteral("Channel"));
+    QCOMPARE(table->horizontalHeaderItem(0)->text(), QStringLiteral("Band"));
+    QCOMPARE(table->horizontalHeaderItem(1)->text(), QStringLiteral("Channel"));
     for (int column = 0; column < 6; ++column)
     {
         const auto expectedMode = column == 1 ? QHeaderView::Stretch : QHeaderView::Fixed;
         QCOMPARE(table->horizontalHeader()->sectionResizeMode(column), expectedMode);
     }
     QCOMPARE(table->horizontalHeader()->height(), 32);
+
+    memoryWindow->show();
+    QVERIFY(QMetaObject::invokeMethod(windowMenu, "aboutToShow"));
+    const QList<QAction*> windowActions = windowMenu->actions();
+    const auto memoryWindowAction = std::find_if(windowActions.cbegin(), windowActions.cend(), [](const QAction* action)
+                                                 { return action->text() == QLatin1String("Memory Manager"); });
+    QVERIFY(memoryWindowAction != windowActions.cend());
+    memoryWindow->hide();
     QCOMPARE(table->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOn);
     QVERIFY(table->styleSheet().contains(QLatin1String(UiTheme::Color::MenuBar)));
 
@@ -269,35 +463,50 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     bool editorWasFrameless = false;
     bool editorHadTitleBar = false;
     bool editorHadScrollArea = false;
-    QString editorChannelText;
-    QTimer::singleShot(
-        100, QCoreApplication::instance(),
-        [&]()
-        {
-            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
-            if (!dialog)
-            {
-                return;
-            }
-            foundEditorDialog = dialog->objectName() == QLatin1String("memoryEditorDialog");
-            editorWasModal = dialog->isModal();
-            editorWasFrameless = dialog->windowFlags().testFlag(Qt::FramelessWindowHint);
-            editorHadTitleBar = dialog->findChild<QWidget*>(QStringLiteral("memoryEditorTitleBar")) != nullptr;
-            editorHadScrollArea = dialog->findChild<QWidget*>(QStringLiteral("memoryEditorScrollArea")) != nullptr;
-            if (auto* channelCombo = dialog->findChild<QComboBox*>(QStringLiteral("memoryEditorChannel")))
-            {
-                editorChannelText = channelCombo->currentText();
-            }
-            dialog->reject();
-        });
+    QString initialEditorBandText;
+    QString initialEditorChannelText;
+    QString derivedEditorBandText;
+    QString derivedEditorChannelText;
+    QTimer::singleShot(100, QCoreApplication::instance(),
+                       [&]()
+                       {
+                           auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                           if (!dialog)
+                           {
+                               return;
+                           }
+                           foundEditorDialog = dialog->objectName() == QLatin1String("memoryEditorDialog");
+                           editorWasModal = dialog->isModal();
+                           editorWasFrameless = dialog->windowFlags().testFlag(Qt::FramelessWindowHint);
+                           editorHadTitleBar =
+                               dialog->findChild<QWidget*>(QStringLiteral("memoryEditorTitleBar")) != nullptr;
+                           editorHadScrollArea =
+                               dialog->findChild<QWidget*>(QStringLiteral("memoryEditorScrollArea")) != nullptr;
+                           auto* bandEdit = dialog->findChild<QLineEdit*>(QStringLiteral("memoryEditorBand"));
+                           auto* channelCombo = dialog->findChild<QComboBox*>(QStringLiteral("memoryEditorChannel"));
+                           auto* frequencyEdit = dialog->findChild<QLineEdit*>(QStringLiteral("memoryEditorFrequency"));
+                           if (bandEdit && channelCombo && frequencyEdit)
+                           {
+                               QVERIFY(bandEdit->isReadOnly());
+                               QCOMPARE(bandEdit->alignment(), Qt::AlignCenter);
+                               initialEditorBandText = bandEdit->text();
+                               initialEditorChannelText = channelCombo->currentText();
+                               frequencyEdit->setText(QStringLiteral("443.050000"));
+                               derivedEditorBandText = bandEdit->text();
+                               derivedEditorChannelText = channelCombo->currentText();
+                           }
+                           dialog->reject();
+                       });
     addMemoryButton->click();
     QVERIFY(foundEditorDialog);
     QVERIFY(editorWasModal);
     QVERIFY(editorWasFrameless);
     QVERIFY(editorHadTitleBar);
     QVERIFY(editorHadScrollArea);
-    QVERIFY(editorChannelText.contains(QLatin1Char('-')));
-    QVERIFY(editorChannelText.endsWith(QStringLiteral("001")));
+    QVERIFY(initialEditorBandText.isEmpty());
+    QVERIFY(initialEditorChannelText.isEmpty());
+    QCOMPARE(derivedEditorBandText, QStringLiteral("70CM"));
+    QCOMPARE(derivedEditorChannelText, QStringLiteral("001 [EMPTY]"));
     QCOMPARE(sdr9700::memory::memoryEditorDialogSize(QSize(1366, 768)), QSize(520, 620));
     QCOMPARE(sdr9700::memory::memoryEditorDialogSize(QSize(1024, 600)), QSize(520, 576));
 }

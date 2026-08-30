@@ -34,6 +34,8 @@ class MemoryController : public QObject
     void showMemoryWindow();
     void forceRadioMemorySync();
     void setMemoryPollIntervalSeconds(int seconds);
+    void setShowSpecialMemories(bool show);
+    void setShowSatelliteMemories(bool show);
     QString selectedMemoryId() const;
     void selectMemoryById(const QString& id, bool showDialogOnFailure);
     void editSelectedMemory();

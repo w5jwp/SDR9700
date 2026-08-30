@@ -83,8 +83,15 @@ class FakeRadioBackend : public IRadioBackend
     void setDualWatchEnabled(bool enabled) override { dualWatchEnabled = enabled; }
     void pollFrequency() override {}
     void selectVfoMode() override {}
-    void selectRadioMemory(quint16, quint16) override {}
+    void selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo) override
+    {
+        selectedMemoryGroup = group;
+        selectedMemoryChannel = channel;
+        selectedMemoryVfo = targetVfo;
+        ++selectedMemoryCalls;
+    }
     void requestRadioMemory(quint16, quint16) override {}
+    void requestSatelliteMemory(quint16) override {}
     void writeRadioMemory(MemoryType) override {}
 
     quint64 frequencyHz{0};
@@ -109,6 +116,10 @@ class FakeRadioBackend : public IRadioBackend
     Vfo requestedVfoState{Vfo::Main};
     bool dualWatchEnabled{false};
     int exchangeCalls{0};
+    quint16 selectedMemoryGroup{0};
+    quint16 selectedMemoryChannel{0};
+    Vfo selectedMemoryVfo{Vfo::Main};
+    int selectedMemoryCalls{0};
 };
 
 class VfoBackendTest : public QObject

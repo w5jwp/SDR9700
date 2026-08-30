@@ -319,6 +319,7 @@ void RadioRouter::route(const CacheItem& item)
         emit dtcsCodeChanged(item.value.value<ToneInfo>().tone);
         break;
     case funcMemoryContents:
+    case funcSatelliteMemory:
         emit radioValueUpdated(item.command, item.value, item.receiver);
         emit radioMemoryReceived(item.value.value<MemoryType>());
         break;

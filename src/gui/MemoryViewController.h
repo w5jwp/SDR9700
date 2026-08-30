@@ -19,6 +19,8 @@ class MemoryViewController : public QObject
     void rebuild();
     void setProgress(const QString& label, int value, int maximum);
     void clearProgress();
+    void setShowSpecialMemories(bool show);
+    void setShowSatelliteMemories(bool show);
     void updateTableInteraction();
     void stopScheduledRefresh();
     bool operationInProgress() const;
@@ -29,4 +31,6 @@ class MemoryViewController : public QObject
     QString m_progressLabel;
     int m_progressValue{0};
     int m_progressMaximum{0};
+    bool m_showSpecialMemories{false};
+    bool m_showSatelliteMemories{false};
 };

@@ -12,6 +12,59 @@
 
 namespace sdr9700::memory
 {
+class BracketAlignedItemDelegate final : public QStyledItemDelegate
+{
+  public:
+    explicit BracketAlignedItemDelegate(QObject* parent = nullptr, const QString& objectName = QString())
+        : QStyledItemDelegate(parent)
+    {
+        setObjectName(objectName);
+    }
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        QStyleOptionViewItem itemOption(option);
+        initStyleOption(&itemOption, index);
+        const QString text = itemOption.text;
+        const qsizetype delimiter = text.indexOf(QStringLiteral(" ["));
+        if (delimiter <= 0)
+        {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        // Let the active platform style paint the item background, focus,
+        // selection, and disabled states. Paint only the two text portions
+        // ourselves so the variable-width slot identifier occupies a fixed
+        // column and every opening bracket starts at the same horizontal
+        // position without forcing memory names into a monospaced font.
+        itemOption.text.clear();
+        const QStyle* style = itemOption.widget ? itemOption.widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &itemOption, painter, itemOption.widget);
+        const QRect textRect = style->subElementRect(QStyle::SE_ItemViewItemText, &itemOption, itemOption.widget);
+        const QFontMetrics metrics(itemOption.font);
+        int widestDigit = 0;
+        for (QChar digit = QLatin1Char('0'); digit <= QLatin1Char('9'); digit = QChar(digit.unicode() + 1))
+        {
+            widestDigit = qMax(widestDigit, metrics.horizontalAdvance(digit));
+        }
+        const int identifierWidth = qMax(widestDigit * 3, metrics.horizontalAdvance(text.first(delimiter)));
+        const int gapWidth = metrics.horizontalAdvance(QLatin1Char(' '));
+        const QPalette::ColorRole textRole =
+            itemOption.state.testFlag(QStyle::State_Selected) ? QPalette::HighlightedText : QPalette::Text;
+
+        painter->save();
+        painter->setFont(itemOption.font);
+        painter->setPen(itemOption.palette.color(itemOption.palette.currentColorGroup(), textRole));
+        painter->drawText(QRect(textRect.left(), textRect.top(), identifierWidth, textRect.height()),
+                          Qt::AlignRight | Qt::AlignVCenter, text.first(delimiter));
+        painter->drawText(QRect(textRect.left() + identifierWidth + gapWidth, textRect.top(),
+                                textRect.width() - identifierWidth - gapWidth, textRect.height()),
+                          Qt::AlignLeft | Qt::AlignVCenter, text.sliced(delimiter + 1));
+        painter->restore();
+    }
+};
+
 class ToneCellDelegate : public QStyledItemDelegate
 {
   public:

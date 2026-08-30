@@ -162,6 +162,11 @@ void MemorySyncController::requestRadioMemoryRefresh()
             m_pollKeys.append(radioMemoryKey(group, channel));
         }
     }
+    for (quint16 channel = kRadioMemoryFirstSatelliteChannel; channel <= kRadioMemoryLastSatelliteChannel; ++channel)
+    {
+        m_expectedMemoryKeys.insert(radioMemoryKey(kRadioMemorySatelliteGroup, channel));
+        m_pollKeys.append(radioMemoryKey(kRadioMemorySatelliteGroup, channel));
+    }
 
     m_syncTimeoutTimer->start(radioMemorySyncTimeoutMs());
     m_replyGraceTimer->stop();
@@ -236,7 +241,14 @@ void MemorySyncController::requestNextRadioMemory()
                                    .arg(memoryBandLabelForGroup(m_currentGroup))
                                    .arg(m_currentChannel, 3, 10, QLatin1Char('0')),
                                m_receivedMemoryKeys.size(), m_expectedMemoryKeys.size());
-    m_owner->m_window->m_model->requestRadioMemory(m_currentGroup, m_currentChannel);
+    if (m_currentGroup == kRadioMemorySatelliteGroup)
+    {
+        m_owner->m_window->m_model->requestSatelliteMemory(m_currentChannel);
+    }
+    else
+    {
+        m_owner->m_window->m_model->requestRadioMemory(m_currentGroup, m_currentChannel);
+    }
     m_refreshTimer->start();
 }
 

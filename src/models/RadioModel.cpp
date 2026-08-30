@@ -110,14 +110,19 @@ void RadioModel::selectVfoMode()
     m_backend->selectVfoMode();
 }
 
-void RadioModel::selectRadioMemory(quint16 group, quint16 channel)
+void RadioModel::selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo)
 {
-    m_backend->selectRadioMemory(group, channel);
+    m_backend->selectRadioMemory(group, channel, targetVfo);
 }
 
 void RadioModel::requestRadioMemory(quint16 group, quint16 channel)
 {
     m_backend->requestRadioMemory(group, channel);
+}
+
+void RadioModel::requestSatelliteMemory(quint16 channel)
+{
+    m_backend->requestSatelliteMemory(channel);
 }
 
 void RadioModel::writeRadioMemory(MemoryType memory)

@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "Types.h"
+#include "Vfo.h"
 
 class IRadioBackend;
 class VfoModel;
@@ -46,8 +47,9 @@ class RadioModel : public QObject
     void setLanModLevel(int level);
     void setTuningStep(int step);
     void selectVfoMode();
-    void selectRadioMemory(quint16 group, quint16 channel);
+    void selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo);
     void requestRadioMemory(quint16 group, quint16 channel);
+    void requestSatelliteMemory(quint16 channel);
     void writeRadioMemory(MemoryType memory);
 
   signals:

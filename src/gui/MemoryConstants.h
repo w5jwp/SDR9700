@@ -8,16 +8,22 @@ namespace sdr9700::memory
 constexpr quint16 kRadioMemoryFirstGroup = 1;
 constexpr quint16 kRadioMemoryLastGroup = 3;
 constexpr quint16 kRadioMemoryFirstChannel = 1;
-constexpr quint16 kRadioMemoryLastChannel = 99;
+constexpr quint16 kRadioMemoryLastUserChannel = 99;
+constexpr quint16 kRadioMemoryFirstSpecialChannel = 100;
+constexpr quint16 kRadioMemoryLastChannel = 107;
+constexpr quint16 kRadioMemoryFirstSatelliteChannel = 1;
+constexpr quint16 kRadioMemoryLastSatelliteChannel = 99;
+constexpr quint16 kRadioMemorySatelliteGroup = 0;
 constexpr int kRadioMemorySyncTotal =
-    (kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1);
+    ((kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1)) +
+    (kRadioMemoryLastSatelliteChannel - kRadioMemoryFirstSatelliteChannel + 1);
 constexpr int kRadioMemoryRefreshIntervalMs = 25;
 constexpr int kRadioMemorySyncReplyGraceMs = 1000;
 constexpr int kRadioMemorySyncSafetyMarginMs = 5000;
 constexpr int kRadioMemoryOperationSyncMaxAttempts = 3;
 // A normal sweep already asks for every radio slot once. Retry only the slots
 // that did not answer so a transient loss can recover without multiplying the
-// normal 297-command load or keeping startup blocked indefinitely.
+// normal 420-command load or keeping startup blocked indefinitely.
 constexpr int kRadioMemoryMissingRetryMaxRounds = 2;
 constexpr int kRadioMemoryInitialSyncRetryDelayMs = 2000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
@@ -36,6 +42,7 @@ constexpr int kMemoryToneTypeRole = Qt::UserRole + 1;
 constexpr int kMemoryToneRxRole = Qt::UserRole + 2;
 constexpr int kMemoryToneTxRole = Qt::UserRole + 3;
 constexpr int kMemoryVerifiedThisSessionRole = Qt::UserRole + 4;
+constexpr int kMemoryReadOnlyRole = Qt::UserRole + 5;
 constexpr auto kMemoryFileFilter = "SDR9700 Memories (*.csv);;CSV Files (*.csv);;All Files (*)";
 
 enum MemoryToneFamily

@@ -3801,7 +3801,8 @@ bool Commander::appendSetCommandValue(Funcs func, const QVariant& value, uchar r
         payload.append(freqBytes);
         payload.append(QByteArray(1, (char)isNegative));
     }
-    else if (valueHolds(qMetaTypeId<uint>()) && (func == funcMemoryContents || func == funcMemoryMode))
+    else if (valueHolds(qMetaTypeId<uint>()) &&
+             (func == funcMemoryContents || func == funcMemoryMode || func == funcSatelliteMemory))
     {
         qDebug(logRadio()).noquote() << "Get Memory Contents" << (value.value<uint>() & 0xffff);
         qDebug(logRadio()).noquote() << "Get Memory Group (if exists)" << (value.value<uint>() >> 16 & 0xffff);

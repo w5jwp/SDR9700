@@ -57,11 +57,20 @@ class UtilityWindow : public QDialog
         }
 
         ensurePolished();
-        const QSize targetSize = preparedSize();
+        QSize targetSize = preparedSize();
         if (size() != targetSize)
         {
             resize(targetSize);
         }
+
+        // QWidget::resize() applies the window's minimum and maximum size
+        // constraints. The unconstrained size hint can change slightly when a
+        // native window is first mapped (for example, after scroll bars and
+        // style metrics settle). Centering from that pre-clamp hint positions
+        // an imaginary window and causes the real fixed-size dialog to jump on
+        // a later centering pass. Always calculate placement from the actual
+        // post-resize size reported by QWidget.
+        targetSize = size();
 
         const QWidget* hostWindow = m_centerHost->window();
         const QRect hostGeometry = hostWindow ? hostWindow->frameGeometry() : m_centerHost->frameGeometry();
@@ -113,6 +122,16 @@ class UtilityWindow : public QDialog
     void showEvent(QShowEvent* event) override
     {
         QDialog::showEvent(event);
+        if (property("prepositionedBeforeShow").toBool())
+        {
+            // A fully constructed fixed-size modal dialog can calculate its
+            // final geometry before it is mapped. Re-centering that dialog
+            // from zero-delay timers produces a visible second movement on
+            // macOS even when the correction is only a few pixels. Ordinary
+            // reusable utility windows still need the deferred passes because
+            // their content or host geometry can settle after show().
+            return;
+        }
         centerOnHost();
         scheduleCenterOnHost();
     }

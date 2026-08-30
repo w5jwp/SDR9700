@@ -1,8 +1,12 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "ConfirmationDialog.h"
 #include "SettingsDialog.h"
+#include "AppSettings.h"
+#include "MainWindowHelpers.h"
 
+#include <QCheckBox>
 #include <QLineEdit>
+#include <QLabel>
 #include <QComboBox>
 #include <QMessageBox>
 #include <QPushButton>
@@ -10,6 +14,7 @@
 #include <QStandardPaths>
 #include <QTreeWidget>
 #include <QtTest>
+#include <algorithm>
 
 class GuiSmokeTest : public QObject
 {
@@ -33,6 +38,10 @@ void GuiSmokeTest::initTestCase()
 
 void GuiSmokeTest::settingsDialogOpensSearchesAndCloses()
 {
+    AppSettings::instance().remove(
+        QString::fromLatin1(sdr9700::ui::main_window::kMemoryShowSpecialMemoriesSettingsKey));
+    AppSettings::instance().remove(
+        QString::fromLatin1(sdr9700::ui::main_window::kMemoryShowSatelliteMemoriesSettingsKey));
     SettingsDialog dialog(SettingsDialog::Page::MemoryManager);
     QVERIFY(dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
     QCOMPARE(dialog.minimumSize(), dialog.maximumSize());
@@ -51,6 +60,23 @@ void GuiSmokeTest::settingsDialogOpensSearchesAndCloses()
     QVERIFY(category->childCount() > 0);
     QVERIFY(!category->flags().testFlag(Qt::ItemIsSelectable));
     QVERIFY(category->isExpanded());
+    auto* showSpecial = dialog.findChild<QCheckBox*>(QStringLiteral("memoryManagerShowSpecialMemories"));
+    auto* showSatellite = dialog.findChild<QCheckBox*>(QStringLiteral("memoryManagerShowSatelliteMemories"));
+    QVERIFY(showSpecial != nullptr);
+    QVERIFY(showSatellite != nullptr);
+    QVERIFY(!showSpecial->isChecked());
+    QVERIFY(!showSatellite->isChecked());
+    const QList<QLabel*> descriptions = dialog.findChildren<QLabel*>();
+    QVERIFY(std::any_of(descriptions.cbegin(), descriptions.cend(),
+                        [](const QLabel* label) { return label->text().contains(QStringLiteral("scan-edge pairs")); }));
+    QVERIFY(std::any_of(descriptions.cbegin(), descriptions.cend(), [](const QLabel* label)
+                        { return label->text().contains(QStringLiteral("paired receive/transmit records")); }));
+    QSignalSpy specialChanged(&dialog, &SettingsDialog::memoryShowSpecialMemoriesChanged);
+    QSignalSpy satelliteChanged(&dialog, &SettingsDialog::memoryShowSatelliteMemoriesChanged);
+    showSpecial->click();
+    showSatellite->click();
+    QCOMPARE(specialChanged.count(), 1);
+    QCOMPARE(satelliteChanged.count(), 1);
     QTreeWidgetItem* selectedPage = navigation->currentItem();
     QVERIFY(selectedPage != nullptr);
     QVERIFY(selectedPage->parent() != nullptr);

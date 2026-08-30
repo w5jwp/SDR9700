@@ -33,7 +33,15 @@ bool MemoryCsvController::exportRadioMemories()
         return false;
     }
 
-    if (!writeMemoriesCsvFile(path, m_owner->currentMemories()))
+    QVector<MemoryRecord> editableMemories;
+    for (const MemoryRecord& memory : m_owner->currentMemories())
+    {
+        if (!memory.readOnly)
+        {
+            editableMemories.append(memory);
+        }
+    }
+    if (!writeMemoriesCsvFile(path, editableMemories))
     {
         QMessageBox::warning(m_owner->popupParent(), QStringLiteral("Export Memories Failed"),
                              QStringLiteral("Memory export failed. Could not save the selected file."));

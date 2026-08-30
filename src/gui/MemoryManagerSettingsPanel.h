@@ -12,4 +12,6 @@ class MemoryManagerSettingsPanel : public QWidget
 
   signals:
     void pollIntervalSecondsChanged(int seconds);
+    void showSpecialMemoriesChanged(bool show);
+    void showSatelliteMemoriesChanged(bool show);
 };

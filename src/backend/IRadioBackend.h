@@ -75,8 +75,9 @@ class IRadioBackend : public QObject
 
     virtual void pollFrequency() = 0;
     virtual void selectVfoMode() = 0;
-    virtual void selectRadioMemory(quint16 group, quint16 channel) = 0;
+    virtual void selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo) = 0;
     virtual void requestRadioMemory(quint16 group, quint16 channel) = 0;
+    virtual void requestSatelliteMemory(quint16 channel) = 0;
     virtual void writeRadioMemory(MemoryType memory) = 0;
 
     virtual void setRxAudioDevice(const QAudioDevice& dev) { Q_UNUSED(dev) }

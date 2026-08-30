@@ -26,6 +26,7 @@ class RadioRouterTest : public QObject
     void coalescesReplaceableBacklogAcrossOneQueuedDrain();
     void boundsReplaceableTrafficWhileConsumerIsStalled();
     void preservesOrderingAcrossLosslessBarriers();
+    void routesNormalAndSatelliteMemoryReplies();
     void rejectsBatchesFromCancelledSessions();
     void boundsLosslessBacklogWithProducerBackpressure();
     void routesOnlyConfirmedScopeReceiver();
@@ -116,6 +117,29 @@ void RadioRouterTest::preservesOrderingAcrossLosslessBarriers()
     QTRY_COMPARE(order.size(), 3);
     QCOMPARE(order,
              QVector<QString>({QStringLiteral("meter:20"), QStringLiteral("memory"), QStringLiteral("meter:40")}));
+}
+
+void RadioRouterTest::routesNormalAndSatelliteMemoryReplies()
+{
+    RadioRouter router;
+    QSignalSpy memorySpy(&router, &RadioRouter::radioMemoryReceived);
+
+    MemoryType normal;
+    normal.group = 1;
+    normal.channel = 107;
+    MemoryType satellite;
+    satellite.group = 0;
+    satellite.channel = 99;
+    satellite.sat = true;
+
+    router.route(CacheItem(funcMemoryContents, QVariant::fromValue(normal), 0));
+    router.route(CacheItem(funcSatelliteMemory, QVariant::fromValue(satellite), 0));
+
+    QCOMPARE(memorySpy.size(), 2);
+    QCOMPARE(memorySpy.at(0).at(0).value<MemoryType>().channel, quint16(107));
+    const MemoryType routedSatellite = memorySpy.at(1).at(0).value<MemoryType>();
+    QCOMPARE(routedSatellite.channel, quint16(99));
+    QVERIFY(routedSatellite.sat);
 }
 
 void RadioRouterTest::rejectsBatchesFromCancelledSessions()

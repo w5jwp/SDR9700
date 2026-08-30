@@ -799,6 +799,12 @@ void CommanderCodecTest::serializesOutboundCommandValues()
     QVERIFY(
         m_commander.appendSetCommandValue(funcFreqSet, QVariant::fromValue(frequency), 0, frequencyCommand, payload));
     QCOMPARE(m_commander.parseFreqDataToInt(payload), frequency.Hz);
+
+    payload.clear();
+    const FuncType satelliteMemoryCommand = m_commander.radioCaps.commands.value(funcSatelliteMemory);
+    QVERIFY(m_commander.appendSetCommandValue(funcSatelliteMemory, QVariant::fromValue<uint>(42), 0,
+                                              satelliteMemoryCommand, payload));
+    QCOMPARE(payload, QByteArray::fromHex("0042"));
 }
 
 void CommanderCodecTest::rejectsUnknownOutboundValueTypes()

@@ -1,6 +1,8 @@
 #include "MemoryViewController.h"
 
+#include "AppSettings.h"
 #include "MainWindow.h"
+#include "MainWindowHelpers.h"
 #include "DialogFooter.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
@@ -25,6 +27,14 @@ using namespace sdr9700::memory;
 
 MemoryViewController::MemoryViewController(MemoryController* owner) : QObject(owner), m_owner(owner)
 {
+    m_showSpecialMemories =
+        AppSettings::instance()
+            .value(QString::fromLatin1(kMemoryShowSpecialMemoriesSettingsKey), QStringLiteral("False"))
+            .toBool();
+    m_showSatelliteMemories =
+        AppSettings::instance()
+            .value(QString::fromLatin1(kMemoryShowSatelliteMemoriesSettingsKey), QStringLiteral("False"))
+            .toBool();
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(250);
     m_refreshTimer->setSingleShot(true);
@@ -34,6 +44,52 @@ MemoryViewController::MemoryViewController(MemoryController* owner) : QObject(ow
 void MemoryViewController::stopScheduledRefresh()
 {
     m_refreshTimer->stop();
+}
+
+void MemoryViewController::setShowSpecialMemories(bool show)
+{
+    if (m_showSpecialMemories == show)
+    {
+        return;
+    }
+    m_showSpecialMemories = show;
+    if (QComboBox* filter = m_owner->m_window->m_memoryBandFilter)
+    {
+        const int existingIndex = filter->findData(QStringLiteral("special"));
+        if (show && existingIndex < 0)
+        {
+            const int satelliteIndex = filter->findData(QStringLiteral("satellite"));
+            filter->insertItem(satelliteIndex < 0 ? filter->count() : satelliteIndex, QStringLiteral("Special"),
+                               QStringLiteral("special"));
+        }
+        else if (!show && existingIndex >= 0)
+        {
+            filter->removeItem(existingIndex);
+        }
+    }
+    rebuild();
+}
+
+void MemoryViewController::setShowSatelliteMemories(bool show)
+{
+    if (m_showSatelliteMemories == show)
+    {
+        return;
+    }
+    m_showSatelliteMemories = show;
+    if (QComboBox* filter = m_owner->m_window->m_memoryBandFilter)
+    {
+        const int existingIndex = filter->findData(QStringLiteral("satellite"));
+        if (show && existingIndex < 0)
+        {
+            filter->addItem(QStringLiteral("Satellite"), QStringLiteral("satellite"));
+        }
+        else if (!show && existingIndex >= 0)
+        {
+            filter->removeItem(existingIndex);
+        }
+    }
+    rebuild();
 }
 
 bool MemoryViewController::operationInProgress() const
@@ -73,11 +129,20 @@ void MemoryViewController::buildMemoryWindow()
     filterLayout->setContentsMargins(kMemoryToolbarGroupMargins);
     filterLayout->setSpacing(kMemoryToolbarGroupSpacing);
     m_owner->m_window->m_memoryBandFilter = new QComboBox(panel);
+    m_owner->m_window->m_memoryBandFilter->setObjectName(QStringLiteral("memoryManagerBandFilter"));
     m_owner->m_window->m_memoryBandFilter->addItem(QStringLiteral("All"), QString());
     for (const availableBands band : sdr9700::kRadioUiBandOrder)
     {
         const QString label = sdr9700::radioBandShortLabel(band);
         m_owner->m_window->m_memoryBandFilter->addItem(label, label);
+    }
+    if (m_showSpecialMemories)
+    {
+        m_owner->m_window->m_memoryBandFilter->addItem(QStringLiteral("Special"), QStringLiteral("special"));
+    }
+    if (m_showSatelliteMemories)
+    {
+        m_owner->m_window->m_memoryBandFilter->addItem(QStringLiteral("Satellite"), QStringLiteral("satellite"));
     }
     filterLayout->addWidget(m_owner->m_window->m_memoryBandFilter);
     toolbar->addWidget(filterGroup);
@@ -135,7 +200,7 @@ void MemoryViewController::buildMemoryWindow()
     m_owner->m_window->m_memoryTable->setObjectName(QStringLiteral("memoryManagerTable"));
     m_owner->m_window->m_memoryTable->setColumnCount(kMemoryTableColumnCount);
     m_owner->m_window->m_memoryTable->setHorizontalHeaderLabels(
-        {QStringLiteral("Channel"), QStringLiteral("Name"), QStringLiteral("Frequency"), QStringLiteral("Offset"),
+        {QStringLiteral("Band"), QStringLiteral("Channel"), QStringLiteral("Frequency"), QStringLiteral("Offset"),
          QStringLiteral("Mode"), QStringLiteral("Tone (TX/RX)"), QStringLiteral("ID")});
     m_owner->m_window->m_memoryTable->setColumnHidden(kMemoryIdColumn, true);
     m_owner->m_window->m_memoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -154,20 +219,23 @@ void MemoryViewController::buildMemoryWindow()
     m_owner->m_window->m_memoryTable->horizontalHeader()->setFixedHeight(32);
     m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionsClickable(false);
     m_owner->m_window->m_memoryTable->horizontalHeader()->setStretchLastSection(false);
-    for (int column = kMemoryChannelColumn; column <= kMemoryToneColumn; ++column)
+    for (int column = kMemoryBandColumn; column <= kMemoryToneColumn; ++column)
     {
         m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Fixed);
     }
-    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryNameColumn, QHeaderView::Stretch);
+    m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryChannelColumn,
+                                                                               QHeaderView::Stretch);
     m_owner->m_window->m_memoryTable->horizontalHeader()->setSectionResizeMode(kMemoryIdColumn, QHeaderView::Fixed);
+    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryBandColumn, kMemoryBandColumnWidth);
     m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryChannelColumn, kMemoryChannelColumnWidth);
-    m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryNameColumn, kMemoryNameColumnWidth);
     m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryFrequencyColumn, kMemoryFrequencyColumnWidth);
     m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryDuplexColumn, kMemoryDuplexColumnWidth);
     m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryModeColumn, kMemoryModeColumnWidth);
     m_owner->m_window->m_memoryTable->setColumnWidth(kMemoryToneColumn, kMemoryToneColumnWidth);
     m_owner->m_window->m_memoryTable->setItemDelegateForColumn(kMemoryToneColumn,
                                                                new ToneCellDelegate(m_owner->m_window->m_memoryTable));
+    m_owner->m_window->m_memoryTable->setItemDelegateForColumn(
+        kMemoryChannelColumn, new BracketAlignedItemDelegate(m_owner->m_window->m_memoryTable));
     leftRoot->addWidget(m_owner->m_window->m_memoryTable, 1);
 
     const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(panel);
@@ -205,6 +273,15 @@ void MemoryViewController::buildMemoryWindow()
 
     connect(m_owner->m_window->m_memoryBandFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), m_owner,
             &MemoryController::reloadMemoryTable);
+    connect(m_owner->m_window->m_memoryTable, &QTableWidget::cellDoubleClicked, this,
+            [this](int row, int)
+            {
+                const QTableWidgetItem* idItem = m_owner->m_window->m_memoryTable->item(row, kMemoryIdColumn);
+                if (idItem)
+                {
+                    m_owner->selectMemoryById(idItem->text(), true);
+                }
+            });
     connect(syncButton, &QPushButton::clicked, m_owner, &MemoryController::forceRadioMemorySync);
     connect(upButton, &QPushButton::clicked, m_owner, &MemoryController::moveSelectedMemoryUp);
     connect(downButton, &QPushButton::clicked, m_owner, &MemoryController::moveSelectedMemoryDown);
@@ -320,9 +397,29 @@ void MemoryViewController::rebuild()
     m_owner->m_window->m_memoryTable->setSortingEnabled(false);
     m_owner->m_window->m_memoryTable->setRowCount(0);
     int visibleCount = 0;
+    int availableCount = 0;
+    int availableVerifiedCount = 0;
     for (const MemoryRecord& memory : memories)
     {
-        if (!bandFilter.isEmpty() && memory.band != bandFilter)
+        const bool satelliteMemory = memory.group == kRadioMemorySatelliteGroup;
+        const bool specialMemory = !satelliteMemory && memory.channel >= kRadioMemoryFirstSpecialChannel;
+        if ((specialMemory && !m_showSpecialMemories) || (satelliteMemory && !m_showSatelliteMemories))
+        {
+            continue;
+        }
+        ++availableCount;
+        if (memory.verifiedThisSession)
+        {
+            ++availableVerifiedCount;
+        }
+        const bool specialFilter = bandFilter == QLatin1String("special");
+        const bool satelliteFilter = bandFilter == QLatin1String("satellite");
+        const bool matchesFilter = bandFilter.isEmpty() ||
+                                   (specialFilter && memory.group != kRadioMemorySatelliteGroup &&
+                                    memory.channel >= kRadioMemoryFirstSpecialChannel) ||
+                                   (satelliteFilter && memory.group == kRadioMemorySatelliteGroup) ||
+                                   (!specialFilter && !satelliteFilter && memory.band == bandFilter);
+        if (!matchesFilter)
         {
             continue;
         }
@@ -334,6 +431,7 @@ void MemoryViewController::rebuild()
         {
             auto* item = new QTableWidgetItem(text);
             item->setData(kMemoryVerifiedThisSessionRole, memory.verifiedThisSession);
+            item->setData(kMemoryReadOnlyRole, memory.readOnly);
             if (!memory.verifiedThisSession)
             {
                 // Do not use QPalette::PlaceholderText here. On macOS that
@@ -345,16 +443,21 @@ void MemoryViewController::rebuild()
                 item->setToolTip(QStringLiteral("Last known value from the local cache; this radio session has not "
                                                 "verified the slot yet."));
             }
+            if (memory.readOnly)
+            {
+                item->setToolTip(QStringLiteral("This IC-9700 special or satellite memory is synchronized for "
+                                                "reference and is read-only in this release."));
+            }
             m_owner->m_window->m_memoryTable->setItem(row, column, item);
             return item;
         };
 
-        auto* channelItem = setItem(kMemoryChannelColumn, QStringLiteral("%1-%2")
-                                                              .arg(memoryBandLabelForGroup(memory.group))
-                                                              .arg(memory.channel, 3, 10, QLatin1Char('0')));
+        auto* bandItem = setItem(kMemoryBandColumn, radioMemoryBandLabel(memory.group));
+        bandItem->setTextAlignment(Qt::AlignCenter);
+        auto* channelItem =
+            setItem(kMemoryChannelColumn,
+                    QStringLiteral("%1 [%2]").arg(radioMemorySlotLabel(memory.group, memory.channel), memory.name));
         channelItem->setData(Qt::UserRole, memory.channel);
-        channelItem->setTextAlignment(Qt::AlignCenter);
-        setItem(kMemoryNameColumn, memory.name);
         auto* frequencyItem = setItem(kMemoryFrequencyColumn, memoryFrequencyLabel(memory.receiveHz));
         frequencyItem->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(memory.receiveHz));
         frequencyItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -376,7 +479,7 @@ void MemoryViewController::rebuild()
     if (m_owner->m_window->m_memoryCountLabel)
     {
         m_owner->m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
-        const int totalCount = memories.size();
+        const int totalCount = availableCount;
         if (m_owner->m_memorySyncController->refreshInProgress())
         {
             if (m_progressLabel.isEmpty())
@@ -395,8 +498,7 @@ void MemoryViewController::rebuild()
             return;
         }
         clearProgress();
-        const int verifiedCount = static_cast<int>(std::count_if(
-            memories.cbegin(), memories.cend(), [](const MemoryRecord& memory) { return memory.verifiedThisSession; }));
+        const int verifiedCount = availableVerifiedCount;
         const int cachedCount = totalCount - verifiedCount;
         const int unansweredSlotCount = m_owner->m_memorySyncController->lastUnansweredSlotCount();
         if (bandFilter.isEmpty())

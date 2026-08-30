@@ -46,4 +46,11 @@ inline void showWarning(QWidget* parent, const QString& title, const QString& me
     configureMessageBoxWindow(dialog);
     dialog.exec();
 }
+
+inline void showInformation(QWidget* parent, const QString& title, const QString& message)
+{
+    QMessageBox dialog(QMessageBox::Information, title, message, QMessageBox::Ok, parent);
+    configureMessageBoxWindow(dialog);
+    dialog.exec();
+}
 } // namespace sdr9700::ui

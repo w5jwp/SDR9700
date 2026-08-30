@@ -90,8 +90,9 @@ class RadioBackend : public IRadioBackend
     void setDualWatchEnabled(bool on) override;
     void pollFrequency() override;
     void selectVfoMode() override;
-    void selectRadioMemory(quint16 group, quint16 channel) override;
+    void selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo) override;
     void requestRadioMemory(quint16 group, quint16 channel) override;
+    void requestSatelliteMemory(quint16 channel) override;
     void writeRadioMemory(MemoryType memory) override;
     void setRxAudioDevice(const QAudioDevice& dev) override;
     void setTxAudioDevice(const QAudioDevice& dev) override;
@@ -127,7 +128,7 @@ class RadioBackend : public IRadioBackend
     static void requestVfoFrequenciesForCommand(Commander* commandSession);
     static void scheduleVfoReceiverReadForCommand(Commander* commandSession, Vfo vfo, Funcs func);
     void observeVfoFrequency(quint64 hz, uchar receiver);
-    static void selectMemoryBandForCommand(Commander* commandSession, quint16 group);
+    static void selectMemoryBandForCommand(Commander* commandSession, quint16 group, Vfo targetVfo);
     static void selectMemoryForCommand(Commander* commandSession, quint16 group, quint16 channel,
                                        bool prepareBand = true);
     void resetScopeController();

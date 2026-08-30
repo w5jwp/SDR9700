@@ -295,6 +295,8 @@ QJsonObject cleanConfigurationSettings(const QJsonDocument& doc)
     insertCleanSetting(&memoryManager, memoryManagerSource, QStringLiteral("pollIntervalSeconds"),
                        [](const QJsonValue& value, QJsonValue* normalized)
                        { return intStringValue(value, 30, 3600, normalized); });
+    insertCleanSetting(&memoryManager, memoryManagerSource, QStringLiteral("showSpecialMemories"), boolStringValue);
+    insertCleanSetting(&memoryManager, memoryManagerSource, QStringLiteral("showSatelliteMemories"), boolStringValue);
     if (!memoryManager.isEmpty())
     {
         settings.insert(QStringLiteral("memoryManager"), memoryManager);
