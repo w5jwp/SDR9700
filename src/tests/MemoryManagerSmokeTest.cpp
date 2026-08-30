@@ -98,6 +98,8 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     QCOMPARE(progressBar->maximum(), 297);
     QCOMPARE(memoryTable->rowCount(), 1);
     QVERIFY(!memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
+    QVERIFY(!memoryTable->item(0, 0)->text().isEmpty());
+    QCOMPARE(memoryTable->item(0, 0)->foreground().color(), QColor(QLatin1String(UiTheme::Color::TextMuted)));
     QVERIFY(memoryTable->item(0, 0)->toolTip().contains(QStringLiteral("local cache")));
 
     QVERIFY(QMetaObject::invokeMethod(&model, "onBackendConnected"));

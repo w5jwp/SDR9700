@@ -336,7 +336,12 @@ void MemoryViewController::rebuild()
             item->setData(kMemoryVerifiedThisSessionRole, memory.verifiedThisSession);
             if (!memory.verifiedThisSession)
             {
-                item->setForeground(m_owner->m_window->palette().color(QPalette::PlaceholderText));
+                // Do not use QPalette::PlaceholderText here. On macOS that
+                // role can carry reduced alpha intended for text fields and
+                // becomes effectively invisible against SDR9700's explicitly
+                // styled dark table. Cached rows must look secondary without
+                // ever looking empty.
+                item->setForeground(QColor(QLatin1String(UiTheme::Color::TextMuted)));
                 item->setToolTip(QStringLiteral("Last known value from the local cache; this radio session has not "
                                                 "verified the slot yet."));
             }
