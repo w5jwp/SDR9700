@@ -2,6 +2,8 @@
 #include "CivSequenceGate.h"
 
 #include <QtTest>
+#include <algorithm>
+#include <random>
 
 class CivSequenceGateTest : public QObject
 {
@@ -13,6 +15,7 @@ class CivSequenceGateTest : public QObject
     void deliversOutOfOrderWithoutBlocking();
     void handlesRollover();
     void boundsDuplicateHistory();
+    void survivesSeededLossDuplicateAndReorderSoak();
 };
 
 void CivSequenceGateTest::deliversInOrder()
@@ -56,6 +59,64 @@ void CivSequenceGateTest::boundsDuplicateHistory()
     }
     QCOMPARE(gate.diagnostics().highWaterMark, CivSequenceGate::kRecentSequenceWindow);
     QCOMPARE(gate.accept(0, QByteArrayLiteral("new rollover"), 1000).payloads.size(), 1);
+}
+
+void CivSequenceGateTest::survivesSeededLossDuplicateAndReorderSoak()
+{
+    CivSequenceGate gate;
+    std::mt19937 random(0x9700);
+    QSet<quint16> expectedSequences;
+    QSet<quint16> deliveredSequences;
+    quint64 injectedDuplicates = 0;
+
+    struct Datagram
+    {
+        quint16 sequence{0};
+        QByteArray payload;
+    };
+
+    constexpr int kDatagramCount = 20000;
+    constexpr int kBatchSize = 8;
+    for (int batchStart = 0; batchStart < kDatagramCount; batchStart += kBatchSize)
+    {
+        QVector<Datagram> arrivals;
+        for (int offset = 0; offset < kBatchSize && batchStart + offset < kDatagramCount; ++offset)
+        {
+            const int logicalIndex = batchStart + offset;
+            const quint16 sequence = static_cast<quint16>(logicalIndex);
+            if (logicalIndex % 23 == 0)
+            {
+                continue;
+            }
+
+            const QByteArray payload = QByteArray::number(sequence);
+            expectedSequences.insert(sequence);
+            arrivals.append({sequence, payload});
+            if (logicalIndex % 7 == 0)
+            {
+                arrivals.append({sequence, payload});
+                ++injectedDuplicates;
+            }
+        }
+
+        std::shuffle(arrivals.begin(), arrivals.end(), random);
+        for (const Datagram& datagram : arrivals)
+        {
+            const CivSequenceGateResult result = gate.accept(datagram.sequence, datagram.payload, batchStart);
+            for (const QByteArray& payload : result.payloads)
+            {
+                const quint16 delivered = payload.toUShort();
+                QVERIFY2(!deliveredSequences.contains(delivered), "CI-V sequence was delivered more than once");
+                deliveredSequences.insert(delivered);
+            }
+        }
+    }
+
+    QCOMPARE(deliveredSequences, expectedSequences);
+    QCOMPARE(gate.diagnostics().delivered, quint64(expectedSequences.size()));
+    QCOMPARE(gate.diagnostics().duplicatesSuppressed, injectedDuplicates);
+    QVERIFY(gate.diagnostics().reordered > 0);
+    QVERIFY(gate.diagnostics().highWaterMark <= CivSequenceGate::kRecentSequenceWindow);
 }
 
 QTEST_GUILESS_MAIN(CivSequenceGateTest)

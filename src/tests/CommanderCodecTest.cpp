@@ -1,5 +1,6 @@
 #include "Commander.h"
 
+#include "CivSequenceGate.h"
 #include "RadioCapabilities.h"
 
 #include <QSignalSpy>
@@ -50,6 +51,7 @@ class CommanderCodecTest : public QObject
     void schedulerCoalescesInteractiveActionsAndPreservesReadProgress();
     void pacesInteractiveConfirmationAfterSet();
     void reportsMeterTransmissionAtWireDispatch();
+    void survivesCombinedTransportAndSchedulerFaultSoak();
 
   private:
     Commander m_commander;
@@ -315,6 +317,89 @@ void CommanderCodecTest::reportsMeterTransmissionAtWireDispatch()
     QCOMPARE(transmittedSpy.size(), 1);
     QCOMPARE(static_cast<Funcs>(transmittedSpy.at(0).at(0).toInt()), funcSMeter);
     QCOMPARE(transmittedSpy.at(0).at(1).toUInt(), uint(1));
+}
+
+void CommanderCodecTest::survivesCombinedTransportAndSchedulerFaultSoak()
+{
+    CivSequenceGate gate;
+    quint16 sequence = 100;
+    int latestInteractiveValue = -1;
+    constexpr int kCycles = 500;
+
+    const auto deliver = [this, &gate](quint16 datagramSequence, const QByteArray& frame)
+    {
+        const CivSequenceGateResult result = gate.accept(datagramSequence, frame, datagramSequence);
+        for (const QByteArray& payload : result.payloads)
+        {
+            m_commander.handleNewData(payload);
+        }
+    };
+
+    for (int cycle = 0; cycle < kCycles; ++cycle)
+    {
+        // Simulate a stalled consumer accumulating high-rate replaceable work.
+        // Hold the same scheduler gate used by an active MAIN/SUB exchange;
+        // every logical key must remain bounded to one latest queued value.
+        m_commander.m_mainSubExchangeConfirmationPending = true;
+        for (int update = 0; update < 40; ++update)
+        {
+            const int value = cycle * 40 + update;
+            m_commander.scheduleInteractiveAction(funcRfGain, cycle % 2, [&latestInteractiveValue, value]()
+                                                  { latestInteractiveValue = value; });
+            m_commander.scheduleMeterRead(funcSMeter, 0);
+            m_commander.scheduleMeterRead(funcSMeter, 1);
+        }
+        QVERIFY(m_commander.m_scheduledCommands.size() <= qsizetype(3));
+
+        // Frequency and mode are distinct canonical families and may be live
+        // together. Deliver them in reverse transport order, duplicate both,
+        // and periodically lose frequency before injecting a late response.
+        m_commander.rememberPendingReply(funcFreqGet, static_cast<uchar>(cycle % 2));
+        m_commander.rememberPendingReply(funcModeGet, static_cast<uchar>((cycle + 1) % 2));
+
+        const quint16 frequencySequence = sequence++;
+        const quint16 modeSequence = sequence++;
+        const QByteArray frequencyReply = QByteArray::fromHex("fefee1a2030052140600fd");
+        const QByteArray modeReply = QByteArray::fromHex("fefee1a2040501fd");
+
+        deliver(modeSequence, modeReply);
+        deliver(modeSequence, modeReply);
+        if (cycle % 17 == 0)
+        {
+            m_commander.discardPendingReplies(funcFreqGet);
+            QTest::ignoreMessage(
+                QtWarningMsg, QRegularExpression(QStringLiteral("Discarding unattributed receiver-less CI-V reply.*")));
+            deliver(sequence++, frequencyReply);
+        }
+        else
+        {
+            deliver(frequencySequence, frequencyReply);
+            deliver(frequencySequence, frequencyReply);
+        }
+
+        m_commander.finishMainSubExchangeConfirmation();
+        while (!m_commander.m_scheduledCommands.isEmpty())
+        {
+            m_commander.dispatchNextScheduledCommand();
+        }
+        QCOMPARE(latestInteractiveValue, cycle * 40 + 39);
+
+        // Advance the deterministic soak beyond any real-time drain without
+        // sleeping; drain timing behavior has dedicated timer-based tests.
+        m_commander.m_pendingReplies.clear();
+        m_commander.m_replyFamilyDrains.clear();
+        m_commander.m_deferredReplyReads.clear();
+    }
+
+    QCOMPARE(m_commander.m_scheduledCommands.size(), qsizetype(0));
+    QCOMPARE(m_commander.m_pendingReplies.size(), qsizetype(0));
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), qsizetype(0));
+    QCOMPARE(m_commander.schedulerDiagnostics().droppedCommands, quint64(0));
+    QVERIFY(m_commander.schedulerDiagnostics().highWaterMark <= qsizetype(3));
+    QVERIFY(m_commander.correlationDiagnostics().drainedReplyFrames > 0);
+    QVERIFY(gate.diagnostics().duplicatesSuppressed > 0);
+    QVERIFY(gate.diagnostics().reordered > 0);
+    QVERIFY(gate.diagnostics().highWaterMark <= CivSequenceGate::kRecentSequenceWindow);
 }
 
 void CommanderCodecTest::correlatesEquivalentFrequencyAndModeReplyCommands()
