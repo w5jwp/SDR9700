@@ -45,6 +45,7 @@ class CommanderCodecTest : public QObject
     void parserToleratesDeterministicArbitraryInput();
     void schedulerCoalescesAndBoundsReads();
     void schedulerMakesStartupProgressUnderMeterPressure();
+    void schedulerCoalescesInteractiveActionsAndPreservesReadProgress();
 
   private:
     Commander m_commander;
@@ -154,6 +155,30 @@ void CommanderCodecTest::schedulerMakesStartupProgressUnderMeterPressure()
     QVERIFY(std::none_of(m_commander.m_scheduledCommands.cbegin(), m_commander.m_scheduledCommands.cend(),
                          [](const Commander::ScheduledCommand& command) { return command.func == funcRfGain; }));
     QCOMPARE(m_commander.m_consecutiveMeterDispatches, 0);
+}
+
+void CommanderCodecTest::schedulerCoalescesInteractiveActionsAndPreservesReadProgress()
+{
+    int deliveredValue = -1;
+    for (int value = 0; value < 100; ++value)
+    {
+        m_commander.scheduleInteractiveAction(funcRfGain, 0, [&deliveredValue, value]() { deliveredValue = value; });
+    }
+    QCOMPARE(m_commander.m_scheduledCommands.size(), 1);
+    QCOMPARE(m_commander.schedulerDiagnostics().coalescedCommands, quint64(99));
+    m_commander.dispatchNextScheduledCommand();
+    QCOMPARE(deliveredValue, 99);
+
+    int interactiveCount = 0;
+    m_commander.scheduleInteractiveAction(funcRfGain, 0, [&interactiveCount]() { ++interactiveCount; });
+    m_commander.scheduleInteractiveAction(funcSquelch, 0, [&interactiveCount]() { ++interactiveCount; });
+    m_commander.scheduleInteractiveAction(funcNRLevel, 0, [&interactiveCount]() { ++interactiveCount; });
+    m_commander.scheduleInteractiveAction(funcNBLevel, 0, [&interactiveCount]() { ++interactiveCount; });
+    m_commander.scheduleStartupRead(funcAttenuator, 0);
+    m_commander.m_consecutiveInteractiveDispatches = 3;
+    m_commander.dispatchNextScheduledCommand();
+    QCOMPARE(interactiveCount, 0);
+    QCOMPARE(m_commander.m_scheduledCommands.size(), 4);
 }
 
 void CommanderCodecTest::correlatesEquivalentFrequencyAndModeReplyCommands()

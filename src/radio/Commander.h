@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QVector>
+#include <functional>
 
 struct CommanderCorrelationDiagnostics
 {
@@ -47,6 +48,7 @@ class Commander : public RadioCommander
     ~Commander();
     CommanderCorrelationDiagnostics correlationDiagnostics() const;
     CommanderSchedulerDiagnostics schedulerDiagnostics() const;
+    void scheduleInteractiveAction(Funcs func, uchar receiver, std::function<void()> action);
 
   public slots:
     void process() override;
@@ -98,7 +100,8 @@ class Commander : public RadioCommander
     enum class ScheduledCommandClass
     {
         Meter,
-        StartupRead
+        StartupRead,
+        InteractiveSet
     };
 
     struct ScheduledCommand
@@ -106,6 +109,7 @@ class Commander : public RadioCommander
         ScheduledCommandClass commandClass{ScheduledCommandClass::StartupRead};
         Funcs func{funcNone};
         uchar receiver{0};
+        std::function<void()> action;
     };
 
     void enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs func, uchar receiver);
@@ -231,6 +235,7 @@ class Commander : public RadioCommander
     QTimer* m_scheduledCommandTimer{nullptr};
     CommanderSchedulerDiagnostics m_schedulerDiagnostics;
     int m_consecutiveMeterDispatches{0};
+    int m_consecutiveInteractiveDispatches{0};
     bool m_suppressReadbackForCurrentCommand{false};
     bool m_shutdownComplete{false};
 

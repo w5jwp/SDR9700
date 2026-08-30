@@ -1031,14 +1031,20 @@ void RadioBackend::setFrequencyHz(quint64 hz)
             if (transferSelectedMemory)
             {
                 commandSession->receiveCommand(funcMemoryToVFO, QVariant(), 0);
+                commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(f), 0);
+                commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+                commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+                return;
             }
-            else
-            {
-                selectMainVfoForCommand(commandSession);
-            }
-            commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(f), 0);
-            commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
-            commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+            commandSession->scheduleInteractiveAction(funcFreqSet, 0,
+                                                      [commandSession, f]()
+                                                      {
+                                                          selectMainVfoForCommand(commandSession);
+                                                          commandSession->receiveCommandNoReadback(
+                                                              funcFreqSet, QVariant::fromValue(f), 0);
+                                                          commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
+                                                          commandSession->receiveCommand(funcModeGet, QVariant(), 0);
+                                                      });
         });
 }
 
@@ -1092,8 +1098,8 @@ void RadioBackend::setNrEnabled(bool on)
 
 void RadioBackend::setNrLevel(int level)
 {
-    routeVfoReceiverCommand(m_activeVfo, [level](Commander* commandSession, uchar receiver)
-                            { commandSession->receiveCommand(funcNRLevel, QVariant(level), receiver); });
+    scheduleVfoReceiverCommand(m_activeVfo, funcNRLevel, [level](Commander* commandSession, uchar receiver)
+                               { commandSession->receiveCommand(funcNRLevel, QVariant(level), receiver); });
 }
 
 void RadioBackend::setNbEnabled(bool on)
@@ -1104,8 +1110,8 @@ void RadioBackend::setNbEnabled(bool on)
 
 void RadioBackend::setNbLevel(int level)
 {
-    routeVfoReceiverCommand(m_activeVfo, [level](Commander* commandSession, uchar receiver)
-                            { commandSession->receiveCommand(funcNBLevel, QVariant(level), receiver); });
+    scheduleVfoReceiverCommand(m_activeVfo, funcNBLevel, [level](Commander* commandSession, uchar receiver)
+                               { commandSession->receiveCommand(funcNBLevel, QVariant(level), receiver); });
 }
 
 void RadioBackend::setPreampEnabled(bool on)
@@ -1144,15 +1150,16 @@ void RadioBackend::setAfGain(int level)
 void RadioBackend::setRfGain(int level)
 {
     const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
-    routeVfoReceiverCommand(m_activeVfo, [bounded](Commander* commandSession, uchar receiver)
-                            { commandSession->receiveCommand(funcRfGain, QVariant::fromValue(bounded), receiver); });
+    scheduleVfoReceiverCommand(m_activeVfo, funcRfGain, [bounded](Commander* commandSession, uchar receiver)
+                               { commandSession->receiveCommand(funcRfGain, QVariant::fromValue(bounded), receiver); });
 }
 
 void RadioBackend::setTxPower(int level)
 {
     const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
-    routeVfoReceiverCommand(Vfo::Main, [bounded](Commander* commandSession, uchar receiver)
-                            { commandSession->receiveCommand(funcRFPower, QVariant::fromValue(bounded), receiver); });
+    scheduleVfoReceiverCommand(
+        Vfo::Main, funcRFPower, [bounded](Commander* commandSession, uchar receiver)
+        { commandSession->receiveCommand(funcRFPower, QVariant::fromValue(bounded), receiver); });
 }
 
 void RadioBackend::setTuningStep(int step)
@@ -1213,14 +1220,14 @@ void RadioBackend::setVfoFrequencyHz(Vfo vfo, quint64 hz)
     frequency.Hz = hz;
     frequency.MHzDouble = hz / 1e6;
     frequency.VFO = activeVFO;
-    routeVfoReceiverCommand(Vfo::Sub,
-                            [frequency](Commander* commandSession, uchar receiver)
-                            {
-                                commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency),
-                                                                         receiver);
-                                commandSession->receiveCommand(funcFreqGet, QVariant(), receiver);
-                                commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
-                            });
+    scheduleVfoReceiverCommand(Vfo::Sub, funcFreqSet,
+                               [frequency](Commander* commandSession, uchar receiver)
+                               {
+                                   commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency),
+                                                                            receiver);
+                                   commandSession->receiveCommand(funcFreqGet, QVariant(), receiver);
+                                   commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
+                               });
 }
 
 void RadioBackend::requestVfoState(Vfo vfo)
@@ -1266,6 +1273,30 @@ void RadioBackend::routeVfoReceiverCommand(Vfo vfo, const std::function<void(Com
                         funcSelectVFO, QVariant::fromValue<vfo_t>(selected == Vfo::Sub ? vfoSub : vfoMain), 0);
                 },
                 [commandSession, &command](uchar receiver) { command(commandSession, receiver); });
+        });
+}
+
+void RadioBackend::scheduleVfoReceiverCommand(Vfo vfo, Funcs func,
+                                              const std::function<void(Commander*, uchar)>& command)
+{
+    const Vfo restoreVfo = m_activeVfo;
+    const uchar receiver = sdr9700::backend::receiverForVfo(vfo);
+    invokeOnCurrentCommander(
+        [vfo, restoreVfo, func, receiver, command](Commander* commandSession)
+        {
+            commandSession->scheduleInteractiveAction(
+                func, receiver,
+                [vfo, restoreVfo, commandSession, command]()
+                {
+                    sdr9700::backend::routeVfoReceiverCommand(
+                        vfo, restoreVfo,
+                        [commandSession](Vfo selected)
+                        {
+                            commandSession->receiveCommand(
+                                funcSelectVFO, QVariant::fromValue<vfo_t>(selected == Vfo::Sub ? vfoSub : vfoMain), 0);
+                        },
+                        [commandSession, command](uchar routedReceiver) { command(commandSession, routedReceiver); });
+                });
         });
 }
 
@@ -1364,25 +1395,25 @@ void RadioBackend::setVfoPreampLevel(Vfo vfo, int level)
 void RadioBackend::setVfoRfGain(Vfo vfo, int level)
 {
     const ushort value = static_cast<ushort>(qBound(0, level, 255));
-    routeVfoReceiverCommand(vfo,
-                            [value](Commander* commandSession, uchar receiver)
-                            {
-                                commandSession->receiveCommandNoReadback(funcRfGain, QVariant::fromValue(value),
-                                                                         receiver);
-                                commandSession->receiveCommand(funcRfGain, QVariant(), receiver);
-                            });
+    scheduleVfoReceiverCommand(vfo, funcRfGain,
+                               [value](Commander* commandSession, uchar receiver)
+                               {
+                                   commandSession->receiveCommandNoReadback(funcRfGain, QVariant::fromValue(value),
+                                                                            receiver);
+                                   commandSession->receiveCommand(funcRfGain, QVariant(), receiver);
+                               });
 }
 
 void RadioBackend::setVfoSquelch(Vfo vfo, int level)
 {
     const ushort value = static_cast<ushort>(qBound(0, level, 255));
-    routeVfoReceiverCommand(vfo,
-                            [value](Commander* commandSession, uchar receiver)
-                            {
-                                commandSession->receiveCommandNoReadback(funcSquelch, QVariant::fromValue(value),
-                                                                         receiver);
-                                commandSession->receiveCommand(funcSquelch, QVariant(), receiver);
-                            });
+    scheduleVfoReceiverCommand(vfo, funcSquelch,
+                               [value](Commander* commandSession, uchar receiver)
+                               {
+                                   commandSession->receiveCommandNoReadback(funcSquelch, QVariant::fromValue(value),
+                                                                            receiver);
+                                   commandSession->receiveCommand(funcSquelch, QVariant(), receiver);
+                               });
 }
 
 void RadioBackend::setDualWatchEnabled(bool on)
@@ -1408,8 +1439,8 @@ void RadioBackend::setSquelch(bool on, int level)
     // On IC-9700, squelch level 0 = fully open, >0 = active.
     // Setting funcSquelch with 0 disables it; non-zero enables + sets level.
     const ushort squelchVal = on ? qMax<ushort>(1, static_cast<ushort>(qBound(0, level, 255))) : 0;
-    routeVfoReceiverCommand(
-        m_activeVfo, [squelchVal](Commander* commandSession, uchar receiver)
+    scheduleVfoReceiverCommand(
+        m_activeVfo, funcSquelch, [squelchVal](Commander* commandSession, uchar receiver)
         { commandSession->receiveCommand(funcSquelch, QVariant::fromValue(squelchVal), receiver); });
 }
 
@@ -1471,8 +1502,8 @@ void RadioBackend::setCompressor(bool on)
 void RadioBackend::setCompressorLevel(int level)
 {
     const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
-    routeVfoReceiverCommand(
-        Vfo::Main, [bounded](Commander* commandSession, uchar receiver)
+    scheduleVfoReceiverCommand(
+        Vfo::Main, funcCompressorLevel, [bounded](Commander* commandSession, uchar receiver)
         { commandSession->receiveCommand(funcCompressorLevel, QVariant::fromValue(bounded), receiver); });
 }
 

@@ -23,6 +23,7 @@ constexpr qsizetype kMaxDeferredReplyReads = 64;
 constexpr int kScheduledCommandIntervalMs = 10;
 constexpr qsizetype kMaxScheduledCommands = 64;
 constexpr int kMaxConsecutiveMeterDispatches = 3;
+constexpr int kMaxConsecutiveInteractiveDispatches = 3;
 constexpr qint64 kScopeAssemblyLifetimeMs = 250;
 
 Funcs canonicalReplyFunc(Funcs func)
@@ -315,6 +316,36 @@ void Commander::scheduleStartupRead(Funcs func, uchar receiver)
     enqueueScheduledRead(ScheduledCommandClass::StartupRead, func, receiver);
 }
 
+void Commander::scheduleInteractiveAction(Funcs func, uchar receiver, std::function<void()> action)
+{
+    const auto existing = std::find_if(m_scheduledCommands.begin(), m_scheduledCommands.end(),
+                                       [func, receiver](const ScheduledCommand& command)
+                                       {
+                                           return command.commandClass == ScheduledCommandClass::InteractiveSet &&
+                                                  command.func == func && command.receiver == receiver;
+                                       });
+    if (existing != m_scheduledCommands.end())
+    {
+        existing->action = std::move(action);
+        ++m_schedulerDiagnostics.coalescedCommands;
+        return;
+    }
+    if (m_scheduledCommands.size() >= kMaxScheduledCommands)
+    {
+        ++m_schedulerDiagnostics.droppedCommands;
+        qWarning(logRadio()).noquote().nospace()
+            << "CI-V scheduler full depth=" << m_scheduledCommands.size()
+            << " dropping interactive=" << funcString[func] << " receiver=" << receiver;
+        return;
+    }
+    m_scheduledCommands.append({ScheduledCommandClass::InteractiveSet, func, receiver, std::move(action)});
+    m_schedulerDiagnostics.highWaterMark = std::max(m_schedulerDiagnostics.highWaterMark, m_scheduledCommands.size());
+    if (!m_scheduledCommandTimer->isActive())
+    {
+        m_scheduledCommandTimer->start();
+    }
+}
+
 void Commander::enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs func, uchar receiver)
 {
     const Funcs canonicalFunc = canonicalReplyFunc(func);
@@ -336,7 +367,7 @@ void Commander::enqueueScheduledRead(ScheduledCommandClass commandClass, Funcs f
         return;
     }
 
-    m_scheduledCommands.append({commandClass, func, receiver});
+    m_scheduledCommands.append({commandClass, func, receiver, {}});
     m_schedulerDiagnostics.highWaterMark = std::max(m_schedulerDiagnostics.highWaterMark, m_scheduledCommands.size());
     if (!m_scheduledCommandTimer->isActive())
     {
@@ -352,7 +383,25 @@ void Commander::dispatchNextScheduledCommand()
     }
 
     qsizetype selected = 0;
-    if (m_consecutiveMeterDispatches >= kMaxConsecutiveMeterDispatches)
+    const auto interactive =
+        std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
+                     { return command.commandClass == ScheduledCommandClass::InteractiveSet; });
+    const auto nonInteractive =
+        std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
+                     { return command.commandClass != ScheduledCommandClass::InteractiveSet; });
+    if (interactive != m_scheduledCommands.cend() &&
+        (m_consecutiveInteractiveDispatches < kMaxConsecutiveInteractiveDispatches ||
+         nonInteractive == m_scheduledCommands.cend()))
+    {
+        selected = std::distance(m_scheduledCommands.cbegin(), interactive);
+    }
+    else if (nonInteractive != m_scheduledCommands.cend())
+    {
+        selected = std::distance(m_scheduledCommands.cbegin(), nonInteractive);
+    }
+
+    if (m_scheduledCommands.at(selected).commandClass != ScheduledCommandClass::InteractiveSet &&
+        m_consecutiveMeterDispatches >= kMaxConsecutiveMeterDispatches)
     {
         const auto startup =
             std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
@@ -364,6 +413,14 @@ void Commander::dispatchNextScheduledCommand()
     }
 
     const ScheduledCommand command = m_scheduledCommands.takeAt(selected);
+    if (command.commandClass == ScheduledCommandClass::InteractiveSet)
+    {
+        ++m_consecutiveInteractiveDispatches;
+    }
+    else
+    {
+        m_consecutiveInteractiveDispatches = 0;
+    }
     if (command.commandClass == ScheduledCommandClass::Meter)
     {
         ++m_consecutiveMeterDispatches;
@@ -373,7 +430,14 @@ void Commander::dispatchNextScheduledCommand()
         m_consecutiveMeterDispatches = 0;
     }
     ++m_schedulerDiagnostics.dispatchedCommands;
-    receiveCommand(command.func, QVariant(), command.receiver);
+    if (command.action)
+    {
+        command.action();
+    }
+    else
+    {
+        receiveCommand(command.func, QVariant(), command.receiver);
+    }
 
     if (!m_scheduledCommands.isEmpty())
     {
@@ -386,6 +450,7 @@ void Commander::resetScheduledCommands()
     m_scheduledCommandTimer->stop();
     m_scheduledCommands.clear();
     m_consecutiveMeterDispatches = 0;
+    m_consecutiveInteractiveDispatches = 0;
 }
 
 void Commander::receiveBaudRate(quint32 baudrate)
