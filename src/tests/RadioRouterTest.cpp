@@ -5,6 +5,7 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <atomic>
+#include <chrono>
 #include <thread>
 
 class RadioRouterTest : public QObject
@@ -23,6 +24,7 @@ class RadioRouterTest : public QObject
     void routesAllSimpleControlBranches();
     void routesBatchInOrder();
     void coalescesReplaceableBacklogAcrossOneQueuedDrain();
+    void boundsReplaceableTrafficWhileConsumerIsStalled();
     void preservesOrderingAcrossLosslessBarriers();
     void rejectsBatchesFromCancelledSessions();
     void boundsLosslessBacklogWithProducerBackpressure();
@@ -45,6 +47,52 @@ void RadioRouterTest::coalescesReplaceableBacklogAcrossOneQueuedDrain()
     QTRY_COMPARE(meterSpy.size(), 1);
     QCOMPARE(meterSpy.at(0).at(0).toInt(), 99);
     QCOMPARE(router.queueDiagnostics().drainEvents, quint64(1));
+}
+
+void RadioRouterTest::boundsReplaceableTrafficWhileConsumerIsStalled()
+{
+    RadioRouter router;
+    QSignalSpy meterSpy(&router, &RadioRouter::smeterChanged);
+    QSignalSpy scopeSpy(&router, &RadioRouter::scopeDataReady);
+    ScopeData mainFrame;
+    mainFrame.valid = true;
+    mainFrame.receiver = 0;
+    ScopeData subFrame = mainFrame;
+    subFrame.receiver = 1;
+
+    std::atomic_bool producerFinished{false};
+    std::thread producer(
+        [&router, &mainFrame, &subFrame, &producerFinished]()
+        {
+            for (int value = 0; value < 5000; ++value)
+            {
+                mainFrame.data = QByteArray::number(value);
+                subFrame.data = QByteArray::number(value);
+                router.enqueueBatch({CacheItem(funcSMeter, value, 0), CacheItem(funcSMeter, value, 1),
+                                     CacheItem(funcScopeWaveData, QVariant::fromValue(mainFrame), 0),
+                                     CacheItem(funcScopeWaveData, QVariant::fromValue(subFrame), 1)});
+            }
+            producerFinished.store(true, std::memory_order_release);
+        });
+
+    // Intentionally do not process this thread's Qt event loop. Replaceable
+    // traffic must collapse at the producer boundary instead of blocking or
+    // filling the queued-delivery path while the consumer is stalled.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    QVERIFY(producerFinished.load(std::memory_order_acquire));
+    producer.join();
+
+    const RadioRouterQueueDiagnostics stalled = router.queueDiagnostics();
+    QCOMPARE(stalled.pendingItems, qsizetype(4));
+    QCOMPARE(stalled.highWaterMark, qsizetype(4));
+    QCOMPARE(stalled.coalescedItems, quint64(19996));
+    QCOMPARE(stalled.backpressureWaits, quint64(0));
+
+    QTRY_COMPARE(router.queueDiagnostics().pendingItems, qsizetype(0));
+    QCOMPARE(meterSpy.size(), 1);
+    QCOMPARE(meterSpy.at(0).at(0).toInt(), 255);
+    QCOMPARE(scopeSpy.size(), 1);
+    QCOMPARE(scopeSpy.at(0).at(0).value<ScopeData>().data, QByteArrayLiteral("4999"));
 }
 
 void RadioRouterTest::preservesOrderingAcrossLosslessBarriers()
@@ -103,12 +151,19 @@ void RadioRouterTest::boundsLosslessBacklogWithProducerBackpressure()
             producerFinished.store(true, std::memory_order_release);
         });
 
+    // Freeze the router's event loop long enough for the worker to hit the
+    // lossless capacity limit. It must block rather than discard records or
+    // grow the container beyond its documented bound.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    QVERIFY(!producerFinished.load(std::memory_order_acquire));
+    QCOMPARE(router.queueDiagnostics().pendingItems, qsizetype(512));
+    QCOMPARE(router.queueDiagnostics().highWaterMark, qsizetype(512));
     QTRY_VERIFY_WITH_TIMEOUT(producerFinished.load(std::memory_order_acquire), 2000);
     producer.join();
     QTRY_COMPARE_WITH_TIMEOUT(memorySpy.size(), 600, 2000);
 
     const RadioRouterQueueDiagnostics diagnostics = router.queueDiagnostics();
-    QVERIFY(diagnostics.highWaterMark <= 512);
+    QCOMPARE(diagnostics.highWaterMark, qsizetype(512));
     QVERIFY(diagnostics.backpressureWaits > 0);
     QCOMPARE(diagnostics.coalescedItems, quint64(0));
 }

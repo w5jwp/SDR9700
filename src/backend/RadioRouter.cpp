@@ -126,9 +126,9 @@ void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
                     }
                 }
                 m_pendingItems.append(item);
+                m_pendingHighWaterMark = qMax(m_pendingHighWaterMark, m_pendingItems.size());
             }
         }
-        m_pendingHighWaterMark = qMax(m_pendingHighWaterMark, m_pendingItems.size());
         if (!m_drainScheduled && !m_pendingItems.isEmpty())
         {
             m_drainScheduled = true;

@@ -38,6 +38,7 @@ class CommanderCodecTest : public QObject
     void defersWholeMainSubExchangeUntilReplyFamiliesAreIdle();
     void receiverScopedRetrySelectsOnlyWhenReadCanDispatch();
     void exchangeGateAllowsOnlyConfirmationRetries();
+    void repeatedExchangesDrainScheduledPressure();
     void discardsLateReplyDuringFamilyDrain();
     void adaptsReplyDrainWindowsToMeasuredRtt();
     void rejectsShortSpectrumFrames();
@@ -165,6 +166,53 @@ void CommanderCodecTest::exchangeGateAllowsOnlyConfirmationRetries()
     m_commander.dispatchNextScheduledCommand();
     QCOMPARE(m_commander.m_scheduledCommands.size(), 2);
     QVERIFY(m_commander.m_scheduledCommandTimer->isActive());
+}
+
+void CommanderCodecTest::repeatedExchangesDrainScheduledPressure()
+{
+    constexpr int kExchangeCount = 500;
+    constexpr int kUpdatesPerExchange = 20;
+    int dispatchedExchanges = 0;
+    int deliveredInteractiveValue = -1;
+    connect(&m_commander, &Commander::mainSubExchangeDispatched, this,
+            [&dispatchedExchanges]() { ++dispatchedExchanges; });
+
+    for (int exchange = 0; exchange < kExchangeCount; ++exchange)
+    {
+        m_commander.requestMainSubExchange();
+        QVERIFY(m_commander.m_mainSubExchangeConfirmationPending);
+
+        for (int update = 0; update < kUpdatesPerExchange; ++update)
+        {
+            const int value = exchange * kUpdatesPerExchange + update;
+            m_commander.scheduleInteractiveAction(funcRfGain, 0, [&deliveredInteractiveValue, value]()
+                                                  { deliveredInteractiveValue = value; });
+        }
+        m_commander.scheduleMeterRead(funcSMeter, 0);
+        QCOMPARE(m_commander.m_scheduledCommands.size(), qsizetype(2));
+
+        m_commander.finishMainSubExchangeConfirmation();
+        while (!m_commander.m_scheduledCommands.isEmpty())
+        {
+            m_commander.dispatchNextScheduledCommand();
+        }
+        QCOMPARE(deliveredInteractiveValue, (exchange + 1) * kUpdatesPerExchange - 1);
+
+        // The scripted transport considers the two ambiguous confirmation
+        // reads resolved before beginning the next exchange. Wire loss and
+        // late-reply behavior are covered independently by the correlation
+        // and sequence-gate tests.
+        m_commander.m_pendingReplies.clear();
+        m_commander.m_replyFamilyDrains.clear();
+        m_commander.m_deferredReplyReads.clear();
+    }
+
+    QCOMPARE(dispatchedExchanges, kExchangeCount);
+    QCOMPARE(m_commander.m_scheduledCommands.size(), qsizetype(0));
+    QCOMPARE(m_commander.m_pendingReplies.size(), qsizetype(0));
+    QCOMPARE(m_commander.m_deferredReplyReads.size(), qsizetype(0));
+    QCOMPARE(m_commander.schedulerDiagnostics().droppedCommands, quint64(0));
+    QCOMPARE(m_commander.schedulerDiagnostics().coalescedCommands, quint64(kExchangeCount * (kUpdatesPerExchange - 1)));
 }
 
 void CommanderCodecTest::schedulerCoalescesAndBoundsReads()
