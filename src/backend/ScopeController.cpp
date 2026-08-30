@@ -72,8 +72,10 @@ void ScopeController::flushLatestFrame()
 
     // Move the latest pending frame out of the controller. Scope data arrives
     // continuously, and this avoids copying the raw CI-V byte buffer once per
-    // flushed frame. Backout point: change this back to a copy if future Qt
-    // metatype behavior requires m_pendingFrame to remain intact after flush.
+    // flushed frame. The member is reset immediately so acceptScopeData() can
+    // safely replace it before the next timer flush. If a future Qt metatype
+    // change requires the emitted source object to remain intact, copying here
+    // is the intentionally localized fallback.
     const ScopeData frame = std::move(m_pendingFrame);
     m_pendingFrame = {};
     m_hasPendingFrame = false;

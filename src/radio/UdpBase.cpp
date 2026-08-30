@@ -203,7 +203,10 @@ void UdpBase::dataReceived(const QByteArray& r)
                     pingLocalBase = localNow;
                 }
 
-                // Predicted radio time based on last base + elapsed.
+                // Project the last synchronized radio timestamp forward by
+                // monotonic local elapsed time. Comparing the received ping
+                // against this projection measures lateness without mixing in
+                // wall-clock adjustments or time-zone changes.
                 const int predictedRadioNow = normDay(pingRadioBase + int(localNow - pingLocalBase));
 
                 // Positive means the ping timestamp is behind the local prediction.

@@ -15,12 +15,18 @@ struct RadioProfile
     QString host;
     quint16 port{50001};
     QString username;
-    QString password; // plaintext in memory; encrypted at rest
+    // The password is necessarily plaintext while establishing a connection.
+    // RadioProfileStore encrypts it before persistence; callers must not log
+    // this field or retain additional plaintext copies beyond connection setup.
+    QString password;
 };
 
-// Passwords are encrypted at rest with AES-256-GCM using a key derived from
-// local Linux machine/user material. Plaintext is kept only in memory while the
-// profile is loaded or edited.
+// Passwords are encrypted at rest with AES-256-GCM. RadioProfileStore derives
+// each record's encryption key from a per-user random key file and a per-record
+// salt. The key file and encrypted profiles share the app configuration
+// directory, so this protects against accidental plaintext disclosure rather
+// than compromise of the entire configuration directory. Plaintext remains in
+// memory only while a profile is loaded, edited, or used for connection setup.
 class RadioProfileStore : public QObject
 {
     Q_OBJECT

@@ -15,6 +15,12 @@
 namespace sdr9700
 {
 
+// The structures in this file form the compiled IC-9700 capability schema.
+// Register bytes and limits are protocol facts consumed by Commander; display
+// names and ordering are application policy consumed by the GUI. Keeping both
+// in typed tables makes unsupported commands explicit and avoids runtime radio
+// definition files whose contents could disagree with the compiled parser.
+
 inline QString radioString(const char* value)
 {
     return QString::fromUtf8(value);
@@ -244,8 +250,11 @@ inline constexpr RadioCommandDef kRadioCommands[] = {
     {funcFB, "fb", 0, 0, false, false, false, false, 0, false},
 };
 
-// funcSMeter is intentionally absent: RadioBackend polls it via a dedicated
-// 100 ms timer (m_smeterPollTimer) for precise 10 Hz control.
+// funcSMeter is intentionally absent from the general periodic table.
+// RadioBackend polls it with m_smeterPollTimer so meter routing can alternate
+// MAIN and SUB deliberately during Dual Watch and suppress new polls while a
+// receiver-context transaction is active. Adding it here would create a second
+// independent polling source and undermine that ordering policy.
 inline constexpr RadioPeriodicDef kRadioPeriodicCommands[] = {
     {funcAttenuator, "Medium Low", 0},
     {funcCompressor, "Medium Low", 0},
@@ -348,9 +357,10 @@ inline constexpr RadioFilterDef kRadioFilters[] = {
     {3, "FIL3", 0},
 };
 
-// Region codes follow the IC-9700 regional band-edge tables. Keep these edges
-// within the IC-9700 hardware coverage even when the regional amateur allocation
-// is wider.
+// Region codes follow the IC-9700 regional band-edge tables rather than a
+// generic amateur-band plan. Keep these edges within IC-9700 hardware coverage
+// even when a jurisdiction permits operation beyond the transceiver's tuning
+// range; the GUI must not offer a frequency the selected radio cannot accept.
 inline constexpr RadioBandDef kRadioBands[] = {
     {"", band23cm, 1240000000ULL, 1300000000ULL, 1296100000ULL, 1300, 3, 5, true, 10.0F, "#ffff0000", "23cm", 0},
     {"1", band70cm, 430000000ULL, 440000000ULL, 432100000ULL, 450, 2, 5, true, 75.0F, "#ff00ff00", "70cm", 0},

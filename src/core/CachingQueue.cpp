@@ -573,7 +573,10 @@ void CachingQueue::receiveValue(Funcs func, QVariant value, uchar receiver)
 
 std::optional<CacheItem> CachingQueue::updateCache(bool reply, QueueItem item)
 {
-    // Caller must hold mutex.
+    // Every caller must hold `mutex` for this entire operation. Besides the
+    // cache map, this function mutates radioState and the outstanding-refresh
+    // key set; observing only a subset of those changes would let subsequent
+    // command routing use a state snapshot that never existed atomically.
 
     if (reply)
     {

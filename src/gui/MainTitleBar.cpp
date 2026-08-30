@@ -33,8 +33,10 @@ class TitleMenuButton : public QToolButton
         QStyleOptionToolButton opt;
         initStyleOption(&opt);
         QPainter p(this);
-        // Draw frame/background with text cleared so the style doesn't draw
-        // it (we re-draw below with the mnemonic flag forced on).
+        // Draw the native frame and background with an empty text field, then
+        // draw the saved label explicitly with TextShowMnemonic. Some platform
+        // styles otherwise suppress the underlined menu mnemonic even though
+        // the QAction keyboard shortcut remains active.
         const QString labelText = opt.text;
         opt.text.clear();
         style()->drawComplexControl(QStyle::CC_ToolButton, &opt, &p, this);

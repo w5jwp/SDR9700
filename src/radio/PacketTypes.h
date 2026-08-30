@@ -10,7 +10,10 @@
 #include <optional>
 #include <type_traits>
 
-// IC-9700 LAN protocol timing and packet-size constants.
+// IC-9700 LAN protocol timing and capacity limits. Names ending in PERIOD or
+// LOCK_PERIOD are milliseconds; PURGE_SECONDS and STALE_CONNECTION are
+// seconds. BUFSIZE and MAX_MISSING bound retransmission bookkeeping rather
+// than socket receive-buffer sizes.
 inline constexpr int PURGE_SECONDS = 10;
 inline constexpr int TOKEN_RENEWAL = 60000;
 inline constexpr int PING_PERIOD = 500;
@@ -25,7 +28,9 @@ inline constexpr int MAX_MISSING = 50;
 inline constexpr int AUDIO_PERIOD = 20;
 inline constexpr int GUIDLEN = 16;
 
-// Fixed-size packet lengths.
+// Exact datagram lengths for fixed-size IC-9700 LAN packet families. These
+// values are also used by static layout tests, so changing one requires wire
+// evidence and a corresponding packet-structure update.
 inline constexpr int CONTROL_SIZE = 0x10;
 inline constexpr int WATCHDOG_SIZE = 0x14;
 inline constexpr int PING_SIZE = 0x15;
@@ -40,7 +45,9 @@ inline constexpr int CAPABILITIES_SIZE = 0x42;
 inline constexpr int RADIO_CAP_SIZE = 0x66;
 inline constexpr int MAX_CAPABILITY_RADIOS = 255;
 
-// Variable-size packet headers before payload.
+// Header lengths for packet families followed by a variable-size payload.
+// CIV_SIZE and DATA_SIZE share the same physical header length but retain
+// separate names to document their distinct call-site semantics.
 inline constexpr int CIV_SIZE = 0x15;
 inline constexpr int AUDIO_SIZE = 0x18;
 inline constexpr int DATA_SIZE = 0x15;
@@ -48,7 +55,8 @@ inline constexpr int DATA_SIZE = 0x15;
 #pragma pack(push)
 #pragma pack(1)
 
-// 0x10 length control packet (connect/disconnect/idle.)
+// 0x10-byte control packet used for connect, disconnect, idle, and
+// retransmission-control messages.
 typedef union control_packet
 {
     struct
@@ -62,7 +70,8 @@ typedef union control_packet
     char packet[CONTROL_SIZE];
 }* control_packet_t;
 
-// 0x14 length watchdog packet
+// 0x14-byte watchdog packet. The trailing 16-bit fields are preserved at their
+// observed wire offsets even though SDR9700 does not currently interpret them.
 typedef union watchdog_packet
 {
     struct
@@ -78,8 +87,9 @@ typedef union watchdog_packet
     char packet[WATCHDOG_SIZE];
 }* watchdog_packet_t;
 
-// 0x15 length ping packet
-// Also used for the slightly different civ header packet.
+// 0x15-byte ping packet. The same overlay is reused for the CI-V data header:
+// the union after `reply` represents either the radio uptime in a ping or the
+// CI-V payload length and CI-V stream sequence number.
 typedef union ping_packet
 {
     struct
@@ -106,7 +116,7 @@ typedef union ping_packet
     char packet[PING_SIZE];
 } *ping_packet_t, *data_packet_t, data_packet;
 
-// 0x16 length open/close packet
+// 0x16-byte CI-V stream open/close packet.
 typedef union openclose_packet
 {
     struct
@@ -124,7 +134,7 @@ typedef union openclose_packet
     char packet[OPENCLOSE_SIZE];
 }* startstop_packet_t;
 
-// 0x18 length audio packet
+// 0x18-byte audio header followed by encoded audio payload bytes.
 typedef union audio_packet
 {
     struct
@@ -143,7 +153,8 @@ typedef union audio_packet
     char packet[AUDIO_SIZE];
 }* audio_packet_t;
 
-// 0x18 length retransmit_range packet
+// 0x18-byte retransmission request containing up to four missing sequence
+// numbers.
 typedef union retransmit_range_packet
 {
     struct
@@ -161,7 +172,9 @@ typedef union retransmit_range_packet
     char packet[RETRANSMIT_RANGE_SIZE];
 }* retransmit_range_packet_t;
 
-// 0x40 length token packet
+// 0x40-byte authentication-token request or response. The overlapping payload
+// layouts represent the capability-identification and GUID forms observed at
+// the same offsets during different authentication phases.
 typedef union token_packet
 {
     struct
@@ -198,7 +211,9 @@ typedef union token_packet
     char packet[TOKEN_SIZE];
 }* token_packet_t;
 
-// 0x50 length login status packet
+// 0x50-byte stream-allocation status response. On success the trailing fields
+// identify the negotiated CI-V and audio ports; on failure `error` and `disc`
+// describe why the requested radio session was not established.
 typedef union status_packet
 {
     struct
@@ -239,7 +254,8 @@ typedef union status_packet
     char packet[STATUS_SIZE];
 }* status_packet_t;
 
-// 0x60 length login status packet
+// 0x60-byte login response carrying the authentication result and negotiated
+// connection-type label.
 typedef union login_response_packet
 {
     struct
@@ -266,7 +282,8 @@ typedef union login_response_packet
     char packet[LOGIN_RESPONSE_SIZE];
 }* login_response_packet_t;
 
-// 0x80 length login packet
+// 0x80-byte login request. Username and password contain the IC-9700-specific
+// substituted byte representation produced by encodeLanText().
 typedef union login_packet
 {
     struct
@@ -292,7 +309,9 @@ typedef union login_packet
     char packet[LOGIN_SIZE];
 }* login_packet_t;
 
-// 0x90 length conninfo and stream request packet
+// 0x90-byte packet used in two protocol phases: radio-usage information from
+// the server and a client stream request containing audio codecs, sample
+// rates, local ports, and buffering preferences.
 typedef union conninfo_packet
 {
     struct
@@ -353,7 +372,9 @@ typedef union conninfo_packet
     char packet[CONNINFO_SIZE];
 }* conninfo_packet_t;
 
-// 0x64 length radio capabilities part of cap packet.
+// Fixed 0x66-byte radio-capability record embedded after the capability-list
+// header. Keep the explicit size and field offsets aligned with
+// PacketLayoutTest; reserved bytes remain intentionally unnamed.
 
 typedef union radio_cap_packet
 {

@@ -104,12 +104,17 @@ class RadioCommander : public QObject
     double getMeterCal(meter_t meter, int value);
 
     quint8 guid[GUIDLEN] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    bool radioPoweredOn = false; // Updated after a valid controller-addressed CI-V reply confirms the radio is
-                                 // responding.
+    // This is not an optimistic connection flag. It becomes true only after a
+    // syntactically valid CI-V reply addressed to SDR9700's controller address
+    // proves that the selected radio is processing commands.
+    bool radioPoweredOn = false;
 
     struct radioCapabilities radioCaps{};
     bool haveRadioCaps = false;
-    bool isRadioAdmin = true; // true = request admin-level radio access on connect
+    // Capability entries can mark commands as administrator-only. Commander
+    // checks this session-access flag before encoding such a command so a
+    // non-administrator session does not knowingly send unsupported traffic.
+    bool isRadioAdmin = true;
 
   private:
 };

@@ -51,7 +51,9 @@ struct audioSetup
     int portInt{0};
     quint8 resampleQuality{0};
     quint8 localAFgain{0};
-    quint16 blockSize{20}; // milliseconds
+    // Duration, in milliseconds, represented by one converted audio block.
+    // The default matches the IC-9700 LAN audio packet cadence.
+    quint16 blockSize{20};
     quint8 guid[GUIDLEN]{};
 };
 

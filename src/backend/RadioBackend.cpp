@@ -1319,10 +1319,10 @@ void RadioBackend::exchangeMainSub()
 {
     if (!m_commander || !m_dualWatchEnabled || m_mainSubExchangePending || m_dualWatchTransition.pending())
     {
-        qWarning(logRadio()).noquote()
-            << "Ignoring MAIN/SUB exchange commanderAvailable=" << (m_commander != nullptr)
-            << " dualWatchEnabled=" << m_dualWatchEnabled << " exchangePending=" << m_mainSubExchangePending
-            << " dualWatchTransitionPending=" << m_dualWatchTransition.pending();
+        qWarning(logRadio()).noquote() << "Ignoring MAIN/SUB exchange commanderAvailable=" << (m_commander != nullptr)
+                                       << " dualWatchEnabled=" << m_dualWatchEnabled
+                                       << " exchangePending=" << m_mainSubExchangePending
+                                       << " dualWatchTransitionPending=" << m_dualWatchTransition.pending();
         return;
     }
 
@@ -2750,11 +2750,12 @@ void RadioBackend::onLanReady()
         m_syncWatchdogTimer->start();
     }
 
-    // Retry sending scope enable commands every 2 seconds until CIV is
-    // established and scope data actually starts flowing.  The CIV stream
-    // opens asynchronously after the control handshake; a fixed one-shot
-    // delay races against that timing.  We stop as soon as scope data
-    // arrives (m_scopeDataReceived set by ScopeController).
+    // Retry scope-enable commands until CI-V is established and scope data
+    // actually starts flowing. The CI-V stream opens asynchronously after the
+    // control handshake, so a fixed one-shot delay can expire before the radio
+    // is ready to process the command. ScopeController sets
+    // m_scopeDataReceived on the first complete frame, which stops this retry
+    // path and prevents needless configuration traffic afterward.
     if (m_scopeRetryTimer)
     {
         m_scopeRetryTimer->stop();

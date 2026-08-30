@@ -542,8 +542,8 @@ void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outO
 {
     // Keep an owned copy for painting because the incoming QVector belongs to
     // the model signal delivery path and may be superseded before paintEvent().
-    // Backout/optimization point: a future double-buffered model could move
-    // this storage upstream and let the canvas paint a shared immutable frame.
+    // Backout/optimization point: a future double-buffered SpectrumScopeModel
+    // could own this storage and let the canvas paint a shared immutable frame.
     // Reuse the existing backing store where possible. Spectrum frames arrive
     // continuously, so avoiding a fresh QVector allocation per repaint keeps
     // click tuning and waterfall painting from competing with allocator churn.

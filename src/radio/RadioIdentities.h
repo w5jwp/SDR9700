@@ -50,6 +50,9 @@ struct radioInput
 
 enum availableBands
 {
+    // Numeric values are stable application band identifiers used by models,
+    // settings, and radio capability tables. Preserve their ordering because
+    // changing an existing value would reinterpret persisted selections.
     band3cm = 0,
     band6cm,    // 1
     band9cm,    // 2

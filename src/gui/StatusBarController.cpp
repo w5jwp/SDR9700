@@ -241,13 +241,17 @@ void StatusBarController::buildStatusBar()
         const QFontMetrics fmB(bold);
 
         int w = 0;
-        // connection stack
+        // Connection-status stack: the regular-weight state text and bold
+        // category label share this width so state changes do not move the
+        // separators or neighboring status groups.
         for (const char* s : {"Reconnecting", "Connected", "Disconnected"})
         {
             w = qMax(w, fmR.horizontalAdvance(QString::fromLatin1(s)));
         }
         w = qMax(w, fmB.horizontalAdvance(QStringLiteral("Radio")));
-        // network stack
+        // Network-quality stack. Include every operator-visible quality label
+        // because the active page changes as latency and loss measurements
+        // cross their thresholds.
         for (const char* s : {"Excellent", "Good", "Fair", "Poor"})
         {
             w = qMax(w, fmR.horizontalAdvance(QString::fromLatin1(s)));
