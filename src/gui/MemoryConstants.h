@@ -31,6 +31,7 @@ constexpr int kMemoryToneCellTextPadding = 8;
 constexpr int kMemoryToneTypeRole = Qt::UserRole + 1;
 constexpr int kMemoryToneRxRole = Qt::UserRole + 2;
 constexpr int kMemoryToneTxRole = Qt::UserRole + 3;
+constexpr int kMemoryVerifiedThisSessionRole = Qt::UserRole + 4;
 constexpr auto kMemoryFileFilter = "SDR9700 Memories (*.csv);;CSV Files (*.csv);;All Files (*)";
 
 enum MemoryToneFamily

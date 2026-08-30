@@ -5,6 +5,7 @@
 #include "AppPaths.h"
 #include "MemoryEditorPolicy.h"
 #include "MemoryController.h"
+#include "MemoryConstants.h"
 #include "MemoryDatabase.h"
 #include "RadioChooserDialog.h"
 #include "RadioCommandController.h"
@@ -84,15 +85,20 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     auto* controller = window.findChild<MemoryController*>();
     auto* statusLabel = window.findChild<QLabel*>(QStringLiteral("memoryManagerStatusLabel"));
     auto* progressBar = window.findChild<QProgressBar*>(QStringLiteral("memoryManagerProgressBar"));
+    auto* memoryTable = window.findChild<QTableWidget*>(QStringLiteral("memoryManagerTable"));
     QVERIFY(controller != nullptr);
     QVERIFY(statusLabel != nullptr);
     QVERIFY(progressBar != nullptr);
+    QVERIFY(memoryTable != nullptr);
 
     controller->setRadioProfileId(profileId);
     QCOMPARE(statusLabel->text(), QStringLiteral("Waiting to verify 1 cached memory with the radio (0/297)"));
     QVERIFY(!progressBar->isHidden());
     QCOMPARE(progressBar->value(), 0);
     QCOMPARE(progressBar->maximum(), 297);
+    QCOMPARE(memoryTable->rowCount(), 1);
+    QVERIFY(!memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
+    QVERIFY(memoryTable->item(0, 0)->toolTip().contains(QStringLiteral("local cache")));
 
     QVERIFY(QMetaObject::invokeMethod(&model, "onBackendConnected"));
     QVERIFY(QMetaObject::invokeMethod(&model, "onBackendReadyChanged", Q_ARG(bool, true)));
@@ -119,6 +125,8 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     }
     QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 memory total"), 1000);
     QVERIFY(progressBar->isHidden());
+    QCOMPARE(memoryTable->rowCount(), 1);
+    QVERIFY(memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
 }
 
 void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()

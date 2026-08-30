@@ -243,7 +243,10 @@ QVector<MemoryRecord> MemoryController::currentMemories() const
     memories.reserve(m_radioMemoriesByKey.size());
     for (const MemoryType& radioMemory : m_radioMemoriesByKey)
     {
-        memories.append(recordFromRadioMemory(radioMemory));
+        MemoryRecord record = recordFromRadioMemory(radioMemory);
+        record.verifiedThisSession =
+            m_memorySyncController->hasReceivedMemory(radioMemoryKey(radioMemory.group, radioMemory.channel));
+        memories.append(record);
     }
     std::sort(memories.begin(), memories.end(),
               [](const MemoryRecord& left, const MemoryRecord& right)
@@ -273,7 +276,10 @@ MemoryRecord MemoryController::memoryForId(const QString& id, bool* found) const
     {
         *found = true;
     }
-    return recordFromRadioMemory(radioMemory);
+    MemoryRecord record = recordFromRadioMemory(radioMemory);
+    record.verifiedThisSession =
+        m_memorySyncController->hasReceivedMemory(radioMemoryKey(radioMemory.group, radioMemory.channel));
+    return record;
 }
 
 MemoryType MemoryController::radioMemoryForId(const QString& id, bool* found) const

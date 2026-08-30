@@ -39,6 +39,10 @@ struct MemoryRecord
     QString urCall;
     QString r1Call;
     QString r2Call;
+    // This presentation-only flag is intentionally excluded from CSV and the
+    // SQLite payload. It describes whether the current radio session has
+    // answered for this exact slot, not a durable property of the memory.
+    bool verifiedThisSession{false};
 };
 
 int memoryBandKeyForHz(quint64 hz);

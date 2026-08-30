@@ -330,9 +330,16 @@ void MemoryViewController::rebuild()
         const int row = m_owner->m_window->m_memoryTable->rowCount();
         m_owner->m_window->m_memoryTable->insertRow(row);
 
-        auto setItem = [this, row](int column, const QString& text)
+        auto setItem = [this, row, &memory](int column, const QString& text)
         {
             auto* item = new QTableWidgetItem(text);
+            item->setData(kMemoryVerifiedThisSessionRole, memory.verifiedThisSession);
+            if (!memory.verifiedThisSession)
+            {
+                item->setForeground(m_owner->m_window->palette().color(QPalette::PlaceholderText));
+                item->setToolTip(QStringLiteral("Last known value from the local cache; this radio session has not "
+                                                "verified the slot yet."));
+            }
             m_owner->m_window->m_memoryTable->setItem(row, column, item);
             return item;
         };
@@ -352,7 +359,10 @@ void MemoryViewController::rebuild()
         toneItem->setData(kMemoryToneTypeRole, memoryToneTypeLabel(memory));
         toneItem->setData(kMemoryToneRxRole, memoryToneRxLabel(memory));
         toneItem->setData(kMemoryToneTxRole, memoryToneTxLabel(memory));
-        toneItem->setToolTip(toneItem->text());
+        if (memory.verifiedThisSession)
+        {
+            toneItem->setToolTip(toneItem->text());
+        }
         toneItem->setTextAlignment(Qt::AlignCenter);
         setItem(kMemoryIdColumn, memory.id);
         ++visibleCount;
@@ -380,12 +390,25 @@ void MemoryViewController::rebuild()
             return;
         }
         clearProgress();
+        const int verifiedCount = static_cast<int>(std::count_if(
+            memories.cbegin(), memories.cend(), [](const MemoryRecord& memory) { return memory.verifiedThisSession; }));
+        const int cachedCount = totalCount - verifiedCount;
         if (bandFilter.isEmpty())
         {
-            m_owner->m_window->m_memoryCountLabel->setText(
-                QStringLiteral("%1 %2 total")
-                    .arg(totalCount)
-                    .arg(totalCount == 1 ? QStringLiteral("memory") : QStringLiteral("memories")));
+            if (cachedCount > 0)
+            {
+                m_owner->m_window->m_memoryCountLabel->setText(QStringLiteral("%1 total (%2 verified, %3 cached)")
+                                                                   .arg(totalCount)
+                                                                   .arg(verifiedCount)
+                                                                   .arg(cachedCount));
+            }
+            else
+            {
+                m_owner->m_window->m_memoryCountLabel->setText(
+                    QStringLiteral("%1 %2 total")
+                        .arg(totalCount)
+                        .arg(totalCount == 1 ? QStringLiteral("memory") : QStringLiteral("memories")));
+            }
         }
         else
         {
