@@ -15,6 +15,7 @@ class VfoSelectionPanel : public QWidget
 
     void setSelectedVfo(Vfo vfo);
     void setDualWatchEnabled(bool enabled);
+    void setDualWatchPending(bool pending);
     void setExchangePending(bool pending);
     void setReceiverContextReady(bool ready);
     void setPttButton(QPushButton* button);
@@ -30,6 +31,7 @@ class VfoSelectionPanel : public QWidget
     void paintEvent(QPaintEvent* event) override;
 
   private:
+    void updateControlsEnabled();
     void updateButtonStyles();
 
     QPushButton* m_mainButton{nullptr};
@@ -39,6 +41,7 @@ class VfoSelectionPanel : public QWidget
     QPushButton* m_pttButton{nullptr};
     Vfo m_selectedVfo{Vfo::Main};
     bool m_dualWatchEnabled{false};
+    bool m_dualWatchPending{false};
     bool m_exchangePending{false};
     bool m_receiverContextReady{true};
 };

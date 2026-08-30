@@ -130,6 +130,7 @@ class IRadioBackend : public QObject
     void dtcsCodeChanged(ushort code);
     void radioMemoryReceived(MemoryType memory);
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
+    void dualWatchTransitionPendingChanged(bool pending);
     void mainSubExchangeCompleted();
     void mainSubExchangeFailed();
 

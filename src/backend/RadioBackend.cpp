@@ -31,6 +31,7 @@
 namespace
 {
 constexpr int kMaxMainSubExchangeRetries = 8;
+constexpr int kMaxDualWatchRetries = 8;
 constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 3000;
 constexpr int kMaxSyncReconnectAttempts = 1;
@@ -326,6 +327,50 @@ RadioBackend::RadioBackend(QObject* parent)
             m_mainSubExchangeRetryTimer->start();
         });
 
+    m_dualWatchRetryTimer = new QTimer(this);
+    m_dualWatchRetryTimer->setSingleShot(true);
+    m_dualWatchRetryTimer->setInterval(150);
+    connect(m_dualWatchRetryTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (!m_dualWatchTransition.pending())
+                {
+                    return;
+                }
+                if (++m_dualWatchRetryCount > kMaxDualWatchRetries)
+                {
+                    qCritical(logRadio()).noquote().nospace()
+                        << "Dual-watch transition failed requested=" << m_dualWatchTransition.requestedEnabled()
+                        << " confirmations=" << m_dualWatchTransition.confirmations() << " elapsedMs="
+                        << (m_dualWatchTransitionClock.isValid() ? m_dualWatchTransitionClock.elapsed() : -1);
+                    finishDualWatchTransition(false);
+                    return;
+                }
+
+                const quint8 missing = m_dualWatchTransition.missingConfirmations();
+                qInfo(logRadio()).noquote() << "Retrying dual-watch transition missing=" << missing;
+                invokeOnCurrentCommander(
+                    [enabled = m_dualWatchTransition.requestedEnabled(), missing](Commander* commandSession)
+                    {
+                        if (missing & sdr9700::DualWatchTransitionPolicy::kStateConfirmed)
+                        {
+                            commandSession->receiveCommandNoReadback(funcVFODualWatch,
+                                                                     QVariant::fromValue<bool>(enabled), 0);
+                            commandSession->receiveCommand(funcVFODualWatch, QVariant(), 0);
+                            return;
+                        }
+                        if (missing & sdr9700::DualWatchTransitionPolicy::kSubFrequencyConfirmed)
+                        {
+                            commandSession->requestReceiverScopedRead(funcFreqGet, kSubReceiver);
+                        }
+                        if (missing & sdr9700::DualWatchTransitionPolicy::kSubModeConfirmed)
+                        {
+                            commandSession->requestReceiverScopedRead(funcModeGet, kSubReceiver);
+                        }
+                    });
+                m_dualWatchRetryTimer->start();
+            });
+
     m_vfoStatePollTimer = new QTimer(this);
     m_vfoStatePollTimer->setInterval(kVfoStatePollIntervalMs);
     m_vfoStatePollTimer->setTimerType(Qt::CoarseTimer);
@@ -333,7 +378,7 @@ RadioBackend::RadioBackend(QObject* parent)
             [this]()
             {
                 if (!m_commander || !m_radioReady || m_pttState.safetyActive() || m_mainSubExchangePending ||
-                    m_smeterPollPending || m_smeterPollQueued)
+                    m_dualWatchTransition.pending() || m_smeterPollPending || m_smeterPollQueued)
                 {
                     return;
                 }
@@ -654,8 +699,48 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     connect(m_commander, &RadioCommander::radioReplyReceived, this,
             [this, session, commandSession](Funcs func, const QVariant& value, uchar receiver)
             {
-                if (!isCurrentSession(session, commandSession) || !m_mainSubExchangePending ||
-                    !m_mainSubExchangeDispatched)
+                if (!isCurrentSession(session, commandSession))
+                {
+                    return;
+                }
+
+                if (m_dualWatchTransition.pending())
+                {
+                    if (func == funcVFODualWatch && m_dualWatchTransition.observeState(value.toBool()))
+                    {
+                        if (!m_dualWatchTransition.requestedEnabled())
+                        {
+                            selectMainVfoForCommand(commandSession);
+                            finishDualWatchTransition(true);
+                        }
+                        else if (!m_dualWatchIdentityRequested)
+                        {
+                            m_dualWatchIdentityRequested = true;
+                            requestSubVfoIdentityForCommand(commandSession);
+                        }
+                    }
+                    else if (m_dualWatchTransition.requestedEnabled() &&
+                             (func == funcFreq || func == funcFreqTR || func == funcFreqGet || func == funcFreqSet ||
+                              func == funcSelectedFreq) &&
+                             receiver == kSubReceiver)
+                    {
+                        m_dualWatchTransition.observeSubFrequency();
+                    }
+                    else if (m_dualWatchTransition.requestedEnabled() &&
+                             (func == funcMode || func == funcModeTR || func == funcModeGet || func == funcModeSet ||
+                              func == funcSelectedMode || func == funcDataModeWithFilter) &&
+                             receiver == kSubReceiver)
+                    {
+                        m_dualWatchTransition.observeSubMode();
+                    }
+
+                    if (m_dualWatchTransition.complete())
+                    {
+                        finishDualWatchTransition(true);
+                    }
+                }
+
+                if (!m_mainSubExchangePending || !m_mainSubExchangeDispatched)
                 {
                     return;
                 }
@@ -953,6 +1038,19 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_pttState.reset();
     m_activeVfo = Vfo::Main;
     m_dualWatchEnabled = false;
+    const bool dualWatchTransitionWasPending = m_dualWatchTransition.pending();
+    m_dualWatchTransition.reset();
+    m_dualWatchIdentityRequested = false;
+    m_dualWatchRetryCount = 0;
+    m_dualWatchTransitionClock.invalidate();
+    if (m_dualWatchRetryTimer)
+    {
+        m_dualWatchRetryTimer->stop();
+    }
+    if (dualWatchTransitionWasPending)
+    {
+        emit dualWatchTransitionPendingChanged(false);
+    }
     m_vfoStatePollPhase = 0;
     m_smeterPollPending = false;
     m_smeterPollQueued = false;
@@ -1219,7 +1317,7 @@ void RadioBackend::selectVfo(Vfo vfo)
 
 void RadioBackend::exchangeMainSub()
 {
-    if (!m_commander || m_mainSubExchangePending)
+    if (!m_commander || m_mainSubExchangePending || m_dualWatchTransition.pending())
     {
         qWarning(logRadio()).noquote() << "Ignoring MAIN/SUB exchange while previous exchange is pending";
         return;
@@ -1479,18 +1577,72 @@ void RadioBackend::setVfoSquelch(Vfo vfo, int level)
 
 void RadioBackend::setDualWatchEnabled(bool on)
 {
+    if (!m_commander || m_dualWatchTransition.pending() || m_mainSubExchangePending || m_pttState.safetyActive())
+    {
+        return;
+    }
+
+    if (!m_dualWatchTransition.request(on))
+    {
+        return;
+    }
+    m_dualWatchIdentityRequested = false;
+    m_dualWatchRetryCount = 0;
+    m_dualWatchTransitionClock.restart();
+    emit dualWatchTransitionPendingChanged(true);
+    qInfo(logRadio()).noquote() << "Dual-watch transition requested enabled=" << on;
+
     invokeOnCurrentCommander(
         [on](Commander* commandSession)
         {
-            commandSession->receiveCommand(funcVFODualWatch, QVariant::fromValue<bool>(on), 0);
-            if (on)
+            commandSession->receiveCommandNoReadback(funcVFODualWatch, QVariant::fromValue<bool>(on), 0);
+            commandSession->receiveCommand(funcVFODualWatch, QVariant(), 0);
+        });
+    m_dualWatchRetryTimer->start();
+}
+
+void RadioBackend::finishDualWatchTransition(bool success)
+{
+    if (!m_dualWatchTransition.pending())
+    {
+        return;
+    }
+
+    const bool enabled = m_dualWatchTransition.requestedEnabled();
+    const quint8 confirmations = m_dualWatchTransition.confirmations();
+    m_dualWatchRetryTimer->stop();
+    m_dualWatchRetryCount = 0;
+    m_dualWatchIdentityRequested = false;
+    m_meterPollTuneHoldoff.restart();
+    qInfo(logRadio()).noquote().nospace()
+        << "Dual-watch transition completed enabled=" << enabled << " success=" << success
+        << " confirmations=" << confirmations
+        << " elapsedMs=" << (m_dualWatchTransitionClock.isValid() ? m_dualWatchTransitionClock.elapsed() : -1);
+    m_dualWatchTransition.reset();
+    emit dualWatchTransitionPendingChanged(false);
+
+    if (!success)
+    {
+        emit statusMessage(QStringLiteral("Dual-watch state refresh failed"), MessageSeverity::Warning);
+        return;
+    }
+    if (enabled)
+    {
+        scheduleSubVfoControlRefresh();
+    }
+}
+
+void RadioBackend::scheduleSubVfoControlRefresh()
+{
+    invokeOnCurrentCommander(
+        [](Commander* commandSession)
+        {
+            for (const Funcs func :
+                 {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
+                  funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus, funcReadFreqOffset,
+                  funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
             {
-                requestSubVfoStateForCommand(commandSession);
-                commandSession->receiveCommand(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
-            }
-            else
-            {
-                selectMainVfoForCommand(commandSession);
+                scheduleVfoReceiverReadForCommand(commandSession, Vfo::Sub, func);
             }
         });
 }
@@ -1736,7 +1888,7 @@ void RadioBackend::observeVfoFrequency(quint64 hz, uchar receiver)
     // intermediate state for duplicated VFO contents or inject another
     // receiver-selection sequence into the exchange. The first frequency
     // report after the exchange settles evaluates the pair normally.
-    if (m_mainSubExchangePending)
+    if (m_mainSubExchangePending || m_dualWatchTransition.pending())
     {
         m_sameBandRefreshPolicy.reset();
         return;
@@ -1879,6 +2031,12 @@ bool RadioBackend::setPtt(bool on)
 
     if (on)
     {
+        if (m_dualWatchTransition.pending())
+        {
+            emit statusMessage(QStringLiteral("PTT blocked: waiting for dual-watch transition"),
+                               MessageSeverity::Error);
+            return false;
+        }
         if (m_transmitConfiguration.confirmationPending())
         {
             emit statusMessage(QStringLiteral("PTT blocked: waiting for radio settings confirmation"),
@@ -2713,6 +2871,10 @@ void RadioBackend::onLanReady()
                     return;
                 }
                 if (m_smeterPollQueued)
+                {
+                    return;
+                }
+                if (m_dualWatchTransition.pending())
                 {
                     return;
                 }

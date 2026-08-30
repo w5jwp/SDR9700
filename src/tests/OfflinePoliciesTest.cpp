@@ -1,4 +1,5 @@
 #include "ConnectionRetryPolicy.h"
+#include "DualWatchTransitionPolicy.h"
 #include "MemorySyncPolicy.h"
 #include "MainSubExchangePolicy.h"
 #include "PttConfirmationPolicy.h"
@@ -30,7 +31,39 @@ class OfflinePoliciesTest : public QObject
     void validatesDuplexTransmitFrequency();
     void blocksPttUntilTransmitConfigurationIsConfirmed();
     void serializesRepeatedMainSubExchanges();
+    void requiresDualWatchStateAndSubIdentity();
 };
+
+void OfflinePoliciesTest::requiresDualWatchStateAndSubIdentity()
+{
+    // Alternate ten thousand complete transitions so every enable must wait
+    // for fresh SUB identity and every disable must remain state-confirmed.
+    constexpr int kTransitionCount = 10000;
+    sdr9700::DualWatchTransitionPolicy policy;
+
+    for (int transition = 0; transition < kTransitionCount; ++transition)
+    {
+        const bool enable = transition % 2 == 0;
+        QVERIFY(policy.request(enable));
+        QVERIFY(!policy.request(!enable));
+        QVERIFY(!policy.observeState(!enable));
+        QVERIFY(!policy.complete());
+        QVERIFY(policy.observeState(enable));
+
+        if (enable)
+        {
+            QCOMPARE(policy.missingConfirmations(), quint8(sdr9700::DualWatchTransitionPolicy::kSubFrequencyConfirmed |
+                                                           sdr9700::DualWatchTransitionPolicy::kSubModeConfirmed));
+            policy.observeSubMode();
+            QVERIFY(!policy.complete());
+            policy.observeSubFrequency();
+        }
+
+        QVERIFY(policy.complete());
+        policy.reset();
+        QVERIFY(!policy.pending());
+    }
+}
 
 void OfflinePoliciesTest::serializesRepeatedMainSubExchanges()
 {

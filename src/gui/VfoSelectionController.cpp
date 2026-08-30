@@ -124,6 +124,12 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                     m_panel->setExchangePending(false);
                     setPttReady(true);
                 });
+        connect(m_backend, &IRadioBackend::dualWatchTransitionPendingChanged, this,
+                [this](bool pending)
+                {
+                    m_panel->setDualWatchPending(pending);
+                    setPttReady(!pending && !m_selectionPending && !m_exchangePolicy.pending());
+                });
         connect(m_backend, &IRadioBackend::pttChanged, this,
                 [this](bool transmitting)
                 {
@@ -256,6 +262,7 @@ void VfoSelectionController::reset()
     m_exchangePolicy.reset();
     m_selectedAction = {};
     m_panel->setExchangePending(false);
+    m_panel->setDualWatchPending(false);
     setPttReady(true);
     m_transmitting = false;
     m_panel->setSelectedVfo(Vfo::Main);

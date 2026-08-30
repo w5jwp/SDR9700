@@ -247,6 +247,13 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
     QVERIFY(!exchangeButton->isEnabled());
     panel.setExchangePending(false);
     QVERIFY(exchangeButton->isEnabled());
+    panel.setDualWatchPending(true);
+    QVERIFY(!mainButton->isEnabled());
+    QVERIFY(!subButton->isEnabled());
+    QVERIFY(!exchangeButton->isEnabled());
+    QVERIFY(!dualWatchButton->isEnabled());
+    panel.setDualWatchPending(false);
+    QVERIFY(dualWatchButton->isEnabled());
     panel.show();
     QApplication::processEvents();
     QWidget* exchangeDivider = panel.findChild<QWidget*>(QStringLiteral("exchangeDivider"));

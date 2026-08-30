@@ -14,6 +14,7 @@
 #include "PttConfirmationPolicy.h"
 #include "TransmitConfigurationPolicy.h"
 #include "SameBandRefreshPolicy.h"
+#include "DualWatchTransitionPolicy.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -108,6 +109,8 @@ class RadioBackend : public IRadioBackend
     void shutdownConnection(bool emitDisconnectedSignal = true, bool emitDisconnectedStage = true);
     void requestInitialRadioState();
     void requestPostReadyRadioState();
+    void finishDualWatchTransition(bool success);
+    void scheduleSubVfoControlRefresh();
     void updateReadyState();
     void setScopeSyncDegraded(bool degraded);
     void handleReportedFrequency(quint64 hz);
@@ -190,13 +193,18 @@ class RadioBackend : public IRadioBackend
     QElapsedTimer m_meterPollTuneHoldoff;
     QTimer* m_bandStateRefreshTimer{nullptr};
     QTimer* m_mainSubExchangeRetryTimer{nullptr};
+    QTimer* m_dualWatchRetryTimer{nullptr};
     QElapsedTimer m_mainSubExchangeClock;
+    QElapsedTimer m_dualWatchTransitionClock;
     int m_currentBandKey{-1};
     quint64 m_currentMainFrequencyHz{0};
     quint64 m_currentSubFrequencyHz{0};
     sdr9700::SameBandRefreshPolicy m_sameBandRefreshPolicy;
     Vfo m_activeVfo{Vfo::Main};
     bool m_dualWatchEnabled{false};
+    sdr9700::DualWatchTransitionPolicy m_dualWatchTransition;
+    bool m_dualWatchIdentityRequested{false};
+    int m_dualWatchRetryCount{0};
     bool m_mainSubExchangePending{false};
     bool m_mainSubExchangeDispatched{false};
     quint8 m_mainSubExchangeConfirmations{0};

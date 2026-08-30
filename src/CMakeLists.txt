@@ -124,6 +124,7 @@ set(SDR9700_APP_SOURCES
     backend/IRadioBackend.h
     backend/TransmitFrequencyPolicy.h
     backend/TransmitConfigurationPolicy.h
+    backend/DualWatchTransitionPolicy.h
     backend/ConnectionRetryPolicy.h
     backend/ScopeController.h
     backend/ScopeController.cpp
