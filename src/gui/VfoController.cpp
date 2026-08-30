@@ -505,7 +505,7 @@ void VfoController::showReceiverControlMenu(const QString& control)
                                  qMakePair(QStringLiteral("MID"), QStringLiteral("mid")),
                                  qMakePair(QStringLiteral("SLOW"), QStringLiteral("slow"))})
         {
-            QAction* action = menu.addAction(item.first);
+            QAction* const action = menu.addAction(item.first);
             connect(action, &QAction::triggered, this,
                     [this, mode = item.second]() { m_backend->setVfoAgcMode(m_vfo, mode); });
         }

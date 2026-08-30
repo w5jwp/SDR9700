@@ -53,8 +53,9 @@ ApplicationConfigurationSettingsPanel::ApplicationConfigurationSettingsPanel(QWi
     applicationLayout->addLayout(pathRow);
 
     auto* applicationButtonRow = new QHBoxLayout;
-    auto* backupConfigurationButton = addActionButton(applicationButtonRow, applicationGroup, QStringLiteral("Backup"));
-    auto* restoreConfigurationButton =
+    auto* const backupConfigurationButton =
+        addActionButton(applicationButtonRow, applicationGroup, QStringLiteral("Backup"));
+    auto* const restoreConfigurationButton =
         addActionButton(applicationButtonRow, applicationGroup, QStringLiteral("Restore"));
     applicationButtonRow->addStretch(1);
     auto* resetConfigurationButton = addActionButton(applicationButtonRow, applicationGroup, QStringLiteral("Reset"));

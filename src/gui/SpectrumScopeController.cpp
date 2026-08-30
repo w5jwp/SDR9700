@@ -758,10 +758,6 @@ void SpectrumScopeController::scheduleSpectrumScopeTune(quint64 hz, bool snapToT
     {
         const quint64 expectedSourceCenterHz = recenterDisplay ? hz : displayCenterHz;
         m_window->m_spectrumScope->holdDisplayCenter(displayCenterHz / 1e6, expectedSourceCenterHz / 1e6);
-    }
-
-    if (m_window->m_spectrumScope)
-    {
         m_window->m_spectrumScope->centerOnFrequency(displayCenterHz / 1e6);
     }
     updateSpectrumVfoMarker();

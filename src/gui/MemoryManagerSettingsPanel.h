@@ -3,8 +3,6 @@
 
 #include <QWidget>
 
-class QSpinBox;
-
 class MemoryManagerSettingsPanel : public QWidget
 {
     Q_OBJECT
@@ -14,7 +12,4 @@ class MemoryManagerSettingsPanel : public QWidget
 
   signals:
     void pollIntervalSecondsChanged(int seconds);
-
-  private:
-    QSpinBox* m_pollIntervalSpin{nullptr};
 };

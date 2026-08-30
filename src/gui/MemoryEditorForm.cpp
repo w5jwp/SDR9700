@@ -316,7 +316,7 @@ void MemoryEditorForm::show(const QString& memoryId)
     auto* dtcsValueRowLayout = new QHBoxLayout(dtcsValueRow);
     dtcsValueRowLayout->setContentsMargins(0, 0, 0, 0);
     dtcsValueRowLayout->setSpacing(8);
-    auto addToneColumn = [](QHBoxLayout* layout, QWidget* parent, const QString& labelText, QWidget* field)
+    auto addToneColumn = [](QHBoxLayout* layout, QWidget* parent, const QString& labelText, QWidget* const field)
     {
         auto* column = new QWidget(parent);
         auto* columnLayout = new QVBoxLayout(column);
@@ -402,7 +402,7 @@ void MemoryEditorForm::show(const QString& memoryId)
     auto* optionsRowLayout = new QHBoxLayout(optionsRow);
     optionsRowLayout->setContentsMargins(0, 0, 0, 0);
     optionsRowLayout->setSpacing(8);
-    auto addOptionColumn = [optionsRow, optionsRowLayout](const QString& labelText, QWidget* field, int stretch)
+    auto addOptionColumn = [optionsRow, optionsRowLayout](const QString& labelText, QWidget* const field, int stretch)
     {
         auto* column = new QWidget(optionsRow);
         auto* columnLayout = new QVBoxLayout(column);
@@ -425,8 +425,8 @@ void MemoryEditorForm::show(const QString& memoryId)
     memoryGrid->setVerticalSpacing(6);
     memoryGrid->setColumnStretch(0, 1);
     memoryGrid->setColumnStretch(1, 1);
-    auto addMemoryField =
-        [memoryFields, memoryGrid](int row, int column, const QString& labelText, QWidget* field, int columnSpan = 1)
+    auto addMemoryField = [memoryFields, memoryGrid](int row, int column, const QString& labelText,
+                                                     QWidget* const field, int columnSpan = 1)
     {
         auto* fieldContainer = new QWidget(memoryFields);
         auto* fieldLayout = new QVBoxLayout(fieldContainer);

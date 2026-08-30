@@ -37,14 +37,12 @@ jobs:
           xargs -0 clang-format-23 --dry-run --Werror
       - name: Static analysis
         run: |
+          # Keep source correctness categories enabled. These filters cover
+          # external include modeling limitations and analyzer status reports.
           cppcheck --error-exitcode=1 --enable=all --inconclusive --std=c++20 \
             --library=qt \
             --suppress=missingIncludeSystem \
             --suppress=missingInclude \
-            --suppress=unknownMacro \
-            --suppress=noValidConfiguration \
-            --suppress=toomanyconfigs \
-            --suppress=preprocessorErrorDirective \
             --suppress=normalCheckLevelMaxBranches \
             --suppress=checkersReport \
             --suppressions-list=.cppcheck-suppressions \

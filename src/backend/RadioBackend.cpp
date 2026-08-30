@@ -832,7 +832,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     // CachingQueue's batched sendValues signal.  Connect once per connectToRadio()
     // call; disconnect the previous session's queue connection first because
     // CachingQueue is a process-wide singleton.
-    CachingQueue* q = CachingQueue::getInstance();
+    CachingQueue* const q = CachingQueue::getInstance();
     if (m_queueSendValuesConnection)
     {
         QObject::disconnect(m_queueSendValuesConnection);

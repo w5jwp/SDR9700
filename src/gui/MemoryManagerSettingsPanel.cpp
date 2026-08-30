@@ -23,21 +23,21 @@ MemoryManagerSettingsPanel::MemoryManagerSettingsPanel(QWidget* parent) : QWidge
     syncLayout->setContentsMargins(10, 12, 10, 10);
     syncLayout->setSpacing(8);
 
-    m_pollIntervalSpin = new QSpinBox(syncGroup);
-    m_pollIntervalSpin->setRange(kMemoryPollIntervalMinSeconds, kMemoryPollIntervalMaxSeconds);
-    m_pollIntervalSpin->setSingleStep(30);
-    m_pollIntervalSpin->setSuffix(QStringLiteral(" seconds"));
-    m_pollIntervalSpin->setValue(
+    auto* const pollIntervalSpin = new QSpinBox(syncGroup);
+    pollIntervalSpin->setRange(kMemoryPollIntervalMinSeconds, kMemoryPollIntervalMaxSeconds);
+    pollIntervalSpin->setSingleStep(30);
+    pollIntervalSpin->setSuffix(QStringLiteral(" seconds"));
+    pollIntervalSpin->setValue(
         AppSettings::instance()
             .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
             .toInt());
-    syncLayout->addRow(QStringLiteral("Poll interval:"), m_pollIntervalSpin);
+    syncLayout->addRow(QStringLiteral("Poll interval:"), pollIntervalSpin);
 
     root->addWidget(syncGroup);
     root->addStretch(1);
 
-    connect(m_pollIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int seconds)
+    connect(pollIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int seconds)
             { AppSettings::instance().setValue(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), seconds); });
-    connect(m_pollIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(pollIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &MemoryManagerSettingsPanel::pollIntervalSecondsChanged);
 }

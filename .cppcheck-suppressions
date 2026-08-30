@@ -1,4 +1,3 @@
-unusedFunction:src/core/CachingQueue.cpp
 unusedFunction:src/models/RadioModel.h
 unusedFunction:src/models/VfoModel.h
 // QtTest invokes private test slots through generated meta-object code.
@@ -44,5 +43,3 @@ functionConst:src/tests/VfoBackendTest.cpp
 unusedFunction:src/tests/VfoDisplayTest.cpp
 unusedFunction:src/tests/VfoModelTest.cpp
 functionConst:src/tests/SystemStatsTest.cpp
-syntaxError:src/build/*
-unmatchedSuppression

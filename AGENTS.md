@@ -81,16 +81,19 @@ cppcheck --enable=all --inconclusive --std=c++20 \
   --library=qt \
   --suppress=missingIncludeSystem \
   --suppress=missingInclude \
-  --suppress=unknownMacro \
-  --suppress=noValidConfiguration \
-  --suppress=toomanyconfigs \
-  --suppress=preprocessorErrorDirective \
+  --suppress=normalCheckLevelMaxBranches \
+  --suppress=checkersReport \
   --suppressions-list=.cppcheck-suppressions \
   -I src -i src/build src
 ```
 
 Do not scan `src/build` with cppcheck. It contains generated CMake, Qt MOC,
 and resource files, which wastes review time and obscures source findings.
+The command suppresses only missing external/include-model details and analyzer
+status reports. Keep all source correctness categories enabled. Add a
+source-specific suppression only
+for a demonstrated false positive that cannot reasonably be expressed more
+clearly in code, and document its reason in `.cppcheck-suppressions`.
 
 Any findings from these tools that are not already suppressed must be included
 in the review report.

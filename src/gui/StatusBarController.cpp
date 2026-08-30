@@ -410,7 +410,7 @@ void StatusBarController::buildStatusBar()
         cpuStatusLayout->setSpacing(0);
         cpuStatusLayout->setAlignment(Qt::AlignVCenter);
 
-        auto* cpuTitleLabel = makeStatusTitle(QStringLiteral("Processor"));
+        auto* const cpuTitleLabel = makeStatusTitle(QStringLiteral("Processor"));
         m_window->m_cpuLabel = makeStatusValue();
         cpuStatusLayout->addWidget(cpuTitleLabel);
         cpuStatusLayout->addWidget(m_window->m_cpuLabel);
@@ -428,7 +428,7 @@ void StatusBarController::buildStatusBar()
         memoryStatusLayout->setSpacing(0);
         memoryStatusLayout->setAlignment(Qt::AlignVCenter);
 
-        auto* memoryTitleLabel = makeStatusTitle(QStringLiteral("Memory"));
+        auto* const memoryTitleLabel = makeStatusTitle(QStringLiteral("Memory"));
         m_window->m_memLabel = makeStatusValue();
         memoryStatusLayout->addWidget(memoryTitleLabel);
         memoryStatusLayout->addWidget(m_window->m_memLabel);

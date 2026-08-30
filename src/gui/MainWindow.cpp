@@ -159,7 +159,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     connect(m_vfo, &VfoModel::toneAccessModeChanged, this, &MainWindow::onToneAccessModeChanged);
     connect(m_vfo, &VfoModel::toneFrequencyChanged, this, &MainWindow::onToneFrequencyChanged);
     connect(m_vfo, &VfoModel::dtcsCodeChanged, this, &MainWindow::onDtcsCodeChanged);
-    if (auto* backend = m_model->backend())
+    if (auto* const backend = m_model->backend())
     {
         connect(backend, &IRadioBackend::radioValueUpdated, this,
                 [this](Funcs func, const QVariant& value, uchar receiver)
@@ -655,19 +655,15 @@ void MainWindow::showRadioChooserDialog()
                     onConnectToProfile(*p);
                 }
             });
-    QPointer<RadioChooserDialog> dlgGuard = dlg;
     centerPopupWindow(dlg);
-    if (dlgGuard)
+    dlg->exec();
+    // QPointer becomes null if nested event processing destroyed the dialog.
+    // Otherwise defer this dialog's deletion until control returns to the main
+    // event loop; the identity check prevents touching a replacement dialog.
+    if (m_radioChooserDialog == dlg)
     {
-        dlgGuard->exec();
-    }
-    if (m_radioChooserDialog == dlgGuard)
-    {
+        dlg->deleteLater();
         m_radioChooserDialog = nullptr;
-    }
-    if (dlgGuard)
-    {
-        dlgGuard->deleteLater();
     }
 }
 
