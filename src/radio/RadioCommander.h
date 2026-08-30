@@ -85,9 +85,7 @@ class RadioCommander : public QObject
     // proves that the selected radio is processing commands.
     bool radioPoweredOn = false;
 
-    struct radioCapabilities radioCaps
-    {
-    };
+    struct radioCapabilities radioCaps{};
     bool haveRadioCaps = false;
 
   private:

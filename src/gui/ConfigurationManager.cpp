@@ -273,12 +273,14 @@ QJsonObject cleanConfigurationSettings(const QJsonDocument& doc)
     const QJsonObject mainWindowSource = source.value(QStringLiteral("mainWindow")).toObject();
     QJsonObject mainWindow;
     insertCleanSetting(&mainWindow, mainWindowSource, QStringLiteral("positionX"),
-                       [](const QJsonValue& value, QJsonValue* normalized) {
+                       [](const QJsonValue& value, QJsonValue* normalized)
+                       {
                            return intStringValue(value, std::numeric_limits<int>::min(),
                                                  std::numeric_limits<int>::max(), normalized);
                        });
     insertCleanSetting(&mainWindow, mainWindowSource, QStringLiteral("positionY"),
-                       [](const QJsonValue& value, QJsonValue* normalized) {
+                       [](const QJsonValue& value, QJsonValue* normalized)
+                       {
                            return intStringValue(value, std::numeric_limits<int>::min(),
                                                  std::numeric_limits<int>::max(), normalized);
                        });

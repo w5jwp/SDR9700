@@ -67,9 +67,13 @@ root, before reporting findings:
 
 **clang-format** — apply in-place and report any files changed:
 ```bash
-find src -name '*.cpp' -o -name '*.h' | xargs clang-format -i
+find src -path src/build -prune -o \( -name '*.cpp' -o -name '*.h' \) -print0 \
+  | xargs -0 clang-format -i
 git diff --stat
 ```
+
+Use clang-format 23 for this command. Linux CI invokes `clang-format-23`
+explicitly; developers must not format the tree with a different major version.
 
 **cppcheck** — pedantic mode, using the project suppressions file:
 ```bash

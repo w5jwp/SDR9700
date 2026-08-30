@@ -115,7 +115,8 @@ void RadioRouter::enqueueBatch(const QVector<CacheItem>& items, quint64 session)
                     }
                     ++m_backpressureWaits;
                     m_pendingSpaceAvailable.wait(locker,
-                                                 [this, session]() {
+                                                 [this, session]()
+                                                 {
                                                      return m_pendingItems.size() < kMaxPendingItems ||
                                                             (session != 0 && session != m_queueSession);
                                                  });

@@ -13,12 +13,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Configure LLVM 23 package repository
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends ca-certificates wget
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb https://apt.llvm.org/noble/ llvm-toolchain-noble-23 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-toolchain-23.list
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends \
             build-essential cmake ninja-build pkg-config \
-            clang-format-18 cppcheck \
+            clang-format-23 cppcheck \
             qt6-base-dev qt6-multimedia-dev libssl-dev libopus-dev \
             libspeexdsp-dev libxkbcommon-dev libeigen3-dev libhidapi-dev
       - name: Build
@@ -26,7 +34,7 @@ jobs:
       - name: Verify formatting
         run: >-
           find src -path src/build -prune -o \( -name '*.cpp' -o -name '*.h' \) -print0 |
-          xargs -0 clang-format-18 --dry-run --Werror
+          xargs -0 clang-format-23 --dry-run --Werror
       - name: Static analysis
         run: |
           cppcheck --error-exitcode=1 --enable=all --inconclusive --std=c++20 \
