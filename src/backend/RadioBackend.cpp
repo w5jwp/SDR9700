@@ -1296,9 +1296,10 @@ void RadioBackend::setRfGain(int level)
 void RadioBackend::setTxPower(int level)
 {
     const ushort bounded = static_cast<ushort>(qBound(0, level, 255));
-    scheduleVfoReceiverCommand(
-        Vfo::Main, funcRFPower, [bounded](Commander* commandSession, uchar receiver)
-        { commandSession->receiveCommand(funcRFPower, QVariant::fromValue(bounded), receiver); });
+    scheduleVfoReceiverCommand(Vfo::Main, funcRFPower,
+                               [bounded](Commander* commandSession, uchar receiver) {
+                                   commandSession->receiveCommand(funcRFPower, QVariant::fromValue(bounded), receiver);
+                               });
 }
 
 void RadioBackend::setTuningStep(int step)
@@ -1679,9 +1680,10 @@ void RadioBackend::setAgcMode(const QString& mode)
     {
         agc = 3;
     }
-    routeVfoReceiverCommand(
-        m_activeVfo, [agc](Commander* commandSession, uchar receiver)
-        { commandSession->receiveCommand(funcAGCTimeConstant, QVariant::fromValue(agc), receiver); });
+    routeVfoReceiverCommand(m_activeVfo,
+                            [agc](Commander* commandSession, uchar receiver) {
+                                commandSession->receiveCommand(funcAGCTimeConstant, QVariant::fromValue(agc), receiver);
+                            });
 }
 
 void RadioBackend::setAutoNotch(bool on)
@@ -2248,8 +2250,7 @@ void RadioBackend::selectVfoMode()
     const bool transferSelectedMemory = m_selectedRadioMemory.has_value();
     m_selectedRadioMemory.reset();
     invokeOnCurrentCommander(
-        [transferSelectedMemory](Commander* commandSession)
-        {
+        [transferSelectedMemory](Commander* commandSession) {
             commandSession->receiveCommand(transferSelectedMemory ? funcMemoryToVFO : funcVFOModeSelect, QVariant(), 0);
         });
 }

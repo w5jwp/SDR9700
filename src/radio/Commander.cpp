@@ -349,10 +349,11 @@ void Commander::scheduleConfirmatoryAction(Funcs func, uchar receiver, std::func
 void Commander::enqueueScheduledAction(ScheduledCommandClass commandClass, Funcs func, uchar receiver,
                                        std::function<void()> action)
 {
-    const auto existing = std::find_if(
-        m_scheduledCommands.begin(), m_scheduledCommands.end(),
-        [commandClass, func, receiver](const ScheduledCommand& command)
-        { return command.commandClass == commandClass && command.func == func && command.receiver == receiver; });
+    const auto existing = std::find_if(m_scheduledCommands.begin(), m_scheduledCommands.end(),
+                                       [commandClass, func, receiver](const ScheduledCommand& command) {
+                                           return command.commandClass == commandClass && command.func == func &&
+                                                  command.receiver == receiver;
+                                       });
     if (existing != m_scheduledCommands.end())
     {
         existing->action = std::move(action);
