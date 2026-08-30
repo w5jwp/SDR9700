@@ -15,6 +15,10 @@ constexpr int kRadioMemoryRefreshIntervalMs = 25;
 constexpr int kRadioMemorySyncReplyGraceMs = 1000;
 constexpr int kRadioMemorySyncSafetyMarginMs = 5000;
 constexpr int kRadioMemoryOperationSyncMaxAttempts = 3;
+// A normal sweep already asks for every radio slot once. Retry only the slots
+// that did not answer so a transient loss can recover without multiplying the
+// normal 297-command load or keeping startup blocked indefinitely.
+constexpr int kRadioMemoryMissingRetryMaxRounds = 2;
 constexpr int kRadioMemoryInitialSyncRetryDelayMs = 2000;
 constexpr int kRadioMemoryWriteIntervalMs = 100;
 constexpr int kRadioMemoryWriteReadbackRetryMs = 500;

@@ -15,6 +15,7 @@
 #include <QMessageBox>
 #include <QThread>
 #include <QTimer>
+#include <algorithm>
 
 using namespace sdr9700::ui::main_window;
 using namespace sdr9700::memory;
@@ -142,10 +143,13 @@ void MemorySyncController::requestRadioMemoryRefresh()
         return;
     }
 
-    m_refreshGroup = kRadioMemoryFirstGroup;
-    m_refreshChannel = kRadioMemoryFirstChannel;
+    m_pollKeys.clear();
+    m_pollKeys.reserve(kRadioMemorySyncTotal);
+    m_pollIndex = 0;
     m_currentGroup = 0;
     m_currentChannel = 0;
+    m_missingRetryRound = 0;
+    m_lastUnansweredSlotCount = 0;
     m_refreshInProgress = true;
     m_receivedMemoryKeys.clear();
     m_expectedMemoryKeys.clear();
@@ -154,6 +158,7 @@ void MemorySyncController::requestRadioMemoryRefresh()
         for (quint16 channel = kRadioMemoryFirstChannel; channel <= kRadioMemoryLastChannel; ++channel)
         {
             m_expectedMemoryKeys.insert(radioMemoryKey(group, channel));
+            m_pollKeys.append(radioMemoryKey(group, channel));
         }
     }
 
@@ -191,7 +196,7 @@ void MemorySyncController::requestNextRadioMemory()
         finishRadioMemoryRefresh(false);
         return;
     }
-    if (m_refreshGroup > kRadioMemoryLastGroup)
+    if (m_pollIndex >= m_pollKeys.size())
     {
         m_refreshTimer->stop();
         if (allExpectedRadioMemoriesReceived())
@@ -212,8 +217,9 @@ void MemorySyncController::requestNextRadioMemory()
         return;
     }
 
-    m_currentGroup = m_refreshGroup;
-    m_currentChannel = m_refreshChannel;
+    const quint32 key = m_pollKeys.at(m_pollIndex++);
+    m_currentGroup = static_cast<quint16>(key >> 16);
+    m_currentChannel = static_cast<quint16>(key & 0xffffU);
     if (m_currentChannel == kRadioMemoryFirstChannel)
     {
         qInfo(logGui()).noquote() << "Radio memory sync polling" << memoryBandLabelForGroup(m_currentGroup);
@@ -223,14 +229,13 @@ void MemorySyncController::requestNextRadioMemory()
         qInfo(logGui()).noquote() << "Radio memory sync polling" << memoryBandLabelForGroup(m_currentGroup) << "channel"
                                   << m_currentChannel;
     }
-    const int syncIndex = sdr9700::memorySyncProgressIndex(m_currentGroup, m_currentChannel, kRadioMemoryFirstGroup,
-                                                           kRadioMemoryFirstChannel, kRadioMemoryLastChannel);
-    m_owner->setMemoryProgress(QStringLiteral("Syncing %1 channel %2")
+    const QString action = m_missingRetryRound > 0 ? QStringLiteral("Retrying") : QStringLiteral("Syncing");
+    m_owner->setMemoryProgress(QStringLiteral("%1 %2 channel %3")
+                                   .arg(action)
                                    .arg(memoryBandLabelForGroup(m_currentGroup))
                                    .arg(m_currentChannel, 3, 10, QLatin1Char('0')),
-                               syncIndex, kRadioMemorySyncTotal);
-    m_owner->m_window->m_model->requestRadioMemory(m_refreshGroup, m_refreshChannel);
-    sdr9700::advanceMemorySyncSlot(m_refreshGroup, m_refreshChannel, kRadioMemoryFirstChannel, kRadioMemoryLastChannel);
+                               m_receivedMemoryKeys.size(), m_expectedMemoryKeys.size());
+    m_owner->m_window->m_model->requestRadioMemory(m_currentGroup, m_currentChannel);
     m_refreshTimer->start();
 }
 
@@ -243,7 +248,7 @@ void MemorySyncController::handleRadioMemoryReceived(quint32 key)
     }
 
     m_refreshTimer->stop();
-    if (m_refreshGroup > kRadioMemoryLastGroup)
+    if (m_pollIndex >= m_pollKeys.size())
     {
         m_owner->setMemoryProgress(QStringLiteral("Finalizing radio memory sync"), m_receivedMemoryKeys.size(),
                                    m_expectedMemoryKeys.size());
@@ -256,6 +261,36 @@ void MemorySyncController::handleRadioMemoryReceived(quint32 key)
     requestNextRadioMemory();
 }
 
+bool MemorySyncController::startMissingMemoryRetry()
+{
+    if (m_missingRetryRound >= kRadioMemoryMissingRetryMaxRounds)
+    {
+        return false;
+    }
+
+    const QSet<quint32> missing = m_expectedMemoryKeys - m_receivedMemoryKeys;
+    if (missing.isEmpty())
+    {
+        return false;
+    }
+
+    m_pollKeys = missing.values();
+    std::sort(m_pollKeys.begin(), m_pollKeys.end());
+    m_pollIndex = 0;
+    ++m_missingRetryRound;
+    qWarning(logGui()).nospace() << "Radio memory sync retry started: missing_slots=" << m_pollKeys.size()
+                                 << " retry_round=" << m_missingRetryRound
+                                 << " retry_round_limit=" << kRadioMemoryMissingRetryMaxRounds;
+    m_owner->setMemoryProgress(QStringLiteral("Retrying %1 missing memory %2")
+                                   .arg(m_pollKeys.size())
+                                   .arg(m_pollKeys.size() == 1 ? QStringLiteral("slot") : QStringLiteral("slots")),
+                               m_receivedMemoryKeys.size(), m_expectedMemoryKeys.size());
+    m_syncTimeoutTimer->start(radioMemorySyncTimeoutMs());
+    m_replyGraceTimer->stop();
+    requestNextRadioMemory();
+    return true;
+}
+
 void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
 {
     m_refreshTimer->stop();
@@ -264,9 +299,14 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     m_owner->m_memoryViewController->stopScheduledRefresh();
     const bool wasInProgress = m_refreshInProgress;
     const bool completedPollPass = wasInProgress && !timedOut && m_owner->m_window->m_model &&
-                                   m_owner->m_window->m_model->isConnected() && m_refreshGroup > kRadioMemoryLastGroup;
+                                   m_owner->m_window->m_model->isConnected() && m_pollIndex >= m_pollKeys.size();
     const bool receivedAllExpected = wasInProgress && allExpectedRadioMemoriesReceived();
+    const int unansweredSlotCount = wasInProgress ? (m_expectedMemoryKeys - m_receivedMemoryKeys).size() : 0;
     const bool noRadioReplies = completedPollPass && m_receivedMemoryKeys.isEmpty();
+    if (completedPollPass && !receivedAllExpected && startMissingMemoryRetry())
+    {
+        return;
+    }
     const bool scheduledRefresh = m_scheduledRefreshInProgress;
     m_scheduledRefreshInProgress = false;
     timedOut = timedOut || noRadioReplies;
@@ -282,6 +322,8 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
         m_refreshInProgress = false;
         m_currentGroup = 0;
         m_currentChannel = 0;
+        m_pollKeys.clear();
+        m_pollIndex = 0;
         m_expectedMemoryKeys.clear();
         m_owner->clearMemoryProgress();
         requestRadioMemoryRefresh();
@@ -289,8 +331,11 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     }
 
     m_refreshInProgress = false;
+    m_lastUnansweredSlotCount = unansweredSlotCount;
     m_currentGroup = 0;
     m_currentChannel = 0;
+    m_pollKeys.clear();
+    m_pollIndex = 0;
     m_expectedMemoryKeys.clear();
     m_owner->clearMemoryProgress();
 
@@ -316,14 +361,24 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     else if (completedPollPass && !m_initialSyncComplete)
     {
         m_initialSyncComplete = true;
+        if (unansweredSlotCount > 0)
+        {
+            qWarning(logGui()).nospace() << "Initial radio memory sync exhausted targeted retries: unanswered_slots="
+                                         << unansweredSlotCount;
+        }
         qInfo(logGui()).noquote() << "Initial radio memory sync complete with" << m_owner->m_radioMemoriesByKey.size()
-                                  << "stored memories";
+                                  << "stored memories and" << unansweredSlotCount << "unanswered slots";
         emit m_owner->initialMemorySyncChanged(true);
     }
     else if (completedPollPass)
     {
+        if (unansweredSlotCount > 0)
+        {
+            qWarning(logGui()).nospace() << "Radio memory sync exhausted targeted retries: unanswered_slots="
+                                         << unansweredSlotCount;
+        }
         qInfo(logGui()).noquote() << "Radio memory sync complete with" << m_owner->m_radioMemoriesByKey.size()
-                                  << "stored memories";
+                                  << "stored memories and" << unansweredSlotCount << "unanswered slots";
         if (scheduledRefresh)
         {
             m_owner->m_window->showToast(QStringLiteral("Scheduled memory sync complete"));
@@ -349,6 +404,7 @@ void MemorySyncController::clearReceivedMemories()
 {
     m_receivedMemoryKeys.clear();
     m_expectedMemoryKeys.clear();
+    m_lastUnansweredSlotCount = 0;
 }
 
 bool MemorySyncController::allExpectedRadioMemoriesReceived() const
@@ -369,4 +425,14 @@ bool MemorySyncController::refreshInProgress() const
 bool MemorySyncController::hasReceivedMemory(quint32 key) const
 {
     return m_receivedMemoryKeys.contains(key);
+}
+
+int MemorySyncController::lastUnansweredSlotCount() const
+{
+    return m_lastUnansweredSlotCount;
+}
+
+int MemorySyncController::missingRetryRound() const
+{
+    return m_missingRetryRound;
 }

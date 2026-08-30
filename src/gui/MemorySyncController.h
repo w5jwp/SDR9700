@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QSet>
+#include <QVector>
 #include <functional>
 
 class MemoryController;
@@ -28,10 +29,16 @@ class MemorySyncController : public QObject
     bool initialMemorySyncComplete() const;
     bool refreshInProgress() const;
     bool hasReceivedMemory(quint32 key) const;
+    // These values remain available after a sweep completes so the memory
+    // view and deterministic tests can report the final verification result
+    // without inferring it from transient progress-label text.
+    int lastUnansweredSlotCount() const;
+    int missingRetryRound() const;
 
   private:
     void startScheduledRadioMemoryRefresh();
     void requestNextRadioMemory();
+    bool startMissingMemoryRetry();
     void finishRadioMemoryRefresh(bool timedOut = false);
     bool allExpectedRadioMemoriesReceived() const;
 
@@ -42,13 +49,18 @@ class MemorySyncController : public QObject
     QTimer* m_replyGraceTimer{nullptr};
     QSet<quint32> m_receivedMemoryKeys;
     QSet<quint32> m_expectedMemoryKeys;
-    quint16 m_refreshGroup{1};
-    quint16 m_refreshChannel{1};
+    // The initial pass contains every radio slot. Retry passes replace this
+    // vector with only the still-unanswered keys while preserving the two sets
+    // above as the authoritative whole-sweep completion state.
+    QVector<quint32> m_pollKeys;
+    qsizetype m_pollIndex{0};
     quint16 m_currentGroup{0};
     quint16 m_currentChannel{0};
     bool m_refreshInProgress{false};
     bool m_initialSyncComplete{false};
     bool m_scheduledRefreshInProgress{false};
     int m_operationSyncAttempt{0};
+    int m_missingRetryRound{0};
+    int m_lastUnansweredSlotCount{0};
     Completion m_operationCompletion;
 };

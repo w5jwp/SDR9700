@@ -398,14 +398,18 @@ void MemoryViewController::rebuild()
         const int verifiedCount = static_cast<int>(std::count_if(
             memories.cbegin(), memories.cend(), [](const MemoryRecord& memory) { return memory.verifiedThisSession; }));
         const int cachedCount = totalCount - verifiedCount;
+        const int unansweredSlotCount = m_owner->m_memorySyncController->lastUnansweredSlotCount();
         if (bandFilter.isEmpty())
         {
-            if (cachedCount > 0)
+            if (cachedCount > 0 || unansweredSlotCount > 0)
             {
-                m_owner->m_window->m_memoryCountLabel->setText(QStringLiteral("%1 total (%2 verified, %3 cached)")
-                                                                   .arg(totalCount)
-                                                                   .arg(verifiedCount)
-                                                                   .arg(cachedCount));
+                m_owner->m_window->m_memoryCountLabel->setText(
+                    QStringLiteral("%1 total (%2 verified, %3 cached; %4 %5 unanswered)")
+                        .arg(totalCount)
+                        .arg(verifiedCount)
+                        .arg(cachedCount)
+                        .arg(unansweredSlotCount)
+                        .arg(unansweredSlotCount == 1 ? QStringLiteral("slot") : QStringLiteral("slots")));
             }
             else
             {

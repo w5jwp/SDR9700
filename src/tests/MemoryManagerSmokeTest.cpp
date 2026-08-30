@@ -7,6 +7,7 @@
 #include "MemoryController.h"
 #include "MemoryConstants.h"
 #include "MemoryDatabase.h"
+#include "MemorySyncController.h"
 #include "RadioChooserDialog.h"
 #include "RadioCommandController.h"
 #include "RadioProfile.h"
@@ -113,6 +114,10 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     {
         for (quint16 channel = 1; channel <= 99; ++channel)
         {
+            if (group == 3 && channel == 99)
+            {
+                continue;
+            }
             MemoryType reply;
             reply.group = group;
             reply.channel = channel;
@@ -125,10 +130,46 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
             QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
         }
     }
+    QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().startsWith(QStringLiteral("Finalizing radio memory sync")), 500);
+    auto* syncController = controller->findChild<MemorySyncController*>();
+    QVERIFY(syncController != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(syncController->missingRetryRound(), 1, 1500);
+
+    MemoryType recoveredReply;
+    recoveredReply.group = 3;
+    recoveredReply.channel = 99;
+    recoveredReply.del = true;
+    model.radioMemoryReceived(recoveredReply);
+    QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
     QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 memory total"), 1000);
     QVERIFY(progressBar->isHidden());
     QCOMPARE(memoryTable->rowCount(), 1);
     QVERIFY(memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
+
+    // A later sweep that never receives the occupied slot must retry only the
+    // missing key, finish after the bounded retry budget, and downgrade the
+    // retained database row to explicitly cached provenance. Startup and the
+    // memory UI must not remain locked forever around an unresponsive slot.
+    controller->forceRadioMemorySync();
+    for (quint16 group = 1; group <= 3; ++group)
+    {
+        for (quint16 channel = 1; channel <= 99; ++channel)
+        {
+            if (group == storedMemory.group && channel == storedMemory.channel)
+            {
+                continue;
+            }
+            MemoryType reply;
+            reply.group = group;
+            reply.channel = channel;
+            reply.del = true;
+            model.radioMemoryReceived(reply);
+            QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
+        }
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 total (0 verified, 1 cached; 1 slot unanswered)"),
+                              3500);
+    QVERIFY(!memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
 }
 
 void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()
