@@ -411,17 +411,19 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
         label->setStyleSheet(
             QStringLiteral("color: %1; font-size: 10px; font-weight: bold;").arg(UiTheme::Color::TextStatusSecondary));
         label->setAlignment(Qt::AlignCenter);
-        // STEP and SPAN need room for values such as "500 kHz". PEAK HOLD's
-        // compact "0 s"–"5 s" values otherwise leave conspicuous empty space
-        // inside its arrows, so size that value field to its actual content.
-        value->setFixedWidth(name == QLatin1String("PEAK HOLD") ? 28 : 52);
+        // Match the value cell to its rendered text. A fixed maximum-width
+        // field leaves invisible padding before the right chevron whenever a
+        // shorter STEP, SPAN, or PEAK HOLD value is selected.
         value->setAlignment(Qt::AlignCenter);
         value->setStyleSheet(
             QStringLiteral("color: %1; font-size: 10px; font-weight: bold;").arg(UiTheme::Color::TextBright));
 
-        const auto updateControl = [selector, value, previous, next]()
+        const auto updateControl = [selector, value, previous, next, control, layout]()
         {
             value->setText(selector->currentText());
+            value->setFixedWidth(value->fontMetrics().horizontalAdvance(value->text()));
+            layout->activate();
+            control->setFixedWidth(layout->sizeHint().width());
             previous->setEnabled(selector->currentIndex() > 0);
             next->setEnabled(selector->currentIndex() + 1 < selector->count());
         };
@@ -431,16 +433,12 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                          [selector]() { selector->setCurrentIndex(selector->currentIndex() + 1); });
         QObject::connect(selector, &QComboBox::currentTextChanged, control,
                          [updateControl](const QString&) { updateControl(); });
-        updateControl();
 
         layout->addWidget(previous);
         layout->addWidget(label);
         layout->addWidget(value);
         layout->addWidget(next);
-        if (name == QLatin1String("PEAK HOLD"))
-        {
-            control->setFixedWidth(layout->sizeHint().width());
-        }
+        updateControl();
         return control;
     };
 
