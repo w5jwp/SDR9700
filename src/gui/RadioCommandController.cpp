@@ -89,7 +89,7 @@ void RadioCommandController::cycleMode()
     m_window->m_vfo->setMode(modes.at(nextIndex));
 }
 
-void RadioCommandController::showOffsetMenu(const QPoint& position)
+void RadioCommandController::showOffsetMenu(const QPoint& position, quint64 receiveFrequencyHz)
 {
     if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
     {
@@ -101,7 +101,12 @@ void RadioCommandController::showOffsetMenu(const QPoint& position)
 
     const auto* simplexAction = menu.addAction(QStringLiteral("SIMPLEX"));
     menu.addSeparator();
-    const QVector<OffsetPreset> presets = offsetPresetsForHz(m_window->m_vfo->frequencyHz());
+    // The clicked controller already owns a confirmed frequency for its logical
+    // VFO. Do not consult the shared radio model here: selecting the other VFO
+    // is asynchronous, so that model can still contain the formerly selected
+    // side's frequency while this menu is being opened. Using it caused MAIN
+    // and SUB to offer one another's band-specific offset presets.
+    const QVector<OffsetPreset> presets = offsetPresetsForHz(receiveFrequencyHz);
     QVector<QAction*> presetActions;
     presetActions.reserve(presets.size());
     for (const OffsetPreset& preset : presets)
