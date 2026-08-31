@@ -9,6 +9,7 @@ class IcomRC28ManagerTest : public QObject
 
   private slots:
     void ledReportMatchesRc28Protocol();
+    void serialDescriptorOmitsProductPrefix();
     void buttonTransitionsPreservePttRelease();
     void closeReleasesHeldButtons();
 };
@@ -22,6 +23,14 @@ void IcomRC28ManagerTest::ledReportMatchesRc28Protocol()
     QCOMPARE(static_cast<quint8>(report.at(1)), quint8(0x01));
     QCOMPARE(static_cast<quint8>(report.at(2)), quint8(0x07));
     QCOMPARE(report.mid(3), QByteArray(30, '\0'));
+}
+
+void IcomRC28ManagerTest::serialDescriptorOmitsProductPrefix()
+{
+    QCOMPARE(IcomRC28Manager::normalizedSerialNumber(QStringLiteral("RC-28 01234567")), QStringLiteral("01234567"));
+    QCOMPARE(IcomRC28Manager::normalizedSerialNumber(QStringLiteral("  RC-28 01234567  ")), QStringLiteral("01234567"));
+    QCOMPARE(IcomRC28Manager::normalizedSerialNumber(QStringLiteral("01234567")), QStringLiteral("01234567"));
+    QVERIFY(IcomRC28Manager::normalizedSerialNumber(QStringLiteral("RC-28")).isEmpty());
 }
 
 void IcomRC28ManagerTest::buttonTransitionsPreservePttRelease()

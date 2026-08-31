@@ -79,6 +79,29 @@ QString IcomRC28Manager::detectDevice()
     return {};
 }
 
+QString IcomRC28Manager::normalizedSerialNumber(const QString& descriptorSerial)
+{
+    QString serial = descriptorSerial.trimmed();
+
+    // The RC-28 HID serial descriptor on macOS prefixes the unit's unique
+    // serial with the product name, for example "RC-28 01234567". Device name
+    // is already reported separately, so exposing that descriptor verbatim in
+    // the Settings panel makes the Serial field repeat product information.
+    // Normalize only the known RC-28 descriptor form; an unfamiliar descriptor
+    // remains intact so future firmware or platform formats are not truncated.
+    constexpr QLatin1StringView productName("RC-28");
+    if (serial == productName)
+    {
+        return {};
+    }
+    constexpr QLatin1StringView productPrefix("RC-28 ");
+    if (serial.startsWith(productPrefix))
+    {
+        serial = serial.sliced(productPrefix.size()).trimmed();
+    }
+    return serial;
+}
+
 QVector<IcomRC28Manager::ButtonTransition> IcomRC28Manager::buttonTransitions(uint8_t previous, uint8_t current)
 {
     QVector<ButtonTransition> transitions;
@@ -184,7 +207,8 @@ bool IcomRC28Manager::open()
     if (auto* info = hid_enumerate(kIcomRC28Vid, kIcomRC28Pid))
     {
         m_devicePath = QString::fromLatin1(info->path ? info->path : "");
-        m_serialNumber = info->serial_number ? QString::fromWCharArray(info->serial_number) : QString{};
+        m_serialNumber =
+            normalizedSerialNumber(info->serial_number ? QString::fromWCharArray(info->serial_number) : QString{});
         hid_free_enumeration(info);
     }
 
