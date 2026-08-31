@@ -264,9 +264,18 @@ RadioBackend::RadioBackend(QObject* parent)
             {
                 m_initialMainFrequencyReceived = true;
                 m_initialFrequencyReceived = true;
-                m_currentMainFrequencyHz = hz;
-                m_transmitConfiguration.confirmFrequency(hz);
-                handleReportedFrequency(hz);
+                const bool receiveFrequencyAccepted =
+                    m_transmitConfiguration.confirmFrequency(hz, m_pttState.safetyActive());
+                if (receiveFrequencyAccepted)
+                {
+                    // Keep the backend's band identity and PTT eligibility
+                    // anchored to receive state. During repeater transmit the
+                    // radio may report the shifted TX frequency here; the UI
+                    // still receives it below for its explicit PTT/memory
+                    // transition handling.
+                    m_currentMainFrequencyHz = hz;
+                    handleReportedFrequency(hz);
+                }
                 emit frequencyChanged(hz);
                 updateReadyState();
             });
