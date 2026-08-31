@@ -232,8 +232,25 @@ QJsonObject AutomationUiDriver::listControls()
 
 QObject* AutomationUiDriver::resolve(const QJsonObject& request)
 {
+    const QString id = request.value(QStringLiteral("controlId")).toString();
+    if (id.isEmpty())
+    {
+        return nullptr;
+    }
+
+    // Control identifiers belong to QObject instances and remain valid while
+    // the guarded object exists. Rewalking every visible widget hierarchy for
+    // every request made repeated operations pathologically expensive on
+    // slower systems. A registry rebuild is needed only when a client refers
+    // to an identifier that is not currently known, such as after a dialog was
+    // created or destroyed since the preceding ui_list response.
+    if (QObject* object = m_objects.value(id))
+    {
+        return object;
+    }
+
     rebuildRegistry();
-    return m_objects.value(request.value(QStringLiteral("controlId")).toString());
+    return m_objects.value(id);
 }
 
 QJsonObject AutomationUiDriver::activate(const QJsonObject& request)
