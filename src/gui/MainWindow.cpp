@@ -38,6 +38,7 @@
 #include "models/SpectrumScopeModel.h"
 
 #include <QToolBar>
+#include <QToolButton>
 #include <QAction>
 #include <QApplication>
 #include <QAudioDevice>
