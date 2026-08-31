@@ -1,0 +1,15 @@
+# SDR9700 CODEOWNERS
+#
+# @w5jwp is currently the project's sole maintainer and code owner. This
+# repository-wide rule covers source, tests, documentation, build and release
+# infrastructure, security configuration, this CODEOWNERS file, and files
+# added in the future.
+#
+# CODEOWNERS uses last-matching-pattern-wins semantics. Keep the single default
+# while one maintainer owns every area: adding path-specific rules with the same
+# owner would create maintenance work without changing review requirements.
+# Introduce narrower path rules only when the project gains additional owners
+# whose review authority differs by area. Place those rules below this default
+# and document their intended scope and ordering.
+
+* @w5jwp
