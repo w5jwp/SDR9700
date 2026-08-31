@@ -1489,6 +1489,104 @@ void RadioBackend::setVfoMode(Vfo vfo, const QString& mode)
                             });
 }
 
+void RadioBackend::applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall)
+{
+    if (recall.frequencyHz == 0 || m_pttState.safetyActive())
+    {
+        qWarning(logRadio()).noquote() << "Ignoring band recall without a frequency or while transmit safety is active";
+        return;
+    }
+
+    ModeInfo modeInfo;
+    const bool hasMode =
+        recall.mode.has_value() && recall.filter.has_value() && populateModeInfo(*recall.mode, &modeInfo);
+    if (hasMode)
+    {
+        modeInfo.filter = static_cast<quint8>(qBound(1, *recall.filter, 3));
+    }
+
+    // MAIN is the IC-9700 transmit path. Mark its frequency, duplex mode, and
+    // offset as pending before any CI-V is queued so PTT cannot race ahead of
+    // the confirming readbacks at the end of this restore.
+    if (vfo == Vfo::Main)
+    {
+        m_transmitConfiguration.requestFrequency(recall.frequencyHz);
+        if (recall.duplexMode.has_value())
+        {
+            m_transmitConfiguration.requestDuplexMode(*recall.duplexMode);
+        }
+        if (recall.repeaterOffsetHz.has_value())
+        {
+            m_transmitConfiguration.requestOffset(*recall.repeaterOffsetHz);
+        }
+    }
+
+    Frequency frequency;
+    frequency.Hz = recall.frequencyHz;
+    frequency.MHzDouble = recall.frequencyHz / 1e6;
+    frequency.VFO = activeVFO;
+
+    Frequency offset;
+    offset.Hz = recall.repeaterOffsetHz.value_or(0);
+    offset.MHzDouble = offset.Hz / 1e6;
+    offset.VFO = activeVFO;
+
+    scheduleVfoReceiverCommand(
+        vfo, funcFreqSet,
+        [recall, frequency, offset, modeInfo, hasMode](Commander* commandSession, uchar receiver)
+        {
+            // A direct frequency change can cause the IC-9700 to load another
+            // band's simplex defaults. Keep the entire restore in one routed
+            // receiver context, set frequency first, and then reassert every
+            // confirmed field remembered for that receiver/band.
+            commandSession->receiveCommandNoReadback(funcFreqSet, QVariant::fromValue(frequency), receiver);
+            if (hasMode)
+            {
+                commandSession->receiveCommandNoReadback(funcModeSet, QVariant::fromValue(modeInfo), receiver);
+            }
+            if (recall.repeaterOffsetHz.has_value())
+            {
+                commandSession->receiveCommandNoReadback(funcSendFreqOffset, QVariant::fromValue(offset), receiver);
+            }
+            if (recall.duplexMode.has_value())
+            {
+                commandSession->receiveCommandNoReadback(funcSplitStatus, QVariant::fromValue(*recall.duplexMode),
+                                                         receiver);
+            }
+            if (recall.toneFrequency.has_value())
+            {
+                commandSession->receiveCommandNoReadback(
+                    funcToneFreq, QVariant::fromValue(ToneInfo(*recall.toneFrequency)), receiver);
+            }
+            if (recall.toneSquelchFrequency.has_value())
+            {
+                commandSession->receiveCommandNoReadback(
+                    funcTSQLFreq, QVariant::fromValue(ToneInfo(*recall.toneSquelchFrequency)), receiver);
+            }
+            if (recall.dtcsCode.has_value())
+            {
+                commandSession->receiveCommandNoReadback(funcDTCSCode, QVariant::fromValue(ToneInfo(*recall.dtcsCode)),
+                                                         receiver);
+            }
+            if (recall.toneAccessMode.has_value())
+            {
+                RptrAccessData access;
+                access.accessMode = *recall.toneAccessMode;
+                commandSession->receiveCommandNoReadback(funcToneSquelchType, QVariant::fromValue(access), receiver);
+            }
+
+            // The radio remains authoritative. Read the complete restored
+            // bundle back instead of publishing the requested values locally.
+            commandSession->receiveCommand(funcFreqGet, QVariant(), receiver);
+            commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
+            for (const Funcs func :
+                 {funcSplitStatus, funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
+            {
+                commandSession->receiveCommand(func, QVariant(), receiver);
+            }
+        });
+}
+
 void RadioBackend::setVfoAgcMode(Vfo vfo, const QString& mode)
 {
     uchar agc = mode == QStringLiteral("fast") ? 1 : mode == QStringLiteral("slow") ? 3 : 2;

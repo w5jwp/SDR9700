@@ -1,4 +1,5 @@
 #include "RadioModel.h"
+#include "RadioState.h"
 #include "VfoModel.h"
 #include "SpectrumScopeModel.h"
 #include "MeterController.h"
@@ -14,6 +15,7 @@ namespace
 RadioModel::RadioModel(QObject* parent) : QObject(parent)
 {
     m_backend = new RadioBackend(this);
+    m_radioState = new sdr9700::RadioState(m_backend, this);
     m_vfo = new VfoModel(m_backend, this);
     m_spectrumScope = new SpectrumScopeModel(this);
     m_meterController = new MeterController(this);

@@ -3,6 +3,7 @@
 #include "SameBandRefreshPolicy.h"
 #include "VfoReceiverCommandRoute.h"
 #include "VfoModel.h"
+#include "RadioState.h"
 
 #include <QtTest>
 
@@ -71,6 +72,12 @@ class FakeRadioBackend : public IRadioBackend
     void exchangeMainSub() override { ++exchangeCalls; }
     void setVfoFrequencyHz(Vfo, quint64) override {}
     void setVfoMode(Vfo, const QString&) override {}
+    void applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall) override
+    {
+        recalledVfo = vfo;
+        recalledBand = recall;
+        ++bandRecallCalls;
+    }
     void requestVfoState(Vfo value) override { requestedVfoState = value; }
     void setVfoAgcMode(Vfo, const QString&) override {}
     void setVfoAttenuatorEnabled(Vfo, bool) override {}
@@ -120,6 +127,9 @@ class FakeRadioBackend : public IRadioBackend
     quint16 selectedMemoryChannel{0};
     Vfo selectedMemoryVfo{Vfo::Main};
     int selectedMemoryCalls{0};
+    Vfo recalledVfo{Vfo::Main};
+    VfoBandRecallRequest recalledBand;
+    int bandRecallCalls{0};
 };
 
 class VfoBackendTest : public QObject
@@ -137,7 +147,83 @@ class VfoBackendTest : public QObject
     void suppressesReceiverMeterPollingDuringContextTransitions();
     void survivesRepeatedExchangeAndTunePressure();
     void sameBandRefreshIsEdgeTriggered();
+    void radioStateKeepsReceiverAndBandRecallIsolated();
+    void radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate();
 };
+
+void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+
+    Frequency mainFrequency;
+    mainFrequency.Hz = 145250000;
+    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(mainFrequency), 0);
+    emit backend.radioValueUpdated(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
+    Frequency mainOffset;
+    mainOffset.Hz = 600000;
+    emit backend.radioValueUpdated(funcReadFreqOffset, QVariant::fromValue(mainOffset), 0);
+
+    Frequency subFrequency;
+    subFrequency.Hz = 443250000;
+    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(subFrequency), 1);
+    emit backend.radioValueUpdated(funcSplitStatus, QVariant::fromValue(dmDupPlus), 1);
+    Frequency subOffset;
+    subOffset.Hz = 5000000;
+    emit backend.radioValueUpdated(funcReadFreqOffset, QVariant::fromValue(subOffset), 1);
+
+    QCOMPARE(state.receiver(Vfo::Main).frequencyHz, std::optional<quint64>(145250000));
+    QCOMPARE(state.receiver(Vfo::Main).duplexMode, std::optional<duplexMode_t>(dmDupMinus));
+    QCOMPARE(state.receiver(Vfo::Sub).frequencyHz, std::optional<quint64>(443250000));
+    QCOMPARE(state.receiver(Vfo::Sub).duplexMode, std::optional<duplexMode_t>(dmDupPlus));
+
+    const sdr9700::RadioState::BandRecall* main2m = state.bandRecall(Vfo::Main, band2m);
+    const sdr9700::RadioState::BandRecall* sub70cm = state.bandRecall(Vfo::Sub, band70cm);
+    QVERIFY(main2m != nullptr);
+    QVERIFY(sub70cm != nullptr);
+    QCOMPARE(main2m->repeaterOffsetHz, std::optional<quint64>(600000));
+    QCOMPARE(sub70cm->repeaterOffsetHz, std::optional<quint64>(5000000));
+
+    // Hammer receiver-tagged values to ensure no update can bleed across the
+    // logical receiver boundary under sustained polling pressure.
+    for (int i = 0; i < 10000; ++i)
+    {
+        mainOffset.Hz = 600000 + static_cast<quint64>(i);
+        emit backend.radioValueUpdated(funcReadFreqOffset, QVariant::fromValue(mainOffset), 0);
+        QCOMPARE(state.receiver(Vfo::Sub).repeaterOffsetHz, std::optional<quint64>(5000000));
+    }
+}
+
+void VfoBackendTest::radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+
+    Frequency frequency;
+    frequency.Hz = 146940000;
+    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(frequency), 0);
+    emit backend.radioValueUpdated(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
+
+    frequency.Hz = 1296100000;
+    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(frequency), 0);
+    QVERIFY(!state.receiver(Vfo::Main).duplexMode.has_value());
+    QCOMPARE(state.receiver(Vfo::Main).band, band23cm);
+    QCOMPARE(state.bandRecall(Vfo::Main, band2m)->duplexMode, std::optional<duplexMode_t>(dmDupMinus));
+
+    emit backend.readyChanged(true);
+    emit backend.readyChanged(false);
+    QVERIFY(!state.receiver(Vfo::Main).frequencyHz.has_value());
+    // A temporary loss of readiness invalidates the live snapshot, but the
+    // confirmed recall remains useful if this same radio session recovers.
+    QCOMPARE(state.bandRecall(Vfo::Main, band2m)->duplexMode, std::optional<duplexMode_t>(dmDupMinus));
+
+    emit backend.disconnected();
+    QVERIFY(!state.receiver(Vfo::Main).frequencyHz.has_value());
+    QVERIFY(!state.shared().selectedVfo.has_value());
+    // Recall is session-local and must never leak from one connection into a
+    // later radio session, even when the application process remains alive.
+    QVERIFY(!state.bandRecall(Vfo::Main, band2m)->duplexMode.has_value());
+}
 
 void VfoBackendTest::sameBandRefreshIsEdgeTriggered()
 {

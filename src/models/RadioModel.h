@@ -10,6 +10,10 @@
 
 class IRadioBackend;
 class VfoModel;
+namespace sdr9700
+{
+class RadioState;
+}
 class SpectrumScopeModel;
 class MeterController;
 struct MeterSnapshot;
@@ -34,6 +38,7 @@ class RadioModel : public QObject
     int smeter() const { return m_smeter; }
 
     VfoModel* vfo() const { return m_vfo; }
+    sdr9700::RadioState* radioState() const { return m_radioState; }
     SpectrumScopeModel* spectrumScope() const { return m_spectrumScope; }
     MeterController* meterController() const { return m_meterController; }
     IRadioBackend* backend() const { return m_backend; }
@@ -89,6 +94,7 @@ class RadioModel : public QObject
   private:
     IRadioBackend* m_backend{nullptr};
     VfoModel* m_vfo{nullptr};
+    sdr9700::RadioState* m_radioState{nullptr};
     SpectrumScopeModel* m_spectrumScope{nullptr};
     MeterController* m_meterController{nullptr};
 

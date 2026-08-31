@@ -85,8 +85,10 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     vfoBlockLayout->setContentsMargins(1, 1, 1, 1);
     vfoBlockLayout->setSpacing(0);
 
-    m_window->m_mainVfoController = new VfoController(Vfo::Main, m_window->m_model->backend(), vfoStrip, m_window);
-    m_window->m_subVfoController = new VfoController(Vfo::Sub, m_window->m_model->backend(), vfoStrip, m_window);
+    m_window->m_mainVfoController =
+        new VfoController(Vfo::Main, m_window->m_model->backend(), m_window->m_model->radioState(), vfoStrip, m_window);
+    m_window->m_subVfoController =
+        new VfoController(Vfo::Sub, m_window->m_model->backend(), m_window->m_model->radioState(), vfoStrip, m_window);
     m_window->m_vfoSelectionController = new VfoSelectionController(
         m_window->m_model->backend(), m_window->m_mainVfoController, m_window->m_subVfoController, vfoStrip, m_window);
     m_window->m_vfoSelectionController->panel()->setPttButton(m_window->m_pttBtn);

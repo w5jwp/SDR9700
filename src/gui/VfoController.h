@@ -11,13 +11,18 @@
 class IRadioBackend;
 class VfoDisplay;
 class QWidget;
+namespace sdr9700
+{
+class RadioState;
+}
 
 class VfoController : public QObject
 {
     Q_OBJECT
 
   public:
-    explicit VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayParent, QObject* parent = nullptr);
+    explicit VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioState* radioState, QWidget* displayParent,
+                           QObject* parent = nullptr);
 
     Vfo vfo() const { return m_vfo; }
     VfoDisplay* display() const { return m_display; }
@@ -74,6 +79,7 @@ class VfoController : public QObject
 
     const Vfo m_vfo;
     IRadioBackend* m_backend{nullptr};
+    sdr9700::RadioState* m_radioState{nullptr};
     VfoDisplay* m_display{nullptr};
     std::optional<quint64> m_confirmedFrequencyHz;
     std::optional<quint64> m_publishedFrequencyHz;

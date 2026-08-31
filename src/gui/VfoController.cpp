@@ -5,6 +5,7 @@
 #include "backend/IRadioBackend.h"
 #include "backend/TransmitFrequencyPolicy.h"
 #include "models/VfoModel.h"
+#include "models/RadioState.h"
 
 #include <QAction>
 #include <QLabel>
@@ -14,8 +15,13 @@
 #include <QVBoxLayout>
 #include <QWidgetAction>
 
-VfoController::VfoController(Vfo vfo, IRadioBackend* backend, QWidget* displayParent, QObject* parent)
-    : QObject(parent), m_vfo(vfo), m_backend(backend), m_display(new VfoDisplay(vfo, displayParent))
+VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioState* radioState, QWidget* displayParent,
+                             QObject* parent)
+    : QObject(parent),
+      m_vfo(vfo),
+      m_backend(backend),
+      m_radioState(radioState),
+      m_display(new VfoDisplay(vfo, displayParent))
 {
     m_initialPublishTimer.setSingleShot(true);
     m_initialPublishTimer.setInterval(250);
@@ -338,12 +344,33 @@ void VfoController::selectBand(availableBands requestedBand)
     {
         return;
     }
-    const quint64 remembered = m_lastBandFrequencyHz[static_cast<std::size_t>(bandIndex)];
+    const sdr9700::RadioState::BandRecall* recall =
+        m_radioState ? m_radioState->bandRecall(m_vfo, requestedBand) : nullptr;
+    const quint64 stateRemembered = recall ? recall->frequencyHz.value_or(0) : 0;
+    const quint64 remembered =
+        stateRemembered > 0 ? stateRemembered : m_lastBandFrequencyHz[static_cast<std::size_t>(bandIndex)];
     const quint64 hz = remembered > 0 ? remembered : sdr9700::radioBandDefaultFrequency(requestedBand);
     if (hz > 0)
     {
         emit frequencyRecenterRequested(m_vfo, hz);
-        m_backend->setVfoFrequencyHz(m_vfo, hz);
+        if (recall && recall->frequencyHz.has_value())
+        {
+            VfoBandRecallRequest request;
+            request.frequencyHz = hz;
+            request.mode = recall->mode;
+            request.filter = recall->filter;
+            request.duplexMode = recall->duplexMode;
+            request.repeaterOffsetHz = recall->repeaterOffsetHz;
+            request.toneAccessMode = recall->toneAccessMode;
+            request.toneFrequency = recall->toneFrequency;
+            request.toneSquelchFrequency = recall->toneSquelchFrequency;
+            request.dtcsCode = recall->dtcsCode;
+            m_backend->applyVfoBandRecall(m_vfo, request);
+        }
+        else
+        {
+            m_backend->setVfoFrequencyHz(m_vfo, hz);
+        }
     }
 }
 
