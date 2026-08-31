@@ -1,10 +1,9 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
 updates:
+  # Keep GitHub Actions up to date.
+  # Convention: pin actions to a full commit SHA with NO trailing `# vX` version
+  # comment — Dependabot bumps the SHA but doesn't keep such comments in sync, so
+  # they drift and mislead (see #3864). The version lives in Dependabot's PR title.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
