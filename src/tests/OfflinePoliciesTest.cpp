@@ -260,7 +260,7 @@ void OfflinePoliciesTest::validatesDuplexTransmitFrequency()
 void OfflinePoliciesTest::blocksPttUntilTransmitConfigurationIsConfirmed()
 {
     sdr9700::TransmitConfigurationPolicy policy;
-    policy.confirmFrequency(446500000);
+    QVERIFY(policy.confirmFrequency(443250000));
     policy.confirmDuplexMode(dmSimplex);
     policy.confirmOffset(0);
     QVERIFY(policy.transmitFrequencyAllowed());
@@ -274,7 +274,39 @@ void OfflinePoliciesTest::blocksPttUntilTransmitConfigurationIsConfirmed()
     QVERIFY(policy.confirmationPending());
     policy.confirmDuplexMode(dmDupPlus);
     QVERIFY(!policy.confirmationPending());
-    QVERIFY(!policy.transmitFrequencyAllowed());
+    QVERIFY(policy.transmitFrequencyAllowed());
+
+    struct RepeaterCase
+    {
+        quint64 receiveHz{0};
+        duplexMode_t mode{dmSimplex};
+        quint64 offsetHz{0};
+        quint64 transmitHz{0};
+    };
+    const std::array<RepeaterCase, 4> repeaters = {
+        RepeaterCase{145250000, dmDupPlus, 600000, 145850000},
+        RepeaterCase{146940000, dmDupMinus, 600000, 146340000},
+        RepeaterCase{443250000, dmDupPlus, 5000000, 448250000},
+        RepeaterCase{1296100000, dmDupMinus, 12000000, 1284100000},
+    };
+    for (const RepeaterCase& repeater : repeaters)
+    {
+        sdr9700::TransmitConfigurationPolicy repeatedKeyUpPolicy;
+        QVERIFY(repeatedKeyUpPolicy.confirmFrequency(repeater.receiveHz));
+        repeatedKeyUpPolicy.confirmDuplexMode(repeater.mode);
+        repeatedKeyUpPolicy.confirmOffset(repeater.offsetHz);
+        QVERIFY(repeatedKeyUpPolicy.transmitFrequencyAllowed());
+
+        // A keyed IC-9700 can report the shifted transmit frequency through
+        // the ordinary selected-frequency route. Repeated key-ups must keep
+        // calculating from the stable RX frequency instead of applying the
+        // duplex offset again to the prior TX report.
+        for (int keyUp = 0; keyUp < 1000; ++keyUp)
+        {
+            QVERIFY(!repeatedKeyUpPolicy.confirmFrequency(repeater.transmitHz, true));
+            QVERIFY(repeatedKeyUpPolicy.transmitFrequencyAllowed());
+        }
+    }
 
     policy.requestDuplexMode(dmDupMinus);
     policy.confirmDuplexMode(dmSimplex);

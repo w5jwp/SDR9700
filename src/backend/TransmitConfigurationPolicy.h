@@ -27,10 +27,20 @@ class TransmitConfigurationPolicy
         m_offsetPending = true;
     }
 
-    void confirmFrequency(quint64 hz)
+    bool confirmFrequency(quint64 hz, bool transmitPathActive = false)
     {
+        // The IC-9700 can publish its temporary repeater transmit frequency
+        // through the same receiver-less selected-frequency path used for the
+        // stable receive frequency. That report remains useful to UI code, but
+        // it must not become the basis for the next transmit calculation or a
+        // +5 MHz offset would be applied again on every key-up.
+        if (transmitPathActive)
+        {
+            return false;
+        }
         m_frequencyHz = hz;
         m_frequencyPending = m_frequencyPending && hz != m_requestedFrequencyHz;
+        return true;
     }
     void confirmDuplexMode(duplexMode_t mode)
     {
