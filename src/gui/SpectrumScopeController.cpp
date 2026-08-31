@@ -97,8 +97,12 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     };
     const auto showOffsetMenu = [this](Vfo vfo, const QPoint& position)
     {
+        const VfoController* targetController =
+            vfo == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController;
+        const quint64 receiveFrequencyHz = targetController ? targetController->frequencyHz() : 0;
         m_window->m_vfoSelectionController->runWhenSelected(
-            vfo, [this, position]() { m_window->m_radioCommandController->showOffsetMenu(position); });
+            vfo, [this, position, receiveFrequencyHz]()
+            { m_window->m_radioCommandController->showOffsetMenu(position, receiveFrequencyHz); });
     };
     connect(m_window->m_mainVfoController, &VfoController::toneMenuRequested, this, showToneMenu);
     connect(m_window->m_subVfoController, &VfoController::toneMenuRequested, this, showToneMenu);
