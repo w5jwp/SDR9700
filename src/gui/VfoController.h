@@ -69,6 +69,7 @@ class VfoController : public QObject
     void publishConfirmedState();
     void updateDisplayEnabled();
     void updateReceiverControlDisplay();
+    void updateTransmitFrequencyDisplay();
     void applyExchangeableControlState(const ExchangeableControlState& state);
 
     const Vfo m_vfo;

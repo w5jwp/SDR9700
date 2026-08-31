@@ -21,6 +21,9 @@ constexpr int kHeaderMeterSpacing = 20;
 constexpr int kMeterFrequencySpacing = 0;
 constexpr int kTitleFontPixelSize = 10;
 constexpr int kFrequencyFontPixelSize = 32;
+constexpr int kTransmitFrequencyFontPixelSize = 13;
+constexpr int kTransmitFrequencyHeight = 16;
+constexpr int kTransmitFrequencyRightInset = 6;
 constexpr int kTxBadgeWidth = 30;
 constexpr int kTxBadgeHeight = 18;
 constexpr int kHeaderButtonHeight = 18;
@@ -33,7 +36,8 @@ constexpr int kReceiverControlHeight = 18;
 constexpr int kReceiverControlSpacing = 4;
 constexpr int kSecondaryControlWidth = 80;
 constexpr int kXfcControlWidth = 52;
-constexpr int kSecondaryToPrimaryControlSpacing = 40;
+constexpr int kFrequencyGroupVerticalOffset = 7;
+constexpr int kSecondaryToPrimaryControlSpacing = 40 - kFrequencyGroupVerticalOffset;
 
 QString vfoTitle(Vfo vfo)
 {
@@ -177,7 +181,11 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     m_frequencyEdit->setStyleSheet(
         QStringLiteral("QLineEdit { background: transparent; border: none; padding: 0px; color: %1; }")
             .arg(UiTheme::Color::TextField));
-    m_frequencyEdit->setTextMargins(0, 8, 0, 0);
+    // The frequency row is seven pixels taller than the original layout. Its
+    // line edit therefore gains seven pixels of height; this top margin keeps
+    // the large receive text moving down by the same full seven pixels as the
+    // fixed-height transmit label below it.
+    m_frequencyEdit->setTextMargins(0, 8 + kFrequencyGroupVerticalOffset, 0, 0);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
     QFont frequencyFont = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
     frequencyFont.setFeature(QFont::Tag("tnum"), 1);
@@ -193,6 +201,19 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
                 emit frequencySubmitted(m_frequencyEdit->text());
                 m_frequencyEdit->clearFocus();
             });
+
+    m_transmitFrequencyLabel = new QLabel(this);
+    m_transmitFrequencyLabel->setObjectName(QStringLiteral("vfoTransmitFrequency"));
+    m_transmitFrequencyLabel->setFixedHeight(kTransmitFrequencyHeight);
+    m_transmitFrequencyLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_transmitFrequencyLabel->setContentsMargins(0, 0, kTransmitFrequencyRightInset, 0);
+    m_transmitFrequencyLabel->setAccessibleName(QStringLiteral("%1 transmit frequency").arg(title));
+    m_transmitFrequencyLabel->setStyleSheet(QStringLiteral("QLabel { color: %1; }").arg(UiTheme::Color::TextMuted));
+    QFont transmitFrequencyFont = frequencyFont;
+    transmitFrequencyFont.setPixelSize(kTransmitFrequencyFontPixelSize);
+    transmitFrequencyFont.setBold(true);
+    m_transmitFrequencyLabel->setFont(transmitFrequencyFont);
+    clearTransmitFrequency();
 
     layout->addLayout(headerLayout);
     layout->addSpacing(kHeaderMeterSpacing);
@@ -260,8 +281,22 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     auto* frequencyControlLayout = new QHBoxLayout;
     frequencyControlLayout->setContentsMargins(0, 0, 0, 0);
     frequencyControlLayout->setSpacing(kReceiverControlSpacing);
-    frequencyControlLayout->addWidget(secondaryControlGroup, 0, Qt::AlignBottom);
-    frequencyControlLayout->addWidget(m_frequencyEdit, 1);
+    // Borrow seven pixels from the otherwise blank gap beneath the frequency
+    // row. A wrapper with an equal bottom inset keeps OFFSET/TONE/XFC/COMP at
+    // their original vertical position while only the two frequency strings
+    // use the newly available space.
+    auto* secondaryControlWrapper = new QWidget(this);
+    auto* secondaryControlWrapperLayout = new QVBoxLayout(secondaryControlWrapper);
+    secondaryControlWrapperLayout->setContentsMargins(0, 0, 0, kFrequencyGroupVerticalOffset);
+    secondaryControlWrapperLayout->setSpacing(0);
+    secondaryControlWrapperLayout->addWidget(secondaryControlGroup);
+    frequencyControlLayout->addWidget(secondaryControlWrapper, 0, Qt::AlignBottom);
+    auto* frequencyValueLayout = new QVBoxLayout;
+    frequencyValueLayout->setContentsMargins(0, 0, 0, 0);
+    frequencyValueLayout->setSpacing(0);
+    frequencyValueLayout->addWidget(m_frequencyEdit, 1);
+    frequencyValueLayout->addWidget(m_transmitFrequencyLabel);
+    frequencyControlLayout->addLayout(frequencyValueLayout, 1);
     layout->addLayout(frequencyControlLayout, 1);
     layout->addSpacing(kSecondaryToPrimaryControlSpacing);
 
@@ -295,12 +330,34 @@ void VfoDisplay::setFrequencyHz(quint64 hz)
     m_frequencyEdit->setText(sdr9700::ui::main_window::formatFrequency(hz));
 }
 
+void VfoDisplay::setTransmitFrequencyHz(quint64 hz)
+{
+    if (!m_transmitFrequencyLabel)
+    {
+        return;
+    }
+    m_transmitFrequencyLabel->setText(QStringLiteral("TX: %1").arg(sdr9700::ui::main_window::formatFrequency(hz)));
+    m_transmitFrequencyLabel->setAccessibleDescription(
+        QStringLiteral("Transmit frequency %1 MHz").arg(hz / 1000000.0, 0, 'f', 6));
+}
+
+void VfoDisplay::clearTransmitFrequency()
+{
+    if (!m_transmitFrequencyLabel)
+    {
+        return;
+    }
+    m_transmitFrequencyLabel->clear();
+    m_transmitFrequencyLabel->setAccessibleDescription(QString());
+}
+
 void VfoDisplay::clearFrequency()
 {
     if (m_frequencyEdit)
     {
         m_frequencyEdit->setText(QStringLiteral("---.---.---"));
     }
+    clearTransmitFrequency();
     setBandText(QStringLiteral("--"));
     setModeText(QStringLiteral("--"));
 }

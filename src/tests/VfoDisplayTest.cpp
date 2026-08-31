@@ -37,6 +37,18 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
 
     QCOMPARE(mainController.display()->frequencyText(), QStringLiteral("145.500.000"));
     QCOMPARE(subController.display()->frequencyText(), QStringLiteral("433.920.000"));
+    auto* mainTransmitFrequency = mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTransmitFrequency"));
+    QVERIFY(mainTransmitFrequency != nullptr);
+    QCOMPARE(mainTransmitFrequency->font().pixelSize(), 13);
+    QCOMPARE(mainTransmitFrequency->contentsMargins().right(), 6);
+    QCOMPARE(mainTransmitFrequency->contentsMargins().top(), 0);
+    QCOMPARE(mainTransmitFrequency->contentsMargins().bottom(), 0);
+    QVERIFY(mainTransmitFrequency->text().isEmpty());
+    mainController.display()->setTransmitFrequencyHz(146100000ULL);
+    QCOMPARE(mainTransmitFrequency->text(), QStringLiteral("TX: 146.100.000"));
+    QCOMPARE(mainTransmitFrequency->accessibleDescription(), QStringLiteral("Transmit frequency 146.100000 MHz"));
+    mainController.display()->clearTransmitFrequency();
+    QVERIFY(mainTransmitFrequency->text().isEmpty());
     QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoIdentityButton"))->text(),
              QStringLiteral("MAIN"));
     QCOMPARE(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoIdentityButton"))->text(),
@@ -100,6 +112,8 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
 
     auto* mainFrequency = mainController.display()->findChild<QLineEdit*>(QStringLiteral("vfoFrequency"));
     QVERIFY(mainFrequency != nullptr);
+    QCOMPARE(mainFrequency->textMargins().top(), 15);
+    QCOMPARE(mainFrequency->textMargins().bottom(), 0);
     QVERIFY(!mainFrequency->isReadOnly());
     QSignalSpy submissionSpy(mainController.display(), &VfoDisplay::frequencySubmitted);
     mainFrequency->setText(QStringLiteral("not a frequency"));

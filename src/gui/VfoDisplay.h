@@ -20,6 +20,8 @@ class VfoDisplay : public QWidget
     Vfo vfo() const { return m_vfo; }
     QString frequencyText() const;
     void setFrequencyHz(quint64 hz);
+    void setTransmitFrequencyHz(quint64 hz);
+    void clearTransmitFrequency();
     void clearFrequency();
     void setOperatingEnabled(bool enabled);
     void setBandText(const QString& text);
@@ -52,6 +54,7 @@ class VfoDisplay : public QWidget
     QPushButton* m_bandButton{nullptr};
     QPushButton* m_modeButton{nullptr};
     QLineEdit* m_frequencyEdit{nullptr};
+    QLabel* m_transmitFrequencyLabel{nullptr};
     VfoSMeter* m_sMeter{nullptr};
     QHash<QString, QPushButton*> m_receiverControlButtons;
     bool m_operatingEnabled{true};
