@@ -2,6 +2,8 @@
 #include "MainWindow.h"
 #include "models/RadioModel.h"
 
+#include <QCoreApplication>
+#include <QEvent>
 #include <QJsonArray>
 #include <QTest>
 
@@ -58,6 +60,12 @@ class AutomationControllerTest final : public QObject
     {
         RadioModel model;
         MainWindow window(&model, nullptr, false);
+        // A production MainWindow schedules profile auto-connect or the modal
+        // Radio Chooser for its first event turn. This test exercises only the
+        // automation inventory, so remove that startup callback before showing
+        // the window. Otherwise a clean CI account with no saved profile blocks
+        // forever inside the chooser while processEvents() runs below.
+        QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
         window.show();
         QCoreApplication::processEvents();
         AutomationController controller(&window);
@@ -96,6 +104,9 @@ class AutomationControllerTest final : public QObject
     {
         RadioModel model;
         MainWindow window(&model, nullptr, false);
+        // Keep the test independent of persisted radio profiles and prevent
+        // the first-turn Radio Chooser from entering a nested modal event loop.
+        QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
         window.show();
         QCoreApplication::processEvents();
         AutomationController controller(&window);
