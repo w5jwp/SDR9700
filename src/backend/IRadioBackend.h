@@ -6,8 +6,25 @@
 #include <QByteArray>
 #include <QAudioDevice>
 #include <QtGlobal>
+#include <optional>
 #include "Types.h"
 #include "Vfo.h"
+
+// A complete, receiver-targeted request assembled from confirmed radio state.
+// The backend applies only populated fields and then reads the result back;
+// callers must not treat submission as confirmation that the radio accepted it.
+struct VfoBandRecallRequest
+{
+    quint64 frequencyHz{0};
+    std::optional<QString> mode;
+    std::optional<int> filter;
+    std::optional<duplexMode_t> duplexMode;
+    std::optional<quint64> repeaterOffsetHz;
+    std::optional<rptAccessTxRx_t> toneAccessMode;
+    std::optional<ushort> toneFrequency;
+    std::optional<ushort> toneSquelchFrequency;
+    std::optional<ushort> dtcsCode;
+};
 
 class IRadioBackend : public QObject
 {
@@ -62,6 +79,7 @@ class IRadioBackend : public QObject
     virtual void exchangeMainSub() = 0;
     virtual void setVfoFrequencyHz(Vfo vfo, quint64 hz) = 0;
     virtual void setVfoMode(Vfo vfo, const QString& mode) = 0;
+    virtual void applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall) = 0;
     virtual void requestVfoState(Vfo vfo) = 0;
     virtual void setVfoAgcMode(Vfo vfo, const QString& mode) = 0;
     virtual void setVfoAttenuatorEnabled(Vfo vfo, bool on) = 0;

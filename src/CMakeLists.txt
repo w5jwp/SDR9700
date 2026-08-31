@@ -136,6 +136,8 @@ set(SDR9700_APP_SOURCES
 
     models/RadioModel.h
     models/RadioModel.cpp
+    models/RadioState.h
+    models/RadioState.cpp
     models/VfoModel.h
     models/VfoModel.cpp
     models/SpectrumScopeModel.h
@@ -524,6 +526,7 @@ if(BUILD_TESTING)
         gui/VfoDisplay.cpp
         gui/VfoSMeter.cpp
         gui/VfoSelectionPanel.cpp
+        models/RadioState.cpp
         models/VfoModel.cpp
     )
     target_include_directories(VfoDisplayTest PRIVATE
@@ -537,6 +540,7 @@ if(BUILD_TESTING)
     add_executable(VfoBackendTest
         tests/VfoBackendTest.cpp
         backend/IRadioBackend.h
+        models/RadioState.cpp
         models/VfoModel.cpp
     )
     target_include_directories(VfoBackendTest PRIVATE

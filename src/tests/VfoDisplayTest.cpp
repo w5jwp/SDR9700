@@ -20,8 +20,8 @@ class VfoDisplayTest : public QObject
 void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
 {
     QWidget parent;
-    VfoController mainController(Vfo::Main, nullptr, &parent);
-    VfoController subController(Vfo::Sub, nullptr, &parent);
+    VfoController mainController(Vfo::Main, nullptr, nullptr, &parent);
+    VfoController subController(Vfo::Sub, nullptr, nullptr, &parent);
 
     QCOMPARE(mainController.vfo(), Vfo::Main);
     QCOMPARE(subController.vfo(), Vfo::Sub);
