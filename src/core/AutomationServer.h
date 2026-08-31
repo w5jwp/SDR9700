@@ -27,7 +27,7 @@ class AutomationServer final : public QObject
     bool start(const RequestHandler& handler);
     void stop();
     QString socketName() const;
-    QString discoveryFilePath() const { return m_discoveryFilePath; }
+    const QString& discoveryFilePath() const { return m_discoveryFilePath; }
     int clientCount() const { return m_clients.size(); }
 
   signals:
