@@ -26,6 +26,9 @@ class VfoSelectionController : public QObject
     void setRadioReady(bool ready);
     void setReceiverContextReady(bool ready);
     void runWhenSelected(Vfo vfo, std::function<void()> action);
+    void selectVfo(Vfo vfo);
+    bool requestMainSubExchange();
+    bool requestDualWatch(bool enabled);
     void completeExchangeScopeSync();
 
   signals:

@@ -417,6 +417,20 @@ int main(int argc, char* argv[])
 {
     configureQtMultimediaEnvironment();
 
+    // Native file/color dialogs live outside Qt's QObject tree and therefore
+    // cannot participate in the typed automation inventory. Only an explicitly
+    // automation-enabled process substitutes Qt dialogs, preserving the normal
+    // native desktop experience for every ordinary launch while making every
+    // modal control discoverable during automation sessions.
+    for (int index = 1; index < argc; ++index)
+    {
+        if (QString::fromLocal8Bit(argv[index]) == QLatin1String("--enable-automation"))
+        {
+            QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+            break;
+        }
+    }
+
     LoggingConfiguration::applyBaseRules(quietLoggingRules());
     qInstallMessageHandler(consoleMessageHandler);
     installUnixSignalHandlers();
@@ -452,6 +466,9 @@ int main(int argc, char* argv[])
     parser.addOption(QCommandLineOption(QStringLiteral("log-file"),
                                         QStringLiteral("Append formatted console logs to <path>."),
                                         QStringLiteral("path")));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("enable-automation"),
+        QStringLiteral("Enable the local receive-control automation bridge (transmit controls remain unavailable).")));
     parser.process(parserArguments);
 
     if (loggingOptions.logFileRequested && !openLogFile(loggingOptions.logFilePath))
@@ -487,6 +504,11 @@ int main(int argc, char* argv[])
 
     auto model = std::make_unique<RadioModel>();
     auto window = std::make_unique<MainWindow>(model.get());
+    if (parser.isSet(QStringLiteral("enable-automation")) && !window->startAutomationBridge())
+    {
+        std::fprintf(stderr, "Unable to start the local automation bridge.\n");
+        return 1;
+    }
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
                      [&window, &model]()
                      {

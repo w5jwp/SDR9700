@@ -20,6 +20,8 @@ class StatusBarController : public QObject
     void showToast(const QString& msg, int durationMs, MainWindow::ToastKind kind);
     void clearPersistentToast(const QString& expectedMessage);
     void updateNetworkQuality(int rttMs);
+    void setAutomationEnabled(bool enabled);
+    void setAutomationClientCount(int count);
 
   private:
     void applyToast(const QString& message, MainWindow::ToastKind kind);

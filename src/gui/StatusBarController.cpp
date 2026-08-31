@@ -335,6 +335,24 @@ void StatusBarController::buildStatusBar()
 
     hbox->addStretch(1);
 
+    // The bridge is opt-in at process startup, and this compact indicator is
+    // visible for the lifetime of an automation-enabled session. The orange
+    // robot is intentionally distinct from radio/network status: it reports
+    // that a local control surface is available, not radio readiness.
+    m_window->m_automationIndicatorContainer = new QWidget(m_window);
+    auto* automationLayout = new QHBoxLayout(m_window->m_automationIndicatorContainer);
+    automationLayout->setContentsMargins(0, 0, 8, 0);
+    automationLayout->setSpacing(0);
+    m_window->m_automationIndicator = new QLabel(QStringLiteral("\U0001F916"), m_window);
+    m_window->m_automationIndicator->setAlignment(Qt::AlignCenter);
+    m_window->m_automationIndicator->setFixedSize(28, 28);
+    m_window->m_automationIndicator->setAccessibleName(QStringLiteral("Automation client connected"));
+    m_window->m_automationIndicator->setStyleSheet(QStringLiteral(
+        "QLabel { background: #f0a000; color: #0b0e12; border-radius: 4px; font-size: 16px; font-weight: bold; }"));
+    automationLayout->addWidget(m_window->m_automationIndicator);
+    m_window->m_automationIndicatorContainer->hide();
+    hbox->addWidget(m_window->m_automationIndicatorContainer);
+
     auto* connectionStatusPanel = new ClickableStatusPanel(m_window);
     applyStatusContainerWidth(connectionStatusPanel, uniformStackWidth);
     auto* connectionStatusLayout = new QVBoxLayout(connectionStatusPanel);
@@ -491,6 +509,31 @@ void StatusBarController::buildStatusBar()
     connect(sysStatsTimer, &QTimer::timeout, this, &StatusBarController::updateSystemStats);
     sysStatsTimer->start(2000);
     updateSystemStats();
+}
+
+void StatusBarController::setAutomationClientCount(int count)
+{
+    if (!m_window->m_automationIndicator)
+    {
+        return;
+    }
+    m_window->m_automationIndicator->setToolTip(
+        QStringLiteral("Automation enabled; %1 local client%2 connected.\nTransmit controls are unavailable.")
+            .arg(count)
+            .arg(count == 1 ? QString() : QStringLiteral("s")));
+}
+
+void StatusBarController::setAutomationEnabled(bool enabled)
+{
+    if (!m_window->m_automationIndicatorContainer)
+    {
+        return;
+    }
+    m_window->m_automationIndicatorContainer->setVisible(enabled);
+    if (enabled)
+    {
+        setAutomationClientCount(0);
+    }
 }
 
 void StatusBarController::showToast(const QString& msg, int durationMs)

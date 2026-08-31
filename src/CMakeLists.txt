@@ -56,6 +56,8 @@ set(SDR9700_CORE_SOURCES
 
     # Core utilities
     core/CachingQueue.cpp
+    core/AutomationServer.h
+    core/AutomationServer.cpp
     core/ApplicationLog.h
     core/ApplicationLog.cpp
     core/Ax25Decoder.h
@@ -188,6 +190,10 @@ set(SDR9700_APP_SOURCES
     gui/RadioCommandController.cpp
     gui/StatusBarController.h
     gui/StatusBarController.cpp
+    gui/AutomationController.h
+    gui/AutomationController.cpp
+    gui/AutomationUiDriver.h
+    gui/AutomationUiDriver.cpp
     gui/ConfigurationManager.h
     gui/ConfigurationManager.cpp
     gui/RadioChooserDialog.h
@@ -595,4 +601,17 @@ if(BUILD_TESTING)
     add_executable(SystemStatsTest tests/SystemStatsTest.cpp)
     target_link_libraries(SystemStatsTest PRIVATE SDR9700_core Qt6::Test)
     add_test(NAME SystemStatsTest COMMAND SystemStatsTest)
+
+    add_executable(AutomationServerTest tests/AutomationServerTest.cpp)
+    target_link_libraries(AutomationServerTest PRIVATE SDR9700_core Qt6::Test)
+    add_test(NAME AutomationServerTest COMMAND AutomationServerTest)
+
+    add_executable(AutomationControllerTest tests/AutomationControllerTest.cpp)
+    target_include_directories(AutomationControllerTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    )
+    target_link_libraries(AutomationControllerTest PRIVATE SDR9700_app_support Qt6::Test)
+    add_test(NAME AutomationControllerTest COMMAND AutomationControllerTest)
+    set_tests_properties(AutomationControllerTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

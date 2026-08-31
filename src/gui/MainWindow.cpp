@@ -5,6 +5,7 @@
 #include "SettingsDialog.h"
 #include "AboutDialog.h"
 #include "ApplicationLogDialog.h"
+#include "AutomationController.h"
 #include "DataDecoderDialog.h"
 #include "DialogPlacement.h"
 #include "DtmfDialog.h"
@@ -223,6 +224,15 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
 #endif
 
     QTimer::singleShot(0, this, &MainWindow::tryAutoConnect);
+}
+
+bool MainWindow::startAutomationBridge()
+{
+    if (!m_automationController)
+    {
+        m_automationController = new AutomationController(this);
+    }
+    return m_automationController->start();
 }
 
 void MainWindow::buildToolBar()
