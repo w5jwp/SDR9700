@@ -71,28 +71,8 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
     connect(m_panel, &VfoSelectionPanel::vfoRequested, this, &VfoSelectionController::requestSelection);
     connect(m_mainController, &VfoController::selectionRequested, this, &VfoSelectionController::requestSelection);
     connect(m_subController, &VfoController::selectionRequested, this, &VfoSelectionController::requestSelection);
-    connect(m_panel, &VfoSelectionPanel::dualWatchRequested, this,
-            [this](bool enabled)
-            {
-                if (m_backend)
-                {
-                    m_backend->setDualWatchEnabled(enabled);
-                }
-            });
-    connect(m_panel, &VfoSelectionPanel::exchangeRequested, this,
-            [this]()
-            {
-                if (!m_backend || m_transmitting || !m_exchangePolicy.request())
-                {
-                    return;
-                }
-                m_selectionPending = false;
-                m_mainController->captureExchangeableControlState();
-                m_subController->captureExchangeableControlState();
-                m_panel->setExchangePending(true);
-                setPttReady(false);
-                m_backend->exchangeMainSub();
-            });
+    connect(m_panel, &VfoSelectionPanel::dualWatchRequested, this, [this](bool enabled) { requestDualWatch(enabled); });
+    connect(m_panel, &VfoSelectionPanel::exchangeRequested, this, [this]() { requestMainSubExchange(); });
     if (m_backend)
     {
         connect(m_backend, &IRadioBackend::mainSubExchangeCompleted, this,
@@ -240,6 +220,36 @@ void VfoSelectionController::runWhenSelected(Vfo vfo, std::function<void()> acti
     }
     requestSelection(vfo);
     m_selectedAction = std::move(action);
+}
+
+void VfoSelectionController::selectVfo(Vfo vfo)
+{
+    requestSelection(vfo);
+}
+
+bool VfoSelectionController::requestMainSubExchange()
+{
+    if (!m_backend || !m_radioReady || m_transmitting || !m_exchangePolicy.request())
+    {
+        return false;
+    }
+    m_selectionPending = false;
+    m_mainController->captureExchangeableControlState();
+    m_subController->captureExchangeableControlState();
+    m_panel->setExchangePending(true);
+    setPttReady(false);
+    m_backend->exchangeMainSub();
+    return true;
+}
+
+bool VfoSelectionController::requestDualWatch(bool enabled)
+{
+    if (!m_backend || !m_radioReady || m_transmitting || m_exchangePolicy.pending())
+    {
+        return false;
+    }
+    m_backend->setDualWatchEnabled(enabled);
+    return true;
 }
 
 void VfoSelectionController::setControlsEnabled(bool enabled)

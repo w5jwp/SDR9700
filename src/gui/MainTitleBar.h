@@ -13,6 +13,7 @@ class QHBoxLayout;
 class QMouseEvent;
 class QPaintEvent;
 class QTimer;
+class QToolButton;
 
 class MainTitleBar : public QWidget
 {
@@ -22,7 +23,7 @@ class MainTitleBar : public QWidget
     explicit MainTitleBar(QWidget* parent = nullptr);
 
     void addMenu(const QString& label, QMenu* menu);
-    void addAction(const QString& label, QObject* context, std::function<void()> callback);
+    QToolButton* addAction(const QString& label, QObject* context, std::function<void()> callback);
     void setTitle(const QString& title);
     void setVolume(int value);
     void setMuted(bool muted);

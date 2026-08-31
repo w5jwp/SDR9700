@@ -5,6 +5,7 @@
 #include "SettingsDialog.h"
 #include "AboutDialog.h"
 #include "ApplicationLogDialog.h"
+#include "AutomationController.h"
 #include "DataDecoderDialog.h"
 #include "DialogPlacement.h"
 #include "DtmfDialog.h"
@@ -37,6 +38,7 @@
 #include "models/SpectrumScopeModel.h"
 
 #include <QToolBar>
+#include <QToolButton>
 #include <QAction>
 #include <QApplication>
 #include <QAudioDevice>
@@ -225,6 +227,15 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     QTimer::singleShot(0, this, &MainWindow::tryAutoConnect);
 }
 
+bool MainWindow::startAutomationBridge()
+{
+    if (!m_automationController)
+    {
+        m_automationController = new AutomationController(this);
+    }
+    return m_automationController->start();
+}
+
 void MainWindow::buildToolBar()
 {
 #if !defined(Q_OS_MAC)
@@ -398,6 +409,7 @@ void MainWindow::buildToolBar()
     auto* settingsMenu = new QMenu(QStringLiteral("&Settings"), this);
     auto* settingsAction =
         settingsMenu->addAction(QStringLiteral("Settings…"), this, [this]() { showSettingsDialog(); });
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
     settingsAction->setMenuRole(QAction::NoRole);
 
     QMenuBar* nativeMenuBar = menuBar();
@@ -411,7 +423,8 @@ void MainWindow::buildToolBar()
 #else
     Q_UNUSED(aboutAction);
     m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
-    m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
+    auto* settingsAction = m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
     m_titleBar->addMenu(QStringLiteral("&Window"), windowMenu);
     m_titleBar->addMenu(QStringLiteral("&Help"), helpMenu);

@@ -46,6 +46,8 @@ class SettingsDialog;
 class ApplicationLogDialog;
 class DataDecoderDialog;
 class StatusBarController;
+class AutomationController;
+class AutomationUiDriver;
 #ifdef HAVE_HIDAPI
 class IcomRC28Manager;
 #endif
@@ -68,9 +70,12 @@ class MainWindow : public QMainWindow
     friend class MemoryWriteController;
     friend class RadioCommandController;
     friend class StatusBarController;
+    friend class AutomationController;
+    friend class AutomationUiDriver;
 
   public:
     explicit MainWindow(RadioModel* model, QWidget* parent = nullptr, bool quitApplicationOnClose = true);
+    bool startAutomationBridge();
 
   private slots:
     void onConnectToProfile(const RadioProfile& profile);
@@ -154,6 +159,7 @@ class MainWindow : public QMainWindow
     MemoryController* m_memoryController{nullptr};
     RadioCommandController* m_radioCommandController{nullptr};
     StatusBarController* m_statusBarController{nullptr};
+    AutomationController* m_automationController{nullptr};
     RadioModel* m_model{nullptr};
     QUuid m_pendingProfileId;
     VfoModel* m_vfo{nullptr};
@@ -214,6 +220,8 @@ class MainWindow : public QMainWindow
 
     QWidget* m_lockWidget{nullptr};
     QLabel* m_lockIndicator{nullptr};
+    QWidget* m_automationIndicatorContainer{nullptr};
+    QLabel* m_automationIndicator{nullptr};
     QLabel* m_toastLabel{nullptr};
     QLabel* m_connStateLabel{nullptr};
     QLabel* m_connDetailLabel{nullptr};
