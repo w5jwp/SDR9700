@@ -55,6 +55,7 @@ class IcomRC28Manager : public QObject
     bool open();
     bool sendLeds(uint8_t ledByte);
     static bool writeLeds(hid_device* device, uint8_t ledByte);
+    static QString normalizedSerialNumber(const QString& descriptorSerial);
 
     struct ButtonTransition
     {
