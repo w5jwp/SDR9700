@@ -15,6 +15,7 @@
 #include "StatusBarController.h"
 #include "UiTheme.h"
 #include "UtilityWindow.h"
+#include "VfoSelectionController.h"
 #include "backend/IRadioBackend.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
@@ -222,9 +223,15 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     QVERIFY(toastLabel != nullptr);
     QCOMPARE(toastLabel->text(), QStringLiteral("Selected memory on MAIN: DATABASE TEST"));
 
-    // Now drive the same confirmed-selection signal used by the live backend
-    // and prove that the identical row action follows the main form to SUB.
-    model.backend()->radioValueUpdated(funcVFOBandMS, QVariant::fromValue<bool>(true), 0);
+    // Physical CI-V receiver routing is deliberately independent of the
+    // operator's selected UI side. Drive the selection controller used by the
+    // main form and prove that the identical row action follows it to SUB,
+    // even though background polling may temporarily route through either
+    // physical receiver.
+    auto* vfoSelection = window.findChild<VfoSelectionController*>();
+    QVERIFY(vfoSelection != nullptr);
+    vfoSelection->selectVfo(Vfo::Sub);
+    model.backend()->radioValueConfirmed(funcVFOBandMS, QVariant::fromValue<bool>(true), 0);
     QCoreApplication::processEvents();
     QVERIFY(QMetaObject::invokeMethod(memoryTable, "cellDoubleClicked", Q_ARG(int, 0), Q_ARG(int, 0)));
     QCOMPARE(toastLabel->text(), QStringLiteral("Selected memory on SUB: DATABASE TEST"));

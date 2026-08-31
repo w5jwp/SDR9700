@@ -88,7 +88,7 @@ class RadioBackend : public IRadioBackend
     void setVfoPreampLevel(Vfo vfo, int level) override;
     void setVfoRfGain(Vfo vfo, int level) override;
     void setVfoSquelch(Vfo vfo, int level) override;
-    void setDualWatchEnabled(bool on) override;
+    bool setDualWatchEnabled(bool on) override;
     void pollFrequency() override;
     void selectVfoMode() override;
     void selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo) override;
@@ -135,7 +135,7 @@ class RadioBackend : public IRadioBackend
     void resetScopeController();
     bool isCurrentSession(quint64 session, const Commander* commandSession) const;
     void invokeOnCurrentCommander(const std::function<void(Commander*)>& command);
-    void routeVfoReceiverCommand(Vfo vfo, const std::function<void(Commander*, uchar)>& command);
+    void routeVfoReceiverCommand(Vfo vfo, Funcs func, const std::function<void(Commander*, uchar)>& command);
     void scheduleVfoReceiverCommand(Vfo vfo, Funcs func, const std::function<void(Commander*, uchar)>& command);
     void restartAfterSyncTimeout();
 

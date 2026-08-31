@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vfo.h"
+#include "models/RadioState.h"
 #include "radio/RadioCapabilities.h"
 
 #include <QObject>
@@ -11,11 +12,6 @@
 class IRadioBackend;
 class VfoDisplay;
 class QWidget;
-namespace sdr9700
-{
-class RadioState;
-}
-
 class VfoController : public QObject
 {
     Q_OBJECT
@@ -26,6 +22,7 @@ class VfoController : public QObject
 
     Vfo vfo() const { return m_vfo; }
     VfoDisplay* display() const { return m_display; }
+    void requestFrequencyHz(quint64 hz);
     void setFrequencyHz(quint64 hz);
     void clearFrequency();
     void setOperatingEnabled(bool enabled);
@@ -35,10 +32,10 @@ class VfoController : public QObject
     void captureExchangeableControlState();
     void discardCapturedExchangeableControlState();
     void applyCapturedControlExchange(VfoController* other);
-    availableBands band() const { return m_band; }
-    quint64 frequencyHz() const { return m_confirmedFrequencyHz.value_or(0); }
+    availableBands band() const;
+    quint64 frequencyHz() const;
     bool hasPublishedState() const { return stateReady() && (!m_backend || m_initialStatePublished); }
-    void selectBand(availableBands requestedBand);
+    bool selectBand(availableBands requestedBand);
 
   signals:
     void bandMenuRequested(Vfo vfo, const QPoint& position);
@@ -61,13 +58,16 @@ class VfoController : public QObject
         bool nrEnabled{false};
         int preampLevel{0};
         int squelch{0};
-        duplexMode_t duplexMode{dmSimplex};
-        quint64 repeaterOffsetHz{0};
-        rptAccessTxRx_t toneAccessMode{ratrNN};
-        ushort toneFrequency{670};
-        ushort dtcsCode{23};
     };
 
+    const sdr9700::RadioState::Receiver* confirmedReceiverState() const;
+    QString confirmedMode() const;
+    std::optional<duplexMode_t> confirmedDuplexMode() const;
+    std::optional<quint64> confirmedRepeaterOffsetHz() const;
+    std::optional<rptAccessTxRx_t> confirmedToneAccessMode() const;
+    std::optional<ushort> confirmedToneFrequency() const;
+    std::optional<ushort> confirmedDtcsCode() const;
+    void applyRadioState();
     void showReceiverControlMenu(const QString& control);
     void showModeMenu();
     bool stateReady() const;
@@ -76,14 +76,18 @@ class VfoController : public QObject
     void updateReceiverControlDisplay();
     void updateTransmitFrequencyDisplay();
     void applyExchangeableControlState(const ExchangeableControlState& state);
+    bool pendingBandRecallIdentityIsConfirmed() const;
+    void finishPendingBandRecall();
 
     const Vfo m_vfo;
     IRadioBackend* m_backend{nullptr};
     sdr9700::RadioState* m_radioState{nullptr};
     VfoDisplay* m_display{nullptr};
-    std::optional<quint64> m_confirmedFrequencyHz;
+    // These fallback fields support backend-free UI fixtures. A live
+    // controller reads the corresponding values exclusively from RadioState.
+    std::optional<quint64> m_fallbackFrequencyHz;
     std::optional<quint64> m_publishedFrequencyHz;
-    availableBands m_band{bandUnknown};
+    availableBands m_fallbackBand{bandUnknown};
     std::array<quint64, std::size(sdr9700::kRadioUiBandOrder)> m_lastBandFrequencyHz{};
     int m_agcMode{0};
     bool m_attenuatorEnabled{false};
@@ -95,17 +99,20 @@ class VfoController : public QObject
     int m_rfGain{0};
     int m_squelch{0};
     int m_txPower{0};
-    duplexMode_t m_duplexMode{dmSimplex};
-    quint64 m_repeaterOffsetHz{0};
-    rptAccessTxRx_t m_toneAccessMode{ratrNN};
-    ushort m_toneFrequency{670};
-    ushort m_dtcsCode{23};
+    QString m_fallbackMode;
+    duplexMode_t m_fallbackDuplexMode{dmSimplex};
+    quint64 m_fallbackRepeaterOffsetHz{0};
+    rptAccessTxRx_t m_fallbackToneAccessMode{ratrNN};
+    ushort m_fallbackToneFrequency{670};
+    ushort m_fallbackDtcsCode{23};
     bool m_xfcEnabled{false};
     bool m_compressorEnabled{false};
-    QString m_mode;
     bool m_operatingEnabled{true};
     bool m_userInteractionEnabled{false};
     bool m_initialStatePublished{false};
     QTimer m_initialPublishTimer;
+    QTimer m_bandRecallSettleTimer;
+    QTimer m_bandRecallTimeoutTimer;
+    std::optional<availableBands> m_pendingBandRecall;
     std::optional<ExchangeableControlState> m_capturedExchangeState;
 };

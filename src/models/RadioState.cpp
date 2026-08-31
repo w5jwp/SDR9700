@@ -20,7 +20,13 @@ RadioState::RadioState(IRadioBackend* backend, QObject* parent) : QObject(parent
         return;
     }
 
-    connect(backend, &IRadioBackend::radioValueUpdated, this, &RadioState::applyRadioValue);
+    // Use the confirmation stream rather than the change-only cache stream.
+    // A band transition clears receiver-specific fields here, but CachingQueue
+    // deliberately retains its protocol cache. If the newly read offset or
+    // tone equals that retained value, radioValueUpdated is suppressed as an
+    // unchanged cache entry even though the confirmation is essential to
+    // repopulating this receiver snapshot.
+    connect(backend, &IRadioBackend::radioValueConfirmed, this, &RadioState::applyRadioValue);
     connect(backend, &IRadioBackend::readyChanged, this, &RadioState::setReady);
     connect(backend, &IRadioBackend::pttChanged, this, &RadioState::setTransmitting);
     connect(backend, &IRadioBackend::disconnected, this, &RadioState::invalidateSession);
@@ -62,6 +68,15 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
     {
         return;
     }
+    if (receiverId == 1 && m_shared.dualWatchEnabled == std::optional<bool>(false))
+    {
+        // Replies already queued before Dual Watch was disabled can arrive
+        // after the OFF confirmation. They no longer describe a live SUB
+        // receiver and must not repopulate the invalidated snapshot. The
+        // confirmed ON transition is observed before its explicit SUB
+        // identity reads, so normal repopulation resumes when SUB is live.
+        return;
+    }
 
     const Vfo vfo = vfoForReceiver(receiverId);
     Receiver& state = m_receivers.at(receiverIndex(vfo));
@@ -74,7 +89,6 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
     case funcFreqGet:
     case funcFreqSet:
     case funcSelectedFreq:
-    case funcUnselectedFreq:
     {
         const quint64 hz = value.value<Frequency>().Hz;
         const availableBands reportedBand = radioBandForFrequency(hz);
@@ -101,7 +115,6 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
     case funcModeGet:
     case funcModeSet:
     case funcSelectedMode:
-    case funcUnselectedMode:
     {
         const ModeInfo info = value.value<ModeInfo>();
         const QString mode = info.name.trimmed().toUpper();
@@ -174,12 +187,63 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
         }
         receiverChanged = true;
         break;
+    case funcAGCTimeConstant:
+        state.agcMode = qBound(0, value.toInt(), 3);
+        receiverChanged = true;
+        break;
+    case funcAttenuator:
+        state.attenuatorEnabled = value.toInt() != 0;
+        receiverChanged = true;
+        break;
+    case funcNoiseBlanker:
+        state.nbEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcNBLevel:
+        state.nbLevel = qBound(0, value.toInt(), 255);
+        receiverChanged = true;
+        break;
+    case funcAutoNotch:
+        state.autoNotchEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcManualNotch:
+        state.manualNotchEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcNoiseReduction:
+        state.nrEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcNRLevel:
+        state.nrLevel = qBound(0, value.toInt(), 255);
+        receiverChanged = true;
+        break;
+    case funcPreamp:
+        state.preampLevel = qBound(0, value.toInt(), 3);
+        receiverChanged = true;
+        break;
+    case funcRfGain:
+        state.rfGain = qBound(0, value.toInt(), 255);
+        receiverChanged = true;
+        break;
+    case funcSquelch:
+        state.squelch = qBound(0, value.toInt(), 255);
+        receiverChanged = true;
+        break;
     case funcVFOBandMS:
         m_shared.selectedVfo = value.toBool() ? Vfo::Sub : Vfo::Main;
         emit sharedStateChanged();
         return;
     case funcVFODualWatch:
         m_shared.dualWatchEnabled = value.toBool();
+        if (!*m_shared.dualWatchEnabled)
+        {
+            // With Dual Watch disabled the radio no longer provides a live
+            // SUB receiver. Invalidate that snapshot while retaining its
+            // session-local band recall for a later re-enable.
+            invalidateReceiver(Vfo::Sub);
+        }
         emit sharedStateChanged();
         return;
     default:

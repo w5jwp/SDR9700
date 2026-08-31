@@ -14,6 +14,7 @@
 #include <QDoubleSpinBox>
 #include <QJsonValue>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMetaObject>
 #include <QSpinBox>
 #include <QTimer>
@@ -362,6 +363,18 @@ QJsonObject AutomationUiDriver::setValue(const QJsonObject& request)
             return reject(QStringLiteral("invalid_value"), QStringLiteral("Value is outside the slider range"));
         slider->setValue(integer);
         QMetaObject::invokeMethod(slider, "sliderReleased", Qt::QueuedConnection);
+        if (auto* menu = qobject_cast<QMenu*>(slider->window()))
+        {
+            QPointer<QMenu> guarded(menu);
+            QTimer::singleShot(0, this,
+                               [guarded]()
+                               {
+                                   if (guarded)
+                                   {
+                                       guarded->close();
+                                   }
+                               });
+        }
     }
     else if (auto* spin = qobject_cast<QSpinBox*>(object))
     {

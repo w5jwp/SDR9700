@@ -89,7 +89,10 @@ class IRadioBackend : public QObject
     virtual void setVfoPreampLevel(Vfo vfo, int level) = 0;
     virtual void setVfoRfGain(Vfo vfo, int level) = 0;
     virtual void setVfoSquelch(Vfo vfo, int level) = 0;
-    virtual void setDualWatchEnabled(bool on) = 0;
+    // Returns true only when the backend started the asynchronous transition.
+    // A true result is acceptance, not radio confirmation; callers still wait
+    // for radioValueConfirmed(funcVFODualWatch, ...).
+    virtual bool setDualWatchEnabled(bool on) = 0;
 
     virtual void pollFrequency() = 0;
     virtual void selectVfoMode() = 0;
@@ -149,6 +152,12 @@ class IRadioBackend : public QObject
     void dtcsCodeChanged(ushort code);
     void radioMemoryReceived(MemoryType memory);
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
+    // Emitted for every parsed, receiver-correlated radio value, including a
+    // confirmation whose payload equals the value already held by
+    // CachingQueue. State projections need the confirmation stream because
+    // they may intentionally invalidate one receiver after a band/context
+    // transition while the lower protocol cache still retains its last value.
+    void radioValueConfirmed(Funcs func, QVariant value, uchar receiver);
     void dualWatchTransitionPendingChanged(bool pending);
     void mainSubExchangeCompleted();
     void mainSubExchangeFailed();

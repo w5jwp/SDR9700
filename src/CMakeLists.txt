@@ -546,16 +546,24 @@ if(BUILD_TESTING)
     add_executable(VfoBackendTest
         tests/VfoBackendTest.cpp
         backend/IRadioBackend.h
+        gui/MainWindowHelpers.cpp
+        gui/VfoController.cpp
+        gui/VfoDisplay.cpp
+        gui/VfoSelectionController.cpp
+        gui/VfoSelectionPanel.cpp
+        gui/VfoSMeter.cpp
         models/RadioState.cpp
         models/VfoModel.cpp
     )
     target_include_directories(VfoBackendTest PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/backend
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui
         ${CMAKE_CURRENT_SOURCE_DIR}/models
     )
-    target_link_libraries(VfoBackendTest PRIVATE SDR9700_core Qt6::Test)
+    target_link_libraries(VfoBackendTest PRIVATE SDR9700_core Qt6::Test Qt6::Widgets)
     add_test(NAME VfoBackendTest COMMAND VfoBackendTest)
+    set_tests_properties(VfoBackendTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     add_executable(UdpStatusMessagesTest tests/UdpStatusMessagesTest.cpp)
     target_include_directories(UdpStatusMessagesTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

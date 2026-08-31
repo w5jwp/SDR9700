@@ -53,8 +53,8 @@ class Commander : public RadioCommander
     CommanderSchedulerDiagnostics schedulerDiagnostics() const;
     void scheduleInteractiveAction(Funcs func, uchar receiver, std::function<void()> action);
     void scheduleConfirmatoryAction(Funcs func, uchar receiver, std::function<void()> action);
+    void executeReceiverScopedAction(uchar receiver, std::function<void()> action);
     void finishMainSubExchangeConfirmation();
-    vfo_t currentRoutingVfo() const;
 
   public slots:
     void commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, audioSetup rxSetup,
@@ -69,6 +69,7 @@ class Commander : public RadioCommander
     void receiveCommand(Funcs func, QVariant value, uchar receiver) override;
     void receiveCommandNoReadback(Funcs func, QVariant value, uchar receiver);
     void scheduleMeterRead(Funcs func, uchar receiver);
+    void scheduleMeterAction(Funcs func, uchar receiver, std::function<void()> action);
     void scheduleStartupRead(Funcs func, uchar receiver);
     void requestMainSubExchange();
     void requestReceiverScopedRead(Funcs func, uchar receiver);
@@ -173,8 +174,11 @@ class Commander : public RadioCommander
     bool takePendingReplyReceiver(Funcs func, uchar* receiver);
     void discardExpiredPendingReplies();
     bool deferReplyReadIfBlocked(Funcs func, uchar receiver);
+    bool enqueueDeferredReplyRead(Funcs func, uchar receiver);
     void beginReplyFamilyDrain(Funcs func, qint64 durationMs);
     void dispatchDeferredReplyReads();
+    void dispatchReceiverScopedRead(Funcs func, uchar receiver);
+    void finishReceiverScopedAction();
     void dispatchMainSubExchange();
     bool replyFamilyBlocked(Funcs func) const;
     bool replyFamilyDraining(Funcs func) const;
@@ -221,6 +225,7 @@ class Commander : public RadioCommander
         qint64 untilMs{0};
     };
     QVector<DeferredReplyRead> m_deferredReplyReads;
+    bool m_receiverScopedReadActive{false};
     bool m_mainSubExchangeQueued{false};
     bool m_mainSubExchangeConfirmationPending{false};
     QVector<ReplyFamilyDrain> m_replyFamilyDrains;
