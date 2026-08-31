@@ -3,6 +3,7 @@
 #include "MainWindowHelpers.h"
 #include "VfoDisplay.h"
 #include "backend/IRadioBackend.h"
+#include "backend/TransmitFrequencyPolicy.h"
 #include "models/VfoModel.h"
 
 #include <QAction>
@@ -404,6 +405,7 @@ void VfoController::updateReceiverControlDisplay()
 {
     if (!stateReady())
     {
+        m_display->clearTransmitFrequency();
         return;
     }
     static const char* const kAgcLabels[] = {"--", "FAST", "MID", "SLOW"};
@@ -420,6 +422,7 @@ void VfoController::updateReceiverControlDisplay()
     m_display->setReceiverControlState(QStringLiteral("OFFSET"),
                                        sdr9700::ui::main_window::offsetModeLabel(m_duplexMode, m_repeaterOffsetHz),
                                        offsetActive);
+    updateTransmitFrequencyDisplay();
     const bool toneActive = m_toneAccessMode != ratrNN;
     const ushort toneValue = isDtcsToneMode(m_toneAccessMode) ? m_dtcsCode : m_toneFrequency;
     const QString toneValueLabel = sdr9700::ui::main_window::memoryToneFrequencyLabel(m_toneAccessMode, toneValue);
@@ -441,6 +444,25 @@ void VfoController::updateReceiverControlDisplay()
         m_display->setReceiverControlState(QStringLiteral("TX PWR"), QStringLiteral("%1%").arg(txPowerPercent),
                                            m_txPower > 0);
     }
+}
+
+void VfoController::updateTransmitFrequencyDisplay()
+{
+    const bool offsetActive = (m_duplexMode == dmDupMinus || m_duplexMode == dmDupPlus) && m_repeaterOffsetHz > 0;
+    if (!offsetActive || !m_confirmedFrequencyHz.has_value())
+    {
+        m_display->clearTransmitFrequency();
+        return;
+    }
+
+    const std::optional<quint64> transmitHz =
+        sdr9700::duplexTransmitFrequency(*m_confirmedFrequencyHz, m_duplexMode, m_repeaterOffsetHz);
+    if (!transmitHz.has_value())
+    {
+        m_display->clearTransmitFrequency();
+        return;
+    }
+    m_display->setTransmitFrequencyHz(*transmitHz);
 }
 
 void VfoController::showModeMenu()
