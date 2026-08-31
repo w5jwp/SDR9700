@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QJsonArray>
+#include <QPointer>
 #include <QTest>
 
 class AutomationControllerTest final : public QObject
@@ -130,7 +131,8 @@ class AutomationControllerTest final : public QObject
                                          {QStringLiteral("controlId"), settingsActionId}})
                     .value(QStringLiteral("ok"))
                     .toBool());
-        QTRY_VERIFY(window.findChild<QWidget*>(QStringLiteral("settingsSearch")) != nullptr);
+        QWidget* settingsSearch = nullptr;
+        QTRY_VERIFY((settingsSearch = window.findChild<QWidget*>(QStringLiteral("settingsSearch"))) != nullptr);
 
         controls = controller.execute(QJsonObject{{QStringLiteral("action"), QStringLiteral("ui_list")}})
                        .value(QStringLiteral("controls"))
@@ -147,6 +149,18 @@ class AutomationControllerTest final : public QObject
         }
         QVERIFY(!navigation.isEmpty());
         QVERIFY(navigation.value(QStringLiteral("items")).toArray().size() >= 3);
+
+        // The settings window is non-modal and production code schedules its
+        // deletion after close. Complete that lifecycle while MainWindow and
+        // RadioModel are still alive instead of leaving a visible top-level
+        // dialog and its deferred work to overlap parent teardown. Linux's
+        // allocator reports that incomplete lifecycle as heap corruption.
+        QPointer<QWidget> settingsWindow = settingsSearch->window();
+        QVERIFY(settingsWindow);
+        QVERIFY(settingsWindow != &window);
+        settingsWindow->close();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY(settingsWindow.isNull());
     }
 };
 
