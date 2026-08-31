@@ -32,6 +32,7 @@ class CommanderCodecTest : public QObject
     void tracksPendingReplyPressure();
     void unsolicitedUpdateDoesNotConsumePendingReply();
     void malformedReplyDoesNotConsumePendingReply();
+    void selectedRepliesUsePendingReceiverIdentity();
     void correlatesEquivalentFrequencyAndModeReplyCommands();
     void discardsPendingRepliesByCanonicalFamily();
     void serializesReceiverlessReadsByCanonicalFamily();
@@ -887,6 +888,31 @@ void CommanderCodecTest::malformedReplyDoesNotConsumePendingReply()
     uchar receiver = 0;
     QVERIFY(m_commander.takePendingReplyReceiver(funcModeGet, &receiver));
     QCOMPARE(receiver, uchar(1));
+}
+
+void CommanderCodecTest::selectedRepliesUsePendingReceiverIdentity()
+{
+    // Commands 03h and 04h identify the currently selected side, not physical
+    // MAIN. During a receiver-scoped SUB read SDR9700 selects SUB first, so the
+    // outstanding request is the only reliable identity for the reply.
+    m_commander.m_pendingReplies.clear();
+    m_commander.m_replyFamilyDrains.clear();
+    m_commander.m_correlationDiagnostics = {};
+    m_commander.m_pendingCommandClock.restart();
+    QSignalSpy replySpy(&m_commander, &RadioCommander::radioReplyReceived);
+
+    m_commander.rememberPendingReply(funcFreqGet, 1);
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a2030052140600fd"));
+    QCOMPARE(replySpy.count(), 1);
+    QCOMPARE(replySpy.takeFirst().at(2).value<uchar>(), uchar(1));
+    QCOMPARE(m_commander.correlationDiagnostics().pendingReplies, qsizetype(0));
+
+    m_commander.m_replyFamilyDrains.clear();
+    m_commander.rememberPendingReply(funcModeGet, 1);
+    m_commander.handleNewData(QByteArray::fromHex("fefee1a2040501fd"));
+    QCOMPARE(replySpy.count(), 1);
+    QCOMPARE(replySpy.takeFirst().at(2).value<uchar>(), uchar(1));
+    QCOMPARE(m_commander.correlationDiagnostics().pendingReplies, qsizetype(0));
 }
 
 void CommanderCodecTest::rejectsShortSpectrumFrames()

@@ -20,7 +20,13 @@ RadioState::RadioState(IRadioBackend* backend, QObject* parent) : QObject(parent
         return;
     }
 
-    connect(backend, &IRadioBackend::radioValueUpdated, this, &RadioState::applyRadioValue);
+    // Use the confirmation stream rather than the change-only cache stream.
+    // A band transition clears receiver-specific fields here, but CachingQueue
+    // deliberately retains its protocol cache. If the newly read offset or
+    // tone equals that retained value, radioValueUpdated is suppressed as an
+    // unchanged cache entry even though the confirmation is essential to
+    // repopulating this receiver snapshot.
+    connect(backend, &IRadioBackend::radioValueConfirmed, this, &RadioState::applyRadioValue);
     connect(backend, &IRadioBackend::readyChanged, this, &RadioState::setReady);
     connect(backend, &IRadioBackend::pttChanged, this, &RadioState::setTransmitting);
     connect(backend, &IRadioBackend::disconnected, this, &RadioState::invalidateSession);
@@ -74,7 +80,6 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
     case funcFreqGet:
     case funcFreqSet:
     case funcSelectedFreq:
-    case funcUnselectedFreq:
     {
         const quint64 hz = value.value<Frequency>().Hz;
         const availableBands reportedBand = radioBandForFrequency(hz);
@@ -101,7 +106,6 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
     case funcModeGet:
     case funcModeSet:
     case funcSelectedMode:
-    case funcUnselectedMode:
     {
         const ModeInfo info = value.value<ModeInfo>();
         const QString mode = info.name.trimmed().toUpper();
@@ -180,6 +184,13 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
         return;
     case funcVFODualWatch:
         m_shared.dualWatchEnabled = value.toBool();
+        if (!*m_shared.dualWatchEnabled)
+        {
+            // With Dual Watch disabled the radio no longer provides a live
+            // SUB receiver. Invalidate that snapshot while retaining its
+            // session-local band recall for a later re-enable.
+            invalidateReceiver(Vfo::Sub);
+        }
         emit sharedStateChanged();
         return;
     default:

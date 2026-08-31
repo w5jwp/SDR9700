@@ -4,7 +4,12 @@
 #include "VfoReceiverCommandRoute.h"
 #include "VfoModel.h"
 #include "RadioState.h"
+#include "VfoController.h"
+#include "VfoDisplay.h"
 
+#include <QLabel>
+#include <QPushButton>
+#include <QWidget>
 #include <QtTest>
 
 class FakeRadioBackend : public IRadioBackend
@@ -149,7 +154,88 @@ class VfoBackendTest : public QObject
     void sameBandRefreshIsEdgeTriggered();
     void radioStateKeepsReceiverAndBandRecallIsolated();
     void radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate();
+    void vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed();
 };
+
+void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+    QWidget parent;
+    VfoController mainController(Vfo::Main, &backend, &state, &parent);
+    VfoController subController(Vfo::Sub, &backend, &state, &parent);
+
+    Frequency mainFrequency;
+    mainFrequency.Hz = 145250000;
+    Frequency subFrequency;
+    subFrequency.Hz = 443250000;
+    ModeInfo mode;
+    mode.mk = modeFM;
+    mode.name = QStringLiteral("FM");
+    mode.filter = 1;
+    Frequency mainOffset;
+    mainOffset.Hz = 600000;
+    Frequency subOffset;
+    subOffset.Hz = 5000000;
+
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(mainFrequency), 0);
+    emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 0);
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(subFrequency), 1);
+    emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 1);
+
+    QTRY_COMPARE(mainController.display()->frequencyText(), QStringLiteral("145.250.000"));
+    QTRY_COMPARE(subController.display()->frequencyText(), QStringLiteral("443.250.000"));
+    QCOMPARE(mainController.band(), band2m);
+    QCOMPARE(subController.band(), band70cm);
+    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoModeButton"))->text(),
+             QStringLiteral("FM"));
+    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoOFFSETButton"))->text(),
+             QStringLiteral("--"));
+
+    // A duplex direction without its companion offset is partial state. It
+    // must not fabricate a confirmed zero-offset display while replies are
+    // still arriving.
+    emit backend.radioValueConfirmed(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
+    emit backend.radioValueConfirmed(funcSplitStatus, QVariant::fromValue(dmDupPlus), 1);
+    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoOFFSETButton"))->text(),
+             QStringLiteral("--"));
+    emit backend.radioValueConfirmed(funcReadFreqOffset, QVariant::fromValue(mainOffset), 0);
+    emit backend.radioValueConfirmed(funcReadFreqOffset, QVariant::fromValue(subOffset), 1);
+    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoOFFSETButton"))->text(),
+             QStringLiteral("-0.600"));
+    QCOMPARE(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoOFFSETButton"))->text(),
+             QStringLiteral("+5.000"));
+
+    RptrAccessData toneAccess;
+    toneAccess.accessMode = ratrTN;
+    emit backend.radioValueConfirmed(funcToneSquelchType, QVariant::fromValue(toneAccess), 0);
+    emit backend.radioValueConfirmed(funcToneSquelchType, QVariant::fromValue(toneAccess), 1);
+    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"))->text(),
+             QStringLiteral("TONE --"));
+    QCOMPARE(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"))->text(),
+             QStringLiteral("TONE --"));
+    emit backend.radioValueConfirmed(funcToneFreq, QVariant::fromValue(ToneInfo(885)), 0);
+    emit backend.radioValueConfirmed(funcToneFreq, QVariant::fromValue(ToneInfo(1035)), 1);
+    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"))->text(),
+             QStringLiteral("TONE 88.5"));
+    QCOMPARE(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"))->text(),
+             QStringLiteral("TONE 103.5"));
+
+    for (int i = 0; i < 10000; ++i)
+    {
+        mainFrequency.Hz = 145250000 + static_cast<quint64>(i);
+        emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(mainFrequency), 0);
+        QCOMPARE(subController.frequencyHz(), quint64(443250000));
+        QCOMPARE(subController.display()->frequencyText(), QStringLiteral("443.250.000"));
+    }
+
+    // Disabling Dual Watch removes the live SUB receiver but intentionally
+    // retains its session recall for a later re-enable.
+    emit backend.radioValueConfirmed(funcVFODualWatch, QVariant::fromValue(false), 0);
+    QCOMPARE(subController.frequencyHz(), quint64(0));
+    QCOMPARE(subController.display()->frequencyText(), QStringLiteral("---.---.---"));
+    QCOMPARE(state.bandRecall(Vfo::Sub, band70cm)->frequencyHz, std::optional<quint64>(443250000));
+}
 
 void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()
 {
@@ -158,19 +244,19 @@ void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()
 
     Frequency mainFrequency;
     mainFrequency.Hz = 145250000;
-    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(mainFrequency), 0);
-    emit backend.radioValueUpdated(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(mainFrequency), 0);
+    emit backend.radioValueConfirmed(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
     Frequency mainOffset;
     mainOffset.Hz = 600000;
-    emit backend.radioValueUpdated(funcReadFreqOffset, QVariant::fromValue(mainOffset), 0);
+    emit backend.radioValueConfirmed(funcReadFreqOffset, QVariant::fromValue(mainOffset), 0);
 
     Frequency subFrequency;
     subFrequency.Hz = 443250000;
-    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(subFrequency), 1);
-    emit backend.radioValueUpdated(funcSplitStatus, QVariant::fromValue(dmDupPlus), 1);
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(subFrequency), 1);
+    emit backend.radioValueConfirmed(funcSplitStatus, QVariant::fromValue(dmDupPlus), 1);
     Frequency subOffset;
     subOffset.Hz = 5000000;
-    emit backend.radioValueUpdated(funcReadFreqOffset, QVariant::fromValue(subOffset), 1);
+    emit backend.radioValueConfirmed(funcReadFreqOffset, QVariant::fromValue(subOffset), 1);
 
     QCOMPARE(state.receiver(Vfo::Main).frequencyHz, std::optional<quint64>(145250000));
     QCOMPARE(state.receiver(Vfo::Main).duplexMode, std::optional<duplexMode_t>(dmDupMinus));
@@ -189,7 +275,7 @@ void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()
     for (int i = 0; i < 10000; ++i)
     {
         mainOffset.Hz = 600000 + static_cast<quint64>(i);
-        emit backend.radioValueUpdated(funcReadFreqOffset, QVariant::fromValue(mainOffset), 0);
+        emit backend.radioValueConfirmed(funcReadFreqOffset, QVariant::fromValue(mainOffset), 0);
         QCOMPARE(state.receiver(Vfo::Sub).repeaterOffsetHz, std::optional<quint64>(5000000));
     }
 }
@@ -201,14 +287,21 @@ void VfoBackendTest::radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate
 
     Frequency frequency;
     frequency.Hz = 146940000;
-    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(frequency), 0);
-    emit backend.radioValueUpdated(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(frequency), 0);
+    emit backend.radioValueConfirmed(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
 
     frequency.Hz = 1296100000;
-    emit backend.radioValueUpdated(funcFreqGet, QVariant::fromValue(frequency), 0);
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(frequency), 0);
     QVERIFY(!state.receiver(Vfo::Main).duplexMode.has_value());
     QCOMPARE(state.receiver(Vfo::Main).band, band23cm);
     QCOMPARE(state.bandRecall(Vfo::Main, band2m)->duplexMode, std::optional<duplexMode_t>(dmDupMinus));
+
+    // A confirmed value must repopulate the new receiver snapshot even when
+    // its payload is identical to the prior band's value. The protocol cache
+    // may regard this as unchanged, but it is new evidence for RadioState
+    // after the band transition invalidated the old operating context.
+    emit backend.radioValueConfirmed(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
+    QCOMPARE(state.receiver(Vfo::Main).duplexMode, std::optional<duplexMode_t>(dmDupMinus));
 
     emit backend.readyChanged(true);
     emit backend.readyChanged(false);
@@ -412,5 +505,5 @@ void VfoBackendTest::survivesRepeatedExchangeAndTunePressure()
     QCOMPARE(activeSamples, inactiveSamples * 4 + (pollTick % 5));
 }
 
-QTEST_GUILESS_MAIN(VfoBackendTest)
+QTEST_MAIN(VfoBackendTest)
 #include "VfoBackendTest.moc"

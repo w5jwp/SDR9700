@@ -57,12 +57,6 @@ bool replyDoesNotRequireReceiverCorrelation(Funcs func)
 {
     switch (func)
     {
-    case funcSelectedFreq:
-    case funcSelectedMode:
-    case funcUnselectedFreq:
-    case funcUnselectedMode:
-        // The opcode identifies selected versus unselected receiver state.
-        return true;
     case funcVFOBandMS:
     case funcScopeMainSub:
         // These are global MAIN/SUB state values, not receiver-scoped reads.

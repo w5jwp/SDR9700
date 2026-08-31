@@ -714,6 +714,8 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                     return;
                 }
 
+                emit radioValueConfirmed(func, value, receiver);
+
                 if (m_dualWatchTransition.pending())
                 {
                     if (func == funcVFODualWatch && m_dualWatchTransition.observeState(value.toBool()))

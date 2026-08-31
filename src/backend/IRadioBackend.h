@@ -149,6 +149,12 @@ class IRadioBackend : public QObject
     void dtcsCodeChanged(ushort code);
     void radioMemoryReceived(MemoryType memory);
     void radioValueUpdated(Funcs func, QVariant value, uchar receiver);
+    // Emitted for every parsed, receiver-correlated radio value, including a
+    // confirmation whose payload equals the value already held by
+    // CachingQueue. State projections need the confirmation stream because
+    // they may intentionally invalidate one receiver after a band/context
+    // transition while the lower protocol cache still retains its last value.
+    void radioValueConfirmed(Funcs func, QVariant value, uchar receiver);
     void dualWatchTransitionPendingChanged(bool pending);
     void mainSubExchangeCompleted();
     void mainSubExchangeFailed();
