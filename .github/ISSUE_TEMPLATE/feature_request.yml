@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        SDR9700 is focused on Linux-native IC-9700 LAN operation. Please describe the operator workflow and how it should behave with the radio.
+        SDR9700 is focused on native Linux and Apple Silicon macOS control of the IC-9700 over its LAN interface. Please describe the operator workflow and the useful outcome rather than designing the implementation for us.
 
   - type: textarea
     id: problem
@@ -53,7 +53,7 @@ body:
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: Optional, but helpful for UI/workflow proposals.
+      description: Optional. Tell us how you handle this today or about another approach worth considering.
 
   - type: checkboxes
     id: checks

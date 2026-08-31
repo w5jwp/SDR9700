@@ -1,19 +1,21 @@
 name: Bug report
-description: Report a reproducible problem in SDR9700.
+description: Report a problem or regression in SDR9700.
 title: "[Bug]: "
 labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a problem. Do not include radio passwords, GitHub tokens, private IP details you do not want public, or unredacted packet captures.
+        Thanks for reporting a problem. The details below help us reproduce it without requiring you to diagnose it first.
+
+        Do not include radio passwords, GitHub tokens, private IP details you do not want public, or unredacted packet captures.
 
   - type: input
     id: version
     attributes:
       label: SDR9700 version or commit
       description: Use the title bar version, About dialog version, or `git rev-parse --short HEAD`.
-      placeholder: "26.06.01 / f76f514"
+      placeholder: "26.9.1-beta.2 or f76f514"
     validations:
       required: true
 
@@ -41,8 +43,16 @@ body:
     id: summary
     attributes:
       label: What happened?
-      description: Describe the problem and what you expected instead.
+      description: Describe the problem, including any visible error or unexpected radio behavior.
       placeholder: "When I..., SDR9700..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: Briefly describe the result you expected instead.
     validations:
       required: true
 
@@ -63,12 +73,12 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Include Linux distribution, desktop/session, Qt version if known, and audio devices if relevant.
+      description: Include your operating system and installation method. Add desktop, Qt, or audio details only when relevant or known.
       placeholder: |
-        - Linux:
-        - Desktop/session:
-        - Qt:
-        - Audio input/output:
+        - OS and version:
+        - Installed from release package or built from source:
+        - Desktop/session or Mac model, if relevant:
+        - Qt and audio devices, if relevant:
     validations:
       required: true
 
@@ -87,8 +97,7 @@ body:
     id: logs
     attributes:
       label: Logs, screenshots, or captures
-      description: Attach logs/screenshots if useful. Redact credentials, tokens, public IPs, and anything station-private.
-      render: text
+      description: Attach screenshots or recordings, or paste relevant output from `--log=radio,udp,ci-v` when useful. Redact credentials, tokens, public IPs, and anything station-private.
 
   - type: checkboxes
     id: checks

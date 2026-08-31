@@ -1,8 +1,8 @@
 # Contributing to SDR9700
 
-Thanks for helping with SDR9700. The project is early-stage, so the most useful
-contributions are focused, verifiable changes that move the IC-9700 client
-toward a clean first release.
+Thanks for helping with SDR9700. The most useful contributions are focused,
+verifiable changes that improve everyday IC-9700 operation without making the
+radio-control path harder to understand or maintain.
 
 ## Before You Start
 
@@ -23,7 +23,7 @@ toward a clean first release.
 ## Development Workflow
 
 ```bash
-make
+make release
 ./src/build/bin/SDR9700
 ```
 
@@ -68,13 +68,23 @@ Useful bug reports include:
 
 ## Pull Requests
 
+Create a topic branch and open a pull request into `main`; do not build new work
+directly on `main`. A pull request may be small, but it should explain the
+operator or maintenance problem, the change, and the verification performed.
+Link an issue when one already exists. Small documentation and maintenance
+changes do not require a separate issue.
+
 Before opening a pull request, run the automated checks from the project root:
 
 **clang-format** — apply in-place and confirm no files changed:
 ```bash
-find src -name '*.cpp' -o -name '*.h' | xargs clang-format -i
+find src -path src/build -prune -o \( -name '*.cpp' -o -name '*.h' \) -print0 \
+  | xargs -0 clang-format-23 -i
 git diff --stat
 ```
+
+Use clang-format 23. CI rejects formatting produced by a different major
+version.
 
 **cppcheck** — pedantic static analysis:
 ```bash
@@ -82,19 +92,20 @@ cppcheck --enable=all --inconclusive --std=c++20 \
   --library=qt \
   --suppress=missingIncludeSystem \
   --suppress=missingInclude \
-  --suppress=unknownMacro \
-  --suppress=noValidConfiguration \
-  --suppress=toomanyconfigs \
-  --suppress=preprocessorErrorDirective \
+  --suppress=normalCheckLevelMaxBranches \
+  --suppress=checkersReport \
   --suppressions-list=.cppcheck-suppressions \
   -I src -i src/build src
 ```
+
+Use cppcheck 2.21.0 so local findings match CI and the reviewed suppressions
+file.
 
 Any findings not already suppressed should be addressed or explained in the PR description.
 
 Then:
 
-- Build locally.
+- Run a clean Release build with `make release`.
 - Run the complete existing test suite with
   `ctest --test-dir src/build --output-on-failure`; all tests must pass.
 - Explain what changed and how it was verified.

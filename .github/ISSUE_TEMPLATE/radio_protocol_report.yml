@@ -10,6 +10,15 @@ body:
 
         Do not post radio passwords, full unredacted packet captures, public IPs, or station-private details.
 
+  - type: input
+    id: version
+    attributes:
+      label: SDR9700 version or commit
+      description: Use the title bar version, About dialog version, or `git rev-parse --short HEAD`.
+      placeholder: "26.9.1-beta.2 or f76f514"
+    validations:
+      required: true
+
   - type: dropdown
     id: area
     attributes:
@@ -45,16 +54,28 @@ body:
       required: true
 
   - type: textarea
+    id: steps
+    attributes:
+      label: How can we reproduce it?
+      description: List the shortest sequence that produces the behavior, including relevant MAIN/SUB, band, mode, or connection state.
+      placeholder: |
+        1. Connect to the IC-9700
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
     id: evidence
     attributes:
       label: Evidence
-      description: Add redacted debug logs, command bytes, packet notes, manual references, screenshots, or a short recording.
-      render: text
+      description: Attach redacted debug logs, packet notes, manual references, screenshots, or a short recording when available. Raw captures should be shared privately if they contain station details.
 
   - type: textarea
     id: radio
     attributes:
       label: Radio and station setup
+      description: Provide what you know; exact settings are only needed when relevant to the behavior.
       placeholder: |
         - IC-9700 firmware:
         - Band/mode:

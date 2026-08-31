@@ -1,3 +1,6 @@
+# Keep an escape hatch for questions and unusual reports that do not fit the
+# structured forms. The forms remain the preferred path for bugs, features,
+# and radio/protocol observations.
 blank_issues_enabled: true
 contact_links:
   - name: Security vulnerability
