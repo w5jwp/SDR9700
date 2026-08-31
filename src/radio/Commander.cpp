@@ -249,6 +249,7 @@ void Commander::shutdownComm()
     }
     m_pendingReplies.clear();
     m_deferredReplyReads.clear();
+    m_receiverScopedReadActive = false;
     m_mainSubExchangeQueued = false;
     m_mainSubExchangeConfirmationPending = false;
     m_replyFamilyDrains.clear();
@@ -274,6 +275,7 @@ void Commander::commonSetup()
     lookingForRadio = true;
     m_pendingReplies.clear();
     m_deferredReplyReads.clear();
+    m_receiverScopedReadActive = false;
     m_mainSubExchangeQueued = false;
     m_replyFamilyDrains.clear();
     m_replyDrainTimer->stop();
@@ -315,14 +317,14 @@ CommanderSchedulerDiagnostics Commander::schedulerDiagnostics() const
     return diagnostics;
 }
 
-vfo_t Commander::currentRoutingVfo() const
-{
-    return queue && queue->getState().receiver == 1 ? vfoSub : vfoMain;
-}
-
 void Commander::scheduleMeterRead(Funcs func, uchar receiver)
 {
     enqueueScheduledRead(ScheduledCommandClass::Meter, func, receiver);
+}
+
+void Commander::scheduleMeterAction(Funcs func, uchar receiver, std::function<void()> action)
+{
+    enqueueScheduledAction(ScheduledCommandClass::Meter, func, receiver, std::move(action));
 }
 
 void Commander::scheduleStartupRead(Funcs func, uchar receiver)
@@ -338,6 +340,27 @@ void Commander::scheduleInteractiveAction(Funcs func, uchar receiver, std::funct
 void Commander::scheduleConfirmatoryAction(Funcs func, uchar receiver, std::function<void()> action)
 {
     enqueueScheduledAction(ScheduledCommandClass::ConfirmatoryRead, func, receiver, std::move(action));
+}
+
+void Commander::executeReceiverScopedAction(uchar receiver, std::function<void()> action)
+{
+    Q_ASSERT(!m_receiverScopedReadActive);
+    m_receiverScopedReadActive = true;
+    const vfo_t targetVfo = receiver == 1 ? vfoSub : vfoMain;
+    receiveCommand(funcSelectVFO, QVariant::fromValue(targetVfo), 0);
+    QTimer::singleShot(50, this,
+                       [this, targetVfo, action = std::move(action)]()
+                       {
+                           if (!m_shutdownComplete)
+                           {
+                               action();
+                               if (targetVfo == vfoSub)
+                               {
+                                   receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+                               }
+                           }
+                           QTimer::singleShot(25, this, &Commander::finishReceiverScopedAction);
+                       });
 }
 
 void Commander::enqueueScheduledAction(ScheduledCommandClass commandClass, Funcs func, uchar receiver,
@@ -415,7 +438,7 @@ void Commander::dispatchNextScheduledCommand()
     const auto nonInteractive =
         std::find_if(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
                      { return command.commandClass != ScheduledCommandClass::InteractiveSet; });
-    if (m_mainSubExchangeConfirmationPending)
+    if (m_mainSubExchangeConfirmationPending || m_receiverScopedReadActive)
     {
         m_scheduledCommandTimer->start();
         return;
@@ -472,6 +495,10 @@ void Commander::dispatchNextScheduledCommand()
     }
     m_dispatchingScheduledCommand = false;
 
+    if (m_mainSubExchangeQueued)
+    {
+        dispatchDeferredReplyReads();
+    }
     if (!m_scheduledCommands.isEmpty())
     {
         m_scheduledCommandTimer->start();
@@ -683,6 +710,11 @@ bool Commander::deferReplyReadIfBlocked(Funcs func, uchar receiver)
     {
         return false;
     }
+    return enqueueDeferredReplyRead(func, receiver);
+}
+
+bool Commander::enqueueDeferredReplyRead(Funcs func, uchar receiver)
+{
     const auto duplicate = std::find_if(m_deferredReplyReads.cbegin(), m_deferredReplyReads.cend(),
                                         [func, receiver](const DeferredReplyRead& read)
                                         { return read.func == func && read.receiver == receiver; });
@@ -724,18 +756,26 @@ void Commander::beginReplyFamilyDrain(Funcs func, qint64 durationMs)
 
 void Commander::dispatchDeferredReplyReads()
 {
+    if (m_receiverScopedReadActive)
+    {
+        m_replyDrainTimer->start(20);
+        return;
+    }
     const qint64 now = m_pendingCommandClock.elapsed();
     m_replyFamilyDrains.erase(std::remove_if(m_replyFamilyDrains.begin(), m_replyFamilyDrains.end(),
                                              [now](const ReplyFamilyDrain& drain) { return drain.untilMs <= now; }),
                               m_replyFamilyDrains.end());
 
-    if (m_mainSubExchangeQueued && !replyFamilyBlocked(funcFreqGet) && !replyFamilyBlocked(funcModeGet))
+    const bool interactiveSetPending =
+        std::any_of(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
+                    { return command.commandClass == ScheduledCommandClass::InteractiveSet; });
+    if (m_mainSubExchangeQueued && !interactiveSetPending && !replyFamilyBlocked(funcFreqGet) &&
+        !replyFamilyBlocked(funcModeGet))
     {
         dispatchMainSubExchange();
         return;
     }
 
-    QSet<Funcs> dispatchedFamilies;
     for (qsizetype index = 0; index < m_deferredReplyReads.size();)
     {
         const DeferredReplyRead read = m_deferredReplyReads.at(index);
@@ -747,20 +787,14 @@ void Commander::dispatchDeferredReplyReads()
             ++index;
             continue;
         }
-        if (replyFamilyBlocked(read.func) || dispatchedFamilies.contains(family))
+        if (replyFamilyBlocked(read.func))
         {
             ++index;
             continue;
         }
         m_deferredReplyReads.removeAt(index);
-        dispatchedFamilies.insert(family);
-        const vfo_t targetVfo = read.receiver == 1 ? vfoSub : vfoMain;
-        receiveCommand(funcSelectVFO, QVariant::fromValue(targetVfo), 0);
-        receiveCommand(read.func, QVariant(), read.receiver);
-        if (targetVfo == vfoSub)
-        {
-            receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
-        }
+        dispatchReceiverScopedRead(read.func, read.receiver);
+        break;
     }
 
     if (!m_deferredReplyReads.isEmpty() || m_mainSubExchangeQueued)
@@ -776,7 +810,10 @@ void Commander::requestMainSubExchange()
         return;
     }
     m_mainSubExchangeQueued = true;
-    if (!replyFamilyBlocked(funcFreqGet) && !replyFamilyBlocked(funcModeGet))
+    const bool interactiveSetPending =
+        std::any_of(m_scheduledCommands.cbegin(), m_scheduledCommands.cend(), [](const ScheduledCommand& command)
+                    { return command.commandClass == ScheduledCommandClass::InteractiveSet; });
+    if (!interactiveSetPending && !replyFamilyBlocked(funcFreqGet) && !replyFamilyBlocked(funcModeGet))
     {
         dispatchMainSubExchange();
     }
@@ -785,17 +822,31 @@ void Commander::requestMainSubExchange()
 void Commander::requestReceiverScopedRead(Funcs func, uchar receiver)
 {
     discardExpiredPendingReplies();
+    if (m_receiverScopedReadActive)
+    {
+        enqueueDeferredReplyRead(func, receiver);
+        return;
+    }
     if (deferReplyReadIfBlocked(func, receiver))
     {
         return;
     }
 
-    const vfo_t targetVfo = receiver == 1 ? vfoSub : vfoMain;
-    receiveCommand(funcSelectVFO, QVariant::fromValue(targetVfo), 0);
-    receiveCommand(func, QVariant(), receiver);
-    if (targetVfo == vfoSub)
+    dispatchReceiverScopedRead(func, receiver);
+}
+
+void Commander::dispatchReceiverScopedRead(Funcs func, uchar receiver)
+{
+    executeReceiverScopedAction(receiver, [this, func, receiver]() { receiveCommand(func, QVariant(), receiver); });
+}
+
+void Commander::finishReceiverScopedAction()
+{
+    m_receiverScopedReadActive = false;
+    dispatchDeferredReplyReads();
+    if (!m_scheduledCommands.isEmpty() && !m_scheduledCommandTimer->isActive())
     {
-        receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+        m_scheduledCommandTimer->start();
     }
 }
 
@@ -811,16 +862,27 @@ void Commander::dispatchMainSubExchange()
     receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
     receiveCommand(funcSelectedFreq, QVariant(), 0);
     receiveCommand(funcSelectedMode, QVariant(), 0);
-    receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
-    receiveCommand(funcFreqGet, QVariant(), 1);
-    receiveCommand(funcModeGet, QVariant(), 1);
-    receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
     receiveCommandNoReadback(funcVFOBandMS, QVariant::fromValue<bool>(false), 0);
     receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(false), 0);
     receiveCommand(funcSelectedFreq, QVariant(), 0);
     receiveCommand(funcVFOBandMS, QVariant(), 0);
     receiveCommand(funcScopeMainSub, QVariant(), 0);
     emit mainSubExchangeDispatched();
+
+    // The swap acknowledgement does not prove that both newly exchanged
+    // receiver contexts are already readable. Let the radio apply the swap,
+    // then obtain SUB identity through the serialized receiver-scoped path.
+    // The old immediate SUB-select/read/restore burst could lose the mode
+    // reply or have another routed operation steal its physical context.
+    QTimer::singleShot(75, this,
+                       [this]()
+                       {
+                           if (!m_shutdownComplete && m_mainSubExchangeConfirmationPending)
+                           {
+                               requestReceiverScopedRead(funcFreqGet, 1);
+                               requestReceiverScopedRead(funcModeGet, 1);
+                           }
+                       });
 }
 
 void Commander::finishMainSubExchangeConfirmation()

@@ -39,6 +39,17 @@ class RadioState final : public QObject
         std::optional<ushort> toneFrequency;
         std::optional<ushort> toneSquelchFrequency;
         std::optional<ushort> dtcsCode;
+        std::optional<int> agcMode;
+        std::optional<bool> attenuatorEnabled;
+        std::optional<bool> nbEnabled;
+        std::optional<int> nbLevel;
+        std::optional<bool> autoNotchEnabled;
+        std::optional<bool> manualNotchEnabled;
+        std::optional<bool> nrEnabled;
+        std::optional<int> nrLevel;
+        std::optional<int> preampLevel;
+        std::optional<int> rfGain;
+        std::optional<int> squelch;
         availableBands band{bandUnknown};
     };
 

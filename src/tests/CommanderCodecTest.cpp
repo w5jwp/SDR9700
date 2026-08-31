@@ -38,6 +38,7 @@ class CommanderCodecTest : public QObject
     void serializesReceiverlessReadsByCanonicalFamily();
     void doesNotDeferMainSubSwapActions();
     void defersWholeMainSubExchangeUntilReplyFamiliesAreIdle();
+    void defersMainSubExchangeUntilInteractiveSetDispatches();
     void receiverScopedRetrySelectsOnlyWhenReadCanDispatch();
     void exchangeGateAllowsOnlyConfirmationRetries();
     void repeatedExchangesDrainScheduledPressure();
@@ -66,6 +67,8 @@ void CommanderCodecTest::init()
     m_commander.m_deferredReplyReads.clear();
     m_commander.m_replyFamilyDrains.clear();
     m_commander.m_replyDrainTimer->stop();
+    m_commander.m_receiverScopedReadActive = false;
+    m_commander.m_rttEstimator.reset();
     m_commander.m_correlationDiagnostics = {};
     m_commander.resetScheduledCommands();
     m_commander.m_schedulerDiagnostics = {};
@@ -123,6 +126,25 @@ void CommanderCodecTest::defersWholeMainSubExchangeUntilReplyFamiliesAreIdle()
     QCOMPARE(interactiveDispatches, 1);
 }
 
+void CommanderCodecTest::defersMainSubExchangeUntilInteractiveSetDispatches()
+{
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+    QSignalSpy dispatchedSpy(&m_commander, &Commander::mainSubExchangeDispatched);
+    int interactiveDispatches = 0;
+    m_commander.scheduleInteractiveAction(funcFreqSet, 1, [&interactiveDispatches]() { ++interactiveDispatches; });
+
+    m_commander.requestMainSubExchange();
+    QCOMPARE(dispatchedSpy.count(), 0);
+    QVERIFY(m_commander.m_mainSubExchangeQueued);
+
+    m_commander.dispatchNextScheduledCommand();
+    QCOMPARE(interactiveDispatches, 1);
+    QCOMPARE(dispatchedSpy.count(), 1);
+    QVERIFY(!m_commander.m_mainSubExchangeQueued);
+    QVERIFY(wireSpy.count() > 0);
+    QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07b0")));
+}
+
 void CommanderCodecTest::receiverScopedRetrySelectsOnlyWhenReadCanDispatch()
 {
     QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
@@ -136,7 +158,7 @@ void CommanderCodecTest::receiverScopedRetrySelectsOnlyWhenReadCanDispatch()
     m_commander.m_pendingReplies.clear();
     m_commander.dispatchDeferredReplyReads();
 
-    QCOMPARE(wireSpy.count(), 3);
+    QTRY_COMPARE(wireSpy.count(), 3);
     QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07d1")));
     QVERIFY(wireSpy.at(1).at(0).toByteArray().contains(QByteArray::fromHex("04")));
     QVERIFY(wireSpy.at(2).at(0).toByteArray().contains(QByteArray::fromHex("07d0")));
@@ -148,7 +170,8 @@ void CommanderCodecTest::receiverScopedRetrySelectsOnlyWhenReadCanDispatch()
     m_commander.m_deferredReplyReads.append({funcModeGet, 1});
     m_commander.m_deferredReplyReads.append({funcRfGain, 1});
     m_commander.dispatchDeferredReplyReads();
-    QCOMPARE(wireSpy.count(), 9);
+    QTRY_COMPARE_WITH_TIMEOUT(wireSpy.count(), 9, 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(!m_commander.m_receiverScopedReadActive, 1000);
 }
 
 void CommanderCodecTest::exchangeGateAllowsOnlyConfirmationRetries()
@@ -160,7 +183,10 @@ void CommanderCodecTest::exchangeGateAllowsOnlyConfirmationRetries()
 
     m_commander.dispatchDeferredReplyReads();
 
-    QCOMPARE(wireSpy.count(), 3);
+    // Receiver-scoped operations intentionally serialize select, read, and
+    // restore across event-loop turns so another routed action cannot steal
+    // the physical context between frames.
+    QTRY_COMPARE_WITH_TIMEOUT(wireSpy.count(), 3, 1000);
     QCOMPARE(m_commander.m_deferredReplyReads.size(), 1);
     QCOMPARE(m_commander.m_deferredReplyReads.first().func, funcRfGain);
     QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("07d1")));

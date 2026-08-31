@@ -89,7 +89,10 @@ class IRadioBackend : public QObject
     virtual void setVfoPreampLevel(Vfo vfo, int level) = 0;
     virtual void setVfoRfGain(Vfo vfo, int level) = 0;
     virtual void setVfoSquelch(Vfo vfo, int level) = 0;
-    virtual void setDualWatchEnabled(bool on) = 0;
+    // Returns true only when the backend started the asynchronous transition.
+    // A true result is acceptance, not radio confirmation; callers still wait
+    // for radioValueConfirmed(funcVFODualWatch, ...).
+    virtual bool setDualWatchEnabled(bool on) = 0;
 
     virtual void pollFrequency() = 0;
     virtual void selectVfoMode() = 0;

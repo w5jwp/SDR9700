@@ -116,7 +116,7 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                     m_transmitting = transmitting;
                     updateTransmitIndicators();
                 });
-        connect(m_backend, &IRadioBackend::radioValueUpdated, this,
+        connect(m_backend, &IRadioBackend::radioValueConfirmed, this,
                 [this](Funcs func, const QVariant& value, uchar receiver)
                 {
                     if (receiver != 0)
@@ -126,17 +126,19 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                     if (func == funcVFOBandMS)
                     {
                         const Vfo selected = value.toBool() ? Vfo::Sub : Vfo::Main;
-                        if (m_selectionPending && selected != m_requestedVfo)
+                        // The physical MAIN/SUB context also changes during
+                        // receiver-routing batches. It confirms an explicit
+                        // UI selection only while that request is pending; it
+                        // must not later overwrite the operator's stable UI
+                        // selection when a background batch restores MAIN.
+                        if (!m_selectionPending || selected != m_requestedVfo)
                         {
                             return;
                         }
-                        if (m_selectionPending)
-                        {
-                            m_selectionPending = false;
-                            m_selectionRetryCount = 0;
-                            m_selectionTimeoutTimer->stop();
-                            setPttReady(true);
-                        }
+                        m_selectionPending = false;
+                        m_selectionRetryCount = 0;
+                        m_selectionTimeoutTimer->stop();
+                        setPttReady(true);
                         m_requestedVfo = selected;
                         const bool changed = m_selectedVfo != selected;
                         m_selectedVfo = selected;
@@ -248,8 +250,7 @@ bool VfoSelectionController::requestDualWatch(bool enabled)
     {
         return false;
     }
-    m_backend->setDualWatchEnabled(enabled);
-    return true;
+    return m_backend->setDualWatchEnabled(enabled);
 }
 
 void VfoSelectionController::setControlsEnabled(bool enabled)

@@ -31,6 +31,24 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                 m_initialStatePublished = true;
                 publishConfirmedState();
             });
+    m_bandRecallSettleTimer.setSingleShot(true);
+    m_bandRecallSettleTimer.setInterval(250);
+    connect(&m_bandRecallSettleTimer, &QTimer::timeout, this, &VfoController::finishPendingBandRecall);
+    m_bandRecallTimeoutTimer.setSingleShot(true);
+    m_bandRecallTimeoutTimer.setInterval(5000);
+    connect(&m_bandRecallTimeoutTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                qWarning() << "Band recall confirmation timed out; refreshing receiver state"
+                           << "vfo=" << (m_vfo == Vfo::Main ? "MAIN" : "SUB")
+                           << "band=" << static_cast<int>(m_pendingBandRecall.value_or(bandUnknown));
+                m_pendingBandRecall.reset();
+                updateDisplayEnabled();
+                if (m_backend)
+                {
+                    m_backend->requestVfoState(m_vfo);
+                }
+            });
 
     connect(m_display, &VfoDisplay::frequencySubmitted, this,
             [this](const QString& text)
@@ -38,10 +56,9 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                 quint64 hz = 0;
                 const bool valid = sdr9700::ui::main_window::parseFrequencyText(text, &hz) &&
                                    sdr9700::ui::main_window::vfoBandIndexForHz(hz) >= 0;
-                if (valid && m_backend)
+                if (valid)
                 {
-                    emit frequencyRecenterRequested(m_vfo, hz);
-                    m_backend->setVfoFrequencyHz(m_vfo, hz);
+                    requestFrequencyHz(hz);
                 }
                 if (frequencyHz() > 0)
                 {
@@ -274,6 +291,25 @@ void VfoController::applyRadioState()
         return;
     }
     publishConfirmedState();
+    if (m_pendingBandRecall.has_value())
+    {
+        if (pendingBandRecallIdentityIsConfirmed())
+        {
+            // Once the complete identity is present, begin one quiet-period
+            // deadline. Stable polling updates RadioState at the same cadence
+            // as this timer; restarting it for every unrelated confirmation
+            // can postpone completion forever and leave the VFO locked until
+            // the five-second recovery timeout fires.
+            if (!m_bandRecallSettleTimer.isActive())
+            {
+                m_bandRecallSettleTimer.start();
+            }
+        }
+        else
+        {
+            m_bandRecallSettleTimer.stop();
+        }
+    }
 }
 
 void VfoController::setFrequencyHz(quint64 hz)
@@ -291,6 +327,22 @@ void VfoController::setFrequencyHz(quint64 hz)
         m_lastBandFrequencyHz[static_cast<std::size_t>(bandIndex)] = hz;
     }
     publishConfirmedState();
+}
+
+void VfoController::requestFrequencyHz(quint64 hz)
+{
+    if (hz == frequencyHz())
+    {
+        return;
+    }
+    if (!m_backend)
+    {
+        setFrequencyHz(hz);
+        return;
+    }
+
+    emit frequencyRecenterRequested(m_vfo, hz);
+    m_backend->setVfoFrequencyHz(m_vfo, hz);
 }
 
 void VfoController::clearFrequency()
@@ -372,12 +424,20 @@ void VfoController::applyExchangeableControlState(const ExchangeableControlState
     updateReceiverControlDisplay();
 }
 
-void VfoController::selectBand(availableBands requestedBand)
+bool VfoController::selectBand(availableBands requestedBand)
 {
     const int bandIndex = sdr9700::radioBandUiIndex(requestedBand);
     if (!m_backend || bandIndex < 0)
     {
-        return;
+        return false;
+    }
+    if (requestedBand == band())
+    {
+        return true;
+    }
+    if (m_pendingBandRecall.has_value())
+    {
+        return false;
     }
     const sdr9700::RadioState::BandRecall* recall =
         m_radioState ? m_radioState->bandRecall(m_vfo, requestedBand) : nullptr;
@@ -387,6 +447,10 @@ void VfoController::selectBand(availableBands requestedBand)
     const quint64 hz = remembered > 0 ? remembered : sdr9700::radioBandDefaultFrequency(requestedBand);
     if (hz > 0)
     {
+        m_pendingBandRecall = requestedBand;
+        m_bandRecallSettleTimer.stop();
+        m_bandRecallTimeoutTimer.start();
+        updateDisplayEnabled();
         emit frequencyRecenterRequested(m_vfo, hz);
         if (recall && recall->frequencyHz.has_value())
         {
@@ -406,7 +470,31 @@ void VfoController::selectBand(availableBands requestedBand)
         {
             m_backend->setVfoFrequencyHz(m_vfo, hz);
         }
+        return true;
     }
+    return false;
+}
+
+bool VfoController::pendingBandRecallIdentityIsConfirmed() const
+{
+    if (!m_pendingBandRecall.has_value() || !m_radioState)
+    {
+        return false;
+    }
+    const auto& receiver = m_radioState->receiver(m_vfo);
+    return receiver.band == *m_pendingBandRecall && receiver.frequencyHz.has_value() && receiver.mode.has_value() &&
+           !receiver.mode->isEmpty() && receiver.filter.has_value();
+}
+
+void VfoController::finishPendingBandRecall()
+{
+    if (!pendingBandRecallIdentityIsConfirmed())
+    {
+        return;
+    }
+    m_pendingBandRecall.reset();
+    m_bandRecallTimeoutTimer.stop();
+    updateDisplayEnabled();
 }
 
 bool VfoController::stateReady() const
@@ -463,7 +551,8 @@ void VfoController::publishConfirmedState()
 
 void VfoController::updateDisplayEnabled()
 {
-    m_display->setOperatingEnabled(m_operatingEnabled && (!m_backend || m_userInteractionEnabled) && stateReady());
+    m_display->setOperatingEnabled(m_operatingEnabled && (!m_backend || m_userInteractionEnabled) && stateReady() &&
+                                   !m_pendingBandRecall.has_value());
 }
 
 void VfoController::updateReceiverControlDisplay()
@@ -553,6 +642,8 @@ void VfoController::showModeMenu()
     for (const QString& mode : VfoModel::availableModes())
     {
         QAction* action = menu.addAction(mode);
+        action->setObjectName(QStringLiteral("%1VfoMode%2Action")
+                                  .arg(m_vfo == Vfo::Main ? QStringLiteral("main") : QStringLiteral("sub"), mode));
         action->setCheckable(true);
         action->setChecked(mode == confirmedMode());
         connect(action, &QAction::triggered, this, [this, mode]() { m_backend->setVfoMode(m_vfo, mode); });
@@ -605,6 +696,9 @@ void VfoController::showReceiverControlMenu(const QString& control)
                                  qMakePair(QStringLiteral("SLOW"), QStringLiteral("slow"))})
         {
             QAction* const action = menu.addAction(item.first);
+            action->setObjectName(
+                QStringLiteral("%1VfoAgc%2Action")
+                    .arg(m_vfo == Vfo::Main ? QStringLiteral("main") : QStringLiteral("sub"), item.first));
             connect(action, &QAction::triggered, this,
                     [this, mode = item.second]() { m_backend->setVfoAgcMode(m_vfo, mode); });
         }
@@ -621,6 +715,9 @@ void VfoController::showReceiverControlMenu(const QString& control)
         auto* label = new QLabel(QStringLiteral("%1%").arg(qRound(currentValue * 100.0 / 255.0)), panel);
         label->setAlignment(Qt::AlignCenter);
         auto* slider = new QSlider(Qt::Horizontal, panel);
+        slider->setAccessibleName(
+            QStringLiteral("%1 VFO %2 level")
+                .arg(m_vfo == Vfo::Main ? QStringLiteral("MAIN") : QStringLiteral("SUB"), control));
         slider->setRange(0, 255);
         slider->setValue(currentValue);
         bool submitted = false;

@@ -68,6 +68,15 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
     {
         return;
     }
+    if (receiverId == 1 && m_shared.dualWatchEnabled == std::optional<bool>(false))
+    {
+        // Replies already queued before Dual Watch was disabled can arrive
+        // after the OFF confirmation. They no longer describe a live SUB
+        // receiver and must not repopulate the invalidated snapshot. The
+        // confirmed ON transition is observed before its explicit SUB
+        // identity reads, so normal repopulation resumes when SUB is live.
+        return;
+    }
 
     const Vfo vfo = vfoForReceiver(receiverId);
     Receiver& state = m_receivers.at(receiverIndex(vfo));
@@ -176,6 +185,50 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
             recall->dtcsCode = *state.dtcsCode;
             recallChanged = true;
         }
+        receiverChanged = true;
+        break;
+    case funcAGCTimeConstant:
+        state.agcMode = qBound(0, value.toInt(), 3);
+        receiverChanged = true;
+        break;
+    case funcAttenuator:
+        state.attenuatorEnabled = value.toInt() != 0;
+        receiverChanged = true;
+        break;
+    case funcNoiseBlanker:
+        state.nbEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcNBLevel:
+        state.nbLevel = qBound(0, value.toInt(), 255);
+        receiverChanged = true;
+        break;
+    case funcAutoNotch:
+        state.autoNotchEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcManualNotch:
+        state.manualNotchEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcNoiseReduction:
+        state.nrEnabled = value.toBool();
+        receiverChanged = true;
+        break;
+    case funcNRLevel:
+        state.nrLevel = qBound(0, value.toInt(), 255);
+        receiverChanged = true;
+        break;
+    case funcPreamp:
+        state.preampLevel = qBound(0, value.toInt(), 3);
+        receiverChanged = true;
+        break;
+    case funcRfGain:
+        state.rfGain = qBound(0, value.toInt(), 255);
+        receiverChanged = true;
+        break;
+    case funcSquelch:
+        state.squelch = qBound(0, value.toInt(), 255);
         receiverChanged = true;
         break;
     case funcVFOBandMS:

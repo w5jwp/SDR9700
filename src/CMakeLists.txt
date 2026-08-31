@@ -549,6 +549,8 @@ if(BUILD_TESTING)
         gui/MainWindowHelpers.cpp
         gui/VfoController.cpp
         gui/VfoDisplay.cpp
+        gui/VfoSelectionController.cpp
+        gui/VfoSelectionPanel.cpp
         gui/VfoSMeter.cpp
         models/RadioState.cpp
         models/VfoModel.cpp

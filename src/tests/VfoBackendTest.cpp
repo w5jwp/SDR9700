@@ -1,11 +1,13 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "IRadioBackend.h"
+#include "MainSubExchangeConfirmationPolicy.h"
 #include "SameBandRefreshPolicy.h"
 #include "VfoReceiverCommandRoute.h"
 #include "VfoModel.h"
 #include "RadioState.h"
 #include "VfoController.h"
 #include "VfoDisplay.h"
+#include "VfoSelectionController.h"
 
 #include <QLabel>
 #include <QPushButton>
@@ -75,7 +77,12 @@ class FakeRadioBackend : public IRadioBackend
     void setTuningStep(int) override {}
     void selectVfo(Vfo value) override { selectedVfo = value; }
     void exchangeMainSub() override { ++exchangeCalls; }
-    void setVfoFrequencyHz(Vfo, quint64) override {}
+    void setVfoFrequencyHz(Vfo vfo, quint64 hz) override
+    {
+        requestedFrequencyVfo = vfo;
+        requestedFrequencyHz = hz;
+        ++vfoFrequencyCalls;
+    }
     void setVfoMode(Vfo, const QString&) override {}
     void applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall) override
     {
@@ -92,7 +99,16 @@ class FakeRadioBackend : public IRadioBackend
     void setVfoPreampLevel(Vfo, int) override {}
     void setVfoRfGain(Vfo, int) override {}
     void setVfoSquelch(Vfo, int) override {}
-    void setDualWatchEnabled(bool enabled) override { dualWatchEnabled = enabled; }
+    bool setDualWatchEnabled(bool enabled) override
+    {
+        ++dualWatchCalls;
+        if (!dualWatchAccepted)
+        {
+            return false;
+        }
+        dualWatchEnabled = enabled;
+        return true;
+    }
     void pollFrequency() override {}
     void selectVfoMode() override {}
     void selectRadioMemory(quint16 group, quint16 channel, Vfo targetVfo) override
@@ -127,6 +143,8 @@ class FakeRadioBackend : public IRadioBackend
     Vfo selectedVfo{Vfo::Main};
     Vfo requestedVfoState{Vfo::Main};
     bool dualWatchEnabled{false};
+    bool dualWatchAccepted{true};
+    int dualWatchCalls{0};
     int exchangeCalls{0};
     quint16 selectedMemoryGroup{0};
     quint16 selectedMemoryChannel{0};
@@ -135,6 +153,9 @@ class FakeRadioBackend : public IRadioBackend
     Vfo recalledVfo{Vfo::Main};
     VfoBandRecallRequest recalledBand;
     int bandRecallCalls{0};
+    Vfo requestedFrequencyVfo{Vfo::Main};
+    quint64 requestedFrequencyHz{0};
+    int vfoFrequencyCalls{0};
 };
 
 class VfoBackendTest : public QObject
@@ -150,12 +171,160 @@ class VfoBackendTest : public QObject
     void mapsVfoToReceiverByte();
     void alternatesInactiveMeterSamplesDuringDualWatch();
     void suppressesReceiverMeterPollingDuringContextTransitions();
+    void exchangeModeConfirmationAlwaysRequiresReceiverFrequency();
     void survivesRepeatedExchangeAndTunePressure();
     void sameBandRefreshIsEdgeTriggered();
     void radioStateKeepsReceiverAndBandRecallIsolated();
     void radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate();
     void vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed();
+    void controllerFrequencyRequestWaitsForRadioConfirmation();
+    void bandRecallRejectsPressureUntilCompleteIdentitySettles();
+    void uiSelectionIgnoresBackgroundReceiverRouting();
+    void dualWatchRequestReportsBackendAcceptance();
 };
+
+void VfoBackendTest::exchangeModeConfirmationAlwaysRequiresReceiverFrequency()
+{
+    constexpr quint8 kMainFrequency = 0x10;
+    constexpr quint8 kSubFrequency = 0x04;
+
+    // Exercise every possible byte-sized combination repeatedly. This is
+    // intentionally much larger than the minimum truth-table test because
+    // the hardware defect appeared only under sustained exchange pressure.
+    for (int pass = 0; pass < 500; ++pass)
+    {
+        for (int raw = 0; raw <= 0xff; ++raw)
+        {
+            const auto confirmations = static_cast<quint8>(raw);
+            QCOMPARE(sdr9700::backend::exchangeModeMayConfirm(confirmations, kMainFrequency),
+                     (confirmations & kMainFrequency) != 0);
+            QCOMPARE(sdr9700::backend::exchangeModeMayConfirm(confirmations, kSubFrequency),
+                     (confirmations & kSubFrequency) != 0);
+        }
+    }
+}
+
+void VfoBackendTest::bandRecallRejectsPressureUntilCompleteIdentitySettles()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+    QWidget parent;
+    VfoController controller(Vfo::Main, &backend, &state, &parent);
+
+    Frequency frequency;
+    frequency.Hz = 432100000;
+    ModeInfo mode;
+    mode.mk = modeFM;
+    mode.name = QStringLiteral("FM");
+    mode.filter = 1;
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(frequency), 0);
+    emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 0);
+    frequency.Hz = 145250000;
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(frequency), 0);
+    emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 0);
+
+    QVERIFY(controller.selectBand(band2m));
+    QCOMPARE(backend.bandRecallCalls, 0);
+    QCOMPARE(backend.vfoFrequencyCalls, 0);
+
+    QVERIFY(controller.selectBand(band70cm));
+    QCOMPARE(backend.bandRecallCalls, 1);
+    QVERIFY(!controller.selectBand(band23cm));
+    QCOMPARE(backend.bandRecallCalls, 1);
+
+    frequency.Hz = 432100000;
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(frequency), 0);
+    QVERIFY(!controller.selectBand(band23cm));
+    emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 0);
+    QVERIFY(!controller.selectBand(band23cm));
+
+    // The steady poller continues reporting unrelated receiver state while a
+    // band identity settles. Those updates must not restart the quiet-period
+    // timer forever; under the real 250 ms poll cadence that left the control
+    // locked until its five-second recovery timeout.
+    for (int i = 0; i < 8; ++i)
+    {
+        emit backend.radioValueConfirmed(funcRfGain, QVariant::fromValue<ushort>(static_cast<ushort>(100 + i)), 0);
+        QTest::qWait(40);
+    }
+    QVERIFY(controller.selectBand(band23cm));
+    QCOMPARE(backend.vfoFrequencyCalls, 1);
+}
+
+void VfoBackendTest::dualWatchRequestReportsBackendAcceptance()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+    QWidget parent;
+    VfoController mainController(Vfo::Main, &backend, &state, &parent);
+    VfoController subController(Vfo::Sub, &backend, &state, &parent);
+    VfoSelectionController selection(&backend, &mainController, &subController, &parent);
+    selection.setRadioReady(true);
+
+    backend.dualWatchAccepted = false;
+    QVERIFY(!backend.dualWatchAccepted);
+    QVERIFY(!selection.requestDualWatch(true));
+    QCOMPARE(backend.dualWatchCalls, 1);
+    QVERIFY(!backend.dualWatchEnabled);
+
+    backend.dualWatchAccepted = true;
+    QVERIFY(selection.requestDualWatch(true));
+    QCOMPARE(backend.dualWatchCalls, 2);
+    QVERIFY(backend.dualWatchEnabled);
+}
+
+void VfoBackendTest::uiSelectionIgnoresBackgroundReceiverRouting()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+    QWidget parent;
+    VfoController mainController(Vfo::Main, &backend, &state, &parent);
+    VfoController subController(Vfo::Sub, &backend, &state, &parent);
+    VfoSelectionController selection(&backend, &mainController, &subController, &parent);
+    selection.setRadioReady(true);
+
+    selection.selectVfo(Vfo::Sub);
+    QCOMPARE(backend.selectedVfo, Vfo::Sub);
+    QCOMPARE(selection.selectedVfo(), Vfo::Main);
+
+    // A stale MAIN observation cannot complete the pending SUB request.
+    emit backend.radioValueConfirmed(funcVFOBandMS, false, 0);
+    QCOMPARE(selection.selectedVfo(), Vfo::Main);
+
+    emit backend.radioValueConfirmed(funcVFOBandMS, true, 0);
+    QCOMPARE(selection.selectedVfo(), Vfo::Sub);
+
+    // Background command routing restores the physical radio context to
+    // MAIN. That is not an operator selection and must not move the UI.
+    emit backend.radioValueConfirmed(funcVFOBandMS, false, 0);
+    QCOMPARE(selection.selectedVfo(), Vfo::Sub);
+}
+
+void VfoBackendTest::controllerFrequencyRequestWaitsForRadioConfirmation()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+    QWidget parent;
+    VfoController controller(Vfo::Main, &backend, &state, &parent);
+
+    Frequency confirmed;
+    confirmed.Hz = 144200000;
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(confirmed), 0);
+    QCOMPARE(controller.frequencyHz(), quint64(144200000));
+
+    controller.requestFrequencyHz(145250000);
+    QCOMPARE(backend.vfoFrequencyCalls, 1);
+    QCOMPARE(backend.requestedFrequencyVfo, Vfo::Main);
+    QCOMPARE(backend.requestedFrequencyHz, quint64(145250000));
+    QCOMPARE(controller.frequencyHz(), quint64(144200000));
+
+    controller.requestFrequencyHz(144200000);
+    QCOMPARE(backend.vfoFrequencyCalls, 1);
+
+    confirmed.Hz = 145250000;
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(confirmed), 0);
+    QCOMPARE(controller.frequencyHz(), quint64(145250000));
+}
 
 void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
 {
@@ -235,6 +404,14 @@ void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
     QCOMPARE(subController.frequencyHz(), quint64(0));
     QCOMPARE(subController.display()->frequencyText(), QStringLiteral("---.---.---"));
     QCOMPARE(state.bandRecall(Vfo::Sub, band70cm)->frequencyHz, std::optional<quint64>(443250000));
+
+    // A SUB reply queued before the OFF confirmation may arrive afterward.
+    // It must not resurrect a receiver that the radio has confirmed is no
+    // longer live.
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(subFrequency), 1);
+    emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 1);
+    QCOMPARE(subController.frequencyHz(), quint64(0));
+    QVERIFY(!state.receiver(Vfo::Sub).mode.has_value());
 }
 
 void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()
@@ -257,11 +434,19 @@ void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()
     Frequency subOffset;
     subOffset.Hz = 5000000;
     emit backend.radioValueConfirmed(funcReadFreqOffset, QVariant::fromValue(subOffset), 1);
+    emit backend.radioValueConfirmed(funcRfGain, 210, 0);
+    emit backend.radioValueConfirmed(funcRfGain, 90, 1);
+    emit backend.radioValueConfirmed(funcSquelch, 32, 0);
+    emit backend.radioValueConfirmed(funcSquelch, 96, 1);
 
     QCOMPARE(state.receiver(Vfo::Main).frequencyHz, std::optional<quint64>(145250000));
     QCOMPARE(state.receiver(Vfo::Main).duplexMode, std::optional<duplexMode_t>(dmDupMinus));
     QCOMPARE(state.receiver(Vfo::Sub).frequencyHz, std::optional<quint64>(443250000));
     QCOMPARE(state.receiver(Vfo::Sub).duplexMode, std::optional<duplexMode_t>(dmDupPlus));
+    QCOMPARE(state.receiver(Vfo::Main).rfGain, std::optional<int>(210));
+    QCOMPARE(state.receiver(Vfo::Sub).rfGain, std::optional<int>(90));
+    QCOMPARE(state.receiver(Vfo::Main).squelch, std::optional<int>(32));
+    QCOMPARE(state.receiver(Vfo::Sub).squelch, std::optional<int>(96));
 
     const sdr9700::RadioState::BandRecall* main2m = state.bandRecall(Vfo::Main, band2m);
     const sdr9700::RadioState::BandRecall* sub70cm = state.bandRecall(Vfo::Sub, band70cm);

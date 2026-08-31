@@ -22,6 +22,7 @@ class VfoController : public QObject
 
     Vfo vfo() const { return m_vfo; }
     VfoDisplay* display() const { return m_display; }
+    void requestFrequencyHz(quint64 hz);
     void setFrequencyHz(quint64 hz);
     void clearFrequency();
     void setOperatingEnabled(bool enabled);
@@ -34,7 +35,7 @@ class VfoController : public QObject
     availableBands band() const;
     quint64 frequencyHz() const;
     bool hasPublishedState() const { return stateReady() && (!m_backend || m_initialStatePublished); }
-    void selectBand(availableBands requestedBand);
+    bool selectBand(availableBands requestedBand);
 
   signals:
     void bandMenuRequested(Vfo vfo, const QPoint& position);
@@ -75,6 +76,8 @@ class VfoController : public QObject
     void updateReceiverControlDisplay();
     void updateTransmitFrequencyDisplay();
     void applyExchangeableControlState(const ExchangeableControlState& state);
+    bool pendingBandRecallIdentityIsConfirmed() const;
+    void finishPendingBandRecall();
 
     const Vfo m_vfo;
     IRadioBackend* m_backend{nullptr};
@@ -108,5 +111,8 @@ class VfoController : public QObject
     bool m_userInteractionEnabled{false};
     bool m_initialStatePublished{false};
     QTimer m_initialPublishTimer;
+    QTimer m_bandRecallSettleTimer;
+    QTimer m_bandRecallTimeoutTimer;
+    std::optional<availableBands> m_pendingBandRecall;
     std::optional<ExchangeableControlState> m_capturedExchangeState;
 };

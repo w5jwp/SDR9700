@@ -59,6 +59,11 @@ QJsonValue optionalInteger(const std::optional<quint64>& value)
     return value ? QJsonValue(static_cast<qint64>(*value)) : QJsonValue(QJsonValue::Null);
 }
 
+template <typename T> QJsonValue optionalJsonValue(const std::optional<T>& value)
+{
+    return value ? QJsonValue(*value) : QJsonValue(QJsonValue::Null);
+}
+
 QJsonObject receiverSnapshot(const sdr9700::RadioState::Receiver& receiver)
 {
     return QJsonObject{
@@ -68,7 +73,18 @@ QJsonObject receiverSnapshot(const sdr9700::RadioState::Receiver& receiver)
                                      : QJsonValue(sdr9700::radioBandShortLabel(receiver.band))},
         {QStringLiteral("mode"), receiver.mode ? QJsonValue(*receiver.mode) : QJsonValue(QJsonValue::Null)},
         {QStringLiteral("filter"), receiver.filter ? QJsonValue(*receiver.filter) : QJsonValue(QJsonValue::Null)},
-        {QStringLiteral("repeaterOffsetHz"), optionalInteger(receiver.repeaterOffsetHz)}};
+        {QStringLiteral("repeaterOffsetHz"), optionalInteger(receiver.repeaterOffsetHz)},
+        {QStringLiteral("agcMode"), optionalJsonValue(receiver.agcMode)},
+        {QStringLiteral("attenuatorEnabled"), optionalJsonValue(receiver.attenuatorEnabled)},
+        {QStringLiteral("nbEnabled"), optionalJsonValue(receiver.nbEnabled)},
+        {QStringLiteral("nbLevel"), optionalJsonValue(receiver.nbLevel)},
+        {QStringLiteral("autoNotchEnabled"), optionalJsonValue(receiver.autoNotchEnabled)},
+        {QStringLiteral("manualNotchEnabled"), optionalJsonValue(receiver.manualNotchEnabled)},
+        {QStringLiteral("nrEnabled"), optionalJsonValue(receiver.nrEnabled)},
+        {QStringLiteral("nrLevel"), optionalJsonValue(receiver.nrLevel)},
+        {QStringLiteral("preampLevel"), optionalJsonValue(receiver.preampLevel)},
+        {QStringLiteral("rfGain"), optionalJsonValue(receiver.rfGain)},
+        {QStringLiteral("squelch"), optionalJsonValue(receiver.squelch)}};
 }
 } // namespace
 
@@ -115,8 +131,7 @@ QJsonObject AutomationController::stateSnapshot() const
                        {QStringLiteral("ready"), model->isReady()},
                        {QStringLiteral("transmitting"), model->isTransmitting()},
                        {QStringLiteral("controlsLocked"), m_window->m_controlsLocked},
-                       {QStringLiteral("selectedVfo"),
-                        shared.selectedVfo ? QJsonValue(vfoName(*shared.selectedVfo)) : QJsonValue(QJsonValue::Null)},
+                       {QStringLiteral("selectedVfo"), vfoName(m_window->m_vfoSelectionController->selectedVfo())},
                        {QStringLiteral("dualWatch"),
                         shared.dualWatchEnabled ? QJsonValue(*shared.dualWatchEnabled) : QJsonValue(QJsonValue::Null)},
                        {QStringLiteral("receivers"),
@@ -199,7 +214,7 @@ QJsonObject AutomationController::execute(const QJsonObject& request)
                           QStringLiteral("frequencyHz must be inside an IC-9700 amateur band"));
         }
         (*vfo == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController)
-            ->setFrequencyHz(static_cast<quint64>(frequencyHz));
+            ->requestFrequencyHz(static_cast<quint64>(frequencyHz));
     }
     else if (action == QLatin1String("select_band"))
     {
@@ -210,7 +225,17 @@ QJsonObject AutomationController::execute(const QJsonObject& request)
             return reject(QStringLiteral("invalid_argument"),
                           QStringLiteral("select_band requires vfo MAIN/SUB and band 2m/70cm/23cm"));
         }
-        (*vfo == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController)->selectBand(*band);
+        const VfoController* other = *vfo == Vfo::Main ? m_window->m_subVfoController : m_window->m_mainVfoController;
+        if (other->band() == *band)
+        {
+            return reject(QStringLiteral("request_rejected"),
+                          QStringLiteral("The requested band is already assigned to the other VFO"));
+        }
+        if (!(*vfo == Vfo::Main ? m_window->m_mainVfoController : m_window->m_subVfoController)->selectBand(*band))
+        {
+            return reject(QStringLiteral("request_rejected"),
+                          QStringLiteral("A band change is already awaiting radio confirmation"));
+        }
     }
     else if (action == QLatin1String("set_dual_watch"))
     {
