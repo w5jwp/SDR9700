@@ -346,7 +346,7 @@ void MainTitleBar::addMenu(const QString& label, QMenu* menu)
     }
 }
 
-void MainTitleBar::addAction(const QString& label, QObject* context, std::function<void()> callback)
+QToolButton* MainTitleBar::addAction(const QString& label, QObject* context, std::function<void()> callback)
 {
     auto* btn = new TitleMenuButton(this);
     btn->setText(label);
@@ -379,6 +379,8 @@ void MainTitleBar::addAction(const QString& label, QObject* context, std::functi
                     }
                 });
     }
+
+    return btn;
 }
 
 void MainTitleBar::setTitle(const QString& title)

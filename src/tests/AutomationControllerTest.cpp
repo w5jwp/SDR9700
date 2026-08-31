@@ -118,7 +118,7 @@ class AutomationControllerTest final : public QObject
         for (const QJsonValue& value : controls)
         {
             const QJsonObject control = value.toObject();
-            if (control.value(QStringLiteral("text")).toString() == QStringLiteral("Settings…"))
+            if (control.value(QStringLiteral("objectName")).toString() == QStringLiteral("settingsAction"))
             {
                 settingsActionId = control.value(QStringLiteral("id")).toString();
                 break;

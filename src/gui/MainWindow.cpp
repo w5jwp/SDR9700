@@ -408,6 +408,7 @@ void MainWindow::buildToolBar()
     auto* settingsMenu = new QMenu(QStringLiteral("&Settings"), this);
     auto* settingsAction =
         settingsMenu->addAction(QStringLiteral("Settings…"), this, [this]() { showSettingsDialog(); });
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
     settingsAction->setMenuRole(QAction::NoRole);
 
     QMenuBar* nativeMenuBar = menuBar();
@@ -421,7 +422,8 @@ void MainWindow::buildToolBar()
 #else
     Q_UNUSED(aboutAction);
     m_titleBar->addMenu(QStringLiteral("&File"), fileMenu);
-    m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
+    auto* settingsAction = m_titleBar->addAction(QStringLiteral("&Settings"), this, [this]() { showSettingsDialog(); });
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
     m_titleBar->addMenu(QStringLiteral("&View"), viewMenu);
     m_titleBar->addMenu(QStringLiteral("&Window"), windowMenu);
     m_titleBar->addMenu(QStringLiteral("&Help"), helpMenu);
