@@ -69,6 +69,7 @@ set(SDR9700_CORE_SOURCES
     core/LoggingConfiguration.h
     core/LoggingConfiguration.cpp
     core/RadioSessionWatchdog.h
+    radio/RadioSessionOwnership.h
     core/SMeterScale.h
     core/Vfo.h
     core/AppSettings.cpp

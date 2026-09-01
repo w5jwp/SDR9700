@@ -25,6 +25,7 @@
 #include "UdpCivData.h"
 #include "UdpAudio.h"
 #include "RadioSessionWatchdog.h"
+#include "RadioSessionOwnership.h"
 
 class UdpHandler : public UdpBase
 {
@@ -104,6 +105,7 @@ class UdpHandler : public UdpBase
     bool m_disconnectStatusReceived = false;
     bool m_tokenRemovalAcknowledged = false;
     bool m_staleSessionReclaimInProgress = false;
+    sdr9700::RadioSessionOwnership m_sessionOwnership;
     bool m_civStreamReady = false;
     bool m_healthFailureReported = false;
     bool m_audioSilenceReported = false;

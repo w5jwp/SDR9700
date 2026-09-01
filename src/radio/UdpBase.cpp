@@ -67,7 +67,7 @@ UdpBase::~UdpBase()
 
 void UdpBase::sendDeparture()
 {
-    if (udp == nullptr || departureSent)
+    if (udp == nullptr || departureSent || !departureAllowed)
     {
         return;
     }

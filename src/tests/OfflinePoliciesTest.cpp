@@ -3,6 +3,7 @@
 #include "MemorySyncPolicy.h"
 #include "MainSubExchangePolicy.h"
 #include "PttConfirmationPolicy.h"
+#include "RadioSessionOwnership.h"
 #include "SpectrumTuningPolicy.h"
 #include "TransmitSafetyPolicy.h"
 #include "TransmitFrequencyPolicy.h"
@@ -32,7 +33,28 @@ class OfflinePoliciesTest : public QObject
     void blocksPttUntilTransmitConfigurationIsConfirmed();
     void serializesRepeatedMainSubExchanges();
     void requiresDualWatchStateAndSubIdentity();
+    void permitsRadioTeardownOnlyAfterStreamOwnership();
 };
+
+void OfflinePoliciesTest::permitsRadioTeardownOnlyAfterStreamOwnership()
+{
+    constexpr int kRejectedConnectionCount = 10000;
+    sdr9700::RadioSessionOwnership ownership;
+
+    // Authentication and rejected stream negotiations never call acquire().
+    // Repeating that lifecycle must not eventually authorize a token removal,
+    // stream close, or departure packet against the actual session owner.
+    for (int attempt = 0; attempt < kRejectedConnectionCount; ++attempt)
+    {
+        QVERIFY(!ownership.permitsRadioTeardown());
+        ownership.release();
+    }
+
+    ownership.acquire();
+    QVERIFY(ownership.permitsRadioTeardown());
+    ownership.release();
+    QVERIFY(!ownership.permitsRadioTeardown());
+}
 
 void OfflinePoliciesTest::requiresDualWatchStateAndSubIdentity()
 {

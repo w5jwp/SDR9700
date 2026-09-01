@@ -18,6 +18,7 @@ class TestUdpBase : public UdpBase
 
     bool accepts(const QNetworkDatagram& datagram) const { return acceptDatagramFrom(datagram); }
     void setSendSequence(quint16 sequence) { sendSeq = sequence; }
+    void allowDeparture(bool allowed) { setDepartureAllowed(allowed); }
     void sendTrackedControl()
     {
         control_packet packet{};
@@ -42,6 +43,7 @@ class UdpBaseTest : public QObject
     void tracksMissingAndDuplicatePackets();
     void clearsTransmitWindowAtSequenceRollover();
     void sendsDepartureOnlyOnce();
+    void suppressesDepartureWithoutSessionOwnership();
     void rejectsTruncatedPackets();
 };
 
@@ -157,6 +159,26 @@ void UdpBaseTest::sendsDepartureOnlyOnce()
     const auto departure = decodePacket<control_packet>(datagram.data());
     QVERIFY(departure.has_value());
     QCOMPARE(departure->type, quint8(0x05));
+    QTest::qWait(20);
+    QVERIFY(!peer.hasPendingDatagrams());
+}
+
+void UdpBaseTest::suppressesDepartureWithoutSessionOwnership()
+{
+    TestUdpBase stream;
+    QUdpSocket peer;
+    QVERIFY(stream.init(0));
+    QVERIFY(peer.bind(QHostAddress::LocalHost, 0));
+    stream.setExpectedPeer(QHostAddress::LocalHost, peer.localPort());
+    stream.allowDeparture(false);
+
+    // Exercise far more close attempts than a real process can produce during
+    // one lifecycle. A rejected connection must remain incapable of emitting
+    // the control departure used by an actual session owner.
+    for (int attempt = 0; attempt < 10000; ++attempt)
+    {
+        stream.sendDeparture();
+    }
     QTest::qWait(20);
     QVERIFY(!peer.hasPendingDatagrams());
 }
