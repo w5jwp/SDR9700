@@ -1,8 +1,10 @@
 #include "SpectrumScopeCanvas.h"
 #include "SpectrumScopeDisplay.h"
+#include "UiTheme.h"
 #include "WaterfallCanvas.h"
 
 #include <QSignalSpy>
+#include <QSet>
 #include <QTest>
 #include <QWheelEvent>
 
@@ -20,6 +22,15 @@ class SpectrumCanvasTest : public QObject
     void emitsWheelStepsAndHonorsInversion();
     void configuresPeakHoldDuration();
     void paintsEmptyAndPopulatedData();
+    void keepsMaximumScopeLevelBelowTopEdge();
+    void mapsObservedS8ScopePeakToMeterFraction();
+    void keepsHorizontalGridDivisionsEven();
+    void smoothsSuccessiveFramesAndResetsAcrossRanges();
+    void interpolatesSparseBinsIntoContinuousTrace();
+    void colorsTraceBySignalIntensity();
+    void keepsScaleBoundaryRedAtScopeFloor();
+    void keepsWaterfallBoundaryRedAboveWaterfall();
+    void keepsDisplayBoundariesEqualThickness();
 };
 
 void SpectrumCanvasTest::mapsFrequencyAcrossClosedPixelRange()
@@ -142,6 +153,260 @@ void SpectrumCanvasTest::paintsEmptyAndPopulatedData()
     QVERIFY(!canvas.grab().isNull());
     canvas.updateSpectrum({}, true);
     QVERIFY(!canvas.grab().isNull());
+}
+
+void SpectrumCanvasTest::keepsMaximumScopeLevelBelowTopEdge()
+{
+    SpectrumScopeCanvas canvas;
+    canvas.resize(430, 240);
+    canvas.show();
+    canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
+    QCoreApplication::processEvents();
+
+    const QImage rendered = canvas.grab().toImage();
+    QVERIFY(!rendered.isNull());
+
+    // A saturated frame draws one continuous trace. It must retain visible
+    // headroom rather than touching the top inset, which made strong signals
+    // appear clipped even though their radio values had been bounded safely.
+    const int traceX = rendered.width() / 3;
+    int firstTraceRow = -1;
+    int brightestValue = -1;
+    for (int y = 0; y < rendered.height() - SpectrumScopeCanvas::scaleHeight(); ++y)
+    {
+        const int value = qGray(rendered.pixel(traceX, y));
+        if (value > brightestValue)
+        {
+            brightestValue = value;
+            firstTraceRow = y;
+        }
+    }
+
+    QVERIFY(firstTraceRow >= 8);
+    QVERIFY(firstTraceRow < 24);
+}
+
+void SpectrumCanvasTest::mapsObservedS8ScopePeakToMeterFraction()
+{
+    SpectrumScopeCanvas canvas;
+    canvas.resize(430, 240);
+    canvas.setPeakHoldDurationMs(0);
+    canvas.show();
+    canvas.updateSpectrum(QVector<float>(64, 35.0f), false);
+    QCoreApplication::processEvents();
+
+    const QImage rendered = canvas.grab().toImage();
+    const int plotHeight = rendered.height() - SpectrumScopeCanvas::scaleHeight();
+    const int traceX = rendered.width() / 3;
+    int brightestRow = -1;
+    int brightestValue = -1;
+    for (int y = 0; y < plotHeight; ++y)
+    {
+        const int value = qGray(rendered.pixel(traceX, y));
+        if (value > brightestValue)
+        {
+            brightestValue = value;
+            brightestRow = y;
+        }
+    }
+
+    const double displayedFraction = 1.0 - double(brightestRow) / double(plotHeight - 1);
+    QVERIFY(displayedFraction >= 0.39);
+    QVERIFY(displayedFraction <= 0.43);
+}
+
+void SpectrumCanvasTest::keepsHorizontalGridDivisionsEven()
+{
+    SpectrumScopeCanvas canvas;
+    constexpr int kPlotHeight = 400;
+    QVector<double> gridRows;
+    for (int level = 0; level <= 160; level += 20)
+    {
+        gridRows.append(canvas.gridLevelToY(float(level), 0, kPlotHeight));
+    }
+
+    const double firstGap = qAbs(gridRows[1] - gridRows[0]);
+    for (int index = 2; index < gridRows.size(); ++index)
+    {
+        QVERIFY(qAbs(qAbs(gridRows[index] - gridRows[index - 1]) - firstGap) < 0.001);
+    }
+
+    // Signal samples retain their independent calibrated transfer function.
+    QVERIFY(canvas.levelToY(35.0f, 0, kPlotHeight) < canvas.gridLevelToY(35.0f, 0, kPlotHeight));
+}
+
+void SpectrumCanvasTest::smoothsSuccessiveFramesAndResetsAcrossRanges()
+{
+    SpectrumScopeCanvas canvas;
+    canvas.resize(430, 240);
+    canvas.setPeakHoldDurationMs(0);
+    canvas.show();
+
+    auto brightestRow = [&canvas]()
+    {
+        const QImage rendered = canvas.grab().toImage();
+        const int traceX = rendered.width() / 3;
+        int row = -1;
+        int brightestValue = -1;
+        for (int y = 0; y < rendered.height() - SpectrumScopeCanvas::scaleHeight(); ++y)
+        {
+            const int value = qGray(rendered.pixel(traceX, y));
+            if (value > brightestValue)
+            {
+                brightestValue = value;
+                row = y;
+            }
+        }
+        return row;
+    };
+
+    canvas.updateSpectrum(QVector<float>(64, 0.0f), false);
+    canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
+    QCoreApplication::processEvents();
+    const int smoothedRow = brightestRow();
+    QVERIFY(smoothedRow >= 85);
+    QVERIFY(smoothedRow < 115);
+
+    canvas.setDataFrequencyRange(144.0, 145.0);
+    canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
+    QCoreApplication::processEvents();
+    const int resetRow = brightestRow();
+    QVERIFY(resetRow >= 8);
+    QVERIFY(resetRow < 24);
+}
+
+void SpectrumCanvasTest::interpolatesSparseBinsIntoContinuousTrace()
+{
+    SpectrumScopeCanvas canvas;
+    canvas.resize(430, 240);
+    canvas.setFrequencyRange(144.0, 145.0);
+    canvas.setDataFrequencyRange(144.0, 145.0);
+    canvas.setVfoFrequency(999.0);
+    canvas.setPeakHoldDurationMs(0);
+    canvas.show();
+    canvas.updateSpectrum({0.0f, 0.0f, 160.0f, 160.0f}, false);
+    QCoreApplication::processEvents();
+
+    const QImage rendered = canvas.grab().toImage();
+    QSet<int> traceRows;
+    for (int x = 120; x <= 310; ++x)
+    {
+        int brightestRow = -1;
+        int brightestValue = -1;
+        for (int y = 0; y < rendered.height() - SpectrumScopeCanvas::scaleHeight(); ++y)
+        {
+            const int value = qGray(rendered.pixel(x, y));
+            if (value > brightestValue)
+            {
+                brightestValue = value;
+                brightestRow = y;
+            }
+        }
+        traceRows.insert(brightestRow);
+    }
+
+    // Nearest-bin plotting produces only two long plateaus with a near-vertical
+    // join. Subpixel Catmull-Rom sampling must populate many intermediate rows.
+    QVERIFY(traceRows.size() > 20);
+}
+
+void SpectrumCanvasTest::colorsTraceBySignalIntensity()
+{
+    SpectrumScopeCanvas canvas;
+    canvas.resize(430, 240);
+    canvas.setPeakHoldDurationMs(0);
+    canvas.show();
+
+    auto strongestColorNearRow = [&canvas](int expectedRow)
+    {
+        const QImage rendered = canvas.grab().toImage();
+        QColor strongest;
+        int strongestChannel = -1;
+        const int x = rendered.width() / 3;
+        for (int y = qMax(0, expectedRow - 3); y <= qMin(rendered.height() - 1, expectedRow + 3); ++y)
+        {
+            const QColor candidate = rendered.pixelColor(x, y);
+            const int channel = qMax(candidate.red(), qMax(candidate.green(), candidate.blue()));
+            if (channel > strongestChannel)
+            {
+                strongest = candidate;
+                strongestChannel = channel;
+            }
+        }
+        return strongest;
+    };
+
+    canvas.updateSpectrum(QVector<float>(64, 20.0f), false);
+    QCoreApplication::processEvents();
+    const QColor weakColor = strongestColorNearRow(150);
+    QVERIFY(weakColor.blue() > weakColor.red() + 80);
+
+    canvas.clearDisplay();
+    canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
+    QCoreApplication::processEvents();
+    const QColor saturatedColor = strongestColorNearRow(10);
+    QVERIFY(saturatedColor.red() > saturatedColor.green() + 80);
+    QVERIFY(saturatedColor.red() > saturatedColor.blue() + 80);
+}
+
+void SpectrumCanvasTest::keepsScaleBoundaryRedAtScopeFloor()
+{
+    SpectrumScopeCanvas canvas;
+    canvas.resize(430, 240);
+    canvas.setPeakHoldDurationMs(0);
+    canvas.show();
+    canvas.updateSpectrum(QVector<float>(64, 0.0f), false);
+    QCoreApplication::processEvents();
+
+    const QImage rendered = canvas.grab().toImage();
+    const QColor boundary =
+        rendered.pixelColor(rendered.width() / 3, rendered.height() - SpectrumScopeCanvas::scaleHeight() - 1);
+    QCOMPARE(boundary, UiTheme::Color::SpectrumBoundary);
+}
+
+void SpectrumCanvasTest::keepsWaterfallBoundaryRedAboveWaterfall()
+{
+    WaterfallCanvas waterfall;
+    waterfall.resize(430, 180);
+    waterfall.show();
+    QCoreApplication::processEvents();
+
+    const QImage rendered = waterfall.grab().toImage();
+    QVERIFY(!rendered.isNull());
+    QCOMPARE(rendered.pixelColor(rendered.width() / 3, 0), UiTheme::Color::SpectrumBoundary);
+}
+
+void SpectrumCanvasTest::keepsDisplayBoundariesEqualThickness()
+{
+    SpectrumScopeDisplay display;
+    display.resize(700, 500);
+    display.show();
+    QCoreApplication::processEvents();
+
+    auto* spectrum = display.findChild<SpectrumScopeCanvas*>();
+    auto* waterfall = display.findChild<WaterfallCanvas*>();
+    QVERIFY(spectrum != nullptr);
+    QVERIFY(waterfall != nullptr);
+    const QImage rendered = display.grab().toImage();
+    const int x = rendered.width() / 3;
+    const int upperBoundaryY = spectrum->geometry().top() + spectrum->height() - SpectrumScopeCanvas::scaleHeight() - 1;
+    const int lowerBoundaryY = waterfall->geometry().top();
+
+    auto redRowCount = [&rendered, x](int centerY)
+    {
+        int count = 0;
+        for (int y = centerY - 2; y <= centerY + 2; ++y)
+        {
+            if (rendered.pixelColor(x, y) == UiTheme::Color::SpectrumBoundary)
+            {
+                ++count;
+            }
+        }
+        return count;
+    };
+
+    QCOMPARE(redRowCount(upperBoundaryY), 1);
+    QCOMPARE(redRowCount(lowerBoundaryY), 1);
 }
 
 QTEST_MAIN(SpectrumCanvasTest)

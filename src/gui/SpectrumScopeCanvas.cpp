@@ -1,4 +1,5 @@
 #include "SpectrumScopeCanvas.h"
+#include "UiTheme.h"
 #include "LogCategories.h"
 
 #include <QFontMetrics>
@@ -6,6 +7,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPolygonF>
 #include <QSizeF>
 #include <QWheelEvent>
 #include <algorithm>
@@ -22,6 +24,12 @@ constexpr int kLevelScaleBottomInsetPx = 0;
 constexpr int kFrequencyLabelHorizontalPaddingPx = 6;
 constexpr int kGridDensityFewer = 0;
 constexpr int kGridDensityMore = 2;
+constexpr float kSpectrumSmoothingAlpha = 0.35f;
+constexpr float kMaximumSpatialSmoothBlend = 0.75f;
+constexpr int kTraceSamplesPerPixel = 2;
+constexpr int kTraceBottomClipInsetPx = 2;
+constexpr double kScopeDisplayExponent = 0.58;
+constexpr double kScopeDisplayCeilingFraction = 0.98;
 constexpr double kWheelStepAngleDelta = 120.0;
 constexpr double kMinFrequencyRangeMhz = 0.001;
 
@@ -51,6 +59,31 @@ double highFrequencyMhz(double startMhz, double endMhz)
 QColor colorWithAlpha(const QColor& color, int alpha)
 {
     return QColor(color.red(), color.green(), color.blue(), alpha);
+}
+
+QColor spectrumHeatColor(float level)
+{
+    // Intensity palette used by the trace: blue at the noise floor, then
+    // cyan, green, yellow, and red at the IC-9700's wire-level ceiling.
+    const float normalized = qBound(0.0f, level / 160.0f, 1.0f);
+    if (normalized < 0.25f)
+    {
+        const float position = normalized / 0.25f;
+        return QColor::fromRgbF(0.0f, position, 1.0f);
+    }
+    if (normalized < 0.5f)
+    {
+        const float position = (normalized - 0.25f) / 0.25f;
+        return QColor::fromRgbF(0.0f, 1.0f, 1.0f - position);
+    }
+    if (normalized < 0.75f)
+    {
+        const float position = (normalized - 0.5f) / 0.25f;
+        return QColor::fromRgbF(position, 1.0f, 0.0f);
+    }
+
+    const float position = (normalized - 0.75f) / 0.25f;
+    return QColor::fromRgbF(1.0f, 1.0f - position, 0.0f);
 }
 
 int normalizedGridDensity(int density)
@@ -146,39 +179,120 @@ int SpectrumScopeCanvas::freqToX(double mhz) const
     return plotLeft + int((mhz - startMhz) / (endMhz - startMhz) * plotW);
 }
 
-int SpectrumScopeCanvas::levelToY(float level, int topY, int h) const
+double SpectrumScopeCanvas::levelToY(float level, int topY, int h) const
 {
-    float norm = (level - m_minLevel) / (m_maxLevel - m_minLevel);
-    norm = std::max(0.0f, std::min(1.0f, norm));
+    const double linearFraction = std::clamp(double(level - m_minLevel) / double(m_maxLevel - m_minLevel), 0.0, 1.0);
+    // IC-9700 scope bytes are vertical raster intensities, not S-meter units.
+    // A linear 0..160 projection substantially understates ordinary received
+    // signals: a simultaneously observed S8 signal produced a scope peak near
+    // 35 while CI-V 15 02 reported 103..105. The exponent maps that observation
+    // to about 41% of the full S0..S9+60 meter range, while the ceiling fraction
+    // reserves two percent of headroom for a maximum 160-byte scope sample.
+    const double norm = std::pow(linearFraction, kScopeDisplayExponent) * kScopeDisplayCeilingFraction;
     const int topInset = qMin(kLevelScaleTopInsetPx, qMax(0, h - 1));
     const int bottomInset = qMin(kLevelScaleBottomInsetPx, qMax(0, h - 1 - topInset));
-    return topY + topInset + int((1.0f - norm) * qMax(1, h - 1 - topInset - bottomInset));
+    return topY + topInset + (1.0 - norm) * qMax(1, h - 1 - topInset - bottomInset);
 }
 
-int SpectrumScopeCanvas::binForFrequency(double mhz, int binCount) const
+double SpectrumScopeCanvas::gridLevelToY(float level, int topY, int h) const
 {
+    const double norm = std::clamp(double(level - m_minLevel) / double(m_maxLevel - m_minLevel), 0.0, 1.0);
+    const int topInset = qMin(kLevelScaleTopInsetPx, qMax(0, h - 1));
+    const int bottomInset = qMin(kLevelScaleBottomInsetPx, qMax(0, h - 1 - topInset));
+    return topY + topInset + (1.0 - norm) * qMax(1, h - 1 - topInset - bottomInset);
+}
+
+double SpectrumScopeCanvas::sourcePositionForDisplayX(double x, int binCount) const
+{
+    const double displayStartMhz = lowFrequencyMhz(m_startMhz, m_endMhz);
+    const double displayEndMhz = highFrequencyMhz(m_startMhz, m_endMhz);
     const double dataStartMhz = lowFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
     const double dataEndMhz = highFrequencyMhz(m_dataStartMhz, m_dataEndMhz);
-    if (binCount <= 0 || dataEndMhz <= dataStartMhz)
+    const int plotW = plotWidthPx();
+    if (binCount <= 0 || plotW <= 0 || displayEndMhz <= displayStartMhz || dataEndMhz <= dataStartMhz)
     {
-        return -1;
+        return -1.0;
     }
+    const double boundedX = qBound(double(plotLeftX()), x, double(plotRightX()));
+    const double mhz = displayStartMhz + ((boundedX - plotLeftX()) / plotW) * (displayEndMhz - displayStartMhz);
     if (mhz < dataStartMhz || mhz > dataEndMhz)
     {
-        return -1;
+        return -1.0;
     }
     if (binCount == 1)
     {
-        return 0;
+        return 0.0;
     }
 
     const double normalized = (mhz - dataStartMhz) / (dataEndMhz - dataStartMhz);
-    return qBound(0, int(std::llround(normalized * double(binCount - 1))), binCount - 1);
+    return qBound(0.0, normalized * double(binCount - 1), double(binCount - 1));
 }
 
-int SpectrumScopeCanvas::binForDisplayX(int x, int binCount) const
+float SpectrumScopeCanvas::interpolatedLevel(const QVector<float>& levels, double sourcePosition)
 {
-    return binForFrequency(xToFreq(x), binCount);
+    if (levels.isEmpty() || sourcePosition < 0.0)
+    {
+        return 0.0f;
+    }
+    if (levels.size() == 1 || sourcePosition >= levels.size() - 1)
+    {
+        return levels.constLast();
+    }
+
+    const int i1 = qBound(0, int(std::floor(sourcePosition)), levels.size() - 1);
+    const int i2 = qMin(i1 + 1, levels.size() - 1);
+    const float t = float(sourcePosition - i1);
+    const float p0 = levels[qMax(0, i1 - 1)];
+    const float p1 = levels[i1];
+    const float p2 = levels[i2];
+    const float p3 = levels[qMin(levels.size() - 1, i2 + 1)];
+    const float t2 = t * t;
+    const float t3 = t2 * t;
+    const float interpolated = 0.5f * ((2.0f * p1) + (-p0 + p2) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
+                                       (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
+
+    // Catmull-Rom can overshoot around a sharp transition. The scope trace is
+    // measured data, so interpolation may round the path between adjacent bins
+    // but must never fabricate a value outside those bins' actual range.
+    return qBound(qMin(p1, p2), interpolated, qMax(p1, p2));
+}
+
+void SpectrumScopeCanvas::rebuildDisplaySpectrumBins()
+{
+    if (m_spectrumBins.size() < 3)
+    {
+        m_displaySpectrumBins = m_spectrumBins;
+        return;
+    }
+
+    int plateauPairs = 0;
+    for (int i = 1; i < m_spectrumBins.size(); ++i)
+    {
+        if (qAbs(m_spectrumBins[i] - m_spectrumBins[i - 1]) < 0.01f)
+        {
+            ++plateauPairs;
+        }
+    }
+    const float plateauFraction = float(plateauPairs) / float(m_spectrumBins.size() - 1);
+    const float blend = kMaximumSpatialSmoothBlend * qBound(0.0f, (plateauFraction - 0.35f) / 0.30f, 1.0f);
+    if (blend <= 0.0f)
+    {
+        m_displaySpectrumBins = m_spectrumBins;
+        return;
+    }
+
+    m_displaySpectrumBins.resize(m_spectrumBins.size());
+    m_displaySpectrumBins[0] = m_spectrumBins[0];
+    m_displaySpectrumBins.last() = m_spectrumBins.constLast();
+    for (int i = 1; i < m_spectrumBins.size() - 1; ++i)
+    {
+        const float smoothed = (i >= 2 && i + 2 < m_spectrumBins.size())
+                                   ? (m_spectrumBins[i - 2] + 4.0f * m_spectrumBins[i - 1] + 6.0f * m_spectrumBins[i] +
+                                      4.0f * m_spectrumBins[i + 1] + m_spectrumBins[i + 2]) /
+                                         16.0f
+                                   : (m_spectrumBins[i - 1] + 2.0f * m_spectrumBins[i] + m_spectrumBins[i + 1]) / 4.0f;
+        m_displaySpectrumBins[i] = m_spectrumBins[i] * (1.0f - blend) + smoothed * blend;
+    }
 }
 
 bool SpectrumScopeCanvas::isSpectrumClickArea(const QPoint& pos) const
@@ -190,7 +304,6 @@ bool SpectrumScopeCanvas::isSpectrumClickArea(const QPoint& pos) const
 void SpectrumScopeCanvas::invalidateStaticLayer()
 {
     m_staticLayerDirty = true;
-    m_displayBins.clear();
 }
 
 void SpectrumScopeCanvas::ensureStaticLayer()
@@ -266,7 +379,18 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
             for (int i = firstStep; i <= lastStep; ++i)
             {
                 const float level = float(i) * step;
-                const int y = levelToY(level, specTop, specDrawH);
+                if (qFuzzyIsNull(level - m_minLevel))
+                {
+                    // The opaque red scope boundary owns the minimum-level
+                    // row. Drawing the blue grid floor there leaves a second
+                    // device-pixel row beside it and makes the pair appear
+                    // purple on high-DPI displays.
+                    continue;
+                }
+                // Grid geometry is a visual ruler, not an amplitude transfer
+                // curve. Keep its divisions linear even though received trace
+                // samples use the calibrated non-linear projection.
+                const int y = gridLevelToY(level, specTop, specDrawH);
                 painter->drawLine(plotLeftX(), y, w, y);
             }
         };
@@ -362,36 +486,6 @@ void SpectrumScopeCanvas::renderStaticLayer(QPainter* painter) const
     }
 }
 
-void SpectrumScopeCanvas::ensureDisplayBinMap(int binCount)
-{
-    const QSize currentSize = size();
-    if (binCount <= 0 || !currentSize.isValid())
-    {
-        m_displayBins.clear();
-        return;
-    }
-
-    if (!m_displayBins.isEmpty() && m_displayBinMapSize == currentSize && m_displayBinMapBinCount == binCount &&
-        m_displayBinMapStartMhz == m_startMhz && m_displayBinMapEndMhz == m_endMhz &&
-        m_displayBinMapDataStartMhz == m_dataStartMhz && m_displayBinMapDataEndMhz == m_dataEndMhz)
-    {
-        return;
-    }
-
-    m_displayBins.resize(width());
-    for (int x = 0; x < m_displayBins.size(); ++x)
-    {
-        m_displayBins[x] = binForDisplayX(x, binCount);
-    }
-
-    m_displayBinMapSize = currentSize;
-    m_displayBinMapBinCount = binCount;
-    m_displayBinMapStartMhz = m_startMhz;
-    m_displayBinMapEndMhz = m_endMhz;
-    m_displayBinMapDataStartMhz = m_dataStartMhz;
-    m_displayBinMapDataEndMhz = m_dataEndMhz;
-}
-
 void SpectrumScopeCanvas::setFrequencyRange(double startMhz, double endMhz)
 {
     if (!normalizeFrequencyRange(&startMhz, &endMhz))
@@ -404,6 +498,7 @@ void SpectrumScopeCanvas::setFrequencyRange(double startMhz, double endMhz)
     }
     m_startMhz = startMhz;
     m_endMhz = endMhz;
+    m_resetSpectrumSmoothing = true;
     invalidateStaticLayer();
     scheduleRepaint();
 }
@@ -420,7 +515,7 @@ void SpectrumScopeCanvas::setDataFrequencyRange(double startMhz, double endMhz)
     }
     m_dataStartMhz = startMhz;
     m_dataEndMhz = endMhz;
-    m_displayBins.clear();
+    m_resetSpectrumSmoothing = true;
 }
 
 void SpectrumScopeCanvas::setVfoFrequency(double freqMhz)
@@ -547,9 +642,21 @@ void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outO
     // Reuse the existing backing store where possible. Spectrum frames arrive
     // continuously, so avoiding a fresh QVector allocation per repaint keeps
     // click tuning and waterfall painting from competing with allocator churn.
-    m_spectrumBins.resize(levels.size());
-    std::copy(levels.cbegin(), levels.cend(), m_spectrumBins.begin());
+    if (m_resetSpectrumSmoothing || m_spectrumBins.size() != levels.size())
+    {
+        m_spectrumBins = levels;
+        m_resetSpectrumSmoothing = false;
+    }
+    else
+    {
+        for (int i = 0; i < levels.size(); ++i)
+        {
+            m_spectrumBins[i] =
+                kSpectrumSmoothingAlpha * levels[i] + (1.0f - kSpectrumSmoothingAlpha) * m_spectrumBins[i];
+        }
+    }
     m_scopeOutOfRange = outOfRange;
+    rebuildDisplaySpectrumBins();
 
     if (m_peakHoldDurationMs <= 0)
     {
@@ -580,9 +687,11 @@ void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outO
 void SpectrumScopeCanvas::clearDisplay()
 {
     m_spectrumBins.clear();
+    m_displaySpectrumBins.clear();
     m_peakHold.clear();
     m_peakHoldTimestampsMs.clear();
     m_scopeOutOfRange = false;
+    m_resetSpectrumSmoothing = true;
     scheduleRepaint();
 }
 
@@ -598,10 +707,7 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
 
-    static const QColor kTrace(0xd2, 0xdc, 0xe4);
     static const QColor kPeak(0x8b, 0xa0, 0xb0, 95);
-    static const QColor kScaleAccentLine(0x9a, 0x24, 0x24);
-
     ensureStaticLayer();
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);
@@ -610,37 +716,40 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     const int w = width();
     const int specTop = 0;
     const int specDrawH = specH;
-    const QRect spectrumPlotRect(plotLeftX(), specTop, qMax(0, w - plotLeftX()), qMax(0, specDrawH - 1));
+    // Keep the rounded trace feather away from the scale boundary. A zero-level
+    // trace lies on that boundary; without this separate inset its blue outer
+    // stroke blends with the red separator and makes the line look purple.
+    const QRect spectrumPlotRect(plotLeftX(), specTop, qMax(0, w - plotLeftX()),
+                                 qMax(0, specDrawH - kTraceBottomClipInsetPx));
     p.drawPixmap(0, 0, m_staticLayer);
 
-    if (!m_spectrumBins.isEmpty())
+    if (!m_displaySpectrumBins.isEmpty())
     {
-        ensureDisplayBinMap(m_spectrumBins.size());
         p.setRenderHint(QPainter::Antialiasing, true);
         p.save();
         p.setClipRect(spectrumPlotRect);
-        QPainterPath specPath, peakPath;
-        bool specFirst = true, peakFirst = true;
+        QPainterPath peakPath;
+        QVector<QPointF> tracePoints;
+        QVector<float> traceLevels;
+        bool peakFirst = true;
 
-        for (int x = plotLeftX(); x < w; ++x)
+        const int sampleCount = qMax(1, plotWidthPx() * kTraceSamplesPerPixel);
+        tracePoints.reserve(sampleCount + 1);
+        traceLevels.reserve(sampleCount + 1);
+        for (int sample = 0; sample <= sampleCount; ++sample)
         {
-            const int bin = (x >= 0 && x < m_displayBins.size()) ? m_displayBins[x] : -1;
-            const float level = bin >= 0 ? m_spectrumBins[bin] : m_minLevel;
+            const double x = plotLeftX() + (double(sample) / sampleCount) * plotWidthPx();
+            const double sourcePosition = sourcePositionForDisplayX(x, m_displaySpectrumBins.size());
+            const float level =
+                sourcePosition >= 0.0 ? interpolatedLevel(m_displaySpectrumBins, sourcePosition) : m_minLevel;
 
-            const int sy = levelToY(level, specTop, specDrawH);
-            if (specFirst)
-            {
-                specPath.moveTo(x, sy);
-                specFirst = false;
-            }
-            else
-            {
-                specPath.lineTo(x, sy);
-            }
+            const double sy = levelToY(level, specTop, specDrawH);
+            tracePoints.append(QPointF(x, sy));
+            traceLevels.append(level);
 
-            if (!m_peakHold.isEmpty() && bin >= 0 && bin < m_peakHold.size())
+            if (!m_peakHold.isEmpty() && sourcePosition >= 0.0)
             {
-                const int py = levelToY(m_peakHold[bin], specTop, specDrawH);
+                const double py = levelToY(interpolatedLevel(m_peakHold, sourcePosition), specTop, specDrawH);
                 if (peakFirst)
                 {
                     peakPath.moveTo(x, py);
@@ -653,24 +762,40 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
             }
         }
 
-        QPainterPath fillPath(specPath);
-        fillPath.lineTo(w, specH);
-        fillPath.lineTo(plotLeftX(), specH);
-        fillPath.closeSubpath();
-
-        QLinearGradient fillGrad(0, specTop, 0, specH);
-        fillGrad.setColorAt(0.00, QColor(0xa1, 0xb0, 0xbc, 175));
-        fillGrad.setColorAt(0.35, QColor(0x6d, 0x80, 0x90, 180));
-        fillGrad.setColorAt(0.72, QColor(0x42, 0x58, 0x6a, 190));
-        fillGrad.setColorAt(1.00, QColor(0x24, 0x36, 0x46, 205));
         p.setPen(Qt::NoPen);
-        p.fillPath(fillPath, fillGrad);
+        for (int i = 0; i + 1 < tracePoints.size(); ++i)
+        {
+            const QPointF& first = tracePoints[i];
+            const QPointF& second = tracePoints[i + 1];
+            const float averageLevel = (traceLevels[i] + traceLevels[i + 1]) * 0.5f;
+            QColor topColor = spectrumHeatColor(averageLevel);
+            topColor.setAlpha(54);
+            const QColor bottomColor(0x00, 0x00, 0x4d, 178);
+            QLinearGradient fillGradient(0.0, qMin(first.y(), second.y()), 0.0, specH);
+            fillGradient.setColorAt(0.0, topColor);
+            fillGradient.setColorAt(1.0, bottomColor);
+            QPolygonF segment;
+            segment << first << second << QPointF(second.x(), specH) << QPointF(first.x(), specH);
+            p.setBrush(fillGradient);
+            p.drawPolygon(segment);
+        }
 
         p.setPen(QPen(kPeak, 1));
         p.drawPath(peakPath);
 
-        p.setPen(QPen(kTrace, 1));
-        p.drawPath(specPath);
+        for (int i = 0; i + 1 < tracePoints.size(); ++i)
+        {
+            QColor featherColor = spectrumHeatColor((traceLevels[i] + traceLevels[i + 1]) * 0.5f);
+            featherColor.setAlpha(56);
+            p.setPen(QPen(featherColor, 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            p.drawLine(tracePoints[i], tracePoints[i + 1]);
+        }
+        for (int i = 0; i + 1 < tracePoints.size(); ++i)
+        {
+            const QColor traceColor = spectrumHeatColor((traceLevels[i] + traceLevels[i + 1]) * 0.5f);
+            p.setPen(QPen(traceColor, 1.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            p.drawLine(tracePoints[i], tracePoints[i + 1]);
+        }
 
         p.restore();
         p.setRenderHint(QPainter::Antialiasing, false);
@@ -709,8 +834,10 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     // Draw the scale boundary independently and last. Raw scope level zero is
     // deliberately clipped at this edge, but must not obscure the red border.
     const int scaleY = specH - 1;
-    p.setPen(QPen(kScaleAccentLine, 1));
-    p.drawLine(plotLeftX(), scaleY, w - 1, scaleY);
+    // Use an opaque rectangle rather than a one-pixel pen. A pen is centered
+    // on its coordinate and can straddle the adjacent blue trace-floor row at
+    // high device-pixel ratios, making the nominally red boundary look purple.
+    p.fillRect(plotLeftX(), scaleY, qMax(0, w - plotLeftX()), 1, UiTheme::Color::SpectrumBoundary);
 }
 
 void SpectrumScopeCanvas::mousePressEvent(QMouseEvent* ev)
