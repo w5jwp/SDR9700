@@ -325,6 +325,9 @@ void SpectrumCanvasTest::interpolatesSparseBinsIntoContinuousTrace()
 
 void SpectrumCanvasTest::colorsTraceBySignalIntensity()
 {
+    QCOMPARE(UiTheme::signalStrengthColor(120.0 / 241.0), UiTheme::Color::MeterBlue);
+    QCOMPARE(UiTheme::signalStrengthColor(121.0 / 241.0), UiTheme::Color::MeterRed);
+
     SpectrumScopeCanvas canvas;
     canvas.resize(430, 240);
     canvas.setPeakHoldDurationMs(0);
@@ -359,8 +362,7 @@ void SpectrumCanvasTest::colorsTraceBySignalIntensity()
     QCoreApplication::processEvents();
     const int s8Row = int(std::lround(canvas.levelToY(35.0f, 0, canvas.height() - SpectrumScopeCanvas::scaleHeight())));
     const QColor s8Color = strongestColorNearRow(s8Row);
-    QVERIFY(s8Color.green() > s8Color.red() + 80);
-    QVERIFY(s8Color.green() > s8Color.blue() + 50);
+    QVERIFY(s8Color.blue() > s8Color.red() + 80);
 
     canvas.clearDisplay();
     canvas.updateSpectrum(QVector<float>(64, 160.0f), false);

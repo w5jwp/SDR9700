@@ -68,6 +68,20 @@ inline constexpr QColor MeterScaleText{0x7f, 0xa4, 0xc8};
 inline constexpr QColor SpectrumBoundary{0x9a, 0x24, 0x24};
 } // namespace Color
 
+// Return the shared receive-signal color for a position on the IC-9700
+// S-meter scale. Icom's presentation uses a simple blue/red distinction
+// instead of a multi-color heat ramp. SDR9700 keeps S9 itself (raw 120) blue
+// and starts red immediately above S9. Both the segmented S-meter and
+// calibrated spectrum trace use this function so their colors cannot drift
+// independently.
+inline QColor signalStrengthColor(double meterFraction)
+{
+    constexpr double kFullScaleRaw = 241.0;
+    constexpr double kS9Fraction = 120.0 / kFullScaleRaw;
+    const double normalized = qBound(0.0, meterFraction, 1.0);
+    return normalized <= kS9Fraction ? Color::MeterBlue : Color::MeterRed;
+}
+
 namespace Size
 {
 inline constexpr int DialogContentMargin = 12;
