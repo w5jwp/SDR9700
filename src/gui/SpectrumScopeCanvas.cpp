@@ -30,6 +30,10 @@ constexpr int kTraceSamplesPerPixel = 2;
 constexpr int kTraceBottomClipInsetPx = 2;
 constexpr double kScopeDisplayExponent = 0.58;
 constexpr double kScopeDisplayCeilingFraction = 0.98;
+constexpr float kSMeterFullScaleRaw = 241.0f;
+constexpr float kCyanMeterFraction = 60.0f / kSMeterFullScaleRaw;
+constexpr float kGreenMeterFraction = 120.0f / kSMeterFullScaleRaw;
+constexpr float kYellowMeterFraction = 181.0f / kSMeterFullScaleRaw;
 constexpr double kWheelStepAngleDelta = 120.0;
 constexpr double kMinFrequencyRangeMhz = 0.001;
 
@@ -64,25 +68,32 @@ QColor colorWithAlpha(const QColor& color, int alpha)
 QColor spectrumHeatColor(float level)
 {
     // Intensity palette used by the trace: blue at the noise floor, then
-    // cyan, green, yellow, and red at the IC-9700's wire-level ceiling.
-    const float normalized = qBound(0.0f, level / 160.0f, 1.0f);
-    if (normalized < 0.25f)
+    // cyan, green, yellow, and red at the IC-9700's wire-level ceiling. Use
+    // the same calibrated projection as trace height so a visually strong
+    // signal receives a correspondingly strong color instead of remaining
+    // blue merely because the radio's scope bytes are non-linear.
+    const float linearFraction = qBound(0.0f, level / 160.0f, 1.0f);
+    const float normalized = float(std::pow(linearFraction, kScopeDisplayExponent));
+    // These transition points share the IC-9700 meter's horizontal scale:
+    // raw 60 is approximately S4-S5, 120 is S9, 181 is S9+30, and 241 is
+    // S9+60/full scale. Colors blend continuously between the landmarks.
+    if (normalized < kCyanMeterFraction)
     {
-        const float position = normalized / 0.25f;
+        const float position = normalized / kCyanMeterFraction;
         return QColor::fromRgbF(0.0f, position, 1.0f);
     }
-    if (normalized < 0.5f)
+    if (normalized < kGreenMeterFraction)
     {
-        const float position = (normalized - 0.25f) / 0.25f;
+        const float position = (normalized - kCyanMeterFraction) / (kGreenMeterFraction - kCyanMeterFraction);
         return QColor::fromRgbF(0.0f, 1.0f, 1.0f - position);
     }
-    if (normalized < 0.75f)
+    if (normalized < kYellowMeterFraction)
     {
-        const float position = (normalized - 0.5f) / 0.25f;
+        const float position = (normalized - kGreenMeterFraction) / (kYellowMeterFraction - kGreenMeterFraction);
         return QColor::fromRgbF(position, 1.0f, 0.0f);
     }
 
-    const float position = (normalized - 0.75f) / 0.25f;
+    const float position = (normalized - kYellowMeterFraction) / (1.0f - kYellowMeterFraction);
     return QColor::fromRgbF(1.0f, 1.0f - position, 0.0f);
 }
 

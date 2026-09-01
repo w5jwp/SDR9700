@@ -7,6 +7,7 @@
 #include <QSet>
 #include <QTest>
 #include <QWheelEvent>
+#include <cmath>
 
 class SpectrumCanvasTest : public QObject
 {
@@ -352,6 +353,14 @@ void SpectrumCanvasTest::colorsTraceBySignalIntensity()
     QCoreApplication::processEvents();
     const QColor weakColor = strongestColorNearRow(150);
     QVERIFY(weakColor.blue() > weakColor.red() + 80);
+
+    canvas.clearDisplay();
+    canvas.updateSpectrum(QVector<float>(64, 35.0f), false);
+    QCoreApplication::processEvents();
+    const int s8Row = int(std::lround(canvas.levelToY(35.0f, 0, canvas.height() - SpectrumScopeCanvas::scaleHeight())));
+    const QColor s8Color = strongestColorNearRow(s8Row);
+    QVERIFY(s8Color.green() > s8Color.red() + 80);
+    QVERIFY(s8Color.green() > s8Color.blue() + 50);
 
     canvas.clearDisplay();
     canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
