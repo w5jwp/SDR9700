@@ -64,6 +64,9 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
       rxSetup(rxAudio),
       txSetup(txAudio)
 {
+    // Discovery and authentication do not own the radio session. Enable the
+    // inherited control-departure packet only after a stream grant arrives.
+    setDepartureAllowed(false);
     this->port = this->controlPort;
     this->username = settings.username;
     passcode(settings.username, usernameEncoded);
@@ -138,7 +141,7 @@ void UdpHandler::shutdown()
 {
     QElapsedTimer shutdownTimer;
     shutdownTimer.start();
-    const bool hadRadioSession = isAuthenticated || gotAuthOK || token != 0;
+    const bool hadRadioSession = m_sessionOwnership.permitsRadioTeardown();
     qDebug(logUdp()).noquote() << "[SHUTDOWN] UdpHandler::shutdown() enter";
 
     // Stop all timers before deleting the UDP socket. Any timer that fires
@@ -174,18 +177,31 @@ void UdpHandler::shutdown()
     m_disconnectStatusReceived = false;
     m_tokenRemovalAcknowledged = false;
 
-    qInfo(logUdp()).noquote().nospace() << "[SHUTDOWN] stage=stream-close elapsedMs=" << shutdownTimer.elapsed();
-    beginStreamShutdown();
-    waitForStreamShutdownSettle(500);
+    bool radioConfirmed = false;
+    if (hadRadioSession)
+    {
+        qInfo(logUdp()).noquote().nospace() << "[SHUTDOWN] stage=stream-close elapsedMs=" << shutdownTimer.elapsed();
+        beginStreamShutdown();
+        waitForStreamShutdownSettle(500);
 
-    qInfo(logUdp()).noquote().nospace() << "[SHUTDOWN] stage=token-removal elapsedMs=" << shutdownTimer.elapsed();
-    const bool radioConfirmed = releaseAuthenticationToken(true);
+        qInfo(logUdp()).noquote().nospace() << "[SHUTDOWN] stage=token-removal elapsedMs=" << shutdownTimer.elapsed();
+        radioConfirmed = releaseAuthenticationToken(true);
 
-    // UdpBase normally sends this from its destructor. The staged shutdown
-    // closes the control socket earlier, so send the control-port departure
-    // explicitly after the radio has acknowledged token removal.
-    qInfo(logUdp()).noquote().nospace() << "[SHUTDOWN] stage=control-departure elapsedMs=" << shutdownTimer.elapsed();
-    sendDeparture();
+        // UdpBase normally sends this from its destructor. The staged shutdown
+        // closes the control socket earlier, so send the control-port departure
+        // explicitly after the radio has acknowledged token removal.
+        qInfo(logUdp()).noquote().nospace()
+            << "[SHUTDOWN] stage=control-departure elapsedMs=" << shutdownTimer.elapsed();
+        sendDeparture();
+    }
+    else
+    {
+        qInfo(logUdp()).noquote()
+            << "[SHUTDOWN] no owned radio session; performing local cleanup without radio-side teardown";
+        releaseAuthenticationToken(false);
+    }
+    m_sessionOwnership.release();
+    setDepartureAllowed(false);
 
     qInfo(logUdp()).noquote().nospace() << "[SHUTDOWN] stage=local-stream-cleanup elapsedMs="
                                         << shutdownTimer.elapsed();
@@ -230,6 +246,7 @@ UdpHandler::~UdpHandler()
     // Ensure the control socket is closed even if shutdown() was skipped.
     closeStreams();
     releaseAuthenticationToken(false);
+    setDepartureAllowed(m_sessionOwnership.permitsRadioTeardown());
     if (civPortReservation)
     {
         delete civPortReservation;
@@ -361,6 +378,15 @@ void UdpHandler::monitorSessionHealth()
 
 bool UdpHandler::releaseAuthenticationToken(bool waitForAcknowledgement)
 {
+    if (!m_sessionOwnership.permitsRadioTeardown())
+    {
+        qInfo(logUdp()).noquote()
+            << "[SHUTDOWN] authentication negotiation did not acquire the radio session; clearing token locally";
+        isAuthenticated = false;
+        gotAuthOK = false;
+        token = 0;
+        return false;
+    }
     if (udp == nullptr || (!isAuthenticated && !gotAuthOK && token == 0))
     {
         qInfo(logUdp()).noquote() << "[SHUTDOWN] no active authentication token to remove";
@@ -774,6 +800,11 @@ void UdpHandler::dataReceived()
                 else if (in->error == 0x00000000 && in->disc == 0x01)
                 {
                     m_disconnectStatusReceived = true;
+                    if (!m_shuttingDown)
+                    {
+                        m_sessionOwnership.release();
+                        setDepartureAllowed(false);
+                    }
                     if (!m_shuttingDown && !m_staleSessionReclaimInProgress)
                     {
                         emit haveNetworkError(
@@ -813,6 +844,12 @@ void UdpHandler::dataReceived()
                         streamOpened = false;
                         break;
                     }
+                    // A successful status response with usable stream ports is
+                    // the ownership boundary. A login token received before
+                    // this point belongs only to negotiation and must never
+                    // authorize teardown of another client's active stream.
+                    m_sessionOwnership.acquire();
+                    setDepartureAllowed(true);
                     if (!streamOpened)
                     {
                         m_staleSessionReclaimAttempts = 0;

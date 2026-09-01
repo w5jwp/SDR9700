@@ -121,6 +121,7 @@ class UdpBase : public QObject
     bool periodicRunning = false;
     bool sentPacketConnect2 = false;
     bool departureSent = false;
+    bool departureAllowed = true;
     qint64 lastReceivedMs = 0; // Monotonic timestamp from mono; safe across wall-clock midnight.
     // udpMutex and txBufferMutex are never nested. Receive bookkeeping may
     // acquire rxBufferMutex followed by missingMutex, never the reverse.
@@ -169,6 +170,7 @@ class UdpBase : public QObject
     // the radio-side UDP session is still alive.
     void markPacketReceived() { lastReceivedMs = elapsedMs(); }
     bool acceptDatagramFrom(const QNetworkDatagram& datagram) const;
+    void setDepartureAllowed(bool allowed) { departureAllowed = allowed; }
 
     QElapsedTimer mono;
     int pingDriftMs = 0; // Signed drift estimate: positive when the radio clock trails prediction.

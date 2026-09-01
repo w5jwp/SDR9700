@@ -21,7 +21,18 @@ for roughly 70–80 seconds after an otherwise clean application exit.
 
 ## Required sequence
 
-Shutdown proceeds synchronously in this order:
+The sequence below applies only after the IC-9700 has granted usable CI-V and
+audio stream ports to this process. A successful login response and its token
+are negotiation state, not proof of session ownership: the radio can accept
+login and then reject the stream because another LAN client already owns it.
+
+When SDR9700 has not received a successful stream grant, shutdown must close
+only its local sockets, timers, reserved ports, and credential buffers. It must
+not send CI-V/audio stream departures, authentication token removal, or the
+control-port departure. Those packets can terminate the established session of
+another client on the same host or network.
+
+For an owned session, shutdown proceeds synchronously in this order:
 
 1. Stop local RX audio before hiding the main window. This prevents residual
    playback after the visible application closes.
@@ -43,8 +54,9 @@ authentication token. The IC-9700 did not emit a separate status packet with
 that packet. Such a status packet is still parsed independently when received.
 
 `UdpBase::sendDeparture()` is idempotent. Explicit shutdown invokes it while
-the socket is valid; the base destructor remains a fallback for paths that did
-not perform staged shutdown.
+the socket is valid; the base destructor remains a fallback for owned-session
+paths that did not perform staged shutdown. The control handler disables that
+fallback until a successful stream grant establishes ownership.
 
 ## The original defect
 
@@ -93,3 +105,9 @@ Sending UDP stream departure to <radio-address>:50001
 
 The next process should receive `I am here` in response to its first `Are You
 There` probe.
+
+Rejected-session shutdown was additionally verified on August 31, 2026 by
+running SDR9700 while AetherSDR owned the IC-9700 LAN session. SDR9700 reported
+the busy session and then closed without disconnecting AetherSDR. The automated
+suite also exercises 10,000 rejected ownership lifecycles and 10,000 suppressed
+control-departure attempts.
