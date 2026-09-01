@@ -1,6 +1,7 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
+#include "MainTitleBar.h"
 #include "AppInfo.h"
 #include "AppPaths.h"
 #include "AppSettings.h"
@@ -64,6 +65,7 @@ class MemoryManagerSmokeTest : public QObject
     void quitActionDefersWindowClose();
     void persistentToastCanBeClearedByOwner();
     void automationIndicatorReflectsClientCount();
+    void titleBarSpeakerTogglesMute();
 };
 
 void MemoryManagerSmokeTest::initTestCase()
@@ -792,6 +794,32 @@ void MemoryManagerSmokeTest::automationIndicatorReflectsClientCount()
     statusBarController->setAutomationClientCount(0);
     QVERIFY(indicator->styleSheet().contains(QStringLiteral("border: none")));
     QVERIFY(indicator->styleSheet().contains(QStringLiteral("background: #f0a000")));
+}
+
+void MemoryManagerSmokeTest::titleBarSpeakerTogglesMute()
+{
+    MainTitleBar titleBar;
+    auto* speakerButton = titleBar.findChild<QPushButton*>(QStringLiteral("titleSpeakerMuteButton"));
+    QVERIFY(speakerButton != nullptr);
+    QCOMPARE(speakerButton->text(), QStringLiteral("🔊"));
+    QCOMPARE(speakerButton->toolTip(), QStringLiteral("Mute audio"));
+
+    const auto buttons = titleBar.findChildren<QPushButton*>();
+    QVERIFY(std::none_of(buttons.cbegin(), buttons.cend(),
+                         [](const QPushButton* button) { return button->text() == QStringLiteral("MUTE"); }));
+
+    QSignalSpy muteSpy(&titleBar, &MainTitleBar::muteToggled);
+    QTest::mouseClick(speakerButton, Qt::LeftButton);
+    QCOMPARE(muteSpy.count(), 1);
+
+    titleBar.setMuted(true);
+    QCOMPARE(speakerButton->text(), QStringLiteral("🔇"));
+    QCOMPARE(speakerButton->toolTip(), QStringLiteral("Unmute audio"));
+
+    QTest::mouseClick(speakerButton, Qt::LeftButton);
+    QCOMPARE(muteSpy.count(), 2);
+    titleBar.setMuted(false);
+    QCOMPARE(speakerButton->text(), QStringLiteral("🔊"));
 }
 
 QTEST_MAIN(MemoryManagerSmokeTest)
