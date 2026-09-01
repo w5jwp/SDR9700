@@ -251,7 +251,7 @@ void VfoSMeter::paintEvent(QPaintEvent* event)
         else if (active)
         {
             const double segmentFraction = double(x - meterRect.left()) / qMax(1, meterRect.width() - 1);
-            segmentColor = UiTheme::signalStrengthColor(segmentFraction);
+            segmentColor = UiTheme::sMeterSignalColor(segmentFraction);
         }
         painter.fillRect(QRect(x, meterRect.top(), kSegmentWidth, meterRect.height()), segmentColor);
     }

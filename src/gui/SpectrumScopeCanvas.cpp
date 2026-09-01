@@ -63,11 +63,8 @@ QColor colorWithAlpha(const QColor& color, int alpha)
 
 QColor spectrumHeatColor(float level)
 {
-    // Use the same calibrated projection as trace height before selecting the
-    // shared IC-9700-style blue-through-S9 or red-above-S9 color.
-    const float linearFraction = qBound(0.0f, level / 160.0f, 1.0f);
-    const float normalized = float(std::pow(linearFraction, kScopeDisplayExponent));
-    return UiTheme::signalStrengthColor(normalized);
+    const double linearFraction = std::clamp(double(level) / 160.0, 0.0, 1.0);
+    return UiTheme::spectrumSignalColor(std::pow(linearFraction, kScopeDisplayExponent));
 }
 
 int normalizedGridDensity(int density)

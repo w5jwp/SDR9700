@@ -165,24 +165,13 @@ void SpectrumCanvasTest::keepsMaximumScopeLevelBelowTopEdge()
     canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
     QCoreApplication::processEvents();
 
-    const QImage rendered = canvas.grab().toImage();
-    QVERIFY(!rendered.isNull());
-
     // A saturated frame draws one continuous trace. It must retain visible
     // headroom rather than touching the top inset, which made strong signals
     // appear clipped even though their radio values had been bounded safely.
-    const int traceX = rendered.width() / 3;
-    int firstTraceRow = -1;
-    int brightestValue = -1;
-    for (int y = 0; y < rendered.height() - SpectrumScopeCanvas::scaleHeight(); ++y)
-    {
-        const int value = qGray(rendered.pixel(traceX, y));
-        if (value > brightestValue)
-        {
-            brightestValue = value;
-            firstTraceRow = y;
-        }
-    }
+    // Verify the projection directly; palette changes must not make a brighter
+    // grid row look like the trace to this geometry regression.
+    const int plotHeight = canvas.height() - SpectrumScopeCanvas::scaleHeight();
+    const int firstTraceRow = int(std::lround(canvas.levelToY(160.0f, 0, plotHeight)));
 
     QVERIFY(firstTraceRow >= 8);
     QVERIFY(firstTraceRow < 24);
@@ -197,22 +186,9 @@ void SpectrumCanvasTest::mapsObservedS8ScopePeakToMeterFraction()
     canvas.updateSpectrum(QVector<float>(64, 35.0f), false);
     QCoreApplication::processEvents();
 
-    const QImage rendered = canvas.grab().toImage();
-    const int plotHeight = rendered.height() - SpectrumScopeCanvas::scaleHeight();
-    const int traceX = rendered.width() / 3;
-    int brightestRow = -1;
-    int brightestValue = -1;
-    for (int y = 0; y < plotHeight; ++y)
-    {
-        const int value = qGray(rendered.pixel(traceX, y));
-        if (value > brightestValue)
-        {
-            brightestValue = value;
-            brightestRow = y;
-        }
-    }
-
-    const double displayedFraction = 1.0 - double(brightestRow) / double(plotHeight - 1);
+    const int plotHeight = canvas.height() - SpectrumScopeCanvas::scaleHeight();
+    const double traceRow = canvas.levelToY(35.0f, 0, plotHeight);
+    const double displayedFraction = 1.0 - traceRow / double(plotHeight - 1);
     QVERIFY(displayedFraction >= 0.39);
     QVERIFY(displayedFraction <= 0.43);
 }
@@ -244,35 +220,20 @@ void SpectrumCanvasTest::smoothsSuccessiveFramesAndResetsAcrossRanges()
     canvas.setPeakHoldDurationMs(0);
     canvas.show();
 
-    auto brightestRow = [&canvas]()
-    {
-        const QImage rendered = canvas.grab().toImage();
-        const int traceX = rendered.width() / 3;
-        int row = -1;
-        int brightestValue = -1;
-        for (int y = 0; y < rendered.height() - SpectrumScopeCanvas::scaleHeight(); ++y)
-        {
-            const int value = qGray(rendered.pixel(traceX, y));
-            if (value > brightestValue)
-            {
-                brightestValue = value;
-                row = y;
-            }
-        }
-        return row;
-    };
-
     canvas.updateSpectrum(QVector<float>(64, 0.0f), false);
     canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
     QCoreApplication::processEvents();
-    const int smoothedRow = brightestRow();
+    QCOMPARE(canvas.m_spectrumBins.constFirst(), 56.0f);
+    const int plotHeight = canvas.height() - SpectrumScopeCanvas::scaleHeight();
+    const int smoothedRow = int(std::lround(canvas.levelToY(canvas.m_spectrumBins.constFirst(), 0, plotHeight)));
     QVERIFY(smoothedRow >= 85);
     QVERIFY(smoothedRow < 115);
 
     canvas.setDataFrequencyRange(144.0, 145.0);
     canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
     QCoreApplication::processEvents();
-    const int resetRow = brightestRow();
+    QCOMPARE(canvas.m_spectrumBins.constFirst(), 160.0f);
+    const int resetRow = int(std::lround(canvas.levelToY(canvas.m_spectrumBins.constFirst(), 0, plotHeight)));
     QVERIFY(resetRow >= 8);
     QVERIFY(resetRow < 24);
 }
@@ -325,8 +286,12 @@ void SpectrumCanvasTest::interpolatesSparseBinsIntoContinuousTrace()
 
 void SpectrumCanvasTest::colorsTraceBySignalIntensity()
 {
-    QCOMPARE(UiTheme::signalStrengthColor(120.0 / 241.0), UiTheme::Color::MeterBlue);
-    QCOMPARE(UiTheme::signalStrengthColor(121.0 / 241.0), UiTheme::Color::MeterRed);
+    QCOMPARE(UiTheme::spectrumSignalColor(0.00), QColor::fromRgbF(0.0, 0.0, 1.0));
+    QCOMPARE(UiTheme::spectrumSignalColor(0.50), QColor::fromRgbF(0.0, 1.0, 0.0));
+    QCOMPARE(UiTheme::spectrumSignalColor(1.00), QColor::fromRgbF(1.0, 0.0, 0.0));
+    QCOMPARE(UiTheme::sMeterSignalColor(0.00), QColor(0x00, 0x90, 0x30));
+    QCOMPARE(UiTheme::sMeterSignalColor(0.50), QColor(0xd4, 0xc0, 0x00));
+    QCOMPARE(UiTheme::sMeterSignalColor(0.85), QColor(0xff, 0x00, 0x00));
 
     SpectrumScopeCanvas canvas;
     canvas.resize(430, 240);
@@ -351,21 +316,33 @@ void SpectrumCanvasTest::colorsTraceBySignalIntensity()
         }
         return strongest;
     };
+    auto frameWithPeak = [](float floor, float peak)
+    {
+        QVector<float> levels(64, floor);
+        for (int index = 19; index <= 24; ++index)
+        {
+            levels[index] = peak;
+        }
+        return levels;
+    };
 
-    canvas.updateSpectrum(QVector<float>(64, 20.0f), false);
+    canvas.updateSpectrum(frameWithPeak(0.0f, 20.0f), false);
     QCoreApplication::processEvents();
-    const QColor weakColor = strongestColorNearRow(150);
+    const int weakRow =
+        int(std::lround(canvas.levelToY(20.0f, 0, canvas.height() - SpectrumScopeCanvas::scaleHeight())));
+    const QColor weakColor = strongestColorNearRow(weakRow);
     QVERIFY(weakColor.blue() > weakColor.red() + 80);
 
     canvas.clearDisplay();
-    canvas.updateSpectrum(QVector<float>(64, 35.0f), false);
+    canvas.updateSpectrum(frameWithPeak(0.0f, 35.0f), false);
     QCoreApplication::processEvents();
     const int s8Row = int(std::lround(canvas.levelToY(35.0f, 0, canvas.height() - SpectrumScopeCanvas::scaleHeight())));
     const QColor s8Color = strongestColorNearRow(s8Row);
-    QVERIFY(s8Color.blue() > s8Color.red() + 80);
+    QVERIFY(s8Color.green() > s8Color.red() + 80);
+    QVERIFY(s8Color.green() > s8Color.blue() + 50);
 
     canvas.clearDisplay();
-    canvas.updateSpectrum(QVector<float>(64, 160.0f), false);
+    canvas.updateSpectrum(frameWithPeak(0.0f, 160.0f), false);
     QCoreApplication::processEvents();
     const QColor saturatedColor = strongestColorNearRow(10);
     QVERIFY(saturatedColor.red() > saturatedColor.green() + 80);

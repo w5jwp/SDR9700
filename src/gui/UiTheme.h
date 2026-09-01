@@ -65,21 +65,56 @@ inline constexpr QColor MeterScaleText{0x7f, 0xa4, 0xc8};
 // use one authoritative color. Keeping this as a QColor also lets custom-
 // painted widgets apply the final opaque pixel row without style-engine
 // blending against the blue waterfall or spectrum trace.
-inline constexpr QColor SpectrumBoundary{0x9a, 0x24, 0x24};
+inline constexpr QColor SpectrumBoundary{0xff, 0x00, 0x00};
 } // namespace Color
 
-// Return the shared receive-signal color for a position on the IC-9700
-// S-meter scale. Icom's presentation uses a simple blue/red distinction
-// instead of a multi-color heat ramp. SDR9700 keeps S9 itself (raw 120) blue
-// and starts red immediately above S9. Both the segmented S-meter and
-// calibrated spectrum trace use this function so their colors cannot drift
-// independently.
-inline QColor signalStrengthColor(double meterFraction)
+inline QColor spectrumSignalColor(double strength)
 {
-    constexpr double kFullScaleRaw = 241.0;
-    constexpr double kS9Fraction = 120.0 / kFullScaleRaw;
+    const double normalized = qBound(0.0, strength, 1.0);
+    if (normalized < 0.25)
+    {
+        return QColor::fromRgbF(0.0, normalized / 0.25, 1.0);
+    }
+    if (normalized < 0.50)
+    {
+        const double position = (normalized - 0.25) / 0.25;
+        return QColor::fromRgbF(0.0, 1.0, 1.0 - position);
+    }
+    if (normalized < 0.75)
+    {
+        const double position = (normalized - 0.50) / 0.25;
+        return QColor::fromRgbF(position, 1.0, 0.0);
+    }
+
+    const double position = (normalized - 0.75) / 0.25;
+    return QColor::fromRgbF(1.0, 1.0 - position, 0.0);
+}
+
+inline QColor sMeterSignalColor(double meterFraction)
+{
+    struct ColorStop
+    {
+        double position{0.0};
+        QColor color{};
+    };
+    static const ColorStop kStops[] = {{0.00, QColor(0x00, 0x90, 0x30)}, {0.30, QColor(0x00, 0xc0, 0x40)},
+                                       {0.50, QColor(0xd4, 0xc0, 0x00)}, {0.70, QColor(0xdd, 0x14, 0x00)},
+                                       {0.85, QColor(0xff, 0x00, 0x00)}, {1.00, QColor(0xff, 0x00, 0x00)}};
+    constexpr int kStopCount = int(sizeof(kStops) / sizeof(kStops[0]));
     const double normalized = qBound(0.0, meterFraction, 1.0);
-    return normalized <= kS9Fraction ? Color::MeterBlue : Color::MeterRed;
+    for (int index = 1; index < kStopCount; ++index)
+    {
+        if (normalized <= kStops[index].position)
+        {
+            const ColorStop& lower = kStops[index - 1];
+            const ColorStop& upper = kStops[index];
+            const double blend = (normalized - lower.position) / (upper.position - lower.position);
+            return QColor::fromRgbF(lower.color.redF() + blend * (upper.color.redF() - lower.color.redF()),
+                                    lower.color.greenF() + blend * (upper.color.greenF() - lower.color.greenF()),
+                                    lower.color.blueF() + blend * (upper.color.blueF() - lower.color.blueF()));
+        }
+    }
+    return kStops[kStopCount - 1].color;
 }
 
 namespace Size
