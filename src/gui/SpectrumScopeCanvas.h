@@ -57,7 +57,8 @@ class SpectrumScopeCanvas : public QWidget
     double gridLevelToY(float level, int topY, int h) const;
     double sourcePositionForDisplayX(double x, int binCount) const;
     static float interpolatedLevel(const QVector<float>& levels, double sourcePosition);
-    void rebuildDisplaySpectrumBins();
+    static QVector<float> spatiallySmoothedBins(const QVector<float>& bins);
+    void rebuildDisplayBins();
     bool isSpectrumClickArea(const QPoint& pos) const;
     void invalidateStaticLayer();
     void ensureStaticLayer();
@@ -92,6 +93,7 @@ class SpectrumScopeCanvas : public QWidget
     QVector<float> m_spectrumBins;
     QVector<float> m_displaySpectrumBins;
     QVector<float> m_peakHold;
+    QVector<float> m_displayPeakHold;
     QVector<qint64> m_peakHoldTimestampsMs;
     QPixmap m_staticLayer;
     QSize m_staticLayerSize;

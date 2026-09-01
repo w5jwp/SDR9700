@@ -123,6 +123,7 @@ SpectrumScopeCanvas::SpectrumScopeCanvas(QWidget* parent) : QWidget(parent)
                 }
                 if (changed)
                 {
+                    rebuildDisplayBins();
                     scheduleRepaint();
                 }
             });
@@ -257,42 +258,50 @@ float SpectrumScopeCanvas::interpolatedLevel(const QVector<float>& levels, doubl
     return qBound(qMin(p1, p2), interpolated, qMax(p1, p2));
 }
 
-void SpectrumScopeCanvas::rebuildDisplaySpectrumBins()
+QVector<float> SpectrumScopeCanvas::spatiallySmoothedBins(const QVector<float>& bins)
 {
-    if (m_spectrumBins.size() < 3)
+    if (bins.size() < 3)
     {
-        m_displaySpectrumBins = m_spectrumBins;
-        return;
+        return bins;
     }
 
     int plateauPairs = 0;
-    for (int i = 1; i < m_spectrumBins.size(); ++i)
+    for (int i = 1; i < bins.size(); ++i)
     {
-        if (qAbs(m_spectrumBins[i] - m_spectrumBins[i - 1]) < 0.01f)
+        if (qAbs(bins[i] - bins[i - 1]) < 0.01f)
         {
             ++plateauPairs;
         }
     }
-    const float plateauFraction = float(plateauPairs) / float(m_spectrumBins.size() - 1);
+    const float plateauFraction = float(plateauPairs) / float(bins.size() - 1);
     const float blend = kMaximumSpatialSmoothBlend * qBound(0.0f, (plateauFraction - 0.35f) / 0.30f, 1.0f);
     if (blend <= 0.0f)
     {
-        m_displaySpectrumBins = m_spectrumBins;
-        return;
+        return bins;
     }
 
-    m_displaySpectrumBins.resize(m_spectrumBins.size());
-    m_displaySpectrumBins[0] = m_spectrumBins[0];
-    m_displaySpectrumBins.last() = m_spectrumBins.constLast();
-    for (int i = 1; i < m_spectrumBins.size() - 1; ++i)
+    QVector<float> smoothedBins(bins.size());
+    smoothedBins[0] = bins[0];
+    smoothedBins.last() = bins.constLast();
+    for (int i = 1; i < bins.size() - 1; ++i)
     {
-        const float smoothed = (i >= 2 && i + 2 < m_spectrumBins.size())
-                                   ? (m_spectrumBins[i - 2] + 4.0f * m_spectrumBins[i - 1] + 6.0f * m_spectrumBins[i] +
-                                      4.0f * m_spectrumBins[i + 1] + m_spectrumBins[i + 2]) /
-                                         16.0f
-                                   : (m_spectrumBins[i - 1] + 2.0f * m_spectrumBins[i] + m_spectrumBins[i + 1]) / 4.0f;
-        m_displaySpectrumBins[i] = m_spectrumBins[i] * (1.0f - blend) + smoothed * blend;
+        const float smoothed =
+            (i >= 2 && i + 2 < bins.size())
+                ? (bins[i - 2] + 4.0f * bins[i - 1] + 6.0f * bins[i] + 4.0f * bins[i + 1] + bins[i + 2]) / 16.0f
+                : (bins[i - 1] + 2.0f * bins[i] + bins[i + 1]) / 4.0f;
+        smoothedBins[i] = bins[i] * (1.0f - blend) + smoothed * blend;
     }
+    return smoothedBins;
+}
+
+void SpectrumScopeCanvas::rebuildDisplayBins()
+{
+    // Peak hold intentionally skips temporal smoothing so it retains the
+    // strongest captured sample. It does use the same spatial presentation as
+    // the live trace, preventing held peaks from exposing the radio's coarse
+    // source-bin stair steps.
+    m_displaySpectrumBins = spatiallySmoothedBins(m_spectrumBins);
+    m_displayPeakHold = spatiallySmoothedBins(m_peakHold);
 }
 
 bool SpectrumScopeCanvas::isSpectrumClickArea(const QPoint& pos) const
@@ -630,6 +639,7 @@ void SpectrumScopeCanvas::setPeakHoldDurationMs(int durationMs)
         m_peakHold = m_spectrumBins;
         m_peakHoldTimestampsMs.fill(m_peakClock.elapsed(), m_spectrumBins.size());
     }
+    rebuildDisplayBins();
     scheduleRepaint();
 }
 
@@ -656,8 +666,6 @@ void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outO
         }
     }
     m_scopeOutOfRange = outOfRange;
-    rebuildDisplaySpectrumBins();
-
     if (m_peakHoldDurationMs <= 0)
     {
         m_peakHold.clear();
@@ -681,6 +689,8 @@ void SpectrumScopeCanvas::updateSpectrum(const QVector<float>& levels, bool outO
         }
     }
 
+    rebuildDisplayBins();
+
     scheduleRepaint();
 }
 
@@ -689,6 +699,7 @@ void SpectrumScopeCanvas::clearDisplay()
     m_spectrumBins.clear();
     m_displaySpectrumBins.clear();
     m_peakHold.clear();
+    m_displayPeakHold.clear();
     m_peakHoldTimestampsMs.clear();
     m_scopeOutOfRange = false;
     m_resetSpectrumSmoothing = true;
@@ -747,9 +758,9 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
             tracePoints.append(QPointF(x, sy));
             traceLevels.append(level);
 
-            if (!m_peakHold.isEmpty() && sourcePosition >= 0.0)
+            if (!m_displayPeakHold.isEmpty() && sourcePosition >= 0.0)
             {
-                const double py = levelToY(interpolatedLevel(m_peakHold, sourcePosition), specTop, specDrawH);
+                const double py = levelToY(interpolatedLevel(m_displayPeakHold, sourcePosition), specTop, specDrawH);
                 if (peakFirst)
                 {
                     peakPath.moveTo(x, py);

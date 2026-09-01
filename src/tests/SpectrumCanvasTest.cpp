@@ -26,6 +26,7 @@ class SpectrumCanvasTest : public QObject
     void mapsObservedS8ScopePeakToMeterFraction();
     void keepsHorizontalGridDivisionsEven();
     void smoothsSuccessiveFramesAndResetsAcrossRanges();
+    void smoothsPeakHoldWithoutChangingHeldSamples();
     void interpolatesSparseBinsIntoContinuousTrace();
     void colorsTraceBySignalIntensity();
     void keepsScaleBoundaryRedAtScopeFloor();
@@ -273,6 +274,17 @@ void SpectrumCanvasTest::smoothsSuccessiveFramesAndResetsAcrossRanges()
     const int resetRow = brightestRow();
     QVERIFY(resetRow >= 8);
     QVERIFY(resetRow < 24);
+}
+
+void SpectrumCanvasTest::smoothsPeakHoldWithoutChangingHeldSamples()
+{
+    SpectrumScopeCanvas canvas;
+    const QVector<float> steppedPeak{0.0f, 0.0f, 0.0f, 160.0f, 160.0f, 160.0f};
+    canvas.updateSpectrum(steppedPeak, false);
+
+    QCOMPARE(canvas.m_peakHold, steppedPeak);
+    QCOMPARE(canvas.m_displayPeakHold, canvas.m_displaySpectrumBins);
+    QVERIFY(canvas.m_displayPeakHold != canvas.m_peakHold);
 }
 
 void SpectrumCanvasTest::interpolatesSparseBinsIntoContinuousTrace()
