@@ -63,6 +63,7 @@ class MemoryManagerSmokeTest : public QObject
     void utilityWindowIsDestroyedWithHost();
     void quitActionDefersWindowClose();
     void persistentToastCanBeClearedByOwner();
+    void automationIndicatorReflectsClientCount();
 };
 
 void MemoryManagerSmokeTest::initTestCase()
@@ -759,6 +760,38 @@ void MemoryManagerSmokeTest::persistentToastCanBeClearedByOwner()
     statusBarController->showToast(QStringLiteral("Radio ready."), 1);
     QCOMPARE(toastLabel->text(), QStringLiteral("Radio ready"));
     QTRY_VERIFY_WITH_TIMEOUT(toastLabel->text().isEmpty(), 100);
+}
+
+void MemoryManagerSmokeTest::automationIndicatorReflectsClientCount()
+{
+    RadioModel model;
+    MainWindow window(&model);
+    QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+
+    auto* indicator = window.findChild<QLabel*>(QStringLiteral("automationIndicator"));
+    const QObjectList children = window.children();
+    const auto controller = std::find_if(children.cbegin(), children.cend(), [](const QObject* child)
+                                         { return dynamic_cast<const StatusBarController*>(child) != nullptr; });
+    QVERIFY(controller != children.cend());
+    auto* statusBarController = dynamic_cast<StatusBarController*>(*controller);
+    QVERIFY(indicator != nullptr);
+    QVERIFY(statusBarController != nullptr);
+
+    statusBarController->setAutomationEnabled(true);
+    QVERIFY(indicator->styleSheet().contains(QStringLiteral("border: none")));
+    QVERIFY(indicator->styleSheet().contains(QStringLiteral("background: #f0a000")));
+    QCOMPARE(indicator->toolTip(),
+             QStringLiteral("Automation enabled.\n0 local clients connected.\nTransmit controls are unavailable."));
+
+    statusBarController->setAutomationClientCount(1);
+    QVERIFY(indicator->styleSheet().contains(QStringLiteral("border: none")));
+    QVERIFY(indicator->styleSheet().contains(QStringLiteral("background: %1").arg(UiTheme::Color::Danger)));
+    QCOMPARE(indicator->toolTip(),
+             QStringLiteral("Automation enabled.\n1 local client connected.\nTransmit controls are unavailable."));
+
+    statusBarController->setAutomationClientCount(0);
+    QVERIFY(indicator->styleSheet().contains(QStringLiteral("border: none")));
+    QVERIFY(indicator->styleSheet().contains(QStringLiteral("background: #f0a000")));
 }
 
 QTEST_MAIN(MemoryManagerSmokeTest)

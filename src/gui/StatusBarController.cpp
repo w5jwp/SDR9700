@@ -21,6 +21,15 @@ namespace
 {
 constexpr int kClockSeparatorGap = 6;
 
+QString automationIndicatorStyle(bool clientConnected)
+{
+    const QString background =
+        clientConnected ? QString::fromLatin1(UiTheme::Color::Danger) : QStringLiteral("#f0a000");
+    return QStringLiteral("QLabel { background: %1; color: #0b0e12; border: none; border-radius: 4px; "
+                          "font-size: 16px; font-weight: bold; }")
+        .arg(background);
+}
+
 QString normalizedToastMessage(QString message)
 {
     message = message.trimmed();
@@ -344,11 +353,11 @@ void StatusBarController::buildStatusBar()
     automationLayout->setContentsMargins(0, 0, 8, 0);
     automationLayout->setSpacing(0);
     m_window->m_automationIndicator = new QLabel(QStringLiteral("\U0001F916"), m_window);
+    m_window->m_automationIndicator->setObjectName(QStringLiteral("automationIndicator"));
     m_window->m_automationIndicator->setAlignment(Qt::AlignCenter);
     m_window->m_automationIndicator->setFixedSize(28, 28);
-    m_window->m_automationIndicator->setAccessibleName(QStringLiteral("Automation client connected"));
-    m_window->m_automationIndicator->setStyleSheet(QStringLiteral(
-        "QLabel { background: #f0a000; color: #0b0e12; border-radius: 4px; font-size: 16px; font-weight: bold; }"));
+    m_window->m_automationIndicator->setAccessibleName(QStringLiteral("Automation enabled"));
+    m_window->m_automationIndicator->setStyleSheet(automationIndicatorStyle(false));
     automationLayout->addWidget(m_window->m_automationIndicator);
     m_window->m_automationIndicatorContainer->hide();
     hbox->addWidget(m_window->m_automationIndicatorContainer);
@@ -517,10 +526,12 @@ void StatusBarController::setAutomationClientCount(int count)
     {
         return;
     }
+    const int boundedCount = qMax(0, count);
+    m_window->m_automationIndicator->setStyleSheet(automationIndicatorStyle(boundedCount > 0));
     m_window->m_automationIndicator->setToolTip(
-        QStringLiteral("Automation enabled; %1 local client%2 connected.\nTransmit controls are unavailable.")
-            .arg(count)
-            .arg(count == 1 ? QString() : QStringLiteral("s")));
+        QStringLiteral("Automation enabled.\n%1 local client%2 connected.\nTransmit controls are unavailable.")
+            .arg(boundedCount)
+            .arg(boundedCount == 1 ? QString() : QStringLiteral("s")));
 }
 
 void StatusBarController::setAutomationEnabled(bool enabled)
