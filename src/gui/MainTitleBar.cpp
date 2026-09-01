@@ -238,27 +238,18 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     root->addWidget(btnSep);
     root->addSpacing(kTitleControlSpacing);
 
-    m_muteBtn = new QPushButton(QStringLiteral("MUTE"), this);
-    m_muteBtn->setFixedHeight(22);
-    m_muteBtn->setCheckable(false);
-    m_muteBtn->setStyleSheet(muteButtonStyle(false));
-    m_muteBtn->setToolTip(QStringLiteral("Toggle mute"));
-    root->addWidget(m_muteBtn);
-    root->addSpacing(kTitleControlSpacing);
-
-    auto* muteSep = new QWidget(this);
-    muteSep->setFixedSize(1, 18);
-    muteSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
-    root->addWidget(muteSep);
-    root->addSpacing(kTitleControlSpacing);
-
-    auto* speakerLabel = new QLabel(QStringLiteral("🔊"), this);
-    speakerLabel->setFixedHeight(20);
-    speakerLabel->setAlignment(Qt::AlignVCenter | Qt::AlignHCenter);
-    speakerLabel->setStyleSheet(
-        QStringLiteral("QLabel { background: transparent; font-size: 14px; padding-bottom: 2px; }"));
-    speakerLabel->setToolTip(QStringLiteral("Volume"));
-    root->addWidget(speakerLabel, 0, Qt::AlignVCenter);
+    m_speakerMuteBtn = new QPushButton(QStringLiteral("🔊"), this);
+    m_speakerMuteBtn->setObjectName(QStringLiteral("titleSpeakerMuteButton"));
+    m_speakerMuteBtn->setFixedSize(24, 22);
+    m_speakerMuteBtn->setCheckable(false);
+    m_speakerMuteBtn->setStyleSheet(
+        QStringLiteral("QPushButton { background: transparent; border: none; font-size: 14px; padding: 0 0 2px 0; }"
+                       "QPushButton:hover { background: %1; border-radius: 3px; }")
+            .arg(UiTheme::Color::ButtonHover));
+    m_speakerMuteBtn->setToolTip(QStringLiteral("Mute audio"));
+    m_speakerMuteBtn->setAccessibleName(QStringLiteral("Audio mute"));
+    m_speakerMuteBtn->setAccessibleDescription(QStringLiteral("Mute or unmute received audio"));
+    root->addWidget(m_speakerMuteBtn, 0, Qt::AlignVCenter);
     root->addSpacing(kTitleControlSpacing);
 
     m_volumeSlider = new QSlider(Qt::Horizontal, this);
@@ -316,7 +307,7 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
                 emit lanModChanged(value);
             });
 
-    connect(m_muteBtn, &QPushButton::clicked, this, &MainTitleBar::muteToggled);
+    connect(m_speakerMuteBtn, &QPushButton::clicked, this, &MainTitleBar::muteToggled);
     connect(m_lockBtn, &QPushButton::clicked, this, &MainTitleBar::lockToggled);
     connect(m_txDurationButton, &QPushButton::clicked, this, &MainTitleBar::txDurationResetRequested);
     connect(m_minimizeBtn, &QPushButton::clicked, this, &MainTitleBar::minimizeRequested);
@@ -408,9 +399,10 @@ void MainTitleBar::setVolume(int value)
 
 void MainTitleBar::setMuted(bool muted)
 {
-    if (m_muteBtn)
+    if (m_speakerMuteBtn)
     {
-        m_muteBtn->setStyleSheet(muteButtonStyle(muted));
+        m_speakerMuteBtn->setText(muted ? QStringLiteral("🔇") : QStringLiteral("🔊"));
+        m_speakerMuteBtn->setToolTip(muted ? QStringLiteral("Unmute audio") : QStringLiteral("Mute audio"));
     }
 }
 
@@ -488,9 +480,9 @@ void MainTitleBar::setVolumeEnabled(bool enabled)
     {
         m_volumeSlider->setEnabled(enabled);
     }
-    if (m_muteBtn)
+    if (m_speakerMuteBtn)
     {
-        m_muteBtn->setEnabled(enabled);
+        m_speakerMuteBtn->setEnabled(enabled);
     }
     if (m_lockBtn)
     {

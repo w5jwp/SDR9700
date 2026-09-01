@@ -57,7 +57,7 @@ class MainTitleBar : public QWidget
     QSlider* m_lanModSlider{nullptr};
     QLabel* m_lanModLabel{nullptr};
     QPushButton* m_txDurationButton{nullptr};
-    QPushButton* m_muteBtn{nullptr};
+    QPushButton* m_speakerMuteBtn{nullptr};
     QPushButton* m_lockBtn{nullptr};
     QSlider* m_volumeSlider{nullptr};
     QLabel* m_volumeLabel{nullptr};
