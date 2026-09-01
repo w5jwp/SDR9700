@@ -13,6 +13,7 @@
 class SpectrumScopeCanvas : public QWidget
 {
     Q_OBJECT
+    friend class SpectrumCanvasTest;
 
   public:
     explicit SpectrumScopeCanvas(QWidget* parent = nullptr);
@@ -52,14 +53,16 @@ class SpectrumScopeCanvas : public QWidget
     int plotRightX() const;
     int plotWidthPx() const;
     double xToFreq(int x) const;
-    int levelToY(float level, int topY, int h) const;
-    int binForFrequency(double mhz, int binCount) const;
-    int binForDisplayX(int x, int binCount) const;
+    double levelToY(float level, int topY, int h) const;
+    double gridLevelToY(float level, int topY, int h) const;
+    double sourcePositionForDisplayX(double x, int binCount) const;
+    static float interpolatedLevel(const QVector<float>& levels, double sourcePosition);
+    static QVector<float> spatiallySmoothedBins(const QVector<float>& bins);
+    void rebuildDisplayBins();
     bool isSpectrumClickArea(const QPoint& pos) const;
     void invalidateStaticLayer();
     void ensureStaticLayer();
     void renderStaticLayer(QPainter* painter) const;
-    void ensureDisplayBinMap(int binCount);
     void scheduleRepaint();
 
     double m_startMhz{144.0};
@@ -71,6 +74,9 @@ class SpectrumScopeCanvas : public QWidget
     QColor m_backgroundColor{0x08, 0x12, 0x1b};
     QColor m_gridLineColor{0x6f, 0x89, 0x9e};
     float m_minLevel{0.0f};
+    // The IC-9700 saturates its scope output at 160. Signal traces use a
+    // calibrated non-linear projection; gridLevelToY() deliberately remains
+    // linear so the horizontal visual divisions stay evenly spaced.
     float m_maxLevel{160.0f};
 
     int m_filterLowHz{-1400};
@@ -80,22 +86,18 @@ class SpectrumScopeCanvas : public QWidget
     bool m_interactionLocked{false};
     bool m_invertMouseWheel{false};
     bool m_scopeOutOfRange{false};
+    bool m_resetSpectrumSmoothing{true};
     double m_wheelStepAccumulator{0.0};
     QPoint m_clickPressPos;
 
     QVector<float> m_spectrumBins;
+    QVector<float> m_displaySpectrumBins;
     QVector<float> m_peakHold;
+    QVector<float> m_displayPeakHold;
     QVector<qint64> m_peakHoldTimestampsMs;
-    QVector<int> m_displayBins;
     QPixmap m_staticLayer;
     QSize m_staticLayerSize;
     qreal m_staticLayerDevicePixelRatio{0.0};
-    QSize m_displayBinMapSize;
-    int m_displayBinMapBinCount{0};
-    double m_displayBinMapStartMhz{0.0};
-    double m_displayBinMapEndMhz{0.0};
-    double m_displayBinMapDataStartMhz{0.0};
-    double m_displayBinMapDataEndMhz{0.0};
     bool m_staticLayerDirty{true};
 
     QTimer m_peakDecayTimer;

@@ -11,7 +11,8 @@ This file is an attribution and license inventory.
 
 SDR9700 benefited from AetherSDR as a source of design inspiration, operating
 experience, and behavior comparison while SDR9700 was developed as its own
-IC-9700-focused application.
+IC-9700-focused application. SDR9700's spectrum heat-map and S-meter color
+palettes use the corresponding AetherSDR palette definitions.
 
 - Reference project: AetherSDR
 - Reference URL: <https://github.com/aethersdr/AetherSDR>

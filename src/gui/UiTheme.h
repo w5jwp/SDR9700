@@ -61,7 +61,61 @@ inline constexpr QColor MeterGreen{0x4d, 0xd8, 0x7a};
 inline constexpr QColor MeterAmber{0xff, 0xb8, 0x4d};
 inline constexpr QColor MeterRed{0xff, 0x4d, 0x4d};
 inline constexpr QColor MeterScaleText{0x7f, 0xa4, 0xc8};
+// Both horizontal boundaries surrounding the spectrum scale and pan control
+// use one authoritative color. Keeping this as a QColor also lets custom-
+// painted widgets apply the final opaque pixel row without style-engine
+// blending against the blue waterfall or spectrum trace.
+inline constexpr QColor SpectrumBoundary{0xff, 0x00, 0x00};
 } // namespace Color
+
+inline QColor spectrumSignalColor(double strength)
+{
+    const double normalized = qBound(0.0, strength, 1.0);
+    if (normalized < 0.25)
+    {
+        return QColor::fromRgbF(0.0, normalized / 0.25, 1.0);
+    }
+    if (normalized < 0.50)
+    {
+        const double position = (normalized - 0.25) / 0.25;
+        return QColor::fromRgbF(0.0, 1.0, 1.0 - position);
+    }
+    if (normalized < 0.75)
+    {
+        const double position = (normalized - 0.50) / 0.25;
+        return QColor::fromRgbF(position, 1.0, 0.0);
+    }
+
+    const double position = (normalized - 0.75) / 0.25;
+    return QColor::fromRgbF(1.0, 1.0 - position, 0.0);
+}
+
+inline QColor sMeterSignalColor(double meterFraction)
+{
+    struct ColorStop
+    {
+        double position{0.0};
+        QColor color{};
+    };
+    static const ColorStop kStops[] = {{0.00, QColor(0x00, 0x90, 0x30)}, {0.30, QColor(0x00, 0xc0, 0x40)},
+                                       {0.50, QColor(0xd4, 0xc0, 0x00)}, {0.70, QColor(0xdd, 0x14, 0x00)},
+                                       {0.85, QColor(0xff, 0x00, 0x00)}, {1.00, QColor(0xff, 0x00, 0x00)}};
+    constexpr int kStopCount = int(sizeof(kStops) / sizeof(kStops[0]));
+    const double normalized = qBound(0.0, meterFraction, 1.0);
+    for (int index = 1; index < kStopCount; ++index)
+    {
+        if (normalized <= kStops[index].position)
+        {
+            const ColorStop& lower = kStops[index - 1];
+            const ColorStop& upper = kStops[index];
+            const double blend = (normalized - lower.position) / (upper.position - lower.position);
+            return QColor::fromRgbF(lower.color.redF() + blend * (upper.color.redF() - lower.color.redF()),
+                                    lower.color.greenF() + blend * (upper.color.greenF() - lower.color.greenF()),
+                                    lower.color.blueF() + blend * (upper.color.blueF() - lower.color.blueF()));
+        }
+    }
+    return kStops[kStopCount - 1].color;
+}
 
 namespace Size
 {

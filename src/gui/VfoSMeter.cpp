@@ -238,16 +238,22 @@ void VfoSMeter::paintEvent(QPaintEvent* event)
     const double meterFraction =
         m_transmitPowerMode ? powerFraction(m_powerWatts, m_maxPowerWatts) : qMin(m_displayRawValue, 241.0) / 241.0;
     const int activeWidth = qRound(meterFraction * meterRect.width());
-    const int s9X = qRound(120.0 / 241.0 * meterRect.width());
     for (int x = meterRect.left(); x + kSegmentWidth <= meterRect.right() + 1; x += kSegmentWidth + kSegmentGap)
     {
         const bool active = x - meterRect.left() < activeWidth;
-        const bool overS9 = !m_transmitPowerMode && x - meterRect.left() >= s9X;
         const bool highPower = m_transmitPowerMode && x - meterRect.left() >= meterRect.width() * 0.82;
-        painter.fillRect(QRect(x, meterRect.top(), kSegmentWidth, meterRect.height()),
-                         QColor(QString::fromLatin1(!active               ? UiTheme::Color::BorderLight
-                                                    : overS9 || highPower ? UiTheme::Color::Danger
-                                                                          : UiTheme::Color::AccentBright)));
+        QColor segmentColor(QString::fromLatin1(UiTheme::Color::BorderLight));
+        if (active && m_transmitPowerMode)
+        {
+            segmentColor =
+                QColor(QString::fromLatin1(highPower ? UiTheme::Color::Danger : UiTheme::Color::AccentBright));
+        }
+        else if (active)
+        {
+            const double segmentFraction = double(x - meterRect.left()) / qMax(1, meterRect.width() - 1);
+            segmentColor = UiTheme::sMeterSignalColor(segmentFraction);
+        }
+        painter.fillRect(QRect(x, meterRect.top(), kSegmentWidth, meterRect.height()), segmentColor);
     }
 
     const QRect readoutRect(width() - kReadoutWidth - 10, meterRect.top(), kReadoutWidth, kSegmentHeight);

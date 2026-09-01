@@ -72,7 +72,7 @@ SpectrumScopeDisplay::SpectrumScopeDisplay(QWidget* parent) : QWidget(parent)
     m_panScrollBar->setToolTip(QStringLiteral("Pan Spectrum Scope"));
     m_panScrollBar->setAccessibleName(QStringLiteral("Spectrum Scope pan"));
     m_panScrollBar->setStyleSheet(QStringLiteral(
-        "QScrollBar:horizontal { background: #061116; border-top: 1px solid #0d2630; border-bottom: 1px solid #9a2424; "
+        "QScrollBar:horizontal { background: #061116; border-top: 1px solid #0d2630; border-bottom: 0; "
         "height: 16px; margin: 0px; }"
         "QScrollBar::groove:horizontal { background: #061116; border: 1px solid #173542; border-radius: 4px; }"
         "QScrollBar::handle:horizontal { background: #2c8195; border: 1px solid #6fb5c8; border-radius: 4px; "
@@ -82,7 +82,7 @@ SpectrumScopeDisplay::SpectrumScopeDisplay(QWidget* parent) : QWidget(parent)
         "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { background: transparent; border: none; "
         "width: 0px; }"
         "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
-        "QScrollBar:disabled { background: #061116; border-bottom-color: #9a2424; }"
+        "QScrollBar:disabled { background: #061116; }"
         "QScrollBar::groove:horizontal:disabled { background: #061116; border-color: #173542; }"
         "QScrollBar::handle:horizontal:disabled { background: transparent; border: none; min-width: 0px; }"
         "QScrollBar::add-page:horizontal:disabled, QScrollBar::sub-page:horizontal:disabled { background: "
