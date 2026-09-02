@@ -30,6 +30,7 @@ class VfoController : public QObject
     void setTuningInteractionEnabled(bool enabled);
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
+    void setLanModLevel(int value);
     void captureExchangeableControlState();
     void discardCapturedExchangeableControlState();
     void applyCapturedControlExchange(VfoController* other);
@@ -47,6 +48,7 @@ class VfoController : public QObject
     void frequencyChanged(quint64 hz);
     void frequencyRecenterRequested(Vfo vfo, quint64 hz);
     void statePublished(Vfo vfo);
+    void lanModLevelChanged(int value);
 
   private:
     struct ExchangeableControlState
@@ -105,6 +107,7 @@ class VfoController : public QObject
     int m_rfGain{0};
     int m_squelch{0};
     int m_txPower{0};
+    int m_lanModLevel{128};
     QString m_fallbackMode;
     duplexMode_t m_fallbackDuplexMode{dmSimplex};
     quint64 m_fallbackRepeaterOffsetHz{0};

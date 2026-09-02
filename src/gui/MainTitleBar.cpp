@@ -61,8 +61,6 @@ constexpr int kTitleBarHeight = 32;
 constexpr int kWindowButtonSize = 32;
 constexpr int kVolumeSliderWidth = 110;
 constexpr int kVolumeLabelWidth = 30;
-constexpr int kLanModSliderWidth = 118;
-constexpr int kLanModLabelWidth = 36;
 constexpr int kTxDurationWidth = 62;
 constexpr int kTitleControlSpacing = 8;
 constexpr int kVolumeValueSpacing = 2;
@@ -189,31 +187,6 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
 
     root->addStretch(1);
 
-    auto* lanModText = new QLabel(QStringLiteral("LAN MOD"), this);
-    lanModText->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
-            .arg(UiTheme::Color::TextMuted));
-    root->addWidget(lanModText);
-    root->addSpacing(4);
-
-    m_lanModSlider = new QSlider(Qt::Horizontal, this);
-    m_lanModSlider->setObjectName(QStringLiteral("titleLanModSlider"));
-    m_lanModSlider->setRange(0, 255);
-    m_lanModSlider->setFixedSize(kLanModSliderWidth, 20);
-    m_lanModSlider->setAccessibleName(QStringLiteral("LAN modulation level"));
-    root->addWidget(m_lanModSlider);
-    root->addSpacing(2);
-
-    m_lanModLabel = new QLabel(QStringLiteral("0%"), this);
-    m_lanModLabel->setObjectName(QStringLiteral("titleLanModValue"));
-    m_lanModLabel->setFixedWidth(kLanModLabelWidth);
-    m_lanModLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_lanModLabel->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
-            .arg(UiTheme::Color::TextMuted));
-    root->addWidget(m_lanModLabel);
-    root->addSpacing(kTitleControlSpacing);
-
     // Volume controls
     auto* volSep = new QWidget(this);
     volSep->setFixedSize(1, 18);
@@ -310,13 +283,6 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
                 }
                 emit volumeChanged(v);
             });
-    connect(m_lanModSlider, &QSlider::valueChanged, this,
-            [this](int value)
-            {
-                m_lanModLabel->setText(QStringLiteral("%1%").arg(value * 100 / 255));
-                emit lanModChanged(value);
-            });
-
     connect(m_speakerMuteBtn, &QPushButton::clicked, this, &MainTitleBar::muteToggled);
     connect(m_lockBtn, &QPushButton::clicked, this, &MainTitleBar::lockToggled);
     connect(m_txDurationButton, &QPushButton::clicked, this, &MainTitleBar::txDurationResetRequested);
@@ -457,26 +423,6 @@ void MainTitleBar::setTxDurationActive(bool transmitting)
     if (m_txDurationButton)
     {
         m_txDurationButton->setStyleSheet(txDurationStyle(transmitting));
-    }
-}
-
-void MainTitleBar::setLanMod(int value)
-{
-    if (!m_lanModSlider)
-    {
-        return;
-    }
-    const int bounded = qBound(0, value, 255);
-    const QSignalBlocker blocker(m_lanModSlider);
-    m_lanModSlider->setValue(bounded);
-    m_lanModLabel->setText(QStringLiteral("%1%").arg(bounded * 100 / 255));
-}
-
-void MainTitleBar::setLanModEnabled(bool enabled)
-{
-    if (m_lanModSlider)
-    {
-        m_lanModSlider->setEnabled(enabled);
     }
 }
 
