@@ -600,7 +600,10 @@ if(BUILD_TESTING)
     add_test(NAME GuiSmokeTest COMMAND GuiSmokeTest)
     set_tests_properties(GuiSmokeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-    add_executable(MemoryManagerSmokeTest tests/MemoryManagerSmokeTest.cpp)
+    add_executable(MemoryManagerSmokeTest
+        tests/MemoryManagerSmokeTest.cpp
+        ../resources/qt/resources.qrc
+    )
     target_include_directories(MemoryManagerSmokeTest PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/gui

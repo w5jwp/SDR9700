@@ -13,11 +13,11 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidgetAction>
-#include <memory>
 
 VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioState* radioState, QWidget* displayParent,
                              QObject* parent)
@@ -164,10 +164,12 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                         return;
                     case funcAutoNotch:
                         m_autoNotchEnabled = value.toBool();
+                        m_autoNotchReceived = true;
                         updateReceiverControlDisplay();
                         return;
                     case funcManualNotch:
                         m_manualNotchEnabled = value.toBool();
+                        m_manualNotchReceived = true;
                         updateReceiverControlDisplay();
                         return;
                     case funcNoiseReduction:
@@ -215,6 +217,8 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                     // one LAN session must not be presented during the next
                     // session before that radio has reported its current state.
                     m_nbLevelReceived = false;
+                    m_autoNotchReceived = false;
+                    m_manualNotchReceived = false;
                     m_nrLevelReceived = false;
                     m_display->setReceiverControlState(QStringLiteral("FILTERS"), QString(), false);
                     m_display->setReceiverControlToolTip(QStringLiteral("FILTERS"), QString());
@@ -620,7 +624,10 @@ void VfoController::updateReceiverControlDisplay()
     const QString nrLabel = !m_nrLevelReceived ? QStringLiteral("NR —")
                             : m_nrEnabled      ? QStringLiteral("NR %1").arg(m_nrLevel)
                                                : QStringLiteral("NR OFF");
-    const QString notchLabel = m_autoNotchEnabled ? QStringLiteral("NOTCH ON") : QStringLiteral("NOTCH OFF");
+    const bool notchKnown = m_autoNotchReceived && m_manualNotchReceived;
+    const QString notchLabel = !notchKnown                                  ? QStringLiteral("NOTCH —")
+                               : m_autoNotchEnabled || m_manualNotchEnabled ? QStringLiteral("NOTCH ON")
+                                                                            : QStringLiteral("NOTCH OFF");
     m_display->setReceiverControlState(QStringLiteral("FILTERS"), QString(), filter.has_value());
     m_display->setReceiverControlToolTip(
         QStringLiteral("FILTERS"), QStringLiteral("%1 • %2 • %3 • %4").arg(filterLabel, nbLabel, notchLabel, nrLabel));
@@ -728,7 +735,6 @@ void VfoController::showReceiverControlMenu(const QString& control)
         QMenu menu(m_display);
         sdr9700::ui::main_window::styleCompactMenu(&menu);
         const std::optional<int> currentFilter = confirmedFilter();
-        const QString currentMode = confirmedMode();
         auto* panel = new QWidget(&menu);
         auto* layout = new QVBoxLayout(panel);
         layout->setContentsMargins(8, 6, 8, 6);
@@ -760,17 +766,8 @@ void VfoController::showReceiverControlMenu(const QString& control)
             filterCombo->addItem(QStringLiteral("FIL%1").arg(filter), filter);
         }
         filterCombo->setCurrentIndex(currentFilter.has_value() ? *currentFilter - 1 : -1);
-        filterCombo->setEnabled(currentFilter.has_value() && !currentMode.isEmpty());
-        connect(filterCombo, &QComboBox::currentIndexChanged, this,
-                [this, currentMode, filterCombo](int index)
-                {
-                    if (index >= 0)
-                    {
-                        m_backend->setVfoFilter(m_vfo, currentMode, filterCombo->itemData(index).toInt());
-                    }
-                });
-        auto addLevelCombo = [this, &addControlCombo, &vfoName](const QString& name, int maximum, int value,
-                                                                bool valueKnown, bool enabled)
+        filterCombo->setEnabled(currentFilter.has_value() && !confirmedMode().isEmpty());
+        auto addLevelCombo = [&addControlCombo, &vfoName](const QString& name, int maximum)
         {
             auto* combo = addControlCombo(name);
             combo->setAccessibleName(QStringLiteral("%1 VFO %2 level").arg(vfoName, name));
@@ -781,62 +778,9 @@ void VfoController::showReceiverControlMenu(const QString& control)
                                                                        : QString::number(level);
                 combo->addItem(text, level);
             }
-            combo->setCurrentIndex(valueKnown && enabled ? value : 0);
-            combo->setEnabled(valueKnown);
-            auto requestedEnabled = std::make_shared<bool>(enabled);
-            connect(combo, &QComboBox::currentIndexChanged, this,
-                    [this, name, combo, requestedEnabled](int index)
-                    {
-                        if (index < 0)
-                        {
-                            return;
-                        }
-                        const int requestedLevel = combo->itemData(index).toInt();
-                        if (name == QStringLiteral("NOTCH"))
-                        {
-                            const bool requestedOn = requestedLevel > 0;
-                            if (*requestedEnabled != requestedOn)
-                            {
-                                *requestedEnabled = requestedOn;
-                                m_backend->setVfoNotch(m_vfo, requestedOn ? VfoNotch::Auto : VfoNotch::Off);
-                            }
-                            return;
-                        }
-                        if (requestedLevel == 0)
-                        {
-                            if (*requestedEnabled)
-                            {
-                                *requestedEnabled = false;
-                                if (name == QStringLiteral("NB"))
-                                {
-                                    m_backend->setVfoNbEnabled(m_vfo, false);
-                                }
-                                else
-                                {
-                                    m_backend->setVfoNrEnabled(m_vfo, false);
-                                }
-                            }
-                            return;
-                        }
-                        if (name == QStringLiteral("NB"))
-                        {
-                            m_backend->setVfoNbLevel(m_vfo, requestedLevel);
-                            if (!*requestedEnabled)
-                            {
-                                *requestedEnabled = true;
-                                m_backend->setVfoNbEnabled(m_vfo, true);
-                            }
-                        }
-                        else
-                        {
-                            m_backend->setVfoNrLevel(m_vfo, requestedLevel);
-                            if (!*requestedEnabled)
-                            {
-                                *requestedEnabled = true;
-                                m_backend->setVfoNrEnabled(m_vfo, true);
-                            }
-                        }
-                    });
+            combo->setCurrentIndex(-1);
+            combo->setEnabled(false);
+            return combo;
         };
         auto addControlDivider = [panel, layout]()
         {
@@ -846,11 +790,119 @@ void VfoController::showReceiverControlMenu(const QString& control)
             layout->addWidget(divider);
         };
         addControlDivider();
-        addLevelCombo(QStringLiteral("NB"), 10, m_nbLevel, m_nbLevelReceived, m_nbEnabled);
+        auto* nbCombo = addLevelCombo(QStringLiteral("NB"), 10);
         addControlDivider();
-        addLevelCombo(QStringLiteral("NOTCH"), 1, m_autoNotchEnabled ? 1 : 0, true, m_autoNotchEnabled);
+        auto* notchCombo = addLevelCombo(QStringLiteral("NOTCH"), 1);
         addControlDivider();
-        addLevelCombo(QStringLiteral("NR"), 15, m_nrLevel, m_nrLevelReceived, m_nrEnabled);
+        auto* nrCombo = addLevelCombo(QStringLiteral("NR"), 15);
+
+        const auto synchronizeControls = [this, filterCombo, nbCombo, notchCombo, nrCombo]()
+        {
+            const std::optional<int> filter = confirmedFilter();
+            const QSignalBlocker filterBlocker(filterCombo);
+            filterCombo->setCurrentIndex(filter.has_value() ? *filter - 1 : -1);
+            filterCombo->setEnabled(filter.has_value() && !confirmedMode().isEmpty());
+
+            const QSignalBlocker nbBlocker(nbCombo);
+            nbCombo->setCurrentIndex(m_nbLevelReceived ? (m_nbEnabled ? m_nbLevel : 0) : -1);
+            nbCombo->setEnabled(m_nbLevelReceived);
+
+            const bool notchKnown = m_autoNotchReceived && m_manualNotchReceived;
+            const QSignalBlocker notchBlocker(notchCombo);
+            notchCombo->setCurrentIndex(notchKnown ? (m_autoNotchEnabled || m_manualNotchEnabled ? 1 : 0) : -1);
+            notchCombo->setEnabled(notchKnown);
+
+            const QSignalBlocker nrBlocker(nrCombo);
+            nrCombo->setCurrentIndex(m_nrLevelReceived ? (m_nrEnabled ? m_nrLevel : 0) : -1);
+            nrCombo->setEnabled(m_nrLevelReceived);
+        };
+        synchronizeControls();
+        connect(filterCombo, &QComboBox::currentIndexChanged, panel,
+                [this, filterCombo, synchronizeControls](int index)
+                {
+                    const QString mode = confirmedMode();
+                    if (index >= 0 && !mode.isEmpty())
+                    {
+                        m_backend->setVfoFilter(m_vfo, mode, filterCombo->itemData(index).toInt());
+                        synchronizeControls();
+                    }
+                });
+        connect(nbCombo, &QComboBox::currentIndexChanged, panel,
+                [this, nbCombo, synchronizeControls](int index)
+                {
+                    if (index < 0)
+                    {
+                        return;
+                    }
+                    const int level = nbCombo->itemData(index).toInt();
+                    if (level == 0)
+                    {
+                        m_backend->setVfoNbEnabled(m_vfo, false);
+                    }
+                    else
+                    {
+                        m_backend->setVfoNbLevel(m_vfo, level);
+                        if (!m_nbEnabled)
+                        {
+                            m_backend->setVfoNbEnabled(m_vfo, true);
+                        }
+                    }
+                    synchronizeControls();
+                });
+        connect(notchCombo, &QComboBox::currentIndexChanged, panel,
+                [this, notchCombo, synchronizeControls](int index)
+                {
+                    if (index >= 0)
+                    {
+                        m_backend->setVfoNotch(m_vfo, notchCombo->itemData(index).toInt() > 0 ? VfoNotch::Auto
+                                                                                              : VfoNotch::Off);
+                        synchronizeControls();
+                    }
+                });
+        connect(nrCombo, &QComboBox::currentIndexChanged, panel,
+                [this, nrCombo, synchronizeControls](int index)
+                {
+                    if (index < 0)
+                    {
+                        return;
+                    }
+                    const int level = nrCombo->itemData(index).toInt();
+                    if (level == 0)
+                    {
+                        m_backend->setVfoNrEnabled(m_vfo, false);
+                    }
+                    else
+                    {
+                        m_backend->setVfoNrLevel(m_vfo, level);
+                        if (!m_nrEnabled)
+                        {
+                            m_backend->setVfoNrEnabled(m_vfo, true);
+                        }
+                    }
+                    synchronizeControls();
+                });
+        if (m_radioState)
+        {
+            connect(m_radioState, &sdr9700::RadioState::receiverStateChanged, panel,
+                    [this, synchronizeControls](Vfo changedVfo)
+                    {
+                        if (changedVfo == m_vfo)
+                        {
+                            synchronizeControls();
+                        }
+                    });
+        }
+        connect(m_backend, &IRadioBackend::radioValueUpdated, panel,
+                [this, synchronizeControls](Funcs func, const QVariant&, uchar receiver)
+                {
+                    const uchar expectedReceiver = m_vfo == Vfo::Main ? 0 : 1;
+                    if (receiver == expectedReceiver &&
+                        (func == funcNoiseBlanker || func == funcNBLevel || func == funcAutoNotch ||
+                         func == funcManualNotch || func == funcNoiseReduction || func == funcNRLevel))
+                    {
+                        synchronizeControls();
+                    }
+                });
         auto* action = new QWidgetAction(&menu);
         action->setDefaultWidget(panel);
         menu.addAction(action);

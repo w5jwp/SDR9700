@@ -21,14 +21,8 @@ constexpr int kVfoButtonWidth = 54;
 constexpr int kRoutingDividerSpacing = 18;
 constexpr int kPttDividerSpacing = 15;
 constexpr int kButtonRadius = 3;
-constexpr const char* kSilverGradient =
-    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #414a53, stop:0.48 #333b43, stop:1 #262c32)";
-constexpr const char* kSilverHoverGradient =
-    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4c5863, stop:0.48 #3a454e, stop:1 #2c343b)";
 constexpr const char* kCompoundBorder = "#71808e";
 constexpr const char* kSilverPressed = "#252c33";
-constexpr const char* kBlueSteelGradient =
-    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #52728c, stop:0.48 #3e5d75, stop:1 #2e485d)";
 
 enum class SegmentPosition
 {
@@ -63,16 +57,16 @@ QString selectionButtonStyle(SegmentPosition position, int fontPixelSize = 10)
                           "QPushButton:hover { background: %6; border-color: %7; color: %8; } "
                           "QPushButton:pressed { background: %9; } "
                           "QPushButton[active=\"true\"] { background: %10; border-color: %11; color: %8; }")
-        .arg(kSilverGradient)
+        .arg(UiTheme::Color::ControlNeutralGradient)
         .arg(kCompoundBorder)
         .arg(innerBorder)
         .arg(corners)
         .arg(UiTheme::Color::TextPrimary)
-        .arg(kSilverHoverGradient)
+        .arg(UiTheme::Color::ControlNeutralHoverGradient)
         .arg(kCompoundBorder)
         .arg(UiTheme::Color::TextBright)
         .arg(kSilverPressed)
-        .arg(kBlueSteelGradient)
+        .arg(UiTheme::Color::ControlActiveGradient)
         .arg(kCompoundBorder)
         .arg(fontPixelSize);
 }

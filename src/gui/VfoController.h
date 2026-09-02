@@ -98,7 +98,9 @@ class VfoController : public QObject
     int m_nbLevel{5};
     bool m_nbLevelReceived{false};
     bool m_autoNotchEnabled{false};
+    bool m_autoNotchReceived{false};
     bool m_manualNotchEnabled{false};
+    bool m_manualNotchReceived{false};
     bool m_nrEnabled{false};
     int m_nrLevel{5};
     bool m_nrLevelReceived{false};
