@@ -17,7 +17,8 @@ constexpr int kButtonHeight = 18;
 constexpr int kButtonWidth = 108;
 constexpr int kVfoButtonWidth = 52;
 constexpr int kVfoButtonSpacing = 4;
-constexpr int kButtonSpacing = 10;
+constexpr int kButtonSpacing = 15;
+constexpr int kPttButtonSpacing = 25;
 
 QString buttonStyle()
 {
@@ -155,11 +156,11 @@ void VfoSelectionPanel::setPttButton(QPushButton* button)
     m_pttButton->setParent(this);
     m_pttButton->setFixedSize(kButtonWidth, 36);
     m_pttButton->setProperty("pttButton", true);
-    layout()->activate();
-    m_pttButton->move((width() - m_pttButton->width()) / 2,
-                      m_dualWatchButton->geometry().bottom() + 1 + kButtonSpacing);
+    auto* panelLayout = qobject_cast<QVBoxLayout*>(layout());
+    const int bottomStretchIndex = panelLayout->count() - 1;
+    panelLayout->insertSpacing(bottomStretchIndex, kPttButtonSpacing);
+    panelLayout->insertWidget(bottomStretchIndex + 1, m_pttButton, 0, Qt::AlignHCenter);
     m_pttButton->show();
-    m_pttButton->raise();
 }
 
 void VfoSelectionPanel::paintEvent(QPaintEvent* event)
