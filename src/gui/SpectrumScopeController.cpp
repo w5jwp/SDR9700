@@ -90,6 +90,18 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
         new VfoController(Vfo::Main, m_window->m_model->backend(), m_window->m_model->radioState(), vfoStrip, m_window);
     m_window->m_subVfoController =
         new VfoController(Vfo::Sub, m_window->m_model->backend(), m_window->m_model->radioState(), vfoStrip, m_window);
+    m_window->m_mainVfoController->setLanModLevel(m_window->m_lanModValue);
+    connect(m_window->m_mainVfoController, &VfoController::lanModLevelChanged, this,
+            [this](int value)
+            {
+                if (!m_window->radioUiReady())
+                {
+                    return;
+                }
+                m_window->m_lanModValue = qBound(0, value, 255);
+                AppSettings::instance().setValueDeferred(QStringLiteral("LANModLevel"), m_window->m_lanModValue);
+                m_window->m_model->setLanModLevel(m_window->m_lanModValue);
+            });
     m_window->m_vfoSelectionController = new VfoSelectionController(
         m_window->m_model->backend(), m_window->m_mainVfoController, m_window->m_subVfoController, vfoStrip, m_window);
     m_window->m_vfoSelectionController->panel()->setPttButton(m_window->m_pttBtn);

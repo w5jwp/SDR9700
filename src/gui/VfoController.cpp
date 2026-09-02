@@ -420,6 +420,16 @@ void VfoController::setTransmitting(bool transmitting)
     }
 }
 
+void VfoController::setLanModLevel(int value)
+{
+    m_lanModLevel = qBound(0, value, 255);
+    if (m_vfo == Vfo::Main)
+    {
+        m_display->setReceiverControlState(
+            QStringLiteral("MOD"), QStringLiteral("%1%").arg(qRound(m_lanModLevel * 100.0 / 255.0)), m_lanModLevel > 0);
+    }
+}
+
 void VfoController::captureExchangeableControlState()
 {
     m_capturedExchangeState = ExchangeableControlState{
@@ -867,10 +877,12 @@ void VfoController::showReceiverControlMenu(const QString& control)
         }
     }
     else if (control == QStringLiteral("RFG") || control == QStringLiteral("SQL") ||
+             (control == QStringLiteral("MOD") && m_vfo == Vfo::Main) ||
              (control == QStringLiteral("TX PWR") && m_vfo == Vfo::Main))
     {
         const int currentValue = control == QStringLiteral("RFG")   ? m_rfGain
                                  : control == QStringLiteral("SQL") ? m_squelch
+                                 : control == QStringLiteral("MOD") ? m_lanModLevel
                                                                     : m_txPower;
         auto* panel = new QWidget(&menu);
         auto* layout = new QVBoxLayout(panel);
@@ -898,6 +910,11 @@ void VfoController::showReceiverControlMenu(const QString& control)
                     {
                         m_backend->setVfoSquelch(m_vfo, slider->value());
                     }
+                    else if (control == QStringLiteral("MOD"))
+                    {
+                        setLanModLevel(slider->value());
+                        emit lanModLevelChanged(slider->value());
+                    }
                     else
                     {
                         m_backend->setTxPower(slider->value());
@@ -918,6 +935,11 @@ void VfoController::showReceiverControlMenu(const QString& control)
             else if (control == QStringLiteral("SQL"))
             {
                 m_backend->setVfoSquelch(m_vfo, slider->value());
+            }
+            else if (control == QStringLiteral("MOD"))
+            {
+                setLanModLevel(slider->value());
+                emit lanModLevelChanged(slider->value());
             }
             else
             {

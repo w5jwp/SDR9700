@@ -27,13 +27,16 @@ constexpr int kTransmitFrequencyRightInset = 6;
 constexpr int kTxBadgeWidth = 40;
 constexpr int kTxBadgeHeight = 18;
 constexpr int kHeaderButtonHeight = 18;
+constexpr int kIdentityButtonWidth = 38;
 constexpr int kBandButtonWidth = 52;
 constexpr int kModeButtonWidth = 52;
 constexpr int kSquelchButtonWidth = 58;
 constexpr int kTxPowerButtonWidth = 68;
-constexpr int kHeaderControlGroupSpacing = 30;
+constexpr int kLanModButtonWidth = 68;
+constexpr int kHeaderControlSpacing = 6;
+constexpr int kHeaderGroupSpacing = 12;
 constexpr int kReceiverControlHeight = 18;
-constexpr int kReceiverControlSpacing = 4;
+constexpr int kReceiverControlSpacing = 6;
 constexpr int kSecondaryControlWidth = 80;
 constexpr int kXfcControlWidth = 52;
 constexpr int kFrequencyGroupVerticalOffset = 7;
@@ -76,7 +79,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
 
     auto* headerLayout = new QHBoxLayout;
     headerLayout->setContentsMargins(0, 0, 0, 0);
-    headerLayout->setSpacing(6);
+    headerLayout->setSpacing(kHeaderControlSpacing);
 
     if (vfo == Vfo::Main)
     {
@@ -99,7 +102,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
 
     m_identityButton = new QPushButton(vfoName(vfo), this);
     m_identityButton->setObjectName(QStringLiteral("vfoIdentityButton"));
-    m_identityButton->setFixedHeight(kHeaderButtonHeight);
+    m_identityButton->setFixedSize(kIdentityButtonWidth, kHeaderButtonHeight);
     m_identityButton->setCursor(Qt::PointingHandCursor);
     m_identityButton->setAccessibleName(QStringLiteral("Select %1").arg(title));
     m_identityButton->setStyleSheet(receiverControlStyle());
@@ -137,6 +140,8 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     QPushButton* squelchButton = createHeaderControl(QStringLiteral("SQL"), kSquelchButtonWidth);
     QPushButton* txPowerButton =
         vfo == Vfo::Main ? createHeaderControl(QStringLiteral("TX PWR"), kTxPowerButtonWidth) : nullptr;
+    QPushButton* lanModButton =
+        vfo == Vfo::Main ? createHeaderControl(QStringLiteral("MOD"), kLanModButtonWidth) : nullptr;
     if (txPowerButton)
     {
         txPowerButton->setText(QStringLiteral("PWR"));
@@ -150,9 +155,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     };
 
     headerLayout->addWidget(m_identityButton);
-    // QBoxLayout also inserts its normal inter-item spacing beside an explicit
-    // spacer, so subtract that contribution to render an exact 30 px gap.
-    headerLayout->addSpacing(kHeaderControlGroupSpacing - headerLayout->spacing());
+    headerLayout->addSpacing(kHeaderGroupSpacing);
     if (m_txBadge)
     {
         headerLayout->addWidget(m_txBadge);
@@ -161,7 +164,15 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     {
         headerLayout->addWidget(createHeaderPlaceholder(kTxBadgeWidth, QStringLiteral("vfoTxBadgePlaceholder")));
     }
-    headerLayout->addStretch();
+    headerLayout->addSpacing(kHeaderGroupSpacing);
+    if (lanModButton)
+    {
+        headerLayout->addWidget(lanModButton);
+    }
+    else
+    {
+        headerLayout->addWidget(createHeaderPlaceholder(kLanModButtonWidth, QStringLiteral("vfoLanModPlaceholder")));
+    }
     if (txPowerButton)
     {
         headerLayout->addWidget(txPowerButton);
@@ -170,8 +181,9 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     {
         headerLayout->addWidget(createHeaderPlaceholder(kTxPowerButtonWidth, QStringLiteral("vfoTxPowerPlaceholder")));
     }
+    headerLayout->addSpacing(kHeaderGroupSpacing);
     headerLayout->addWidget(squelchButton);
-    headerLayout->addSpacing(kHeaderControlGroupSpacing);
+    headerLayout->addSpacing(kHeaderGroupSpacing);
     headerLayout->addWidget(m_bandButton);
     headerLayout->addWidget(m_modeButton);
 

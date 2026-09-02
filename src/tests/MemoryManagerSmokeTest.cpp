@@ -541,7 +541,8 @@ void MemoryManagerSmokeTest::mainWindowRetainsFixedFramelessDesign()
     QCOMPARE(window.minimumSize(), QSize(UiTheme::Size::MainWindowMinWidth, UiTheme::Size::MainWindowMinHeight));
     QVERIFY(window.findChild<QTableWidget*>(QStringLiteral("memoryBrowserTable")) == nullptr);
     QVERIFY(window.findChild<QWidget*>(QStringLiteral("vfoDisplayStrip")) != nullptr);
-    QVERIFY(window.findChild<QSlider*>(QStringLiteral("titleLanModSlider")) != nullptr);
+    QVERIFY(window.findChild<QSlider*>(QStringLiteral("titleLanModSlider")) == nullptr);
+    QVERIFY(window.findChild<QPushButton*>(QStringLiteral("vfoMODButton")) != nullptr);
 }
 
 void MemoryManagerSmokeTest::fileMenuTracksRadioConnection()

@@ -575,9 +575,9 @@ void MainWindow::showSettingsDialog()
                 }
 
                 m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
-                if (m_titleBar)
+                if (m_mainVfoController)
                 {
-                    m_titleBar->setLanMod(m_lanModValue);
+                    m_mainVfoController->setLanModLevel(m_lanModValue);
                 }
                 m_model->setLanModLevel(m_lanModValue);
                 m_spectrumScopeDisplay->setInvertMouseWheel(
@@ -669,21 +669,6 @@ void MainWindow::reloadMemoryTable()
 void MainWindow::buildRadioControls()
 {
     m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
-    if (m_titleBar)
-    {
-        m_titleBar->setLanMod(m_lanModValue);
-        connect(m_titleBar, &MainTitleBar::lanModChanged, this,
-                [this](int value)
-                {
-                    if (!radioUiReady())
-                    {
-                        return;
-                    }
-                    m_lanModValue = qBound(0, value, 255);
-                    AppSettings::instance().setValueDeferred(QStringLiteral("LANModLevel"), m_lanModValue);
-                    m_model->setLanModLevel(m_lanModValue);
-                });
-    }
     const int appVolume = appVolumeSettingValue();
     m_currentAfGain = appVolume;
     if (m_titleBar)
@@ -961,7 +946,6 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     if (m_titleBar)
     {
         m_titleBar->setVolumeEnabled(enabled);
-        m_titleBar->setLanModEnabled(enabled);
         m_titleBar->setLockEnabled(enabled && m_controlLockKnown);
     }
     if (m_pttBtn)
@@ -995,9 +979,9 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_toneFrequency = 670;
     m_dtcsCode = 23;
 
-    if (m_titleBar)
+    if (m_mainVfoController)
     {
-        m_titleBar->setLanMod(m_lanModValue);
+        m_mainVfoController->setLanModLevel(m_lanModValue);
     }
     if (m_mainVfoController)
     {
