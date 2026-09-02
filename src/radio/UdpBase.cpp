@@ -2,17 +2,29 @@
 #include "LogCategories.h"
 
 #include <QMutexLocker>
+#include <QRandomGenerator>
 #include <QTime>
 
 #include <utility>
 
-bool UdpBase::init(quint16 bindPort)
+bool UdpBase::init(quint16 bindPort, QUdpSocket* boundSocket)
 {
     departureSent = false;
-    udp = new QUdpSocket(this);
-    if (!udp->bind(bindPort))
+    udp = boundSocket != nullptr ? boundSocket : new QUdpSocket(this);
+    if (boundSocket != nullptr)
+    {
+        udp->setParent(this);
+    }
+    if (boundSocket == nullptr && !udp->bind(bindPort))
     {
         qCritical(logUdp()).noquote() << "Unable to bind UDP port" << bindPort << ":" << udp->errorString();
+        delete udp;
+        udp = nullptr;
+        return false;
+    }
+    if (udp->state() != QAbstractSocket::BoundState || (bindPort != 0 && udp->localPort() != bindPort))
+    {
+        qCritical(logUdp()).noquote() << "Reserved UDP socket is not bound to requested port" << bindPort;
         delete udp;
         udp = nullptr;
         return false;
@@ -20,12 +32,11 @@ bool UdpBase::init(quint16 bindPort)
 
     localPort = udp->localPort();
     qInfo(logUdp()).noquote().nospace() << "UDP stream bound localPort=" << localPort << " remotePort=" << port;
-    uint32_t addr = localIP.toIPv4Address();
-    // The IC-9700 LAN protocol uses a 32-bit client/session ID. SDR9700
-    // follows Icom's observed convention of combining the last two IPv4
-    // octets with the local UDP port; two hosts that collide on those
-    // values on a large subnet are an accepted protocol-level constraint.
-    myId = (addr >> 8 & 0xff) << 24 | (addr & 0xff) << 16 | (localPort & 0xffff);
+    // RS-BA1 session IDs are opaque per-stream tokens. Keep the bound port in
+    // the low half and randomize the high half so a replacement process cannot
+    // be mistaken for a retained predecessor transport from the same host.
+    const quint32 randomHigh = QRandomGenerator::global()->generate() & 0xffff;
+    myId = (randomHigh << 16) | localPort;
 
     retransmitTimer = new QTimer(this);
     connect(retransmitTimer, &QTimer::timeout, this, &UdpBase::sendRetransmitRequest);
@@ -492,9 +503,8 @@ void UdpBase::sendControl(bool tracked, quint8 type, quint16 seq)
     if (!tracked)
     {
         p.seq = seq;
-        udpMutex.lock();
+        QMutexLocker locker(&udpMutex);
         udp->writeDatagram(encodePacket(p), radioIP, port);
-        udpMutex.unlock();
     }
     else
     {
@@ -524,7 +534,7 @@ void UdpBase::sendPing()
     return;
 }
 
-void UdpBase::sendTrackedPacket(QByteArray d)
+void UdpBase::sendTrackedPacket(QByteArray d, int copies)
 {
     if (udp == nullptr)
     {
@@ -564,21 +574,44 @@ void UdpBase::sendTrackedPacket(QByteArray d)
 
     purgeOldEntries();
 
-    udpMutex.lock();
-    qint64 ret = udp->writeDatagram(d, radioIP, port);
-    if (ret < 0)
+    QMutexLocker udpLocker(&udpMutex);
+    for (int copy = 0; copy < copies; ++copy)
     {
-        qWarning(logUdp()).noquote() << this->metaObject()->className() << "writeDatagram FAILED to"
-                                     << radioIP.toString() << ":" << port << udp->errorString();
+        const qint64 ret = udp->writeDatagram(d, radioIP, port);
+        if (ret < 0)
+        {
+            qWarning(logUdp()).noquote() << this->metaObject()->className() << "writeDatagram FAILED to"
+                                         << radioIP.toString() << ":" << port << udp->errorString();
+        }
     }
 
     if (idleTimer != nullptr && idleTimer->isActive())
     {
         idleTimer->start(IDLE_PERIOD);
     }
-    udpMutex.unlock();
-    packetsSent++;
+    udpLocker.unlock();
+    packetsSent += copies;
     return;
+}
+
+void UdpBase::sendUntrackedPacket(const QByteArray& d, int copies)
+{
+    if (udp == nullptr || d.size() < CONTROL_SIZE)
+    {
+        return;
+    }
+
+    QMutexLocker udpLocker(&udpMutex);
+    for (int copy = 0; copy < copies; ++copy)
+    {
+        const qint64 ret = udp->writeDatagram(d, radioIP, port);
+        if (ret < 0)
+        {
+            qWarning(logUdp()).noquote() << this->metaObject()->className() << "writeDatagram FAILED to"
+                                         << radioIP.toString() << ":" << port << udp->errorString();
+        }
+    }
+    packetsSent += copies;
 }
 
 void UdpBase::purgeOldEntries()

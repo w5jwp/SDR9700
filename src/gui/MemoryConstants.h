@@ -17,7 +17,13 @@ constexpr quint16 kRadioMemorySatelliteGroup = 0;
 constexpr int kRadioMemorySyncTotal =
     ((kRadioMemoryLastGroup - kRadioMemoryFirstGroup + 1) * (kRadioMemoryLastChannel - kRadioMemoryFirstChannel + 1)) +
     (kRadioMemoryLastSatelliteChannel - kRadioMemoryFirstSatelliteChannel + 1);
-constexpr int kRadioMemoryRefreshIntervalMs = 25;
+// A full startup sweep is deliberately kept below the rate used by ordinary
+// interactive CI-V traffic. The IC-9700 can stop answering CI-V when a newly
+// recovered LAN session is immediately loaded with the entire memory sweep.
+constexpr int kRadioMemoryRefreshIntervalMs = 75;
+constexpr int kRadioMemoryStartupStabilityMs = 1000;
+constexpr int kRadioMemoryStartupFallbackMs = 5000;
+constexpr int kRadioMemoryStartupMinimumScopeFrames = 3;
 constexpr int kRadioMemorySyncReplyGraceMs = 1000;
 constexpr int kRadioMemorySyncSafetyMarginMs = 5000;
 constexpr int kRadioMemoryOperationSyncMaxAttempts = 3;

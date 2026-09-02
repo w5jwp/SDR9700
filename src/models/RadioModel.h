@@ -79,6 +79,7 @@ class RadioModel : public QObject
     void txAudioLevelChanged(int peak, int rms);
     void radioMemoryReceived(MemoryType memory);
     void audioDataReady(const QByteArray& pcm, int sampleRate, int channelCount);
+    void spectrumActivity();
 
   private slots:
     void onBackendConnected();

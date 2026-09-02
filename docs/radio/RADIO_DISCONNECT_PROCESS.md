@@ -106,8 +106,11 @@ Sending UDP stream departure to <radio-address>:50001
 The next process should receive `I am here` in response to its first `Are You
 There` probe.
 
-Rejected-session shutdown was additionally verified on August 31, 2026 by
-running SDR9700 while AetherSDR owned the IC-9700 LAN session. SDR9700 reported
-the busy session and then closed without disconnecting AetherSDR. The automated
-suite also exercises 10,000 rejected ownership lifecycles and 10,000 suppressed
-control-departure attempts.
+Rejected-session shutdown was additionally verified on August 31 and September
+2, 2026 with independent clients owning the IC-9700 LAN session. SDR9700 reports
+the radio-supplied owner IP address, closes only its local resources, and does
+not automatically retry. The established client remains connected. The
+automated suite also exercises 10,000 rejected ownership lifecycles and 10,000
+suppressed control-departure attempts. Crash-recovery authorization and standby
+wake are documented separately in
+[Radio Connection Recovery](RADIO_CONNECTION_RECOVERY.md).

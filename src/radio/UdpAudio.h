@@ -32,12 +32,13 @@ class UdpAudio : public UdpBase
 
   public:
     UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint16 lport, audioSetup rxSetup,
-             audioSetup txSetup);
+             audioSetup txSetup, QUdpSocket* boundSocket = nullptr);
     ~UdpAudio();
 
     int audioLatency = 0;
 
   signals:
+    void ready();
     void haveAudioData(audioPacket data);
 
     void setupTxAudio(audioSetup setup);
@@ -101,6 +102,7 @@ class UdpAudio : public UdpBase
     int m_txSilencePacketBytes = 640; // 20 ms, 16 kHz, mono 16-bit PCM.
 
     bool m_audioReady = false;
+    bool m_transportReadyEmitted = false;
 
     QElapsedTimer audioClock;
     bool audioHaveBase = false;

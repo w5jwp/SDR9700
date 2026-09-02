@@ -13,6 +13,7 @@
 #include "LogCategories.h"
 #include "RadioCapabilities.h"
 #include "RadioIdentities.h"
+#include "UdpStatusMessages.h"
 #include "ShutdownTiming.h"
 #include "TransmitFrequencyPolicy.h"
 
@@ -37,6 +38,7 @@ constexpr int kMaxDualWatchRetries = 8;
 constexpr int kSyncWatchdogTimeoutMs = 10000;
 constexpr int kSyncReconnectDelayMs = 3000;
 constexpr int kMaxSyncReconnectAttempts = 1;
+constexpr int kStandbyWakeDelayMs = 10000;
 constexpr int kMemoryWriteReadbackDelayMs = 250;
 constexpr int kVfoStatePollIntervalMs = 250;
 constexpr int kReceiverContextSettleMs = 250;
@@ -223,10 +225,18 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_scopeController, &ScopeController::scopeDataReceived, this,
             [this]()
             {
+                // A retained frame can arrive while startup is deliberately
+                // turning scope output off to synchronize VFO state. Do not
+                // let that stale frame satisfy this session's scope readiness
+                // or stop the subsequent enable retry loop.
+                if (!m_scopeEnableRequested)
+                {
+                    return;
+                }
                 if (m_scopeSyncDegraded)
                 {
                     setScopeSyncDegraded(false);
-                    emit statusMessage(QStringLiteral("Spectrum scope sync complete"), MessageSeverity::Info);
+                    qInfo(logRadio()).noquote() << "Spectrum scope synchronization complete";
                 }
                 m_scopeDataReceived = true;
                 updateReadyState();
@@ -598,7 +608,7 @@ RadioBackend::RadioBackend(QObject* parent)
 
 RadioBackend::~RadioBackend()
 {
-    shutdownConnection(false, false);
+    shutdownConnection(false, false, m_standbyWakePolicy.complete());
     if (m_scopeController && m_radioDataThread && m_radioDataThread->isRunning())
     {
         QMetaObject::invokeMethod(m_scopeController, &ScopeController::reset, Qt::QueuedConnection);
@@ -645,6 +655,17 @@ RadioBackend::~RadioBackend()
 
 void RadioBackend::connectToRadio(const QString& host, quint16 port, const QString& user, const QString& pass)
 {
+    // Operator-initiated and ordinary reconnects begin a new bootstrap policy.
+    // Internal retries keep the existing policy so repeated silent CI-V paths
+    // advance RetrySession -> Wake -> Fail instead of restarting forever.
+    const bool previousRadioWasReady = m_standbyWakePolicy.complete();
+    const bool bootstrapReconnect = m_bootstrapReconnectPending;
+    m_bootstrapReconnectPending = false;
+    if (!bootstrapReconnect)
+    {
+        ++m_bootstrapGeneration;
+        m_standbyWakePolicy.reset();
+    }
     if (!m_syncReconnectPending)
     {
         m_syncReconnectAttempts = 0;
@@ -656,9 +677,18 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
         // Replacing one session is not an operator-requested disconnect. Reset
         // backend readiness without publishing a transient Disconnected state
         // that could start MainWindow's automatic reconnect timer.
-        shutdownConnection(false, false);
+        shutdownConnection(false, false, previousRadioWasReady);
     }
-    emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1").arg(host));
+    // Internal bootstrap replacements are implementation details of the same
+    // operator-requested connection attempt. Republishing "Connecting" here
+    // used to overwrite the more useful "Waking radio" toast during the
+    // bounded standby delay, making the UI appear to bounce between states.
+    // Preserve the current lifecycle message until the command plane either
+    // becomes usable or the attempt reaches its final failure.
+    if (!bootstrapReconnect)
+    {
+        emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to radio"));
+    }
 
     QHostAddress radioAddress;
     if (radioAddress.setAddress(host) && radioAddress.protocol() != QAbstractSocket::IPv4Protocol)
@@ -1003,13 +1033,17 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
 
 void RadioBackend::disconnectFromRadio()
 {
+    const bool radioWasReady = m_standbyWakePolicy.complete();
+    ++m_bootstrapGeneration;
+    m_bootstrapReconnectPending = false;
+    m_standbyWakePolicy.reset();
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->stop();
     }
     emit connectionStageChanged(ConnectionStage::Disconnecting, QStringLiteral("Disconnecting from radio"));
     stopLocalAudio();
-    shutdownConnection();
+    shutdownConnection(true, true, radioWasReady);
     m_connectionHost.clear();
     m_connectionPort = 0;
     m_connectionUser.clear();
@@ -1061,7 +1095,7 @@ void RadioBackend::stopLocalAudio()
     qInfo(logAudio()).noquote() << "[SHUTDOWN] local playback stopped";
 }
 
-void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisconnectedStage)
+void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisconnectedStage, bool sendSafetyCommands)
 {
     if (!m_commander)
     {
@@ -1160,7 +1194,10 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
 
     if (QThread::currentThread() == m_commander->thread())
     {
-        sendDisconnectSafetyCommands(m_commander, originalDataOffMod, originalData1Mod);
+        if (sendSafetyCommands)
+        {
+            sendDisconnectSafetyCommands(m_commander, originalDataOffMod, originalData1Mod);
+        }
         m_commander->closeComm();
     }
     else
@@ -1168,9 +1205,12 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
         auto closeDone = std::make_shared<QSemaphore>();
         const bool queued = QMetaObject::invokeMethod(
             m_commander,
-            [commandSession, closeDone, originalDataOffMod, originalData1Mod]()
+            [commandSession, closeDone, originalDataOffMod, originalData1Mod, sendSafetyCommands]()
             {
-                sendDisconnectSafetyCommands(commandSession, originalDataOffMod, originalData1Mod);
+                if (sendSafetyCommands)
+                {
+                    sendDisconnectSafetyCommands(commandSession, originalDataOffMod, originalData1Mod);
+                }
                 commandSession->closeComm();
                 closeDone->release();
             },
@@ -1186,6 +1226,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_commander = nullptr;
     m_radioReady = false;
     m_scopeDataReceived = false;
+    m_scopeEnableRequested = false;
     setScopeSyncDegraded(false);
     resetScopeController();
     m_initialFrequencyReceived = false;
@@ -2659,16 +2700,11 @@ void RadioBackend::updateReadyState()
         {
             m_vfoStatePollTimer->start();
         }
-        // Let MemoryController establish the startup memory poll before the
-        // broader post-ready status snapshot queues dozens of CI-V reads. This
-        // is intentionally a small, documented backout point: if future packet
-        // captures show the IC-9700 handles the full burst without delaying
-        // memory replies, this can return to a direct requestPostReadyRadioState()
-        // call.
-        // The status snapshot is now paced and bounded by Commander, so it no
-        // longer needs the full half-second separation previously used to
-        // protect memory synchronization from an immediate command burst.
-        QTimer::singleShot(200, this,
+        // Give a newly opened or recovered CI-V stream time to demonstrate
+        // useful spectrum traffic before the broader status snapshot joins
+        // startup. MemoryController applies the same recovery window before
+        // beginning its separately paced 420-slot sweep.
+        QTimer::singleShot(3000, this,
                            [this]()
                            {
                                if (m_radioReady && m_commander)
@@ -2676,10 +2712,7 @@ void RadioBackend::updateReadyState()
                                    requestPostReadyRadioState();
                                }
                            });
-        emit connectionStageChanged(ConnectionStage::SyncingRadioState,
-                                    m_scopeSyncDegraded
-                                        ? QStringLiteral("Radio state synced; syncing memories and spectrum scope")
-                                        : QStringLiteral("Radio state synced; syncing memories"));
+        emit connectionStageChanged(ConnectionStage::SyncingRadioState, QStringLiteral("Synchronizing memories"));
         invokeOnCurrentCommander([](Commander* c) { c->enableAudio(); });
     }
 }
@@ -2857,6 +2890,10 @@ void RadioBackend::onLanReady()
         return;
     }
 
+    // UdpHandler emits lanReady only after the directed Transceiver ID reply,
+    // so reaching this point proves the command plane is awake and usable.
+    m_standbyWakePolicy.commandPlaneReady();
+
     m_radioReady = false;
     m_scopeDataReceived = false;
     setScopeSyncDegraded(false);
@@ -2928,7 +2965,7 @@ void RadioBackend::onLanReady()
                        });
 
     emit connected();
-    emit connectionStageChanged(ConnectionStage::SyncingRadioState, QStringLiteral("Connected; syncing radio state"));
+    emit connectionStageChanged(ConnectionStage::SyncingRadioState, QStringLiteral("Synchronizing radio"));
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->start();
@@ -2959,6 +2996,7 @@ void RadioBackend::onLanReady()
             return;
         }
         const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
+        m_scopeEnableRequested = true;
         invokeOnCurrentCommander(
             [lanModLevel](Commander* commandSession)
             {
@@ -3113,35 +3151,24 @@ void RadioBackend::onLanReady()
 
 void RadioBackend::onPortError(errorType err)
 {
-    QString message;
-    switch (err.code)
+    if (err.code == ErrorCode::CommandPlaneUnavailable)
     {
-    case ErrorCode::AuthFailure:
-        message = QStringLiteral("Login denied; check the radio username and password");
-        break;
-    case ErrorCode::ConnectionFailed:
-        message = err.message.trimmed();
-        if (message.isEmpty())
-        {
-            message = QStringLiteral("Radio connection failed");
-        }
-        break;
-    case ErrorCode::Disconnected:
-        message = QStringLiteral("Radio disconnected");
-        break;
-    default:
-        message = err.message.trimmed();
-        if (message.isEmpty())
-        {
-            message = QStringLiteral("Radio connection failed");
-        }
-        break;
+        handleCommandPlaneUnavailable();
+        return;
     }
+
+    const QString message = sdr9700::connectionErrorMessage(err);
+
+    // A different transport failure supersedes any delayed standby-wake
+    // callback. Without advancing the generation, that callback could reopen
+    // the just-failed target after this handler deliberately cleared it.
+    ++m_bootstrapGeneration;
+    m_bootstrapReconnectPending = false;
 
     // Tear down the failed transport without emitting a generic disconnect
     // toast. The typed error below is the authoritative explanation and also
     // drives MainWindow's reconnect policy.
-    shutdownConnection(false, false);
+    shutdownConnection(false, false, m_standbyWakePolicy.complete());
     m_connectionHost.clear();
     m_connectionPort = 0;
     m_connectionUser.clear();
@@ -3149,6 +3176,99 @@ void RadioBackend::onPortError(errorType err)
     emit connectionStageChanged(
         err.code == ErrorCode::Disconnected ? ConnectionStage::Disconnected : ConnectionStage::Failed, message);
     emit errorOccurred(err.code, message);
+}
+
+void RadioBackend::handleCommandPlaneUnavailable()
+{
+    // This signal is intentionally narrower than "disconnected": LAN login,
+    // token negotiation, and both media handshakes succeeded, but the radio did
+    // not answer our directed CI-V identity query. A crashed predecessor and a
+    // radio in standby look identical at this boundary, so exhaust one clean
+    // session replacement before sending the state-changing power-on command.
+    switch (m_standbyWakePolicy.commandPlaneUnavailable())
+    {
+    case sdr9700::StandbyWakePolicy::Action::Continue:
+        return;
+    case sdr9700::StandbyWakePolicy::Action::RetrySession:
+        qInfo(logRadio()).noquote()
+            << "IC-9700 command plane was silent; retrying once with a fresh LAN session before standby wake";
+        // A single clean-session retry distinguishes a crashed predecessor
+        // from standby, but it requires no operator action and normally lasts
+        // only a few seconds. Keep it in the diagnostic log instead of
+        // replacing the persistent Connecting toast with transient chatter.
+        reconnectBootstrapSession();
+        return;
+    case sdr9700::StandbyWakePolicy::Action::Wake:
+    {
+        const int wakeAttempt = m_standbyWakePolicy.wakeAttempts();
+        qInfo(logRadio()).noquote().nospace() << "Sending IC-9700 standby wake attempt=" << wakeAttempt;
+        emit connectionStageChanged(ConnectionStage::WaitingForRadio, QStringLiteral("Waking radio from standby mode"));
+        invokeOnCurrentCommander([](Commander* commandSession) { commandSession->sendStandbyWake(); });
+
+        // The radio needs time to boot its CI-V command plane. Keep the current
+        // media pipe alive long enough to deliver the wake frame, then replace
+        // the provisional session without sending ordinary radio-state safety
+        // commands into a command plane that has not answered us.
+        const quint64 generation = m_bootstrapGeneration;
+        // An operator disconnect or a new connection request increments the
+        // generation. That makes this delayed callback harmless if intent
+        // changes while the IC-9700 is waking.
+        QTimer::singleShot(kStandbyWakeDelayMs, this,
+                           [this, generation]()
+                           {
+                               if (generation != m_bootstrapGeneration)
+                               {
+                                   return;
+                               }
+                               reconnectBootstrapSession();
+                           });
+        return;
+    }
+    case sdr9700::StandbyWakePolicy::Action::Fail:
+    {
+        const QString message = QStringLiteral("Unable to connect to radio");
+        qWarning(logRadio()).noquote() << "IC-9700 command plane remained unavailable after bounded standby wake";
+        shutdownConnection(true, false, false);
+        emit connectionStageChanged(ConnectionStage::Failed, message);
+        // Keep this typed as command-plane exhaustion. MainWindow retries
+        // ordinary connection failures, which would reset this policy and turn
+        // the deliberately bounded wake sequence into an infinite loop.
+        emit errorOccurred(ErrorCode::CommandPlaneUnavailable, message);
+        return;
+    }
+    }
+}
+
+void RadioBackend::reconnectBootstrapSession()
+{
+    if (m_connectionHost.isEmpty() || m_connectionPort == 0)
+    {
+        return;
+    }
+
+    const QString host = m_connectionHost;
+    const quint16 port = m_connectionPort;
+    const QString user = m_connectionUser;
+    const QString pass = m_connectionPass;
+    const quint64 generation = m_bootstrapGeneration;
+
+    // This provisional session never proved CI-V readiness. Close only the LAN
+    // resources it actually owns; PTT/data-mode safety writes would be both
+    // ineffective and misleading while the command plane is silent.
+    shutdownConnection(false, false, false);
+    m_bootstrapReconnectPending = true;
+    // Preserve the policy epoch across this internal connection replacement.
+    // connectToRadio() consumes m_bootstrapReconnectPending rather than
+    // resetting the attempt counters as it would for a new operator request.
+    QTimer::singleShot(0, this,
+                       [this, generation, host, port, user, pass]()
+                       {
+                           if (generation != m_bootstrapGeneration || !m_bootstrapReconnectPending)
+                           {
+                               return;
+                           }
+                           connectToRadio(host, port, user, pass);
+                       });
 }
 
 void RadioBackend::onNetworkStatus(networkStatus status)

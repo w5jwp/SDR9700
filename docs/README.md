@@ -21,6 +21,8 @@ repository root remain there; implementation details and research live here.
 - [Radio Disconnect Process](radio/RADIO_DISCONNECT_PROCESS.md) records the
   hardware-verified authenticated LAN teardown sequence and its regression
   procedure.
+- [Radio Connection Recovery](radio/RADIO_CONNECTION_RECOVERY.md) documents
+  normal startup, crash recovery, foreign-session refusal, and standby wake.
 - [CI-V Command Audit](radio/research/CI_V_COMMAND_AUDIT.md) compares the Icom
   command reference with SDR9700's compiled capability table.
 - [VFO Command Scope](radio/research/VFO_COMMAND_SCOPE.md) records the verified

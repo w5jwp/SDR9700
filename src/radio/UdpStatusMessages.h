@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Types.h"
+
 #include <QString>
 
 namespace sdr9700
@@ -29,5 +31,42 @@ inline QString waitingForBusyRadioMessage(const QString& deviceName, const QStri
         return QStringLiteral("Waiting for %1; in use by station at %2").arg(radio, address);
     }
     return QStringLiteral("Waiting for %1; in use by another station").arg(radio);
+}
+
+inline QString connectionErrorMessage(const errorType& error)
+{
+    if (error.code == ErrorCode::AuthFailure)
+    {
+        return QStringLiteral("Login denied; check the radio username and password");
+    }
+
+    const QString detail = error.message.trimmed();
+    if (!detail.isEmpty())
+    {
+        return detail;
+    }
+    if (error.code == ErrorCode::Disconnected)
+    {
+        return QStringLiteral("Radio disconnected");
+    }
+    return QStringLiteral("Radio connection failed");
+}
+
+inline QString reconnectingMessage(QString message)
+{
+    message = message.trimmed();
+    while (!message.isEmpty() && QStringLiteral(".!?;:").contains(message.back()))
+    {
+        message.chop(1);
+    }
+    if (message.isEmpty())
+    {
+        return QStringLiteral("Radio connection lost; reconnecting");
+    }
+    if (message.contains(QStringLiteral("reconnect"), Qt::CaseInsensitive))
+    {
+        return message;
+    }
+    return message + QStringLiteral("; reconnecting");
 }
 } // namespace sdr9700

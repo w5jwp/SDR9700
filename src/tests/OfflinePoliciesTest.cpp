@@ -4,14 +4,18 @@
 #include "MainSubExchangePolicy.h"
 #include "PttConfirmationPolicy.h"
 #include "RadioSessionOwnership.h"
+#include "RadioSessionCorrelation.h"
+#include "RadioSessionRecoveryStore.h"
+#include "RetainedSessionRemovalPolicy.h"
 #include "SpectrumTuningPolicy.h"
+#include "StandbyWakePolicy.h"
 #include "TransmitSafetyPolicy.h"
 #include "TransmitFrequencyPolicy.h"
 #include "TransmitConfigurationPolicy.h"
 
+#include <QCoreApplication>
 #include <QTest>
 #include <array>
-#include <limits>
 
 class OfflinePoliciesTest : public QObject
 {
@@ -34,7 +38,109 @@ class OfflinePoliciesTest : public QObject
     void serializesRepeatedMainSubExchanges();
     void requiresDualWatchStateAndSubIdentity();
     void permitsRadioTeardownOnlyAfterStreamOwnership();
+    void correlatesRadioSessionResponses();
+    void retainedTokenResetPolicyIsSingleShot();
+    void boundsStandbyWakeBootstrap();
+    void requiresCompleteTransportRecoveryIdentity();
+    void waitsForRetainedTokenRemovalBeforeReplacementLogin();
+    void refusesRecoveryWhileJournalOwnerIsAlive();
 };
+
+void OfflinePoliciesTest::refusesRecoveryWhileJournalOwnerIsAlive()
+{
+    sdr9700::RadioSessionRecoveryRecord record;
+    record.ownerProcessId = QCoreApplication::applicationPid();
+    QVERIFY(sdr9700::RadioSessionRecoveryStore::ownerProcessIsRunning(record));
+}
+
+void OfflinePoliciesTest::waitsForRetainedTokenRemovalBeforeReplacementLogin()
+{
+    sdr9700::RetainedSessionRemovalPolicy policy;
+    QVERIFY(!policy.pending());
+    QVERIFY(!policy.acknowledge());
+
+    policy.begin();
+    QVERIFY(policy.pending());
+    for (int attempt = 1; attempt <= sdr9700::RetainedSessionRemovalPolicy::kMaxAttempts; ++attempt)
+    {
+        QVERIFY(policy.takeAttempt());
+        QCOMPARE(policy.attempts(), attempt);
+        QVERIFY(policy.pending());
+    }
+    QVERIFY(policy.exhausted());
+    QVERIFY(!policy.takeAttempt());
+
+    policy.begin();
+    QVERIFY(policy.takeAttempt());
+    QVERIFY(policy.acknowledge());
+    QVERIFY(!policy.pending());
+    QVERIFY(!policy.exhausted());
+    QVERIFY(!policy.acknowledge());
+}
+
+void OfflinePoliciesTest::boundsStandbyWakeBootstrap()
+{
+    using Action = sdr9700::StandbyWakePolicy::Action;
+    sdr9700::StandbyWakePolicy policy;
+
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::RetrySession);
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Wake);
+    QCOMPARE(policy.wakeAttempts(), 1);
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Wake);
+    QCOMPARE(policy.wakeAttempts(), 2);
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Fail);
+
+    policy.reset();
+    QCOMPARE(policy.commandPlaneReady(), Action::Continue);
+    QVERIFY(policy.complete());
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Continue);
+    QCOMPARE(policy.wakeAttempts(), 0);
+}
+
+void OfflinePoliciesTest::requiresCompleteTransportRecoveryIdentity()
+{
+    sdr9700::RadioSessionRecoveryRecord record;
+    QVERIFY(!record.hasTransportIdentities());
+    record.control = {50001, 50001, 0x11111111, 0x22222222};
+    record.civ = {50002, 50002, 0x33333333, 0x44444444};
+    record.audio = {50003, 50003, 0x55555555, 0x66666666};
+    QVERIFY(record.hasTransportIdentities());
+    record.audio.remotePort = 0;
+    QVERIFY(!record.hasTransportIdentities());
+}
+
+void OfflinePoliciesTest::correlatesRadioSessionResponses()
+{
+    sdr9700::RadioSessionRequest request;
+    request.begin(0x1234, 0x5678, 0x9abcdef0);
+
+    QVERIFY(request.matches(0x1234, 0x5678, 0x9abcdef0));
+    QVERIFY(request.matchesIdentity(0x1234, 0x5678, 0x9abcdef0));
+    QVERIFY(!request.matches(0x1235, 0x5678, 0x9abcdef0));
+    QVERIFY(!request.matches(0x1234, 0x5679, 0x9abcdef0));
+    QVERIFY(!request.matches(0x1234, 0x5678, 0x9abcdef1));
+    QVERIFY(request.matchesLogin(0x1234, 0x5678));
+    QVERIFY(request.matchesAuthenticationResponse(0x1234));
+    // A token-reissue response is correlated by request identity, not by its
+    // newly returned six-byte authentication identifier.
+    QVERIFY(request.matchesAuthenticationResponse(0x1234));
+    QVERIFY(!request.matchesAuthenticationResponse(0x1235));
+    request.clear();
+    QVERIFY(!request.matches(0x1234, 0x5678, 0x9abcdef0));
+    QVERIFY(request.matchesIdentity(0x1234, 0x5678, 0x9abcdef0));
+
+    QVERIFY(sdr9700::matchesRadioSessionEnvelope(0x11111111, 0x22222222, 0x11111111, 0x22222222));
+    QVERIFY(!sdr9700::matchesRadioSessionEnvelope(0x33333333, 0x22222222, 0x11111111, 0x22222222));
+    QVERIFY(!sdr9700::matchesRadioSessionEnvelope(0x11111111, 0x44444444, 0x11111111, 0x22222222));
+}
+
+void OfflinePoliciesTest::retainedTokenResetPolicyIsSingleShot()
+{
+    QVERIFY(sdr9700::shouldResetReissuedTokenAfterStreamRejection(true, false, 0xffffffff));
+    QVERIFY(!sdr9700::shouldResetReissuedTokenAfterStreamRejection(false, false, 0xffffffff));
+    QVERIFY(!sdr9700::shouldResetReissuedTokenAfterStreamRejection(true, true, 0xffffffff));
+    QVERIFY(!sdr9700::shouldResetReissuedTokenAfterStreamRejection(true, false, 0));
+}
 
 void OfflinePoliciesTest::permitsRadioTeardownOnlyAfterStreamOwnership()
 {
@@ -173,6 +279,12 @@ void OfflinePoliciesTest::identifiesExpectedMemoryWriteReadback()
 
 void OfflinePoliciesTest::retriesRecoverableRadioConnectionFailures()
 {
+    QVERIFY(sdr9700::isAutomaticReconnectError(ErrorCode::ConnectionFailed));
+    QVERIFY(sdr9700::isAutomaticReconnectError(ErrorCode::Disconnected));
+    QVERIFY(sdr9700::isAutomaticReconnectError(ErrorCode::PortReservationFailed));
+    QVERIFY(!sdr9700::isAutomaticReconnectError(ErrorCode::RadioBusy));
+    QVERIFY(!sdr9700::isAutomaticReconnectError(ErrorCode::AuthFailure));
+
     QVERIFY(sdr9700::shouldRetryRadioConnection(true, false, false, false, true));
     QVERIFY(sdr9700::shouldRetryRadioConnection(false, true, false, false, true));
     QVERIFY(!sdr9700::shouldRetryRadioConnection(false, false, false, false, true));

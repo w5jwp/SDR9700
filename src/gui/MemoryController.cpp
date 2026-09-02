@@ -42,6 +42,8 @@ MemoryController::MemoryController(MainWindow* window)
             Qt::QueuedConnection);
     connect(m_window->m_model, &RadioModel::readyChanged, m_memorySyncController,
             &MemorySyncController::handleRadioReadyChanged);
+    connect(m_window->m_model, &RadioModel::spectrumActivity, m_memorySyncController,
+            &MemorySyncController::handleSpectrumActivity);
 }
 
 MemoryController::~MemoryController() = default;

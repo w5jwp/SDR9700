@@ -70,6 +70,10 @@ set(SDR9700_CORE_SOURCES
     core/LoggingConfiguration.cpp
     core/RadioSessionWatchdog.h
     radio/RadioSessionOwnership.h
+    radio/RadioSessionCorrelation.h
+    radio/RadioSessionRecoveryStore.h
+    radio/RetainedSessionRemovalPolicy.h
+    radio/RadioSessionRecoveryStore.cpp
     core/SMeterScale.h
     core/Vfo.h
     core/AppSettings.cpp
@@ -130,6 +134,7 @@ set(SDR9700_APP_SOURCES
     backend/TransmitConfigurationPolicy.h
     backend/DualWatchTransitionPolicy.h
     backend/ConnectionRetryPolicy.h
+    backend/StandbyWakePolicy.h
     backend/ScopeController.h
     backend/ScopeController.cpp
     backend/RadioRouter.h
@@ -568,7 +573,7 @@ if(BUILD_TESTING)
 
     add_executable(UdpStatusMessagesTest tests/UdpStatusMessagesTest.cpp)
     target_include_directories(UdpStatusMessagesTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(UdpStatusMessagesTest PRIVATE Qt6::Test)
+    target_link_libraries(UdpStatusMessagesTest PRIVATE SDR9700_core Qt6::Test)
     add_test(NAME UdpStatusMessagesTest COMMAND UdpStatusMessagesTest)
 
     set(GUI_SMOKE_TEST_SOURCES
