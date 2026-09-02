@@ -43,9 +43,9 @@ class IRadioBackend : public QObject
     virtual void setFilterWidth(int lowHz, int highHz) = 0;
 
     virtual void setNrEnabled(bool on) = 0;
-    virtual void setNrLevel(int level) = 0; // 0-15
+    virtual void setNrLevel(int level) = 0; // 1-15
     virtual void setNbEnabled(bool on) = 0;
-    virtual void setNbLevel(int level) = 0; // 0-10
+    virtual void setNbLevel(int level) = 0; // 1-10
     virtual void setPreampEnabled(bool on) = 0;
     virtual void setPreampLevel(int level) = 0;
     virtual void setAttenuatorEnabled(bool on) = 0;
@@ -84,8 +84,10 @@ class IRadioBackend : public QObject
     virtual void setVfoAgcMode(Vfo vfo, const QString& mode) = 0;
     virtual void setVfoAttenuatorEnabled(Vfo vfo, bool on) = 0;
     virtual void setVfoNbEnabled(Vfo vfo, bool on) = 0;
+    virtual void setVfoNbLevel(Vfo vfo, int level) = 0;
     virtual void setVfoNotch(Vfo vfo, VfoNotch notch) = 0;
     virtual void setVfoNrEnabled(Vfo vfo, bool on) = 0;
+    virtual void setVfoNrLevel(Vfo vfo, int level) = 0;
     virtual void setVfoPreampLevel(Vfo vfo, int level) = 0;
     virtual void setVfoRfGain(Vfo vfo, int level) = 0;
     virtual void setVfoSquelch(Vfo vfo, int level) = 0;

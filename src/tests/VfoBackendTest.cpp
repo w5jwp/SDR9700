@@ -94,8 +94,10 @@ class FakeRadioBackend : public IRadioBackend
     void setVfoAgcMode(Vfo, const QString&) override {}
     void setVfoAttenuatorEnabled(Vfo, bool) override {}
     void setVfoNbEnabled(Vfo, bool) override {}
+    void setVfoNbLevel(Vfo, int) override {}
     void setVfoNotch(Vfo, VfoNotch) override {}
     void setVfoNrEnabled(Vfo, bool) override {}
+    void setVfoNrLevel(Vfo, int) override {}
     void setVfoPreampLevel(Vfo, int) override {}
     void setVfoRfGain(Vfo, int) override {}
     void setVfoSquelch(Vfo, int) override {}
@@ -361,6 +363,24 @@ void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
     QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoOFFSETButton"))->text(),
              QStringLiteral("--"));
 
+    auto* mainNbButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoNBButton"));
+    auto* mainNrButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoNRButton"));
+    auto* subNbButton = subController.display()->findChild<QPushButton*>(QStringLiteral("vfoNBButton"));
+    QVERIFY(mainNbButton);
+    QVERIFY(mainNrButton);
+    QVERIFY(subNbButton);
+    emit backend.radioValueUpdated(funcNoiseBlanker, true, 0);
+    emit backend.radioValueUpdated(funcNoiseReduction, true, 0);
+    QCOMPARE(mainNbButton->text(), QStringLiteral("NB"));
+    QCOMPARE(mainNrButton->text(), QStringLiteral("NR"));
+    emit backend.radioValueUpdated(funcNBLevel, 255, 0);
+    emit backend.radioValueUpdated(funcNRLevel, 0, 0);
+    emit backend.radioValueUpdated(funcNoiseBlanker, true, 1);
+    emit backend.radioValueUpdated(funcNBLevel, 128, 1);
+    QCOMPARE(mainNbButton->text(), QStringLiteral("NB 10"));
+    QCOMPARE(mainNrButton->text(), QStringLiteral("NR 1"));
+    QCOMPARE(subNbButton->text(), QStringLiteral("NB 6"));
+
     // A duplex direction without its companion offset is partial state. It
     // must not fabricate a confirmed zero-offset display while replies are
     // still arriving.
@@ -412,6 +432,12 @@ void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
     emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 1);
     QCOMPARE(subController.frequencyHz(), quint64(0));
     QVERIFY(!state.receiver(Vfo::Sub).mode.has_value());
+
+    emit backend.disconnected();
+    emit backend.radioValueUpdated(funcNoiseBlanker, true, 0);
+    emit backend.radioValueUpdated(funcNoiseReduction, true, 0);
+    QCOMPARE(mainNbButton->text(), QStringLiteral("NB"));
+    QCOMPARE(mainNrButton->text(), QStringLiteral("NR"));
 }
 
 void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()

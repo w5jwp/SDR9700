@@ -92,9 +92,13 @@ class VfoController : public QObject
     int m_agcMode{0};
     bool m_attenuatorEnabled{false};
     bool m_nbEnabled{false};
+    int m_nbLevel{5};
+    bool m_nbLevelReceived{false};
     bool m_autoNotchEnabled{false};
     bool m_manualNotchEnabled{false};
     bool m_nrEnabled{false};
+    int m_nrLevel{5};
+    bool m_nrLevelReceived{false};
     int m_preampLevel{0};
     int m_rfGain{0};
     int m_squelch{0};

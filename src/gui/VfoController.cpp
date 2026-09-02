@@ -133,9 +133,9 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                     const uchar expectedReceiver = m_vfo == Vfo::Main ? 0 : 1;
                     if (receiver != expectedReceiver ||
                         (func != funcAGCTimeConstant && func != funcAttenuator && func != funcNoiseBlanker &&
-                         func != funcAutoNotch && func != funcManualNotch && func != funcNoiseReduction &&
-                         func != funcPreamp && func != funcRfGain && func != funcSquelch && func != funcRFPower &&
-                         func != funcSMeter))
+                         func != funcNBLevel && func != funcAutoNotch && func != funcManualNotch &&
+                         func != funcNoiseReduction && func != funcNRLevel && func != funcPreamp &&
+                         func != funcRfGain && func != funcSquelch && func != funcRFPower && func != funcSMeter))
                     {
                         return;
                     }
@@ -153,6 +153,11 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                         m_nbEnabled = value.toBool();
                         updateReceiverControlDisplay();
                         return;
+                    case funcNBLevel:
+                        m_nbLevel = qBound(1, qRound(value.toInt() * 9.0 / 255.0) + 1, 10);
+                        m_nbLevelReceived = true;
+                        updateReceiverControlDisplay();
+                        return;
                     case funcAutoNotch:
                         m_autoNotchEnabled = value.toBool();
                         updateReceiverControlDisplay();
@@ -163,6 +168,11 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                         return;
                     case funcNoiseReduction:
                         m_nrEnabled = value.toBool();
+                        updateReceiverControlDisplay();
+                        return;
+                    case funcNRLevel:
+                        m_nrLevel = qBound(1, qRound(value.toInt() * 14.0 / 255.0) + 1, 15);
+                        m_nrLevelReceived = true;
                         updateReceiverControlDisplay();
                         return;
                     case funcPreamp:
@@ -193,6 +203,17 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                     default:
                         return;
                     }
+                });
+        connect(m_backend, &IRadioBackend::disconnected, this,
+                [this]()
+                {
+                    // Level values are radio-authoritative. A value learned in
+                    // one LAN session must not be presented during the next
+                    // session before that radio has reported its current state.
+                    m_nbLevelReceived = false;
+                    m_nrLevelReceived = false;
+                    m_display->setReceiverControlState(QStringLiteral("NB"), QString(), false);
+                    m_display->setReceiverControlState(QStringLiteral("NR"), QString(), false);
                 });
         connect(m_backend, &IRadioBackend::readyChanged, this,
                 [this](bool ready)
@@ -566,9 +587,11 @@ void VfoController::updateReceiverControlDisplay()
     m_display->setReceiverControlState(QStringLiteral("AGC"), QString::fromLatin1(kAgcLabels[m_agcMode]),
                                        m_agcMode > 0);
     m_display->setReceiverControlState(QStringLiteral("ATT"), QString(), m_attenuatorEnabled);
-    m_display->setReceiverControlState(QStringLiteral("NB"), QString(), m_nbEnabled);
+    m_display->setReceiverControlState(
+        QStringLiteral("NB"), m_nbEnabled && m_nbLevelReceived ? QString::number(m_nbLevel) : QString(), m_nbEnabled);
     m_display->setReceiverControlState(QStringLiteral("NOTCH"), QString(), m_autoNotchEnabled);
-    m_display->setReceiverControlState(QStringLiteral("NR"), QString(), m_nrEnabled);
+    m_display->setReceiverControlState(
+        QStringLiteral("NR"), m_nrEnabled && m_nrLevelReceived ? QString::number(m_nrLevel) : QString(), m_nrEnabled);
     m_display->setReceiverControlState(QStringLiteral("PRE"), QString(), (m_preampLevel & 0x01) != 0);
     const int rfPercent = qBound(0, qRound(m_rfGain * 100.0 / 255.0), 100);
     m_display->setReceiverControlState(QStringLiteral("RFG"), QString::number(rfPercent), m_rfGain > 0);
@@ -662,14 +685,60 @@ void VfoController::showReceiverControlMenu(const QString& control)
         m_backend->setVfoAttenuatorEnabled(m_vfo, !m_attenuatorEnabled);
         return;
     }
-    if (control == QStringLiteral("NB"))
+    if (control == QStringLiteral("NB") || control == QStringLiteral("NR"))
     {
-        m_backend->setVfoNbEnabled(m_vfo, !m_nbEnabled);
-        return;
-    }
-    if (control == QStringLiteral("NR"))
-    {
-        m_backend->setVfoNrEnabled(m_vfo, !m_nrEnabled);
+        const bool isNb = control == QStringLiteral("NB");
+        const int maximum = isNb ? 10 : 15;
+        const int currentLevel = isNb ? m_nbLevel : m_nrLevel;
+        const bool currentlyEnabled = isNb ? m_nbEnabled : m_nrEnabled;
+        QMenu menu(m_display);
+        sdr9700::ui::main_window::styleCompactMenu(&menu);
+        QAction* enabledAction =
+            menu.addAction(currentlyEnabled ? QStringLiteral("Disable") : QStringLiteral("Enable"));
+        connect(enabledAction, &QAction::triggered, this,
+                [this, isNb, currentlyEnabled]()
+                {
+                    if (isNb)
+                    {
+                        m_backend->setVfoNbEnabled(m_vfo, !currentlyEnabled);
+                    }
+                    else
+                    {
+                        m_backend->setVfoNrEnabled(m_vfo, !currentlyEnabled);
+                    }
+                });
+        menu.addSeparator();
+
+        auto* panel = new QWidget(&menu);
+        auto* layout = new QVBoxLayout(panel);
+        layout->setContentsMargins(8, 6, 8, 6);
+        auto* label = new QLabel(QStringLiteral("Level %1").arg(currentLevel), panel);
+        label->setAlignment(Qt::AlignCenter);
+        auto* slider = new QSlider(Qt::Horizontal, panel);
+        slider->setAccessibleName(
+            QStringLiteral("%1 VFO %2 level")
+                .arg(m_vfo == Vfo::Main ? QStringLiteral("MAIN") : QStringLiteral("SUB"), control));
+        slider->setRange(1, maximum);
+        slider->setValue(currentLevel);
+        connect(slider, &QSlider::valueChanged, this,
+                [this, isNb, label](int value)
+                {
+                    label->setText(QStringLiteral("Level %1").arg(value));
+                    if (isNb)
+                    {
+                        m_backend->setVfoNbLevel(m_vfo, value);
+                    }
+                    else
+                    {
+                        m_backend->setVfoNrLevel(m_vfo, value);
+                    }
+                });
+        layout->addWidget(label);
+        layout->addWidget(slider);
+        auto* action = new QWidgetAction(&menu);
+        action->setDefaultWidget(panel);
+        menu.addAction(action);
+        menu.exec(m_display->receiverControlMenuPosition(control));
         return;
     }
     if (control == QStringLiteral("PRE"))

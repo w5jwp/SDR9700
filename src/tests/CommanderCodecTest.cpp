@@ -833,6 +833,18 @@ void CommanderCodecTest::serializesOutboundCommandValues()
                                               compressorLevelCommand, payload));
     QCOMPARE(payload, QByteArray::fromHex("0192"));
 
+    payload.clear();
+    const FuncType nbLevelCommand = m_commander.radioCaps.commands.value(funcNBLevel);
+    QVERIFY(
+        m_commander.appendSetCommandValue(funcNBLevel, QVariant::fromValue<ushort>(128), 0, nbLevelCommand, payload));
+    QCOMPARE(payload, QByteArray::fromHex("0128"));
+
+    payload.clear();
+    const FuncType nrLevelCommand = m_commander.radioCaps.commands.value(funcNRLevel);
+    QVERIFY(
+        m_commander.appendSetCommandValue(funcNRLevel, QVariant::fromValue<ushort>(255), 1, nrLevelCommand, payload));
+    QCOMPARE(payload, QByteArray::fromHex("0255"));
+
     Frequency frequency;
     frequency.Hz = 145825000;
     payload.clear();

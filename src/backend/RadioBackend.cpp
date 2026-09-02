@@ -72,8 +72,9 @@ struct VfoStatePollItem
 constexpr std::array kVfoStatePollItems{
     VfoStatePollItem{funcFreqGet, false},         VfoStatePollItem{funcModeGet, false},
     VfoStatePollItem{funcAGCTimeConstant, false}, VfoStatePollItem{funcAttenuator, false},
-    VfoStatePollItem{funcNoiseBlanker, false},    VfoStatePollItem{funcAutoNotch, false},
-    VfoStatePollItem{funcManualNotch, false},     VfoStatePollItem{funcNoiseReduction, false},
+    VfoStatePollItem{funcNoiseBlanker, false},    VfoStatePollItem{funcNBLevel, false},
+    VfoStatePollItem{funcAutoNotch, false},       VfoStatePollItem{funcManualNotch, false},
+    VfoStatePollItem{funcNoiseReduction, false},  VfoStatePollItem{funcNRLevel, false},
     VfoStatePollItem{funcPreamp, false},          VfoStatePollItem{funcRfGain, false},
     VfoStatePollItem{funcSquelch, false},         VfoStatePollItem{funcSplitStatus, false},
     VfoStatePollItem{funcReadFreqOffset, false},  VfoStatePollItem{funcToneSquelchType, false},
@@ -1340,8 +1341,10 @@ void RadioBackend::setNrEnabled(bool on)
 
 void RadioBackend::setNrLevel(int level)
 {
-    scheduleVfoReceiverCommand(m_activeVfo, funcNRLevel, [level](Commander* commandSession, uchar receiver)
-                               { commandSession->receiveCommand(funcNRLevel, QVariant(level), receiver); });
+    const ushort rawLevel = static_cast<ushort>(qRound((qBound(1, level, 15) - 1) * 255.0 / 14.0));
+    scheduleVfoReceiverCommand(
+        m_activeVfo, funcNRLevel, [rawLevel](Commander* commandSession, uchar receiver)
+        { commandSession->receiveCommand(funcNRLevel, QVariant::fromValue(rawLevel), receiver); });
 }
 
 void RadioBackend::setNbEnabled(bool on)
@@ -1352,8 +1355,10 @@ void RadioBackend::setNbEnabled(bool on)
 
 void RadioBackend::setNbLevel(int level)
 {
-    scheduleVfoReceiverCommand(m_activeVfo, funcNBLevel, [level](Commander* commandSession, uchar receiver)
-                               { commandSession->receiveCommand(funcNBLevel, QVariant(level), receiver); });
+    const ushort rawLevel = static_cast<ushort>(qRound((qBound(1, level, 10) - 1) * 255.0 / 9.0));
+    scheduleVfoReceiverCommand(
+        m_activeVfo, funcNBLevel, [rawLevel](Commander* commandSession, uchar receiver)
+        { commandSession->receiveCommand(funcNBLevel, QVariant::fromValue(rawLevel), receiver); });
 }
 
 void RadioBackend::setPreampEnabled(bool on)
@@ -1520,10 +1525,11 @@ void RadioBackend::requestVfoState(Vfo vfo)
             selectMainVfoForCommand(commandSession);
             commandSession->receiveCommand(funcFreqGet, QVariant(), 0);
             commandSession->receiveCommand(funcModeGet, QVariant(), 0);
-            for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch,
-                                     funcManualNotch, funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch,
-                                     funcRFPower, funcSplitStatus, funcReadFreqOffset, funcToneSquelchType,
-                                     funcToneFreq, funcTSQLFreq, funcDTCSCode, funcCompressor, funcXFCStatus})
+            for (const Funcs func :
+                 {funcAGCTimeConstant, funcAttenuator,     funcNoiseBlanker, funcNBLevel,        funcAutoNotch,
+                  funcManualNotch,     funcNoiseReduction, funcNRLevel,      funcPreamp,         funcRfGain,
+                  funcSquelch,         funcRFPower,        funcSplitStatus,  funcReadFreqOffset, funcToneSquelchType,
+                  funcToneFreq,        funcTSQLFreq,       funcDTCSCode,     funcCompressor,     funcXFCStatus})
             {
                 commandSession->receiveCommand(func, QVariant(), 0);
             }
@@ -1722,6 +1728,18 @@ void RadioBackend::setVfoNbEnabled(Vfo vfo, bool on)
                             });
 }
 
+void RadioBackend::setVfoNbLevel(Vfo vfo, int level)
+{
+    const ushort value = static_cast<ushort>(qRound((qBound(1, level, 10) - 1) * 255.0 / 9.0));
+    routeVfoReceiverCommand(vfo, funcNBLevel,
+                            [value](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcNBLevel, QVariant::fromValue(value),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcNBLevel, QVariant(), receiver);
+                            });
+}
+
 void RadioBackend::setVfoNotch(Vfo vfo, VfoNotch notch)
 {
     routeVfoReceiverCommand(vfo, funcAutoNotch,
@@ -1744,6 +1762,18 @@ void RadioBackend::setVfoNrEnabled(Vfo vfo, bool on)
                                 commandSession->receiveCommandNoReadback(funcNoiseReduction, QVariant::fromValue(on),
                                                                          receiver);
                                 commandSession->receiveCommand(funcNoiseReduction, QVariant(), receiver);
+                            });
+}
+
+void RadioBackend::setVfoNrLevel(Vfo vfo, int level)
+{
+    const ushort value = static_cast<ushort>(qRound((qBound(1, level, 15) - 1) * 255.0 / 14.0));
+    routeVfoReceiverCommand(vfo, funcNRLevel,
+                            [value](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcNRLevel, QVariant::fromValue(value),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcNRLevel, QVariant(), receiver);
                             });
 }
 
@@ -1848,9 +1878,9 @@ void RadioBackend::scheduleSubVfoControlRefresh()
         [](Commander* commandSession)
         {
             for (const Funcs func :
-                 {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
-                  funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus, funcReadFreqOffset,
-                  funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
+                 {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcNBLevel, funcAutoNotch, funcManualNotch,
+                  funcNoiseReduction, funcNRLevel, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus,
+                  funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
             {
                 scheduleVfoReceiverReadForCommand(commandSession, Vfo::Sub, func);
             }
@@ -2025,9 +2055,10 @@ void RadioBackend::requestSubVfoStateForCommand(Commander* commandSession)
 
     // Continue reading the receiver controls needed during startup or an
     // explicit full state refresh while SUB remains selected.
-    for (const Funcs func : {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcAutoNotch, funcManualNotch,
-                             funcNoiseReduction, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus,
-                             funcReadFreqOffset, funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
+    for (const Funcs func :
+         {funcAGCTimeConstant, funcAttenuator, funcNoiseBlanker, funcNBLevel, funcAutoNotch, funcManualNotch,
+          funcNoiseReduction, funcNRLevel, funcPreamp, funcRfGain, funcSquelch, funcSplitStatus, funcReadFreqOffset,
+          funcToneSquelchType, funcToneFreq, funcTSQLFreq, funcDTCSCode})
     {
         commandSession->receiveCommand(func, QVariant(), 1);
     }

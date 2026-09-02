@@ -79,7 +79,7 @@ void VfoModel::setNrLevel(int level)
 {
     if (m_backend)
     {
-        m_backend->setNrLevel(qBound(0, level, 15));
+        m_backend->setNrLevel(qBound(1, level, 15));
     }
 }
 
@@ -95,7 +95,7 @@ void VfoModel::setNbLevel(int level)
 {
     if (m_backend)
     {
-        m_backend->setNbLevel(qBound(0, level, 10));
+        m_backend->setNbLevel(qBound(1, level, 10));
     }
 }
 

@@ -340,16 +340,30 @@ void RadioRouter::route(const CacheItem& item)
             emit nrChanged(item.value.toBool());
         break;
     case funcNRLevel:
-        emit nrLevelChanged(qBound(0, item.value.toInt(), 15));
+    {
+        const int rawLevel = qBound(0, item.value.toInt(), 255);
+        emit radioValueUpdated(item.command, QVariant(rawLevel), item.receiver);
+        if (item.receiver == kMainReceiver)
+        {
+            emit nrLevelChanged(qRound(rawLevel * 14.0 / 255.0) + 1);
+        }
         break;
+    }
     case funcNoiseBlanker:
         emit radioValueUpdated(item.command, item.value, item.receiver);
         if (item.receiver == kMainReceiver)
             emit nbChanged(item.value.toBool());
         break;
     case funcNBLevel:
-        emit nbLevelChanged(qBound(0, item.value.toInt(), 10));
+    {
+        const int rawLevel = qBound(0, item.value.toInt(), 255);
+        emit radioValueUpdated(item.command, QVariant(rawLevel), item.receiver);
+        if (item.receiver == kMainReceiver)
+        {
+            emit nbLevelChanged(qRound(rawLevel * 9.0 / 255.0) + 1);
+        }
         break;
+    }
     case funcPreamp:
     {
         const int level = qBound(0, item.value.toInt(), 3);
