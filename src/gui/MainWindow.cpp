@@ -724,9 +724,9 @@ void MainWindow::buildRadioControls()
     resetRadioOwnedControlsForSync();
 }
 
-void MainWindow::updateTxIndicator(bool on)
+void MainWindow::updateTransmitState(bool on)
 {
-    m_statusBarController->updateTxIndicator(on);
+    m_statusBarController->updateTransmitState(on);
 }
 
 void MainWindow::updateTxDurationLabel()
@@ -1008,7 +1008,7 @@ void MainWindow::resetRadioOwnedControlsForSync()
         m_subVfoController->clearFrequency();
     }
 
-    updateTxIndicator(false);
+    updateTransmitState(false);
     if (m_metersDialog)
     {
         m_metersDialog->resetMeters();
@@ -1597,23 +1597,6 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
             m_metersDialog->setTransmitAudioLevel(m_meterSnapshot.txAudioPeak, m_meterSnapshot.txAudioRms);
         }
     }
-    if (!m_txActive || !m_txSwrLabel)
-    {
-        return;
-    }
-    if (!m_meterSnapshot.swrValid)
-    {
-        m_txSwrLabel->setText(
-            QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusSecondary));
-        return;
-    }
-
-    const double swr = m_meterSnapshot.swr;
-    const char* swrColor = swr <= 1.7   ? UiTheme::Color::Success
-                           : swr <= 2.7 ? UiTheme::Color::Warning
-                                        : UiTheme::Color::Danger;
-    m_txSwrLabel->setText(
-        QStringLiteral("<span style='color:%1'>SWR %2</span>").arg(QString::fromLatin1(swrColor)).arg(swr, 0, 'f', 2));
 }
 
 void MainWindow::showToast(const QString& msg, int durationMs, ToastKind kind)
@@ -2000,7 +1983,7 @@ void MainWindow::onPttChanged(bool on)
             m_dtmfDialog->setSendInProgress(false);
         }
     }
-    updateTxIndicator(on);
+    updateTransmitState(on);
     m_pttBtn->setProperty("pttActive", on);
     m_pttBtn->update();
     setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), on ? QStringLiteral("ON") : QStringLiteral("OFF"));

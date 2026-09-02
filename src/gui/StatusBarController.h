@@ -10,7 +10,7 @@ class StatusBarController : public QObject
   public:
     explicit StatusBarController(MainWindow* window);
 
-    void updateTxIndicator(bool on);
+    void updateTransmitState(bool on);
     void updateTxDurationLabel();
     void updateStatusClock();
     void toggleStatusClockMode();

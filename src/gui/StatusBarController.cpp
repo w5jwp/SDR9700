@@ -51,13 +51,9 @@ QString normalizedToastMessage(QString message)
 
 StatusBarController::StatusBarController(MainWindow* window) : QObject(window), m_window(window) {}
 
-void StatusBarController::updateTxIndicator(bool on)
+void StatusBarController::updateTransmitState(bool on)
 {
-    if (!m_window->m_txIndicator)
-    {
-        return;
-    }
-    if (m_window->m_txActive == on && !m_window->m_txIndicator->styleSheet().isEmpty())
+    if (m_window->m_txActive == on)
     {
         if (!on && m_window->m_txDurationTimer && m_window->m_txDurationTimer->isActive())
         {
@@ -73,12 +69,6 @@ void StatusBarController::updateTxIndicator(bool on)
     m_window->updateIcomRC28Leds();
     if (on)
     {
-        m_window->m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::Danger, true));
-        if (m_window->m_txSwrLabel)
-        {
-            m_window->m_txSwrLabel->setText(
-                QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusSecondary));
-        }
         m_window->m_txElapsed.start();
         updateTxDurationLabel();
         if (m_window->m_txDurationTimer)
@@ -88,15 +78,9 @@ void StatusBarController::updateTxIndicator(bool on)
     }
     else
     {
-        m_window->m_txIndicator->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary, true));
         if (m_window->m_txDurationTimer)
         {
             m_window->m_txDurationTimer->stop();
-        }
-        if (m_window->m_txSwrLabel)
-        {
-            m_window->m_txSwrLabel->setText(
-                QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusLabel));
         }
         if (m_window->m_titleBar)
         {
@@ -273,9 +257,6 @@ void StatusBarController::buildStatusBar()
         w = qMax(w, fmR.horizontalAdvance(QStringLiteral("999M")));
         w = qMax(w, fmR.horizontalAdvance(QStringLiteral("1.0G")));
         w = qMax(w, fmB.horizontalAdvance(QStringLiteral("Memory")));
-        // TX stack
-        w = qMax(w, fmR.horizontalAdvance(QStringLiteral("SWR 9.99")));
-        w = qMax(w, fmB.horizontalAdvance(QStringLiteral("TX")));
         // time stack
         w = qMax(w, fmR.horizontalAdvance(QStringLiteral("0000-00-00")));
         w = qMax(w, fmR.horizontalAdvance(QStringLiteral("00:00:00Z")));
@@ -283,53 +264,11 @@ void StatusBarController::buildStatusBar()
         return w + 16; // uniform padding buffer
     }();
 
-    const int txStackWidth = [&]()
-    {
-        QFont regular;
-        regular.setPixelSize(12);
-        QFont bold = regular;
-        bold.setBold(true);
-        const QFontMetrics fmR(regular);
-        const QFontMetrics fmB(bold);
-
-        int w = fmR.horizontalAdvance(QStringLiteral("SWR 9.99"));
-        w = qMax(w, fmB.horizontalAdvance(QStringLiteral("TX")));
-        return w + 16;
-    }();
-
     auto applyStatusContainerWidth = [](QWidget* widget, int width)
     {
         widget->setMinimumWidth(width);
         widget->setMaximumWidth(width);
     };
-
-    auto* transmitStatusPanel = new QWidget(m_window);
-    applyStatusContainerWidth(transmitStatusPanel, txStackWidth);
-    transmitStatusPanel->setAccessibleName("Transmit status");
-    transmitStatusPanel->setAccessibleDescription("Shows transmit state and SWR.");
-    const QString txTooltip = QStringLiteral("Transmit status and SWR.");
-    transmitStatusPanel->setToolTip(txTooltip);
-    auto* transmitStatusLayout = new QVBoxLayout(transmitStatusPanel);
-    transmitStatusLayout->setContentsMargins(0, 0, 0, 0);
-    transmitStatusLayout->setSpacing(0);
-    transmitStatusLayout->setAlignment(Qt::AlignVCenter);
-
-    m_window->m_txIndicator = new QLabel(QStringLiteral("TX"), m_window);
-    m_window->m_txIndicator->setAlignment(Qt::AlignCenter);
-    m_window->m_txIndicator->setToolTip(txTooltip);
-    updateTxIndicator(false);
-
-    m_window->m_txSwrLabel = new QLabel(
-        QStringLiteral("<span style='color:%1'>SWR --</span>").arg(UiTheme::Color::TextStatusLabel), m_window);
-    m_window->m_txSwrLabel->setTextFormat(Qt::RichText);
-    m_window->m_txSwrLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusSecondary));
-    m_window->m_txSwrLabel->setAlignment(Qt::AlignCenter);
-    m_window->m_txSwrLabel->setToolTip(QStringLiteral("Transmit SWR from the radio."));
-
-    transmitStatusLayout->addWidget(m_window->m_txIndicator);
-    transmitStatusLayout->addWidget(m_window->m_txSwrLabel);
-    hbox->addWidget(transmitStatusPanel);
-    hbox->addSpacing(16);
 
     m_window->m_txDurationTimer = new QTimer(m_window);
     m_window->m_txDurationTimer->setInterval(250);

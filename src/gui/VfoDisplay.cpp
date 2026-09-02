@@ -24,7 +24,7 @@ constexpr int kFrequencyFontPixelSize = 32;
 constexpr int kTransmitFrequencyFontPixelSize = 13;
 constexpr int kTransmitFrequencyHeight = 16;
 constexpr int kTransmitFrequencyRightInset = 6;
-constexpr int kTxBadgeWidth = 30;
+constexpr int kTxBadgeWidth = 40;
 constexpr int kTxBadgeHeight = 18;
 constexpr int kHeaderButtonHeight = 18;
 constexpr int kBandButtonWidth = 52;
@@ -86,9 +86,10 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
         m_txBadge->setAlignment(Qt::AlignCenter);
         m_txBadge->setAccessibleName(QStringLiteral("%1 transmit indicator").arg(title));
         m_txBadge->setStyleSheet(
-            QStringLiteral("QLabel { background: #080b0f; border: 1px solid %1; border-radius: 1px; color: %1; "
-                           "font-size: %3px; font-weight: bold; } "
-                           "QLabel[transmitting=\"true\"] { background: %2; border-color: %1; color: %4; }")
+            QStringLiteral("QLabel#vfoTxBadge { background: #080b0f; border: 1px solid %1; border-radius: 0; "
+                           "color: %1; font-size: %3px; font-weight: bold; } "
+                           "QLabel#vfoTxBadge[transmitting=\"true\"] { background: %2; border: 1px solid %1; "
+                           "color: %4; }")
                 .arg(UiTheme::Color::Danger, UiTheme::Color::PttActive)
                 .arg(kTitleFontPixelSize)
                 .arg(UiTheme::Color::TextBright));
@@ -147,6 +148,17 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     };
 
     headerLayout->addWidget(m_identityButton);
+    // QBoxLayout also inserts its normal inter-item spacing beside an explicit
+    // spacer, so subtract that contribution to render an exact 30 px gap.
+    headerLayout->addSpacing(kHeaderControlGroupSpacing - headerLayout->spacing());
+    if (m_txBadge)
+    {
+        headerLayout->addWidget(m_txBadge);
+    }
+    else
+    {
+        headerLayout->addWidget(createHeaderPlaceholder(kTxBadgeWidth, QStringLiteral("vfoTxBadgePlaceholder")));
+    }
     headerLayout->addStretch();
     if (txPowerButton)
     {
@@ -160,15 +172,6 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     headerLayout->addSpacing(kHeaderControlGroupSpacing);
     headerLayout->addWidget(m_bandButton);
     headerLayout->addWidget(m_modeButton);
-    headerLayout->addSpacing(kHeaderControlGroupSpacing);
-    if (m_txBadge)
-    {
-        headerLayout->addWidget(m_txBadge);
-    }
-    else
-    {
-        headerLayout->addWidget(createHeaderPlaceholder(kTxBadgeWidth, QStringLiteral("vfoTxBadgePlaceholder")));
-    }
 
     m_frequencyEdit = new QLineEdit(this);
     m_frequencyEdit->setObjectName(QStringLiteral("vfoFrequency"));
@@ -428,6 +431,20 @@ void VfoDisplay::setTransmitPowerWatts(double watts)
     }
 }
 
+void VfoDisplay::setTransmitSwr(double swr)
+{
+    // Meter reports can arrive after the radio has returned to receive. Do not
+    // carry that final reading into the next transmission; each TX interval
+    // starts unknown and displays only SWR sampled during that interval.
+    if (!m_txBadge || !m_transmitting)
+    {
+        return;
+    }
+    m_transmitSwr = qBound(1.0, swr, 6.0);
+    m_transmitSwrValid = true;
+    m_txBadge->setText(QString::number(m_transmitSwr, 'f', 2));
+}
+
 void VfoDisplay::setMaxTransmitPowerWatts(double watts)
 {
     if (m_sMeter)
@@ -449,6 +466,16 @@ void VfoDisplay::setTransmitting(bool transmitting)
     if (!m_txBadge)
     {
         return;
+    }
+    m_transmitting = transmitting;
+    if (transmitting)
+    {
+        m_txBadge->setText(m_transmitSwrValid ? QString::number(m_transmitSwr, 'f', 2) : QStringLiteral("--"));
+    }
+    else
+    {
+        m_txBadge->setText(QStringLiteral("TX"));
+        m_transmitSwrValid = false;
     }
     m_txBadge->setProperty("transmitting", transmitting);
     m_txBadge->style()->unpolish(m_txBadge);
