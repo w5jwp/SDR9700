@@ -44,7 +44,6 @@ class VfoController : public QObject
     void toneMenuRequested(Vfo vfo, const QPoint& position);
     void offsetMenuRequested(Vfo vfo, const QPoint& position);
     void compressorMenuRequested(Vfo vfo, const QPoint& position);
-    void selectionRequested(Vfo vfo);
     void frequencyChanged(quint64 hz);
     void frequencyRecenterRequested(Vfo vfo, quint64 hz);
     void statePublished(Vfo vfo);

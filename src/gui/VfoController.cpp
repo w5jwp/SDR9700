@@ -73,7 +73,6 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
                     m_display->clearFrequency();
                 }
             });
-    connect(m_display, &VfoDisplay::vfoClicked, this, [this]() { emit selectionRequested(m_vfo); });
     connect(m_display, &VfoDisplay::bandClicked, this,
             [this]() { emit bandMenuRequested(m_vfo, m_display->bandMenuPosition()); });
     connect(m_display, &VfoDisplay::modeClicked, this, &VfoController::showModeMenu);
@@ -695,8 +694,14 @@ void VfoController::showModeMenu()
     }
     QMenu menu(m_display);
     sdr9700::ui::main_window::styleCompactMenu(&menu);
+    bool firstMode = true;
     for (const QString& mode : VfoModel::availableModes())
     {
+        if (!firstMode)
+        {
+            menu.addSeparator();
+        }
+        firstMode = false;
         QAction* action = menu.addAction(mode);
         action->setObjectName(QStringLiteral("%1VfoMode%2Action")
                                   .arg(m_vfo == Vfo::Main ? QStringLiteral("main") : QStringLiteral("sub"), mode));
@@ -865,10 +870,16 @@ void VfoController::showReceiverControlMenu(const QString& control)
         {
             return;
         }
+        bool firstMode = true;
         for (const auto& item : {qMakePair(QStringLiteral("FAST"), QStringLiteral("fast")),
                                  qMakePair(QStringLiteral("MID"), QStringLiteral("mid")),
                                  qMakePair(QStringLiteral("SLOW"), QStringLiteral("slow"))})
         {
+            if (!firstMode)
+            {
+                menu.addSeparator();
+            }
+            firstMode = false;
             QAction* const action = menu.addAction(item.first);
             action->setObjectName(
                 QStringLiteral("%1VfoAgc%2Action")

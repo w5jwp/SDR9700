@@ -52,12 +52,18 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
         const VfoController* other = vfo == Vfo::Main ? m_subController : m_mainController;
         QMenu menu(m_panel);
         sdr9700::ui::main_window::styleCompactMenu(&menu);
+        bool firstBand = true;
         for (const availableBands band : sdr9700::kRadioUiBandOrder)
         {
             if (band == other->band())
             {
                 continue;
             }
+            if (!firstBand)
+            {
+                menu.addSeparator();
+            }
+            firstBand = false;
             QAction* action = menu.addAction(sdr9700::radioBandMenuLabel(band));
             action->setData(static_cast<int>(band));
         }
@@ -69,8 +75,6 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
     connect(m_mainController, &VfoController::bandMenuRequested, this, showBandMenu);
     connect(m_subController, &VfoController::bandMenuRequested, this, showBandMenu);
     connect(m_panel, &VfoSelectionPanel::vfoRequested, this, &VfoSelectionController::requestSelection);
-    connect(m_mainController, &VfoController::selectionRequested, this, &VfoSelectionController::requestSelection);
-    connect(m_subController, &VfoController::selectionRequested, this, &VfoSelectionController::requestSelection);
     connect(m_panel, &VfoSelectionPanel::dualWatchRequested, this, [this](bool enabled) { requestDualWatch(enabled); });
     connect(m_panel, &VfoSelectionPanel::exchangeRequested, this, [this]() { requestMainSubExchange(); });
     if (m_backend)

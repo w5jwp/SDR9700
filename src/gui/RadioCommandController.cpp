@@ -18,6 +18,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QPushButton>
@@ -27,6 +28,7 @@
 #include <QVBoxLayout>
 #include <QWidgetAction>
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 using namespace sdr9700::ui::main_window;
@@ -111,6 +113,10 @@ void RadioCommandController::showOffsetMenu(const QPoint& position, quint64 rece
     presetActions.reserve(presets.size());
     for (const OffsetPreset& preset : presets)
     {
+        if (!presetActions.isEmpty())
+        {
+            menu.addSeparator();
+        }
         presetActions.append(menu.addAction(preset.label));
     }
     menu.addSeparator();
@@ -221,6 +227,7 @@ void RadioCommandController::showToneMenu(const QPoint& position)
 
     QMenu menu(m_window);
     styleCompactMenu(&menu);
+    menu.setStyleSheet(menu.styleSheet() + QStringLiteral("QMenu::item { padding-right: 34px; }"));
 
     auto styleToneGridButton = [](QPushButton* button)
     {
@@ -295,6 +302,7 @@ void RadioCommandController::showToneMenu(const QPoint& position)
     };
 
     addCtcssMenu(&menu, QStringLiteral("TONE"), ratrTN);
+    menu.addSeparator();
     addCtcssMenu(&menu, QStringLiteral("TSQL"), ratrTT);
     menu.addSeparator();
     addDtcsMenu(&menu, QStringLiteral("DTCS"), ratrDD);
@@ -350,64 +358,76 @@ void RadioCommandController::showCompressorMenu(const QPoint& position)
     QMenu menu(m_window);
     styleCompactMenu(&menu);
 
-    auto* enabledAction = menu.addAction(QStringLiteral("Enabled"));
-    enabledAction->setCheckable(true);
-    enabledAction->setChecked(m_window->m_vfo->compressorOn());
-    connect(enabledAction, &QAction::toggled, this, [this](bool enabled) { m_window->m_vfo->setCompressor(enabled); });
-    connect(m_window->m_vfo, &VfoModel::compressorChanged, enabledAction,
-            [enabledAction](bool enabled)
-            {
-                const QSignalBlocker block(enabledAction);
-                enabledAction->setChecked(enabled);
-            });
-
     auto* panel = new QWidget(&menu);
-    panel->setFixedWidth(190);
-    auto* panelLayout = new QVBoxLayout(panel);
+    auto* panelLayout = new QHBoxLayout(panel);
     panelLayout->setContentsMargins(8, 6, 8, 6);
-    panelLayout->setSpacing(4);
+    panelLayout->setSpacing(6);
 
-    auto levelText = [](int value)
-    { return QStringLiteral("Level %1%").arg(qRound(qBound(0, value, 255) * 100.0 / 255.0)); };
+    auto levelText = [](int value) { return QStringLiteral("%1%").arg(qBound(0, value, 255) * 100 / 255); };
 
     const bool levelKnown = m_window->m_vfo->compressorLevelKnown();
-    auto* valueLabel =
-        new QLabel(levelKnown ? levelText(m_window->m_vfo->compressorLevel()) : QStringLiteral("Level --"), panel);
-    valueLabel->setAlignment(Qt::AlignCenter);
+    const bool compressorEnabled = m_window->m_vfo->compressorOn();
+    const int initialValue = compressorEnabled ? qMax(1, levelKnown ? m_window->m_vfo->compressorLevel() : 1) : 0;
+    auto* valueLabel = new QLabel(levelText(initialValue), panel);
+    valueLabel->setObjectName(QStringLiteral("compressorLevelLabel"));
+    valueLabel->setFixedWidth(30);
+    valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     valueLabel->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; }").arg(UiTheme::Color::TextMuted));
+        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
+            .arg(UiTheme::Color::TextMuted));
 
     auto* slider = new QSlider(Qt::Horizontal, panel);
+    slider->setObjectName(QStringLiteral("compressorLevelSlider"));
     slider->setRange(0, 255);
-    slider->setValue(m_window->m_vfo->compressorLevel());
-    slider->setEnabled(levelKnown);
+    slider->setValue(initialValue);
+    slider->setFixedWidth(110);
+    slider->setFixedHeight(20);
     slider->setAccessibleName(QStringLiteral("Speech compressor level"));
-    slider->setAccessibleDescription(QStringLiteral("Adjusts the IC-9700 speech compression level."));
+    slider->setAccessibleDescription(QStringLiteral("Set to zero to turn speech compression off."));
+    auto requestedEnabled = std::make_shared<bool>(compressorEnabled);
     connect(slider, &QSlider::valueChanged, this,
-            [this, valueLabel, levelText](int value)
+            [this, valueLabel, levelText, requestedEnabled](int value)
             {
                 valueLabel->setText(levelText(value));
+                if (value == 0)
+                {
+                    if (*requestedEnabled)
+                    {
+                        *requestedEnabled = false;
+                        m_window->m_vfo->setCompressor(false);
+                    }
+                    return;
+                }
                 m_compressorLevelSetter(value);
+                if (!*requestedEnabled)
+                {
+                    *requestedEnabled = true;
+                    m_window->m_vfo->setCompressor(true);
+                }
             });
     connect(m_window->m_vfo, &VfoModel::compressorLevelChanged, slider,
-            [slider, valueLabel, levelText](int value)
+            [slider, valueLabel, levelText, requestedEnabled](int value)
             {
+                if (!*requestedEnabled)
+                {
+                    return;
+                }
+                const QSignalBlocker block(slider);
+                slider->setValue(qMax(1, value));
+                valueLabel->setText(levelText(slider->value()));
+            });
+    connect(m_window->m_vfo, &VfoModel::compressorChanged, slider,
+            [this, slider, valueLabel, levelText, requestedEnabled](bool enabled)
+            {
+                *requestedEnabled = enabled;
+                const int value = enabled ? qMax(1, m_window->m_vfo->compressorLevel()) : 0;
                 const QSignalBlocker block(slider);
                 slider->setValue(value);
                 valueLabel->setText(levelText(value));
             });
-    connect(m_window->m_vfo, &VfoModel::compressorLevelKnownChanged, slider,
-            [slider, valueLabel](bool known)
-            {
-                slider->setEnabled(known);
-                if (!known)
-                {
-                    valueLabel->setText(QStringLiteral("Level --"));
-                }
-            });
 
-    panelLayout->addWidget(valueLabel);
     panelLayout->addWidget(slider);
+    panelLayout->addWidget(valueLabel);
 
     auto* panelAction = new QWidgetAction(&menu);
     panelAction->setDefaultWidget(panel);
