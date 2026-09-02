@@ -389,13 +389,16 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                 m_window->m_spectrumScopeDisplay->setPeakHoldDurationMs(seconds * 1000);
             });
 
-    const auto makeInlineSelector = [spectrumToolbar](const QString& name, QComboBox* selector)
+    constexpr int kInlineSelectorTextSpacing = 4;
+    constexpr int kPeakHoldChevronSpacing = 4;
+    const auto makeInlineSelector =
+        [spectrumToolbar](const QString& name, QComboBox* selector, const int trailingChevronSpacing = 0)
     {
         auto* control = new QWidget(spectrumToolbar);
         control->setFixedHeight(22);
         auto* layout = new QHBoxLayout(control);
         layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(4);
+        layout->setSpacing(0);
 
         auto* previous = new QToolButton(control);
         auto* label = new QLabel(name, control);
@@ -441,8 +444,17 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
                          [updateControl](const QString&) { updateControl(); });
 
         layout->addWidget(previous);
+        layout->addSpacing(kInlineSelectorTextSpacing);
         layout->addWidget(label);
+        layout->addSpacing(kInlineSelectorTextSpacing);
         layout->addWidget(value);
+        // The fixed-width chevron button normally supplies enough visual inset
+        // by itself. The long PEAK HOLD label beside its short value is the one
+        // optical exception; its caller requests a small balancing gap here.
+        if (trailingChevronSpacing > 0)
+        {
+            layout->addSpacing(trailingChevronSpacing);
+        }
         layout->addWidget(next);
         updateControl();
         return control;
@@ -453,8 +465,9 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     spectrumToolbarLayout->addSpacing(50);
     spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("SPAN"), spanSelector), 0, Qt::AlignVCenter);
     spectrumToolbarLayout->addSpacing(50);
-    spectrumToolbarLayout->addWidget(makeInlineSelector(QStringLiteral("PEAK HOLD"), peakHoldSelector), 0,
-                                     Qt::AlignVCenter);
+    spectrumToolbarLayout->addWidget(
+        makeInlineSelector(QStringLiteral("PEAK HOLD"), peakHoldSelector, kPeakHoldChevronSpacing), 0,
+        Qt::AlignVCenter);
     spectrumToolbarLayout->addSpacing(50);
     auto* recenterButton = new QToolButton(spectrumToolbar);
     recenterButton->setObjectName(QStringLiteral("spectrumRecenterButton"));
