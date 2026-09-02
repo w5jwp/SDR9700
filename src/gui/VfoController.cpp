@@ -10,6 +10,7 @@
 
 #include <QAction>
 #include <QComboBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QSlider>
@@ -885,19 +886,28 @@ void VfoController::showReceiverControlMenu(const QString& control)
                                  : control == QStringLiteral("MOD") ? m_lanModLevel
                                                                     : m_txPower;
         auto* panel = new QWidget(&menu);
-        auto* layout = new QVBoxLayout(panel);
+        auto* layout = new QHBoxLayout(panel);
         layout->setContentsMargins(8, 6, 8, 6);
-        auto* label = new QLabel(QStringLiteral("%1%").arg(qRound(currentValue * 100.0 / 255.0)), panel);
-        label->setAlignment(Qt::AlignCenter);
+        layout->setSpacing(6);
+        auto* label = new QLabel(QStringLiteral("%1%").arg(currentValue * 100 / 255), panel);
         auto* slider = new QSlider(Qt::Horizontal, panel);
+        slider->setObjectName(QStringLiteral("vfo%1LevelSlider").arg(control.simplified().remove(QLatin1Char(' '))));
         slider->setAccessibleName(
             QStringLiteral("%1 VFO %2 level")
                 .arg(m_vfo == Vfo::Main ? QStringLiteral("MAIN") : QStringLiteral("SUB"), control));
         slider->setRange(0, 255);
         slider->setValue(currentValue);
+        slider->setFixedWidth(110);
+        slider->setFixedHeight(20);
+        label->setObjectName(QStringLiteral("vfo%1LevelLabel").arg(control.simplified().remove(QLatin1Char(' '))));
+        label->setFixedWidth(30);
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        label->setStyleSheet(
+            QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
+                .arg(UiTheme::Color::TextMuted));
         bool submitted = false;
         connect(slider, &QSlider::valueChanged, label,
-                [label](int value) { label->setText(QStringLiteral("%1%").arg(qRound(value * 100.0 / 255.0))); });
+                [label](int value) { label->setText(QStringLiteral("%1%").arg(value * 100 / 255)); });
         connect(slider, &QSlider::sliderReleased, this,
                 [this, control, slider, &submitted]()
                 {
@@ -920,8 +930,8 @@ void VfoController::showReceiverControlMenu(const QString& control)
                         m_backend->setTxPower(slider->value());
                     }
                 });
-        layout->addWidget(label);
         layout->addWidget(slider);
+        layout->addWidget(label);
         auto* action = new QWidgetAction(&menu);
         action->setDefaultWidget(panel);
         menu.addAction(action);

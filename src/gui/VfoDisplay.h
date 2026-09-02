@@ -4,10 +4,12 @@
 
 #include <QWidget>
 #include <QHash>
+#include <optional>
 
 class QLineEdit;
 class QLabel;
 class QPushButton;
+class QTimer;
 class VfoSMeter;
 
 class VfoDisplay : public QWidget
@@ -48,15 +50,19 @@ class VfoDisplay : public QWidget
     void receiverControlClicked(const QString& control);
 
   protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
 
   private:
+    void finishFrequencyEditing();
+
     const Vfo m_vfo;
     QLabel* m_txBadge{nullptr};
     QPushButton* m_identityButton{nullptr};
     QPushButton* m_bandButton{nullptr};
     QPushButton* m_modeButton{nullptr};
     QLineEdit* m_frequencyEdit{nullptr};
+    QTimer* m_frequencyEditTimer{nullptr};
     QLabel* m_transmitFrequencyLabel{nullptr};
     VfoSMeter* m_sMeter{nullptr};
     QHash<QString, QPushButton*> m_receiverControlButtons;
@@ -65,4 +71,7 @@ class VfoDisplay : public QWidget
     bool m_transmitting{false};
     bool m_transmitSwrValid{false};
     double m_transmitSwr{1.0};
+    bool m_frequencyEditing{false};
+    bool m_deferredFrequencyClear{false};
+    std::optional<quint64> m_deferredFrequencyHz;
 };

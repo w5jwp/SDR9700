@@ -4,12 +4,14 @@
 #include "UiTheme.h"
 #include "VfoSMeter.h"
 
+#include <QEvent>
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPainter>
 #include <QPushButton>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace
@@ -33,6 +35,7 @@ constexpr int kModeButtonWidth = 52;
 constexpr int kSquelchButtonWidth = 58;
 constexpr int kTxPowerButtonWidth = 68;
 constexpr int kLanModButtonWidth = 68;
+constexpr int kFrequencyEditTimeoutMs = 10000;
 constexpr int kHeaderControlSpacing = 6;
 constexpr int kHeaderGroupSpacing = 12;
 constexpr int kReceiverControlHeight = 18;
@@ -192,6 +195,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     m_frequencyEdit->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_frequencyEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_frequencyEdit->setFocusPolicy(Qt::ClickFocus);
+    m_frequencyEdit->installEventFilter(this);
     m_frequencyEdit->setAccessibleName(QStringLiteral("%1 frequency").arg(title));
     m_frequencyEdit->setAccessibleDescription(QStringLiteral("Enter frequency in MHz, then press Enter."));
     m_frequencyEdit->setToolTip(QStringLiteral("Enter frequency in MHz, then press Enter"));
@@ -212,12 +216,29 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     frequencyFont.setPixelSize(kFrequencyFontPixelSize);
     frequencyFont.setBold(true);
     m_frequencyEdit->setFont(frequencyFont);
+    m_frequencyEditTimer = new QTimer(this);
+    m_frequencyEditTimer->setObjectName(QStringLiteral("frequencyEditTimer"));
+    m_frequencyEditTimer->setSingleShot(true);
+    m_frequencyEditTimer->setInterval(kFrequencyEditTimeoutMs);
+    connect(m_frequencyEditTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                m_frequencyEdit->clearFocus();
+                finishFrequencyEditing();
+            });
+    connect(m_frequencyEdit, &QLineEdit::textEdited, this,
+            [this]()
+            {
+                m_frequencyEditing = true;
+                m_frequencyEditTimer->start();
+            });
     connect(m_frequencyEdit, &QLineEdit::returnPressed, this,
             [this]()
             {
                 emit frequencySubmitted(m_frequencyEdit->text());
                 m_frequencyEdit->clearFocus();
             });
+    connect(m_frequencyEdit, &QLineEdit::editingFinished, this, &VfoDisplay::finishFrequencyEditing);
 
     m_transmitFrequencyLabel = new QLabel(this);
     m_transmitFrequencyLabel->setObjectName(QStringLiteral("vfoTransmitFrequency"));
@@ -338,10 +359,45 @@ QString VfoDisplay::frequencyText() const
     return m_frequencyEdit ? m_frequencyEdit->text() : QString();
 }
 
+bool VfoDisplay::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_frequencyEdit && event->type() == QEvent::FocusIn)
+    {
+        // Treat the initial click as the start of editing. Otherwise, a radio
+        // update between the click and the first keystroke can reset the text
+        // and move the cursor to the right edge.
+        m_frequencyEditing = true;
+        m_frequencyEditTimer->start();
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void VfoDisplay::finishFrequencyEditing()
+{
+    m_frequencyEditTimer->stop();
+    m_frequencyEditing = false;
+    if (m_deferredFrequencyClear)
+    {
+        m_frequencyEdit->setText(QStringLiteral("---.---.---"));
+    }
+    else if (m_deferredFrequencyHz.has_value())
+    {
+        m_frequencyEdit->setText(sdr9700::ui::main_window::formatFrequency(*m_deferredFrequencyHz));
+    }
+    m_deferredFrequencyClear = false;
+    m_deferredFrequencyHz.reset();
+}
+
 void VfoDisplay::setFrequencyHz(quint64 hz)
 {
     if (!m_frequencyEdit)
     {
+        return;
+    }
+    if (m_frequencyEditing)
+    {
+        m_deferredFrequencyHz = hz;
+        m_deferredFrequencyClear = false;
         return;
     }
     m_frequencyEdit->setText(sdr9700::ui::main_window::formatFrequency(hz));
@@ -372,7 +428,15 @@ void VfoDisplay::clearFrequency()
 {
     if (m_frequencyEdit)
     {
-        m_frequencyEdit->setText(QStringLiteral("---.---.---"));
+        if (m_frequencyEditing)
+        {
+            m_deferredFrequencyHz.reset();
+            m_deferredFrequencyClear = true;
+        }
+        else
+        {
+            m_frequencyEdit->setText(QStringLiteral("---.---.---"));
+        }
     }
     clearTransmitFrequency();
     setBandText(QStringLiteral("--"));
