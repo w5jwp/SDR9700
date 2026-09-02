@@ -104,10 +104,9 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoPREButton"))->text(),
              QStringLiteral("P.AMP"));
     QCOMPARE(txPowerButton->text(), QStringLiteral("PWR 65%"));
-    for (const QString& control :
-         {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"), QStringLiteral("NOTCH"),
-          QStringLiteral("NR"), QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("TONE"),
-          QStringLiteral("OFFSET"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
+    for (const QString& control : {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("FILTERS"),
+                                   QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("TONE"),
+                                   QStringLiteral("OFFSET"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
     {
         QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfo%1Button").arg(control)) !=
                 nullptr);
@@ -140,10 +139,9 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
              QVariant(false));
     QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoModeButton"))->property("active"),
              QVariant(false));
-    for (const QString& control :
-         {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"), QStringLiteral("NOTCH"),
-          QStringLiteral("NR"), QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("TONE"),
-          QStringLiteral("OFFSET"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
+    for (const QString& control : {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("FILTERS"),
+                                   QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("TONE"),
+                                   QStringLiteral("OFFSET"), QStringLiteral("SQL"), QStringLiteral("TXPWR")})
     {
         QVERIFY(!mainController.display()
                      ->findChild<QPushButton*>(QStringLiteral("vfo%1Button").arg(control))

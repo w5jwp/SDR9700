@@ -307,8 +307,8 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     receiverControlLayout->setContentsMargins(0, 0, 0, 0);
     receiverControlLayout->setSpacing(kReceiverControlSpacing);
     const QStringList controls = {
-        QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"),  QStringLiteral("NOTCH"),
-        QStringLiteral("NR"),  QStringLiteral("PRE"), QStringLiteral("RFG"),
+        QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("FILTERS"),
+        QStringLiteral("PRE"), QStringLiteral("RFG"),
     };
     for (const QString& control : controls)
     {
@@ -514,6 +514,14 @@ void VfoDisplay::setReceiverControlState(const QString& control, const QString& 
     button->style()->unpolish(button);
     button->style()->polish(button);
     button->update();
+}
+
+void VfoDisplay::setReceiverControlToolTip(const QString& control, const QString& toolTip)
+{
+    if (QPushButton* button = m_receiverControlButtons.value(control, nullptr))
+    {
+        button->setToolTip(toolTip);
+    }
 }
 
 QPoint VfoDisplay::bandMenuPosition() const

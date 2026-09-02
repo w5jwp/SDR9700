@@ -9,8 +9,11 @@
 #include "VfoDisplay.h"
 #include "VfoSelectionController.h"
 
+#include <QComboBox>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
+#include <QTimer>
 #include <QWidget>
 #include <QtTest>
 
@@ -85,6 +88,13 @@ class FakeRadioBackend : public IRadioBackend
         ++vfoFrequencyCalls;
     }
     void setVfoMode(Vfo, const QString&) override {}
+    void setVfoFilter(Vfo vfo, const QString& modeName, int filter) override
+    {
+        requestedFilterVfo = vfo;
+        requestedFilterMode = modeName;
+        requestedFilter = filter;
+        ++vfoFilterCalls;
+    }
     void applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall) override
     {
         recalledVfo = vfo;
@@ -160,6 +170,10 @@ class FakeRadioBackend : public IRadioBackend
     Vfo requestedFrequencyVfo{Vfo::Main};
     quint64 requestedFrequencyHz{0};
     int vfoFrequencyCalls{0};
+    Vfo requestedFilterVfo{Vfo::Main};
+    QString requestedFilterMode;
+    int requestedFilter{0};
+    int vfoFilterCalls{0};
 };
 
 class VfoBackendTest : public QObject
@@ -181,11 +195,75 @@ class VfoBackendTest : public QObject
     void radioStateKeepsReceiverAndBandRecallIsolated();
     void radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate();
     void vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed();
+    void filtersMenuKeepsControlColumnsAligned();
     void controllerFrequencyRequestWaitsForRadioConfirmation();
     void bandRecallRejectsPressureUntilCompleteIdentitySettles();
     void uiSelectionIgnoresBackgroundReceiverRouting();
     void dualWatchRequestReportsBackendAcceptance();
 };
+
+void VfoBackendTest::filtersMenuKeepsControlColumnsAligned()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+    QWidget parent;
+    VfoController controller(Vfo::Main, &backend, &state, &parent);
+
+    Frequency frequency;
+    frequency.Hz = 146520000;
+    ModeInfo mode;
+    mode.mk = modeFM;
+    mode.name = QStringLiteral("FM");
+    mode.filter = 2;
+    emit backend.radioValueConfirmed(funcFreqGet, QVariant::fromValue(frequency), 0);
+    emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 0);
+    emit backend.radioValueUpdated(funcNBLevel, 128, 0);
+    emit backend.radioValueUpdated(funcNRLevel, 128, 0);
+
+    auto* filtersButton = controller.display()->findChild<QPushButton*>(QStringLiteral("vfoFILTERSButton"));
+    QVERIFY(filtersButton);
+    filtersButton->setEnabled(true);
+    bool inspected = false;
+    QTimer::singleShot(0, this,
+                       [&backend, &inspected]()
+                       {
+                           auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+                           QVERIFY(menu);
+                           const QStringList names = {QStringLiteral("FILTER"), QStringLiteral("NB"),
+                                                      QStringLiteral("NOTCH"), QStringLiteral("NR")};
+                           int nameX = -1;
+                           int comboX = -1;
+                           int comboWidth = -1;
+                           for (const QString& name : names)
+                           {
+                               auto* nameLabel = menu->findChild<QLabel*>(QStringLiteral("vfoFilters%1Name").arg(name));
+                               auto* combo = menu->findChild<QComboBox*>(QStringLiteral("vfoFilters%1Combo").arg(name));
+                               QVERIFY(nameLabel);
+                               QVERIFY(combo);
+                               if (nameX < 0)
+                               {
+                                   nameX = nameLabel->x();
+                                   comboX = combo->x();
+                                   comboWidth = combo->width();
+                               }
+                               QCOMPARE(nameLabel->x(), nameX);
+                               QCOMPARE(combo->x(), comboX);
+                               QCOMPARE(combo->width(), comboWidth);
+                           }
+                           auto* filterCombo = menu->findChild<QComboBox*>(QStringLiteral("vfoFiltersFILTERCombo"));
+                           QVERIFY(filterCombo);
+                           filterCombo->setCurrentIndex(2);
+                           QCOMPARE(filterCombo->currentText(), QStringLiteral("FIL3"));
+                           QCOMPARE(backend.vfoFilterCalls, 1);
+                           QCOMPARE(backend.requestedFilterVfo, Vfo::Main);
+                           QCOMPARE(backend.requestedFilterMode, QStringLiteral("FM"));
+                           QCOMPARE(backend.requestedFilter, 3);
+                           inspected = true;
+                           menu->close();
+                       });
+    filtersButton->click();
+    QVERIFY(inspected);
+}
 
 void VfoBackendTest::exchangeModeConfirmationAlwaysRequiresReceiverFrequency()
 {
@@ -365,23 +443,22 @@ void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
     QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoOFFSETButton"))->text(),
              QStringLiteral("--"));
 
-    auto* mainNbButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoNBButton"));
-    auto* mainNrButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoNRButton"));
-    auto* subNbButton = subController.display()->findChild<QPushButton*>(QStringLiteral("vfoNBButton"));
-    QVERIFY(mainNbButton);
-    QVERIFY(mainNrButton);
-    QVERIFY(subNbButton);
+    auto* mainFiltersButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoFILTERSButton"));
+    auto* subFiltersButton = subController.display()->findChild<QPushButton*>(QStringLiteral("vfoFILTERSButton"));
+    QVERIFY(mainFiltersButton);
+    QVERIFY(subFiltersButton);
+    QCOMPARE(mainFiltersButton->property("active"), QVariant(true));
+    QCOMPARE(subFiltersButton->property("active"), QVariant(true));
     emit backend.radioValueUpdated(funcNoiseBlanker, true, 0);
     emit backend.radioValueUpdated(funcNoiseReduction, true, 0);
-    QCOMPARE(mainNbButton->text(), QStringLiteral("NB"));
-    QCOMPARE(mainNrButton->text(), QStringLiteral("NR"));
+    QCOMPARE(mainFiltersButton->text(), QStringLiteral("FILTERS"));
+    QCOMPARE(mainFiltersButton->property("active"), QVariant(true));
     emit backend.radioValueUpdated(funcNBLevel, 255, 0);
     emit backend.radioValueUpdated(funcNRLevel, 0, 0);
     emit backend.radioValueUpdated(funcNoiseBlanker, true, 1);
     emit backend.radioValueUpdated(funcNBLevel, 128, 1);
-    QCOMPARE(mainNbButton->text(), QStringLiteral("NB 10"));
-    QCOMPARE(mainNrButton->text(), QStringLiteral("NR 1"));
-    QCOMPARE(subNbButton->text(), QStringLiteral("NB 6"));
+    QCOMPARE(mainFiltersButton->toolTip(), QStringLiteral("FIL1 • NB 10 • NOTCH OFF • NR 1"));
+    QCOMPARE(subFiltersButton->toolTip(), QStringLiteral("FIL1 • NB 6 • NOTCH OFF • NR —"));
 
     // A duplex direction without its companion offset is partial state. It
     // must not fabricate a confirmed zero-offset display while replies are
@@ -438,8 +515,8 @@ void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
     emit backend.disconnected();
     emit backend.radioValueUpdated(funcNoiseBlanker, true, 0);
     emit backend.radioValueUpdated(funcNoiseReduction, true, 0);
-    QCOMPARE(mainNbButton->text(), QStringLiteral("NB"));
-    QCOMPARE(mainNrButton->text(), QStringLiteral("NR"));
+    QCOMPARE(mainFiltersButton->text(), QStringLiteral("FILTERS"));
+    QCOMPARE(mainFiltersButton->property("active"), QVariant(false));
 }
 
 void VfoBackendTest::radioStateKeepsReceiverAndBandRecallIsolated()

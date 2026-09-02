@@ -80,6 +80,7 @@ class RadioBackend : public IRadioBackend
     void exchangeMainSub() override;
     void setVfoFrequencyHz(Vfo vfo, quint64 hz) override;
     void setVfoMode(Vfo vfo, const QString& mode) override;
+    void setVfoFilter(Vfo vfo, const QString& mode, int filter) override;
     void applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall) override;
     void requestVfoState(Vfo vfo) override;
     void setVfoAgcMode(Vfo vfo, const QString& mode) override;

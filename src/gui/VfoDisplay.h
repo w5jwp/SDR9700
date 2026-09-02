@@ -35,6 +35,7 @@ class VfoDisplay : public QWidget
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
     void setReceiverControlState(const QString& control, const QString& value, bool active);
+    void setReceiverControlToolTip(const QString& control, const QString& toolTip);
     QPoint bandMenuPosition() const;
     QPoint modeMenuPosition() const;
     QPoint receiverControlMenuPosition(const QString& control) const;
