@@ -41,6 +41,32 @@ MemorySyncController::MemorySyncController(MemoryController* owner) : QObject(ow
     m_replyGraceTimer = new QTimer(this);
     m_replyGraceTimer->setSingleShot(true);
     connect(m_replyGraceTimer, &QTimer::timeout, this, [this]() { finishRadioMemoryRefresh(false); });
+
+    m_startupStabilityTimer = new QTimer(this);
+    m_startupStabilityTimer->setSingleShot(true);
+    m_startupStabilityTimer->setInterval(kRadioMemoryStartupStabilityMs);
+    connect(m_startupStabilityTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (m_startupScopeFrameCount >= kRadioMemoryStartupMinimumScopeFrames)
+                {
+                    startInitialRadioMemoryRefresh();
+                }
+            });
+
+    m_startupFallbackTimer = new QTimer(this);
+    m_startupFallbackTimer->setSingleShot(true);
+    m_startupFallbackTimer->setInterval(kRadioMemoryStartupFallbackMs);
+    connect(m_startupFallbackTimer, &QTimer::timeout, this,
+            [this]()
+            {
+                if (m_initialSyncPending)
+                {
+                    qWarning(logGui()).noquote()
+                        << "Starting initial memory sync without confirmed spectrum activity after bounded wait";
+                    startInitialRadioMemoryRefresh();
+                }
+            });
 }
 
 void MemorySyncController::forceRadioMemorySync()
@@ -76,6 +102,7 @@ void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
 void MemorySyncController::handleRadioReadyChanged(bool ready)
 {
     qInfo(logGui()).noquote() << "MemorySyncController observed radio readyChanged:" << ready;
+    m_radioReady = ready;
     if (ready)
     {
         if (m_initialSyncComplete)
@@ -83,12 +110,21 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
             m_initialSyncComplete = false;
             emit m_owner->initialMemorySyncChanged(false);
         }
-        m_owner->m_window->showToast(QStringLiteral("Syncing memories"), 4000);
-        requestRadioMemoryRefresh();
+        m_initialSyncPending = true;
+        m_startupScopeFrameCount = 0;
+        m_startupStabilityTimer->stop();
+        m_startupFallbackTimer->start();
+        // This brief stability gate is part of radio synchronization, not a
+        // separate operator-facing lifecycle stage. Leave the current
+        // connection toast in place until memory polling actually begins.
         m_periodicRefreshTimer->start();
         return;
     }
 
+    m_initialSyncPending = false;
+    m_startupScopeFrameCount = 0;
+    m_startupStabilityTimer->stop();
+    m_startupFallbackTimer->stop();
     m_refreshTimer->stop();
     m_periodicRefreshTimer->stop();
     m_owner->m_memoryViewController->stopScheduledRefresh();
@@ -104,6 +140,36 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
     // or used to bypass the normal radio write/readback verification.
     clearReceivedMemories();
     m_owner->rebuildMemoryViews();
+}
+
+void MemorySyncController::handleSpectrumActivity()
+{
+    if (!m_radioReady || !m_initialSyncPending)
+    {
+        return;
+    }
+
+    ++m_startupScopeFrameCount;
+    if (!m_startupStabilityTimer->isActive())
+    {
+        m_startupStabilityTimer->start();
+    }
+}
+
+void MemorySyncController::startInitialRadioMemoryRefresh()
+{
+    if (!m_radioReady || !m_initialSyncPending)
+    {
+        return;
+    }
+
+    m_initialSyncPending = false;
+    m_startupStabilityTimer->stop();
+    m_startupFallbackTimer->stop();
+    qInfo(logGui()).nospace() << "Initial memory sync stability gate satisfied scope_frames="
+                              << m_startupScopeFrameCount;
+    m_owner->m_window->showToast(QStringLiteral("Synchronizing memories"), 0);
+    requestRadioMemoryRefresh();
 }
 
 void MemorySyncController::startScheduledRadioMemoryRefresh()

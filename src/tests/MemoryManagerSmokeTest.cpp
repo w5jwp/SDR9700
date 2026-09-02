@@ -114,7 +114,11 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
 
     QVERIFY(QMetaObject::invokeMethod(&model, "onBackendConnected"));
     QVERIFY(QMetaObject::invokeMethod(&model, "onBackendReadyChanged", Q_ARG(bool, true)));
-    QVERIFY(statusLabel->text().startsWith(QStringLiteral("Syncing 2M channel 001")));
+    QVERIFY(!statusLabel->text().startsWith(QStringLiteral("Syncing 2M channel")));
+    model.spectrumActivity();
+    model.spectrumActivity();
+    model.spectrumActivity();
+    QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().startsWith(QStringLiteral("Syncing 2M channel 001")), 1500);
     MemoryType liveMemory = storedMemory;
     liveMemory.frequency.Hz = 145500000;
     liveMemory.frequency.MHzDouble = 145.5;

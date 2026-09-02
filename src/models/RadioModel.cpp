@@ -244,5 +244,6 @@ void RadioModel::onSpectrumDataReady(const QVector<float>& levels, double start,
     {
         return;
     }
+    emit spectrumActivity();
     m_spectrumScope->ingestSpectrum(levels, start, end, outOfRange);
 }

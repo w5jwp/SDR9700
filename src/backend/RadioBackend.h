@@ -15,6 +15,7 @@
 #include "TransmitConfigurationPolicy.h"
 #include "SameBandRefreshPolicy.h"
 #include "DualWatchTransitionPolicy.h"
+#include "StandbyWakePolicy.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -108,7 +109,8 @@ class RadioBackend : public IRadioBackend
     void onNetworkStatus(networkStatus status);
 
   private:
-    void shutdownConnection(bool emitDisconnectedSignal = true, bool emitDisconnectedStage = true);
+    void shutdownConnection(bool emitDisconnectedSignal = true, bool emitDisconnectedStage = true,
+                            bool sendSafetyCommands = true);
     void requestInitialRadioState();
     void requestPostReadyRadioState();
     void finishDualWatchTransition(bool success);
@@ -138,6 +140,8 @@ class RadioBackend : public IRadioBackend
     void routeVfoReceiverCommand(Vfo vfo, Funcs func, const std::function<void(Commander*, uchar)>& command);
     void scheduleVfoReceiverCommand(Vfo vfo, Funcs func, const std::function<void(Commander*, uchar)>& command);
     void restartAfterSyncTimeout();
+    void handleCommandPlaneUnavailable();
+    void reconnectBootstrapSession();
 
     QThread* m_workerThread{nullptr};
     QThread* m_radioDataThread{nullptr};
@@ -175,6 +179,7 @@ class RadioBackend : public IRadioBackend
     QTimer* m_syncWatchdogTimer{nullptr};
     bool m_scopeDataReceived{false};
     bool m_scopeSyncDegraded{false};
+    bool m_scopeEnableRequested{false};
     bool m_initialFrequencyReceived{false};
     bool m_initialModeReceived{false};
     bool m_initialMainFrequencyReceived{false};
@@ -183,6 +188,14 @@ class RadioBackend : public IRadioBackend
     bool m_radioReady{false};
     int m_syncReconnectAttempts{0};
     bool m_syncReconnectPending{false};
+    // Tracks only the pre-readiness bootstrap. Once the directed CI-V probe
+    // succeeds, normal synchronization/reconnect policy takes over.
+    sdr9700::StandbyWakePolicy m_standbyWakePolicy;
+    // True only while connectToRadio() is being invoked by the bounded wake
+    // sequence; it prevents that internal replacement from resetting policy.
+    bool m_bootstrapReconnectPending{false};
+    // Cancels delayed wake/reconnect callbacks after operator intent changes.
+    quint64 m_bootstrapGeneration{0};
     std::optional<std::pair<quint16, quint16>> m_selectedRadioMemory;
     QTimer* m_smeterPollTimer{nullptr};
     QTimer* m_vfoStatePollTimer{nullptr};

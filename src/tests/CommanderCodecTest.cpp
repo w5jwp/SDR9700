@@ -27,6 +27,7 @@ class CommanderCodecTest : public QObject
     void rejectsMalformedFeatureAndScopeReplies();
     void parsesMemoryFields();
     void serializesOutboundCommandValues();
+    void serializesStandbyWakeFrame();
     void rejectsUnknownOutboundValueTypes();
     void acknowledgementsAreDiagnosticOnly();
     void tracksPendingReplyPressure();
@@ -79,6 +80,19 @@ void CommanderCodecTest::init()
     sdr9700::populateRadioCapabilities(m_commander.radioCaps);
     m_commander.haveRadioCaps = true;
     m_commander.setCIVAddr(0xA2);
+}
+
+void CommanderCodecTest::serializesStandbyWakeFrame()
+{
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+
+    m_commander.sendStandbyWake();
+
+    QCOMPARE(wireSpy.count(), 1);
+    const QByteArray frame = wireSpy.takeFirst().at(0).toByteArray();
+    QCOMPARE(frame.size(), 157);
+    QCOMPARE(frame.left(152), QByteArray(152, '\xFE'));
+    QCOMPARE(frame.right(5), QByteArray::fromHex("a2e11801fd"));
 }
 
 void CommanderCodecTest::doesNotDeferMainSubSwapActions()

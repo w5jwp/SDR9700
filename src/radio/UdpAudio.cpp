@@ -12,7 +12,7 @@ constexpr quint8 kLpcmMono16Codec = 0x04;
 } // namespace
 
 UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint16 lport, audioSetup rxSetup,
-                   audioSetup txSetup)
+                   audioSetup txSetup, QUdpSocket* boundSocket)
 {
     qInfo(logUdp()).noquote() << "Starting UdpAudio";
     this->localIP = local;
@@ -33,7 +33,7 @@ UdpAudio::UdpAudio(QHostAddress local, QHostAddress ip, quint16 audioPort, quint
         enableTx = false;
     }
 
-    if (!init(lport))
+    if (!init(lport, boundSocket))
     {
         return;
     }
@@ -293,6 +293,13 @@ void UdpAudio::dataReceived()
         {
         case (16):
         {
+            const auto decodedControl = decodePacket<control_packet>(r);
+            const control_packet* control = &*decodedControl;
+            if (control->type == 0x06 && !m_transportReadyEmitted)
+            {
+                m_transportReadyEmitted = true;
+                emit ready();
+            }
             break;
         }
         default:

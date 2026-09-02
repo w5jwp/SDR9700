@@ -28,7 +28,8 @@ class UdpCivData : public UdpBase
     Q_OBJECT
 
   public:
-    UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, quint16 localPort);
+    UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, quint16 localPort,
+               QUdpSocket* boundSocket = nullptr);
     ~UdpCivData();
 
     void closeStream();
@@ -36,6 +37,8 @@ class UdpCivData : public UdpBase
 
   signals:
     void receive(QByteArray);
+    // The transport handshake is complete. UdpHandler opens the CI-V pipe
+    // only after the companion audio transport reaches the same state.
     void ready();
 
   public slots:

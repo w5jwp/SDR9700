@@ -75,6 +75,7 @@ class Commander : public RadioCommander
     void requestReceiverScopedRead(Funcs func, uchar receiver);
     void discardPendingReplies(Funcs func);
     void readCurrentFrequencyAndMode();
+    void sendStandbyWake();
     void setPttActive(bool active);
     void sendDtmfPcm(const QByteArray& pcm);
     void enableAudio();
@@ -85,6 +86,7 @@ class Commander : public RadioCommander
   signals:
     void mainSubExchangeDispatched();
     void commandTransmitted(Funcs func, uchar receiver);
+    void standbyWakeHoldStarted();
 
   private:
     enum class FrameOrigin

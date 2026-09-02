@@ -24,11 +24,14 @@ void PacketLayoutTest::packetSizesMatchProtocolConstants()
     QCOMPARE(sizeof(control_packet), size_t(CONTROL_SIZE));
     QCOMPARE(sizeof(watchdog_packet), size_t(WATCHDOG_SIZE));
     QCOMPARE(sizeof(ping_packet), size_t(PING_SIZE));
+    QCOMPARE(sizeof(openclose_packet), size_t(OPENCLOSE_SIZE));
     QCOMPARE(sizeof(audio_packet), size_t(AUDIO_SIZE));
     QCOMPARE(sizeof(token_packet), size_t(TOKEN_SIZE));
     QCOMPARE(sizeof(status_packet), size_t(STATUS_SIZE));
     QCOMPARE(sizeof(login_packet), size_t(LOGIN_SIZE));
     QCOMPARE(sizeof(conninfo_packet), size_t(CONNINFO_SIZE));
+    QCOMPARE(CIV_STREAM_CLOSED, quint8(0x00));
+    QCOMPARE(CIV_STREAM_OPEN, quint8(0x05));
 }
 
 void PacketLayoutTest::commonHeaderOffsetsAreStable()
