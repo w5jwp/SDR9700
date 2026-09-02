@@ -133,7 +133,7 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     auto* root = new QHBoxLayout(this);
     root->setContentsMargins(kNoMargins);
 #if defined(Q_OS_MAC)
-    root->setContentsMargins(10, 0, 0, 0);
+    root->setContentsMargins(11, 0, 0, 0);
 #endif
     root->setSpacing(0);
 

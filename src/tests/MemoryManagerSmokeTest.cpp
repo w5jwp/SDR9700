@@ -63,7 +63,7 @@ class MemoryManagerSmokeTest : public QObject
     void compressorMenuReflectsConfirmedLevel();
     void utilityWindowIsDestroyedWithHost();
     void quitActionDefersWindowClose();
-    void persistentToastCanBeClearedByOwner();
+    void persistentStatusMessageCanBeClearedByOwner();
     void automationIndicatorReflectsClientCount();
     void titleBarSpeakerTogglesMute();
 };
@@ -226,9 +226,9 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     // Invoke the table signal so this test covers the complete UI connection
     // rather than calling the memory controller directly.
     QVERIFY(QMetaObject::invokeMethod(memoryTable, "cellDoubleClicked", Q_ARG(int, 0), Q_ARG(int, 0)));
-    auto* toastLabel = window.findChild<QLabel*>(QStringLiteral("statusToastLabel"));
-    QVERIFY(toastLabel != nullptr);
-    QCOMPARE(toastLabel->text(), QStringLiteral("Selected memory on MAIN: DATABASE TEST"));
+    auto* statusMessageLabel = window.findChild<QLabel*>(QStringLiteral("statusMessageLabel"));
+    QVERIFY(statusMessageLabel != nullptr);
+    QCOMPARE(statusMessageLabel->text(), QStringLiteral("Selected memory on MAIN: DATABASE TEST"));
 
     // Physical CI-V receiver routing is deliberately independent of the
     // operator's selected UI side. Drive the selection controller used by the
@@ -241,7 +241,7 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     model.backend()->radioValueConfirmed(funcVFOBandMS, QVariant::fromValue<bool>(true), 0);
     QCoreApplication::processEvents();
     QVERIFY(QMetaObject::invokeMethod(memoryTable, "cellDoubleClicked", Q_ARG(int, 0), Q_ARG(int, 0)));
-    QCOMPARE(toastLabel->text(), QStringLiteral("Selected memory on SUB: DATABASE TEST"));
+    QCOMPARE(statusMessageLabel->text(), QStringLiteral("Selected memory on SUB: DATABASE TEST"));
 }
 
 void MemoryManagerSmokeTest::unnamedRadioMemoryIsPersistedWithFrequencyName()
@@ -722,30 +722,55 @@ void MemoryManagerSmokeTest::quitActionDefersWindowClose()
     QVERIFY(repeatedClose.isAccepted());
 }
 
-void MemoryManagerSmokeTest::persistentToastCanBeClearedByOwner()
+void MemoryManagerSmokeTest::persistentStatusMessageCanBeClearedByOwner()
 {
     RadioModel model;
     MainWindow window(&model);
     QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
 
-    auto* toastLabel = window.findChild<QLabel*>(QStringLiteral("statusToastLabel"));
+    auto* statusMessageLabel = window.findChild<QLabel*>(QStringLiteral("statusMessageLabel"));
     const QObjectList children = window.children();
     const auto controller = std::find_if(children.cbegin(), children.cend(), [](const QObject* child)
                                          { return dynamic_cast<const StatusBarController*>(child) != nullptr; });
     QVERIFY(controller != children.cend());
     auto* statusBarController = dynamic_cast<StatusBarController*>(*controller);
-    QVERIFY(toastLabel != nullptr);
+    QVERIFY(statusMessageLabel != nullptr);
     QVERIFY(statusBarController != nullptr);
 
     const QString importMessage = QStringLiteral("Syncing radio memories before import...");
-    statusBarController->showToast(importMessage, 0);
-    QCOMPARE(toastLabel->text(), QStringLiteral("Syncing radio memories before import"));
+    statusBarController->showStatusMessage(importMessage, 0);
+    QCOMPARE(statusMessageLabel->text(), QStringLiteral("Syncing radio memories before import"));
 
-    statusBarController->clearPersistentToast(QStringLiteral("A different operation"));
-    QCOMPARE(toastLabel->text(), QStringLiteral("Syncing radio memories before import"));
+    statusBarController->clearPersistentStatusMessage(QStringLiteral("A different operation"));
+    QCOMPARE(statusMessageLabel->text(), QStringLiteral("Syncing radio memories before import"));
 
-    statusBarController->clearPersistentToast(importMessage);
-    QVERIFY(toastLabel->text().isEmpty());
+    statusBarController->clearPersistentStatusMessage(importMessage);
+    QVERIFY(statusMessageLabel->text().isEmpty());
+
+    const QString recommendedLength(StatusBarController::kRecommendedStatusMessageCharacters, QLatin1Char('x'));
+    statusBarController->showStatusMessage(recommendedLength, 0);
+    QCOMPARE(statusMessageLabel->text(), recommendedLength);
+
+    const QString warningLength(StatusBarController::kRecommendedStatusMessageCharacters + 1, QLatin1Char('x'));
+    QTest::ignoreMessage(QtWarningMsg,
+                         "Status message exceeds the recommended length characters=65 recommended=64 maximum=72");
+    statusBarController->showStatusMessage(warningLength, 0);
+    QCOMPARE(statusMessageLabel->text(), warningLength);
+
+    const QString maximumLength(StatusBarController::kMaximumStatusMessageCharacters, QLatin1Char('x'));
+    QTest::ignoreMessage(QtWarningMsg,
+                         "Status message exceeds the recommended length characters=72 recommended=64 maximum=72");
+    statusBarController->showStatusMessage(maximumLength, 0);
+    QCOMPARE(statusMessageLabel->text(), maximumLength);
+
+    const QString rejectedLength(StatusBarController::kMaximumStatusMessageCharacters + 1, QLatin1Char('x'));
+    QTest::ignoreMessage(
+        QtWarningMsg,
+        "Status message rejected because it exceeds the maximum length characters=73 recommended=64 maximum=72");
+    statusBarController->showStatusMessage(rejectedLength, 0);
+    QCOMPARE(statusMessageLabel->text(), maximumLength);
+    statusBarController->clearPersistentStatusMessage(maximumLength);
+    QVERIFY(statusMessageLabel->text().isEmpty());
 
     const QStringList punctuatedMessages = {
         QStringLiteral("Complete."),         QStringLiteral("Wait..."),   QStringLiteral("Warning!"),
@@ -754,18 +779,18 @@ void MemoryManagerSmokeTest::persistentToastCanBeClearedByOwner()
     };
     for (const QString& message : punctuatedMessages)
     {
-        statusBarController->showToast(message, 1000);
-        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char('.')), qPrintable(toastLabel->text()));
-        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char('!')), qPrintable(toastLabel->text()));
-        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char('?')), qPrintable(toastLabel->text()));
-        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char(';')), qPrintable(toastLabel->text()));
-        QVERIFY2(!toastLabel->text().endsWith(QLatin1Char(':')), qPrintable(toastLabel->text()));
-        QVERIFY2(!toastLabel->text().endsWith(QChar(0x2026)), qPrintable(toastLabel->text()));
+        statusBarController->showStatusMessage(message, 1000);
+        QVERIFY2(!statusMessageLabel->text().endsWith(QLatin1Char('.')), qPrintable(statusMessageLabel->text()));
+        QVERIFY2(!statusMessageLabel->text().endsWith(QLatin1Char('!')), qPrintable(statusMessageLabel->text()));
+        QVERIFY2(!statusMessageLabel->text().endsWith(QLatin1Char('?')), qPrintable(statusMessageLabel->text()));
+        QVERIFY2(!statusMessageLabel->text().endsWith(QLatin1Char(';')), qPrintable(statusMessageLabel->text()));
+        QVERIFY2(!statusMessageLabel->text().endsWith(QLatin1Char(':')), qPrintable(statusMessageLabel->text()));
+        QVERIFY2(!statusMessageLabel->text().endsWith(QChar(0x2026)), qPrintable(statusMessageLabel->text()));
     }
 
-    statusBarController->showToast(QStringLiteral("Radio ready."), 1);
-    QCOMPARE(toastLabel->text(), QStringLiteral("Radio ready"));
-    QTRY_VERIFY_WITH_TIMEOUT(toastLabel->text().isEmpty(), 100);
+    statusBarController->showStatusMessage(QStringLiteral("Radio ready."), 1);
+    QCOMPARE(statusMessageLabel->text(), QStringLiteral("Radio ready"));
+    QTRY_VERIFY_WITH_TIMEOUT(statusMessageLabel->text().isEmpty(), 100);
 }
 
 void MemoryManagerSmokeTest::automationIndicatorReflectsClientCount()

@@ -51,7 +51,8 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
         }
         else
         {
-            m_owner->m_window->showToast(QStringLiteral("Controls are locked"), 4000, MainWindow::ToastKind::Warning);
+            m_owner->m_window->showStatusMessage(QStringLiteral("Controls are locked"), 4000,
+                                                 MainWindow::StatusMessageKind::Warning);
         }
         return;
     }
@@ -81,8 +82,8 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
         }
         else
         {
-            m_owner->m_window->showToast(QStringLiteral("Connect to radio before selecting a memory"), 4000,
-                                         MainWindow::ToastKind::Warning);
+            m_owner->m_window->showStatusMessage(QStringLiteral("Connect to radio before selecting a memory"), 4000,
+                                                 MainWindow::StatusMessageKind::Warning);
         }
         return;
     }
@@ -131,7 +132,7 @@ void MemorySelectionController::selectMemoryById(const QString& id, bool showDia
                                m_owner->m_window->m_activeMemorySelectionReleaseScheduled = false;
                            });
     }
-    m_owner->m_window->showToast(
+    m_owner->m_window->showStatusMessage(
         QStringLiteral("Selected memory on %1: %2")
             .arg(targetVfo == Vfo::Sub ? QStringLiteral("SUB") : QStringLiteral("MAIN"), memory.name));
 }
@@ -200,7 +201,8 @@ void MemorySelectionController::copySelectedMemory()
                                {
                                    if (success)
                                    {
-                                       m_owner->m_window->showToast(QStringLiteral("Copied memory: %1").arg(name));
+                                       m_owner->m_window->showStatusMessage(
+                                           QStringLiteral("Copied memory: %1").arg(name));
                                    }
                                });
 }
@@ -247,7 +249,7 @@ void MemorySelectionController::removeSelectedMemory()
                                {
                                    if (success)
                                    {
-                                       m_owner->m_window->showToast(QStringLiteral("Memory removed"));
+                                       m_owner->m_window->showStatusMessage(QStringLiteral("Memory removed"));
                                    }
                                });
 }
@@ -313,7 +315,7 @@ void MemorySelectionController::moveSelectedMemory(int direction)
                                     {
                                         if (success)
                                         {
-                                            m_owner->m_window->showToast(QStringLiteral("Memories reordered"));
+                                            m_owner->m_window->showStatusMessage(QStringLiteral("Memories reordered"));
                                         }
                                     });
 }

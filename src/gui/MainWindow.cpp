@@ -155,7 +155,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                 {
                     // The ordinary ready notification was deliberately held
                     // while the scope caught up. Re-evaluate it now so the
-                    // lifecycle ends with one unambiguous "Radio ready" toast.
+                    // lifecycle ends with one unambiguous "Radio ready" status message.
                     m_radioUiReadyNotified = false;
                     onRadioReadyChanged(m_model && m_model->isReady());
                 }
@@ -804,7 +804,7 @@ void MainWindow::onConnectToProfile(const RadioProfile& profile)
     m_userDisconnected = false;
     // The backend validates the profile synchronously. Publish Connecting before
     // entering it so an invalid host/port cannot leave the previous UI state on
-    // screen while an error toast is shown.
+    // screen while an error status message is shown.
     onConnectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to radio"));
     m_model->connectToRadio(profile.host, profile.port, profile.username, profile.password);
 }
@@ -1340,7 +1340,7 @@ void MainWindow::onConnectionChanged(bool connected)
         {
             if (!RadioProfileStore::instance().setLastProfileId(m_pendingProfileId))
             {
-                showToast("Could not save selected radio profile", 8000, ToastKind::Warning);
+                showStatusMessage("Could not save selected radio profile", 8000, StatusMessageKind::Warning);
             }
         }
     }
@@ -1434,8 +1434,8 @@ void MainWindow::onRadioReadyChanged(bool ready)
             m_connStateName = QStringLiteral("Syncing");
             m_connStateLabel->setText(
                 QStringLiteral("<span style='color:%1'>Syncing</span>").arg(UiTheme::Color::Warning));
-            m_connectionToastMessage = QStringLiteral("Synchronizing spectrum scope");
-            showToast(m_connectionToastMessage, 0);
+            m_connectionStatusMessage = QStringLiteral("Synchronizing spectrum scope");
+            showStatusMessage(m_connectionStatusMessage, 0);
             updateConnectionTooltip();
             return;
         }
@@ -1448,9 +1448,9 @@ void MainWindow::onRadioReadyChanged(bool ready)
             // reached a usable point, but MainWindow waits for both the first
             // memory poll and the spectrum scope before presenting the final
             // operator-facing ready state.
-            clearPersistentToast(m_connectionToastMessage);
-            m_connectionToastMessage.clear();
-            showToast(QStringLiteral("Radio ready"), 5000);
+            clearPersistentStatusMessage(m_connectionStatusMessage);
+            m_connectionStatusMessage.clear();
+            showStatusMessage(QStringLiteral("Radio ready"), 5000);
         }
     }
     else
@@ -1599,14 +1599,14 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
     }
 }
 
-void MainWindow::showToast(const QString& msg, int durationMs, ToastKind kind)
+void MainWindow::showStatusMessage(const QString& msg, int durationMs, StatusMessageKind kind)
 {
-    m_statusBarController->showToast(msg, durationMs, kind);
+    m_statusBarController->showStatusMessage(msg, durationMs, kind);
 }
 
-void MainWindow::clearPersistentToast(const QString& expectedMessage)
+void MainWindow::clearPersistentStatusMessage(const QString& expectedMessage)
 {
-    m_statusBarController->clearPersistentToast(expectedMessage);
+    m_statusBarController->clearPersistentStatusMessage(expectedMessage);
 }
 
 void MainWindow::updateNetworkQuality(int rttMs)
@@ -1660,34 +1660,35 @@ void MainWindow::onConnectionStageChanged(ConnectionStage stage, const QString& 
     updateConnectionTooltip();
     if (!message.isEmpty())
     {
-        const ToastKind kind = stage == ConnectionStage::Failed ? ToastKind::Error
-                               : stage == ConnectionStage::Reconnecting || stage == ConnectionStage::WaitingForRadio
-                                   ? ToastKind::Warning
-                                   : ToastKind::Info;
-        m_connectionToastMessage = message;
-        showToast(m_connectionToastMessage, 0, kind);
+        const StatusMessageKind kind =
+            stage == ConnectionStage::Failed ? StatusMessageKind::Error
+            : stage == ConnectionStage::Reconnecting || stage == ConnectionStage::WaitingForRadio
+                ? StatusMessageKind::Warning
+                : StatusMessageKind::Info;
+        m_connectionStatusMessage = message;
+        showStatusMessage(m_connectionStatusMessage, 0, kind);
     }
 }
 
 void MainWindow::onStatusMessage(const QString& msg, MessageSeverity severity)
 {
-    ToastKind kind = ToastKind::Info;
+    StatusMessageKind kind = StatusMessageKind::Info;
     if (severity == MessageSeverity::Warning)
     {
-        kind = ToastKind::Warning;
+        kind = StatusMessageKind::Warning;
     }
     else if (severity == MessageSeverity::Error)
     {
-        kind = ToastKind::Error;
+        kind = StatusMessageKind::Error;
     }
-    showToast(msg, 5000, kind);
+    showStatusMessage(msg, 5000, kind);
 }
 
 void MainWindow::onError(ErrorCode code, const QString& msg)
 {
     Q_UNUSED(msg)
     // RadioBackend publishes the same failure through connectionStageChanged,
-    // which owns the persistent operator-facing toast. Keep this typed signal
+    // which owns the persistent operator-facing status message. Keep this typed signal
     // solely for reconnect policy so one failure does not produce two messages.
     m_lastErrorWasCredential = code == ErrorCode::AuthFailure;
     const bool connectionAttemptFailed = sdr9700::isAutomaticReconnectError(code);
@@ -1710,8 +1711,8 @@ bool MainWindow::scheduleRadioReconnect()
     }
 
     m_reconnecting = true;
-    m_connectionToastMessage = sdr9700::reconnectingMessage(m_connectionToastMessage);
-    showToast(m_connectionToastMessage, 0, ToastKind::Warning);
+    m_connectionStatusMessage = sdr9700::reconnectingMessage(m_connectionStatusMessage);
+    showStatusMessage(m_connectionStatusMessage, 0, StatusMessageKind::Warning);
     if (m_connStateLabel)
     {
         m_connStateName = QStringLiteral("Reconnecting");
@@ -1792,12 +1793,13 @@ void MainWindow::applyAudioSettings()
     const int outputChannels = qBound(1, settings.value("audioOutputChannels", 2).toInt(), 2);
     if (m_model->isConnected() && outputChannels != m_connectedAudioOutputChannels)
     {
-        showToast(QStringLiteral("Audio devices updated; codec applies on next connection"), 5000, ToastKind::Info);
+        showStatusMessage(QStringLiteral("Audio devices updated; codec applies on next connection"), 5000,
+                          StatusMessageKind::Info);
     }
     else
     {
         m_connectedAudioOutputChannels = outputChannels;
-        showToast(QStringLiteral("Audio settings updated"), 3000, ToastKind::Info);
+        showStatusMessage(QStringLiteral("Audio settings updated"), 3000, StatusMessageKind::Info);
     }
 }
 

@@ -682,7 +682,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     }
     // Internal bootstrap replacements are implementation details of the same
     // operator-requested connection attempt. Republishing "Connecting" here
-    // used to overwrite the more useful "Waking radio" toast during the
+    // used to overwrite the more useful "Waking radio" status message during the
     // bounded standby delay, making the UI appear to bounce between states.
     // Preserve the current lifecycle message until the command plane either
     // becomes usable or the attempt reaches its final failure.
@@ -3213,7 +3213,7 @@ void RadioBackend::onPortError(errorType err)
     m_bootstrapReconnectPending = false;
 
     // Tear down the failed transport without emitting a generic disconnect
-    // toast. The typed error below is the authoritative explanation and also
+    // status message. The typed error below is the authoritative explanation and also
     // drives MainWindow's reconnect policy.
     shutdownConnection(false, false, m_standbyWakePolicy.complete());
     m_connectionHost.clear();
@@ -3242,7 +3242,7 @@ void RadioBackend::handleCommandPlaneUnavailable()
         // A single clean-session retry distinguishes a crashed predecessor
         // from standby, but it requires no operator action and normally lasts
         // only a few seconds. Keep it in the diagnostic log instead of
-        // replacing the persistent Connecting toast with transient chatter.
+        // replacing the persistent Connecting status message with transient chatter.
         reconnectBootstrapSession();
         return;
     case sdr9700::StandbyWakePolicy::Action::Wake:

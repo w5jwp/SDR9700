@@ -8,6 +8,9 @@
 class StatusBarController : public QObject
 {
   public:
+    static constexpr int kRecommendedStatusMessageCharacters = 64;
+    static constexpr int kMaximumStatusMessageCharacters = 72;
+
     explicit StatusBarController(MainWindow* window);
 
     void updateTransmitState(bool on);
@@ -16,18 +19,18 @@ class StatusBarController : public QObject
     void toggleStatusClockMode();
     void updateSystemStats();
     void buildStatusBar();
-    void showToast(const QString& msg, int durationMs);
-    void showToast(const QString& msg, int durationMs, MainWindow::ToastKind kind);
-    void clearPersistentToast(const QString& expectedMessage);
+    void showStatusMessage(const QString& msg, int durationMs);
+    void showStatusMessage(const QString& msg, int durationMs, MainWindow::StatusMessageKind kind);
+    void clearPersistentStatusMessage(const QString& expectedMessage);
     void updateNetworkQuality(int rttMs);
     void setAutomationEnabled(bool enabled);
     void setAutomationClientCount(int count);
 
   private:
-    void applyToast(const QString& message, MainWindow::ToastKind kind);
+    void applyStatusMessage(const QString& message, MainWindow::StatusMessageKind kind);
 
     MainWindow* m_window{nullptr};
     SystemStatsProvider m_systemStatsProvider;
     QString m_persistentMessage;
-    MainWindow::ToastKind m_persistentKind{MainWindow::ToastKind::Info};
+    MainWindow::StatusMessageKind m_persistentKind{MainWindow::StatusMessageKind::Info};
 };

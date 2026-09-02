@@ -91,7 +91,7 @@ void MemorySyncController::forceRadioMemorySync()
 
     requestRadioMemoryRefresh();
     m_owner->reloadMemoryTable();
-    m_owner->showMemoryToast(QStringLiteral("Memory sync started"));
+    m_owner->showMemoryStatusMessage(QStringLiteral("Memory sync started"));
 }
 
 void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
@@ -116,7 +116,7 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
         m_startupFallbackTimer->start();
         // This brief stability gate is part of radio synchronization, not a
         // separate operator-facing lifecycle stage. Leave the current
-        // connection toast in place until memory polling actually begins.
+        // connection status message in place until memory polling actually begins.
         m_periodicRefreshTimer->start();
         return;
     }
@@ -168,7 +168,7 @@ void MemorySyncController::startInitialRadioMemoryRefresh()
     m_startupFallbackTimer->stop();
     qInfo(logGui()).nospace() << "Initial memory sync stability gate satisfied scope_frames="
                               << m_startupScopeFrameCount;
-    m_owner->m_window->showToast(QStringLiteral("Synchronizing memories"), 0);
+    m_owner->m_window->showStatusMessage(QStringLiteral("Synchronizing memories"), 0);
     requestRadioMemoryRefresh();
 }
 
@@ -181,7 +181,7 @@ void MemorySyncController::startScheduledRadioMemoryRefresh()
     }
 
     m_scheduledRefreshInProgress = true;
-    m_owner->m_window->showToast(QStringLiteral("Scheduled memory sync started"));
+    m_owner->m_window->showStatusMessage(QStringLiteral("Scheduled memory sync started"));
     requestRadioMemoryRefresh();
 }
 
@@ -431,9 +431,9 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
     {
         qWarning(logGui()).noquote() << "Radio memory sync failed after receiving" << m_receivedMemoryKeys.size()
                                      << "memory replies" << (noRadioReplies ? "(no CI-V memory replies)" : "(timeout)");
-        m_owner->m_window->showToast(m_initialSyncComplete ? QStringLiteral("Memory sync timed out")
-                                                           : QStringLiteral("Memory sync timed out; retrying"),
-                                     5000, MainWindow::ToastKind::Warning);
+        m_owner->m_window->showStatusMessage(m_initialSyncComplete ? QStringLiteral("Memory sync timed out")
+                                                                   : QStringLiteral("Memory sync timed out; retrying"),
+                                             5000, MainWindow::StatusMessageKind::Warning);
         if (!m_initialSyncComplete && m_owner->m_window->m_model && m_owner->m_window->m_model->isConnected())
         {
             QTimer::singleShot(kRadioMemoryInitialSyncRetryDelayMs, this,
@@ -469,7 +469,7 @@ void MemorySyncController::finishRadioMemoryRefresh(bool timedOut)
                                   << "stored memories and" << unansweredSlotCount << "unanswered slots";
         if (scheduledRefresh)
         {
-            m_owner->m_window->showToast(QStringLiteral("Scheduled memory sync complete"));
+            m_owner->m_window->showStatusMessage(QStringLiteral("Scheduled memory sync complete"));
         }
     }
     m_owner->rebuildMemoryViews();

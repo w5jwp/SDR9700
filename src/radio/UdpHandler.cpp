@@ -822,7 +822,7 @@ void UdpHandler::dataReceived()
                         // Retained-session recovery normally completes in less
                         // than a second and requires no operator action. Keep
                         // its detailed progress in the log while preserving
-                        // the stable "Connecting to radio" toast.
+                        // the stable "Connecting to radio" status message.
                         beginPredecessorTokenRemoval(*predecessor);
                     }
                     else
@@ -1249,7 +1249,7 @@ void UdpHandler::dataReceived()
                 {
                     qWarning(logUdp()).noquote() << "Unsupported LAN audio codec requested; using mono LPCM16";
                     // Codec normalization is automatic and requires no user
-                    // action. Keep it in diagnostics; presenting it as a toast
+                    // action. Keep it in diagnostics; presenting it as a status message
                     // on every bootstrap replacement obscures the connection
                     // and standby-wake lifecycle.
                     rxSetup.codec = kLpcmMono16;
@@ -1391,7 +1391,7 @@ void UdpHandler::dataReceived()
                         {
                             // Recovery is automatic and non-actionable. Its
                             // bounded attempts remain visible in diagnostics;
-                            // avoid flashing a warning toast between normal
+                            // avoid flashing a warning status message between normal
                             // connection lifecycle stages.
                         }
                         else

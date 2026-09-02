@@ -63,8 +63,8 @@ void MemoryWriteController::startWrites(const QVector<MemoryType>& memories, con
     }
     if (active())
     {
-        m_owner->m_window->showToast(QStringLiteral("Memory write already in progress"), 5000,
-                                     MainWindow::ToastKind::Warning);
+        m_owner->m_window->showStatusMessage(QStringLiteral("Memory write already in progress"), 5000,
+                                             MainWindow::StatusMessageKind::Warning);
         if (completion)
         {
             completion(false);
@@ -185,7 +185,7 @@ void MemoryWriteController::finish(bool failed)
                                    }
                                });
         }
-        m_owner->m_window->showToast(message, 5000, MainWindow::ToastKind::Warning);
+        m_owner->m_window->showStatusMessage(message, 5000, MainWindow::StatusMessageKind::Warning);
     }
     if (completion)
     {
