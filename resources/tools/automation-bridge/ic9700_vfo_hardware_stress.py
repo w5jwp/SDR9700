@@ -280,4 +280,3 @@ if final["receivers"]["MAIN"].get("band") == final["receivers"]["SUB"].get("band
 print("FINAL", json.dumps(final, sort_keys=True), flush=True)
 print("SUMMARY", json.dumps({**COUNTS, "elapsed_seconds": round(time.monotonic() - started, 2)}, sort_keys=True),
       flush=True)
-
