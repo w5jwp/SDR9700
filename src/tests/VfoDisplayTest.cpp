@@ -4,10 +4,12 @@
 #include "VfoSMeter.h"
 #include "UiTheme.h"
 
+#include <QFocusEvent>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QTimer>
 #include <QtTest>
 
 class VfoDisplayTest : public QObject
@@ -16,9 +18,51 @@ class VfoDisplayTest : public QObject
 
   private slots:
     void controllersKeepIndependentIdentityAndFrequency();
+    void manualFrequencyEditingDefersRadioUpdates();
     void selectionPanelPublishesRequestsAndAppliesConfirmedState();
     void dialLockDisablesTuningButLeavesOperationalControlsEnabled();
 };
+
+void VfoDisplayTest::manualFrequencyEditingDefersRadioUpdates()
+{
+    VfoDisplay display(Vfo::Main);
+    auto* frequency = display.findChild<QLineEdit*>(QStringLiteral("vfoFrequency"));
+    QVERIFY(frequency);
+
+    display.setFrequencyHz(145500000ULL);
+    frequency->setCursorPosition(3);
+    QFocusEvent focusIn(QEvent::FocusIn, Qt::MouseFocusReason);
+    QCoreApplication::sendEvent(frequency, &focusIn);
+    display.setFrequencyHz(433920000ULL);
+    QCOMPARE(frequency->text(), QStringLiteral("145.500.000"));
+    QCOMPARE(frequency->cursorPosition(), 3);
+    QVERIFY(QMetaObject::invokeMethod(frequency, "editingFinished", Qt::DirectConnection));
+    QCOMPARE(frequency->text(), QStringLiteral("433.920.000"));
+
+    QCoreApplication::sendEvent(frequency, &focusIn);
+    display.setFrequencyHz(1296000000ULL);
+    auto* editTimer = display.findChild<QTimer*>(QStringLiteral("frequencyEditTimer"));
+    QVERIFY(editTimer);
+    editTimer->setInterval(1);
+    QTRY_COMPARE(frequency->text(), QStringLiteral("1296.000.000"));
+
+    frequency->setText(QStringLiteral("146.52"));
+    QVERIFY(
+        QMetaObject::invokeMethod(frequency, "textEdited", Qt::DirectConnection, Q_ARG(QString, frequency->text())));
+    display.setFrequencyHz(433920000ULL);
+    QCOMPARE(frequency->text(), QStringLiteral("146.52"));
+
+    QVERIFY(QMetaObject::invokeMethod(frequency, "editingFinished", Qt::DirectConnection));
+    QCOMPARE(frequency->text(), QStringLiteral("433.920.000"));
+
+    frequency->setText(QStringLiteral("1296."));
+    QVERIFY(
+        QMetaObject::invokeMethod(frequency, "textEdited", Qt::DirectConnection, Q_ARG(QString, frequency->text())));
+    display.clearFrequency();
+    QCOMPARE(frequency->text(), QStringLiteral("1296."));
+    QVERIFY(QMetaObject::invokeMethod(frequency, "editingFinished", Qt::DirectConnection));
+    QCOMPARE(frequency->text(), QStringLiteral("---.---.---"));
+}
 
 void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
 {

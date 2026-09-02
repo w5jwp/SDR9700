@@ -63,7 +63,9 @@ constexpr int kVolumeSliderWidth = 110;
 constexpr int kVolumeLabelWidth = 30;
 constexpr int kTxDurationWidth = 62;
 constexpr int kTitleControlSpacing = 8;
-constexpr int kVolumeValueSpacing = 2;
+constexpr int kTitleSeparatorSpacing = 16;
+constexpr int kTitleControlGroupLeftOffset = 40;
+constexpr int kVolumeValueSpacing = 6;
 constexpr int kHeartbeatIndicatorWidth = 10;
 constexpr int kHeartbeatIndicatorSpacing = 12;
 constexpr int kHeartbeatLitDurationMs = 100;
@@ -187,12 +189,11 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
 
     root->addStretch(1);
 
-    // Volume controls
-    auto* volSep = new QWidget(this);
-    volSep->setFixedSize(1, 18);
-    volSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
-    root->addWidget(volSep);
-    root->addSpacing(kTitleControlSpacing);
+    auto* controlGroupSep = new QWidget(this);
+    controlGroupSep->setFixedSize(1, 18);
+    controlGroupSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
+    root->addWidget(controlGroupSep);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     m_txDurationButton = new QPushButton(QStringLiteral("00:00:00"), this);
     m_txDurationButton->setFixedSize(kTxDurationWidth, 22);
@@ -200,13 +201,13 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     m_txDurationButton->setStyleSheet(txDurationStyle(false));
     m_txDurationButton->setToolTip(QStringLiteral("Reset transmit duration"));
     root->addWidget(m_txDurationButton);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     auto* txSep = new QWidget(this);
     txSep->setFixedSize(1, 18);
     txSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
     root->addWidget(txSep);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     m_lockBtn = new QPushButton(this);
     m_lockBtn->setFixedSize(24, 22);
@@ -214,13 +215,13 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     m_lockBtn->setCheckable(false);
     setLockStateUnknown();
     root->addWidget(m_lockBtn);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     auto* btnSep = new QWidget(this);
     btnSep->setFixedSize(1, 18);
     btnSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
     root->addWidget(btnSep);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     m_speakerMuteBtn = new QPushButton(this);
     m_speakerMuteBtn->setObjectName(QStringLiteral("titleSpeakerMuteButton"));
@@ -251,13 +252,14 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
         QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
             .arg(UiTheme::Color::TextMuted));
     root->addWidget(m_volumeLabel);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     auto* chromeSep = new QWidget(this);
     chromeSep->setFixedSize(1, 18);
     chromeSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
     root->addWidget(chromeSep);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
+    root->addSpacing(kTitleControlGroupLeftOffset);
 
     m_minimizeBtn = new QPushButton(QStringLiteral("−"), this);
     m_minimizeBtn->setFixedSize(kWindowButtonSize, kTitleBarHeight);
