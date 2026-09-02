@@ -775,6 +775,10 @@ enum class ErrorCode
     AuthFailure,
     ConnectionFailed,
     Disconnected,
+    // The radio explicitly reports a session owned by another client. This is
+    // terminal for the current attempt: SDR9700 must not retry automatically
+    // or send teardown traffic for a session it cannot prove it owns.
+    RadioBusy,
     InvalidRadio,
     PortReservationFailed,
     // LAN login and media allocation succeeded, but a directed CI-V probe did

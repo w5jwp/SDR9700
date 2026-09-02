@@ -33,21 +33,6 @@ inline QString waitingForBusyRadioMessage(const QString& deviceName, const QStri
     return QStringLiteral("Waiting for %1; in use by another station").arg(radio);
 }
 
-inline QString preparingRadioConnectionMessage(const QString& deviceName)
-{
-    return QStringLiteral("Found %1; preparing connection").arg(radioDisplayName(deviceName));
-}
-
-inline QString radioLoginAcceptedMessage()
-{
-    return QStringLiteral("Radio login accepted; requesting CI-V and audio streams");
-}
-
-inline QString recoveringRetainedSessionMessage(const QString& deviceName)
-{
-    return QStringLiteral("Recovering retained SDR9700 session on %1").arg(radioDisplayName(deviceName));
-}
-
 inline QString connectionErrorMessage(const errorType& error)
 {
     if (error.code == ErrorCode::AuthFailure)

@@ -6,15 +6,16 @@
 #include "RadioSessionOwnership.h"
 #include "RadioSessionCorrelation.h"
 #include "RadioSessionRecoveryStore.h"
+#include "RetainedSessionRemovalPolicy.h"
 #include "SpectrumTuningPolicy.h"
 #include "StandbyWakePolicy.h"
 #include "TransmitSafetyPolicy.h"
 #include "TransmitFrequencyPolicy.h"
 #include "TransmitConfigurationPolicy.h"
 
+#include <QCoreApplication>
 #include <QTest>
 #include <array>
-#include <limits>
 
 class OfflinePoliciesTest : public QObject
 {
@@ -41,7 +42,41 @@ class OfflinePoliciesTest : public QObject
     void retainedTokenResetPolicyIsSingleShot();
     void boundsStandbyWakeBootstrap();
     void requiresCompleteTransportRecoveryIdentity();
+    void waitsForRetainedTokenRemovalBeforeReplacementLogin();
+    void refusesRecoveryWhileJournalOwnerIsAlive();
 };
+
+void OfflinePoliciesTest::refusesRecoveryWhileJournalOwnerIsAlive()
+{
+    sdr9700::RadioSessionRecoveryRecord record;
+    record.ownerProcessId = QCoreApplication::applicationPid();
+    QVERIFY(sdr9700::RadioSessionRecoveryStore::ownerProcessIsRunning(record));
+}
+
+void OfflinePoliciesTest::waitsForRetainedTokenRemovalBeforeReplacementLogin()
+{
+    sdr9700::RetainedSessionRemovalPolicy policy;
+    QVERIFY(!policy.pending());
+    QVERIFY(!policy.acknowledge());
+
+    policy.begin();
+    QVERIFY(policy.pending());
+    for (int attempt = 1; attempt <= sdr9700::RetainedSessionRemovalPolicy::kMaxAttempts; ++attempt)
+    {
+        QVERIFY(policy.takeAttempt());
+        QCOMPARE(policy.attempts(), attempt);
+        QVERIFY(policy.pending());
+    }
+    QVERIFY(policy.exhausted());
+    QVERIFY(!policy.takeAttempt());
+
+    policy.begin();
+    QVERIFY(policy.takeAttempt());
+    QVERIFY(policy.acknowledge());
+    QVERIFY(!policy.pending());
+    QVERIFY(!policy.exhausted());
+    QVERIFY(!policy.acknowledge());
+}
 
 void OfflinePoliciesTest::boundsStandbyWakeBootstrap()
 {
@@ -244,6 +279,12 @@ void OfflinePoliciesTest::identifiesExpectedMemoryWriteReadback()
 
 void OfflinePoliciesTest::retriesRecoverableRadioConnectionFailures()
 {
+    QVERIFY(sdr9700::isAutomaticReconnectError(ErrorCode::ConnectionFailed));
+    QVERIFY(sdr9700::isAutomaticReconnectError(ErrorCode::Disconnected));
+    QVERIFY(sdr9700::isAutomaticReconnectError(ErrorCode::PortReservationFailed));
+    QVERIFY(!sdr9700::isAutomaticReconnectError(ErrorCode::RadioBusy));
+    QVERIFY(!sdr9700::isAutomaticReconnectError(ErrorCode::AuthFailure));
+
     QVERIFY(sdr9700::shouldRetryRadioConnection(true, false, false, false, true));
     QVERIFY(sdr9700::shouldRetryRadioConnection(false, true, false, false, true));
     QVERIFY(!sdr9700::shouldRetryRadioConnection(false, false, false, false, true));

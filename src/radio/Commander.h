@@ -86,6 +86,7 @@ class Commander : public RadioCommander
   signals:
     void mainSubExchangeDispatched();
     void commandTransmitted(Funcs func, uchar receiver);
+    void standbyWakeHoldStarted();
 
   private:
     enum class FrameOrigin

@@ -78,7 +78,7 @@ UdpHandler::UdpHandler(UdpConnectionSettings settings, audioSetup rxAudio, audio
     std::fill(std::begin(audioLevelsTxRMS), std::end(audioLevelsTxRMS), 0);
     std::fill(std::begin(audioLevelsRxRMS), std::end(audioLevelsRxRMS), 0);
 
-    qInfo(logUdp()).noquote().nospace() << "Starting UdpHandler user=" << username << " client=" << compName
+    qInfo(logUdp()).noquote().nospace() << "Starting control session client=" << compName
                                         << " rxLatency=" << rxSetup.latency << " txLatency=" << txSetup.latency
                                         << " rxSampleRate=" << rxSetup.sampleRate << " rxCodec=" << rxSetup.codec
                                         << " txSampleRate=" << txSetup.sampleRate << " txCodec=" << txSetup.codec;
@@ -141,12 +141,15 @@ void UdpHandler::init()
     watchdogTimer = new QTimer(this);
     civReadinessTimer = new QTimer(this);
     civReadinessTimer->setSingleShot(true);
+    predecessorRemovalTimer = new QTimer(this);
+    predecessorRemovalTimer->setSingleShot(true);
 
     connect(tokenTimer, &QTimer::timeout, this, std::bind(&UdpHandler::sendToken, this, 0x05));
     connect(areYouThereTimer, &QTimer::timeout, this, &UdpHandler::sendAreYouThere);
     connect(pingTimer, &QTimer::timeout, this, &UdpBase::sendPing);
     connect(idleTimer, &QTimer::timeout, this, std::bind(&UdpBase::sendControl, this, true, 0, 0));
     connect(watchdogTimer, &QTimer::timeout, this, &UdpHandler::monitorSessionHealth);
+    connect(predecessorRemovalTimer, &QTimer::timeout, this, &UdpHandler::sendPredecessorTokenRemovalAttempt);
     connect(civReadinessTimer, &QTimer::timeout, this,
             [this]()
             {
@@ -194,6 +197,10 @@ void UdpHandler::shutdown()
     if (civReadinessTimer)
     {
         civReadinessTimer->stop();
+    }
+    if (predecessorRemovalTimer)
+    {
+        predecessorRemovalTimer->stop();
     }
     if (retransmitTimer)
     {
@@ -352,6 +359,7 @@ void UdpHandler::startMediaStreamsWhenReady()
     const sdr9700::RadioSessionRecoveryRecord recoveryRecord{
         radioIP.toString(),
         compName,
+        0,
         tokRequest,
         token,
         {boundLocalPort(), remotePort(), localSessionId(), remoteSessionId()},
@@ -456,12 +464,25 @@ void UdpHandler::monitorSessionHealth()
     }
 }
 
+void UdpHandler::beginStandbyWakeHold()
+{
+    // Silence is expected after the power-on frame while the IC-9700 boots.
+    // The backend owns this bounded interval and will replace the provisional
+    // session when it expires. Leaving the ordinary CI-V watchdog active here
+    // lets it declare a stall first, bypassing the wake policy and adding an
+    // unrelated reconnect delay even though the wake command succeeded.
+    if (watchdogTimer)
+    {
+        watchdogTimer->stop();
+    }
+    qInfo(logUdp()).noquote() << "Session watchdog paused for bounded standby-wake hold";
+}
+
 bool UdpHandler::releaseAuthenticationToken(bool waitForAcknowledgement)
 {
     if (!m_sessionOwnership.permitsRadioTeardown())
     {
-        qInfo(logUdp()).noquote()
-            << "[SHUTDOWN] authentication negotiation did not acquire the radio session; clearing token locally";
+        qInfo(logUdp()).noquote() << "[SHUTDOWN] no owned radio session; clearing local authentication state only";
         isAuthenticated = false;
         gotAuthOK = false;
         token = 0;
@@ -768,8 +789,8 @@ void UdpHandler::dataReceived()
             if (in->type == 0x04)
             {
                 qInfo(logUdp()).noquote().nospace()
-                    << this->metaObject()->className() << ": received I am here from "
-                    << datagram.senderAddress().toString() << ':' << datagram.senderPort();
+                    << "Control discovery acknowledged remote=" << datagram.senderAddress().toString() << ':'
+                    << datagram.senderPort();
 
                 if (areYouThereTimer->isActive())
                 {
@@ -780,7 +801,7 @@ void UdpHandler::dataReceived()
             }
             else if (in->type == 0x06)
             {
-                qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Received I am ready";
+                qInfo(logUdp()).noquote() << "Control transport ready";
                 if (!m_shuttingDown && !sentPacketLogin)
                 {
                     sentPacketLogin = true;
@@ -795,24 +816,14 @@ void UdpHandler::dataReceived()
                     {
                         m_staleSessionReclaimInProgress = true;
                         m_staleSessionReclaimAttempts = 1;
-                        tokRequest = predecessor->tokenRequest;
-                        token = predecessor->token;
                         qInfo(logUdp()).noquote()
                             << "Removing retained predecessor authentication before initial login owner="
                             << predecessor->ownerName;
-                        if (!m_predecessorTransportsReclaimed)
-                        {
-                            reclaimPredecessorTransports(*predecessor);
-                            m_predecessorTransportsReclaimed = predecessor->hasTransportIdentities();
-                        }
-                        networkStatus recoveryStatus = status;
-                        recoveryStatus.message = sdr9700::recoveringRetainedSessionMessage(devName);
-                        recoveryStatus.userVisibleMessage = true;
-                        recoveryStatus.connectionStage = ConnectionStage::Reconnecting;
-                        recoveryStatus.messageSeverity = MessageSeverity::Warning;
-                        emit haveNetworkStatus(recoveryStatus);
-                        sendToken(0x01);
-                        sendLogin();
+                        // Retained-session recovery normally completes in less
+                        // than a second and requires no operator action. Keep
+                        // its detailed progress in the log while preserving
+                        // the stable "Connecting to radio" toast.
+                        beginPredecessorTokenRemoval(*predecessor);
                     }
                     else
                     {
@@ -924,7 +935,7 @@ void UdpHandler::dataReceived()
                     // disable transport reclaim after a later crash.
                     auto recoveryRecord = sdr9700::RadioSessionRecoveryStore::load(radioIP.toString(), compName)
                                               .value_or(sdr9700::RadioSessionRecoveryRecord{
-                                                  radioIP.toString(), compName, 0, 0, {}, {}, {}});
+                                                  radioIP.toString(), compName, 0, 0, 0, {}, {}, {}});
                     recoveryRecord.tokenRequest = tokRequest;
                     recoveryRecord.token = token;
                     if (m_sessionOwnership.permitsRadioTeardown() &&
@@ -932,7 +943,14 @@ void UdpHandler::dataReceived()
                     {
                         qWarning(logUdp()).noquote() << "Could not update the radio session recovery record";
                     }
-                    if (!streamOpened && !m_streamRequest.pending)
+                    // Authentication can complete before the connection-info
+                    // advertisement tells us whether the radio is available.
+                    // Never submit a zero-port stream request while another
+                    // client owns the radio; setCurrentRadio() will request
+                    // streams after it selects an available radio and reserves
+                    // both local ports.
+                    if (!streamOpened && !m_streamRequest.pending && civPortReservation && audioPortReservation &&
+                        civLocalPort != 0 && audioLocalPort != 0)
                     {
                         sendRequestStream();
                     }
@@ -948,8 +966,8 @@ void UdpHandler::dataReceived()
                 }
                 else
                 {
-                    qWarning(logUdp()).noquote()
-                        << this->metaObject()->className() << ": Unknown response to token renewal? " << in->response;
+                    qWarning(logUdp()).noquote().nospace()
+                        << "Unknown token-renewal response=0x" << Qt::hex << in->response;
                 }
             }
             else if (in->requesttype == 0x01 && in->requestreply == 0x02 && in->type != 0x01)
@@ -966,6 +984,10 @@ void UdpHandler::dataReceived()
                 qInfo(logUdp()).noquote().nospace()
                     << this->metaObject()->className() << ": token removal acknowledged response=0x" << Qt::hex
                     << in->response;
+                if (m_predecessorRemovalPolicy.pending())
+                {
+                    completePredecessorTokenRemoval();
+                }
             }
             break;
         }
@@ -997,6 +1019,13 @@ void UdpHandler::dataReceived()
                 if (in->disc != 0x01)
                 {
                     m_streamRequest.clear();
+                }
+                if (in->error == 0x00000000 && in->disc == 0x01 && currentDisconnect &&
+                    m_predecessorRemovalPolicy.pending())
+                {
+                    m_disconnectStatusReceived = true;
+                    completePredecessorTokenRemoval();
+                    break;
                 }
                 if (in->error != 0x00000000 && !streamOpened)
                 {
@@ -1061,7 +1090,7 @@ void UdpHandler::dataReceived()
                                                         "Radio ended the connection; reconnecting.",
                                                         ErrorCode::Disconnected));
                     }
-                    qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Got radio disconnected.";
+                    qInfo(logUdp()).noquote() << "Radio acknowledged stream disconnection";
                     closeStreams();
                 }
                 else
@@ -1069,7 +1098,8 @@ void UdpHandler::dataReceived()
                     civPort = qFromBigEndian(in->civport);
                     audioPort = qFromBigEndian(in->audioport);
                     qInfo(logUdp()).noquote().nospace()
-                        << "Connection error=" << QString("0x%1").arg(qFromBigEndian(in->error), 8, 16, QChar('0'))
+                        << "Stream request result error="
+                        << QString("0x%1").arg(qFromBigEndian(in->error), 8, 16, QChar('0'))
                         << " disconnected=" << quint8(in->disc) << " civPort=" << civPort << " audioPort=" << audioPort
                         << " rxCodec=" << rxSetup.codec << " txCodec=" << txSetup.codec;
                     if (civPort == 0 || audioPort == 0)
@@ -1102,7 +1132,7 @@ void UdpHandler::dataReceived()
                     m_sessionOwnership.acquire();
                     setDepartureAllowed(true);
                     const sdr9700::RadioSessionRecoveryRecord recoveryRecord{
-                        radioIP.toString(), compName, tokRequest, token, {}, {}, {}};
+                        radioIP.toString(), compName, 0, tokRequest, token, {}, {}, {}};
                     if (!sdr9700::RadioSessionRecoveryStore::save(recoveryRecord))
                     {
                         qWarning(logUdp()).noquote() << "Could not save the radio session recovery record";
@@ -1218,12 +1248,10 @@ void UdpHandler::dataReceived()
                 if (rxSetup.codec != kLpcmMono16 || (txSetup.codec != 0 && txSetup.codec != kLpcmMono16))
                 {
                     qWarning(logUdp()).noquote() << "Unsupported LAN audio codec requested; using mono LPCM16";
-                    networkStatus codecStatus = status;
-                    codecStatus.message =
-                        QStringLiteral("The configured LAN audio codec is unavailable. Using LPCM16.");
-                    codecStatus.userVisibleMessage = true;
-                    codecStatus.messageSeverity = MessageSeverity::Warning;
-                    emit haveNetworkStatus(codecStatus);
+                    // Codec normalization is automatic and requires no user
+                    // action. Keep it in diagnostics; presenting it as a toast
+                    // on every bootstrap replacement obscures the connection
+                    // and standby-wake lifecycle.
                     rxSetup.codec = kLpcmMono16;
                     if (txSetup.codec != 0)
                     {
@@ -1243,13 +1271,7 @@ void UdpHandler::dataReceived()
 
                     if (in->tokrequest == tokRequest)
                     {
-                        qInfo(logUdp()).noquote()
-                            << this->metaObject()->className() << ": Received matching token response";
-                        networkStatus loginStatus = status;
-                        loginStatus.message = sdr9700::radioLoginAcceptedMessage();
-                        loginStatus.userVisibleMessage = true;
-                        loginStatus.connectionStage = ConnectionStage::OpeningStreams;
-                        emit haveNetworkStatus(loginStatus);
+                        qInfo(logUdp()).noquote() << "Login response matched current request; requesting streams";
                         token = in->token;
                         sendToken(0x02);
                         sendToken(0x05);
@@ -1263,8 +1285,7 @@ void UdpHandler::dataReceived()
                     }
                 }
 
-                qInfo(logUdp()).noquote()
-                    << this->metaObject()->className() << ": Detected connection speed " << m_connectionType;
+                qDebug(logUdp()).noquote().nospace() << "Negotiated connection type=" << m_connectionType;
             }
             break;
         }
@@ -1341,7 +1362,7 @@ void UdpHandler::dataReceived()
             if (!streamOpened && radios.size() == 1)
             {
 
-                qDebug(logUdp()).noquote() << "Single radio available, can I connect to it?";
+                qDebug(logUdp()).noquote() << "Single radio advertised; selecting radio index 0";
 
                 if (in->busy)
                 {
@@ -1368,55 +1389,55 @@ void UdpHandler::dataReceived()
                         // still blocks and this process's grant is handled above.
                         if (requestRetainedSessionRecovery(inComputer))
                         {
-                            networkStatus reclaimStatus = status;
-                            reclaimStatus.message = sdr9700::recoveringRetainedSessionMessage(devName);
-                            reclaimStatus.userVisibleMessage = true;
-                            reclaimStatus.connectionStage = ConnectionStage::Reconnecting;
-                            reclaimStatus.messageSeverity = MessageSeverity::Warning;
-                            emit haveNetworkStatus(reclaimStatus);
+                            // Recovery is automatic and non-actionable. Its
+                            // bounded attempts remain visible in diagnostics;
+                            // avoid flashing a warning toast between normal
+                            // connection lifecycle stages.
                         }
                         else
                         {
-                            networkStatus busyStatus = status;
-                            busyStatus.message =
-                                QStringLiteral("Waiting for %1; previous SDR9700 session is still closing")
-                                    .arg(sdr9700::radioDisplayName(devName));
-                            busyStatus.userVisibleMessage = true;
-                            busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
-                            busyStatus.messageSeverity = MessageSeverity::Warning;
-                            emit haveNetworkStatus(busyStatus);
                             sendControl(false, 0x00, in->seq); // Respond with an idle.
+                            if (!m_foreignSessionReported)
+                            {
+                                m_foreignSessionReported = true;
+                                const QString message = QStringLiteral("Radio in use by %1").arg(ip.toString());
+                                qInfo(logUdp()).noquote().nospace() << message << " computer=" << inComputer;
+                                emit haveNetworkError(
+                                    errorType(false, radioIP.toString(), message, ErrorCode::RadioBusy));
+                            }
                         }
                     }
                     else if (in->ipaddress != 0x00)
                     {
-                        networkStatus busyStatus = status;
-                        busyStatus.message = sdr9700::waitingForBusyRadioMessage(devName, inComputer, ip.toString());
-                        busyStatus.userVisibleMessage = true;
-                        busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
-                        busyStatus.messageSeverity = MessageSeverity::Warning;
-                        emit haveNetworkStatus(busyStatus);
                         sendControl(false, 0x00, in->seq); // Respond with an idle
+                        if (!m_foreignSessionReported)
+                        {
+                            m_foreignSessionReported = true;
+                            // Icom clients commonly advertise the generic
+                            // computer name "icom-pc". The peer address is the
+                            // useful identity for an operator deciding which
+                            // station currently owns the radio.
+                            const QString message = QStringLiteral("Radio in use by %1").arg(ip.toString());
+                            qInfo(logUdp()).noquote().nospace() << message << " computer=" << inComputer;
+                            emit haveNetworkError(errorType(false, radioIP.toString(), message, ErrorCode::RadioBusy));
+                        }
                     }
                     else if (inComputer != compName)
                     {
-                        networkStatus busyStatus = status;
-                        busyStatus.message = sdr9700::waitingForBusyRadioMessage(devName, {}, {});
-                        busyStatus.userVisibleMessage = true;
-                        busyStatus.connectionStage = ConnectionStage::WaitingForRadio;
-                        busyStatus.messageSeverity = MessageSeverity::Warning;
-                        emit haveNetworkStatus(busyStatus);
                         sendControl(false, 0x00, in->seq); // Respond with an idle
+                        if (!m_foreignSessionReported)
+                        {
+                            m_foreignSessionReported = true;
+                            const QString message = QStringLiteral("Radio in use by another client");
+                            qInfo(logUdp()).noquote() << message;
+                            emit haveNetworkError(errorType(false, radioIP.toString(), message, ErrorCode::RadioBusy));
+                        }
                     }
                 }
                 else
                 {
-                    qDebug(logUdp()).noquote() << "Attempting to connect to radio";
-                    networkStatus availableStatus = status;
-                    availableStatus.message = sdr9700::preparingRadioConnectionMessage(devName);
-                    availableStatus.userVisibleMessage = true;
-                    availableStatus.connectionStage = ConnectionStage::OpeningStreams;
-                    emit haveNetworkStatus(availableStatus);
+                    qInfo(logUdp()).noquote().nospace() << "Radio available; requesting stream ownership model="
+                                                        << boundedLatin1(in->name, sizeof(in->name));
 
                     setCurrentRadio(0);
                 }
@@ -1512,43 +1533,100 @@ bool UdpHandler::requestRetainedSessionRecovery(const QString& ownerName)
         return false;
     }
 
+    // Recovery is authorized only by a journal whose recorded process is no
+    // longer alive. A same-host SDR9700 name alone is not proof of abandonment:
+    // it may belong to another running instance of this application.
+    const auto predecessor = sdr9700::RadioSessionRecoveryStore::loadRecoverable(radioIP.toString(), ownerName);
+    if (!predecessor)
+    {
+        return false;
+    }
+
     ++m_staleSessionReclaimAttempts;
     m_staleSessionReclaimInProgress = true;
-
-    // A replacement process does not possess the predecessor's six-byte
-    // authentication identifier and therefore cannot remove that token. Start
-    // a fresh login generation instead; the radio can reissue authentication
-    // in its current token response. All replies are correlated before use.
-    qInfo(logUdp()).noquote() << "Recovering retained SDR9700 LAN session from" << ownerName << "attempt"
-                              << m_staleSessionReclaimAttempts << "of" << kMaxStaleSessionReclaimAttempts;
+    qInfo(logUdp()).noquote().nospace() << "Recovering retained SDR9700 LAN session owner=" << ownerName
+                                        << " attempt=" << m_staleSessionReclaimAttempts << '/'
+                                        << kMaxStaleSessionReclaimAttempts;
     if (tokenTimer)
     {
         tokenTimer->stop();
     }
-    const auto predecessor = sdr9700::RadioSessionRecoveryStore::load(radioIP.toString(), ownerName);
-    if (predecessor)
+    qInfo(logUdp()).noquote() << "Removing retained predecessor authentication before fresh login";
+    beginPredecessorTokenRemoval(*predecessor);
+    return true;
+}
+
+void UdpHandler::beginPredecessorTokenRemoval(const sdr9700::RadioSessionRecoveryRecord& predecessor)
+{
+    if (!m_predecessorTransportsReclaimed)
     {
-        tokRequest = predecessor->tokenRequest;
-        token = predecessor->token;
-        qInfo(logUdp()).noquote() << "Removing retained predecessor authentication before fresh login";
-        reclaimPredecessorTransports(*predecessor);
-        sendToken(0x01);
+        reclaimPredecessorTransports(predecessor);
+        m_predecessorTransportsReclaimed = predecessor.hasTransportIdentities();
     }
+
+    tokRequest = predecessor.tokenRequest;
+    token = predecessor.token;
+    m_predecessorOwnerName = predecessor.ownerName;
+    m_tokenRemovalAcknowledged = false;
     m_disconnectStatusReceived = false;
+    m_predecessorRemovalPolicy.begin();
+    // Build the inner request once and resend that same correlated operation.
+    // Generating a new inner sequence for each retry can make a delayed valid
+    // acknowledgement look stale forever when it crosses a retry boundary.
+    m_predecessorRemovalPacket = createTokenPacket(0x01);
+    sendPredecessorTokenRemovalAttempt();
+}
+
+void UdpHandler::sendPredecessorTokenRemovalAttempt()
+{
+    if (m_shuttingDown || udp == nullptr || !m_predecessorRemovalPolicy.pending())
+    {
+        return;
+    }
+    if (!m_predecessorRemovalPolicy.takeAttempt())
+    {
+        qWarning(logUdp()).noquote() << "Radio did not acknowledge retained predecessor token removal after"
+                                     << sdr9700::RetainedSessionRemovalPolicy::kMaxAttempts << "attempts";
+        m_predecessorRemovalPolicy.reset();
+        emit haveNetworkError(errorType(true, radioIP.toString(),
+                                        "The radio did not acknowledge recovery of the retained session.",
+                                        ErrorCode::ConnectionFailed));
+        return;
+    }
+
+    qInfo(logUdp()).noquote() << "Predecessor token removal attempt" << m_predecessorRemovalPolicy.attempts() << "of"
+                              << sdr9700::RetainedSessionRemovalPolicy::kMaxAttempts;
+    sendTrackedPacket(m_predecessorRemovalPacket);
+    predecessorRemovalTimer->start(500);
+}
+
+void UdpHandler::completePredecessorTokenRemoval()
+{
+    if (!m_predecessorRemovalPolicy.acknowledge())
+    {
+        return;
+    }
+    predecessorRemovalTimer->stop();
+    sdr9700::RadioSessionRecoveryStore::removeOwned(radioIP.toString(), m_predecessorOwnerName);
+    qInfo(logUdp()).noquote() << "Retained predecessor token removal acknowledged; starting fresh login";
+
+    token = 0;
     gotAuthOK = false;
     isAuthenticated = false;
     closeStreams();
     m_loginRequest.clear();
     m_tokenRenewalRequest.clear();
+    m_tokenRemovalRequest.clear();
     m_streamRequest.clear();
     m_currentStreamGrantObserved = false;
+    m_predecessorOwnerName.clear();
+    m_predecessorRemovalPacket.clear();
+    m_predecessorTransportsReclaimed = false;
     if (radios.size() == 1)
     {
         setCurrentRadio(0);
     }
     sendLogin();
-
-    return true;
 }
 
 void UdpHandler::reclaimPredecessorTransports(const sdr9700::RadioSessionRecoveryRecord& predecessor)
@@ -1604,8 +1682,8 @@ void UdpHandler::setCurrentRadio(quint8 radio)
 
     closeStreams();
 
-    qInfo(logUdp()).noquote() << "Got Radio" << radio;
-    qInfo(logUdp()).noquote() << "Find available local ports";
+    qInfo(logUdp()).noquote().nospace() << "Selected radio index=" << radio;
+    qInfo(logUdp()).noquote() << "Reserving local CI-V/audio UDP ports";
 
     // Reserve fresh local CI-V/audio ports for every stream request. Reusing a
     // remembered port after its reservation socket was released races another
@@ -1709,14 +1787,15 @@ void UdpHandler::sendAreYouThere()
     // makes the radio look "unreachable" while it is recovering.
     if (areYouThereCounter == kAreYouThereMaxAttempts)
     {
-        qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Radio not responding.";
+        qInfo(logUdp()).noquote() << "Control discovery exhausted without a radio response";
         status.message = "Radio not responding!";
         emit haveNetworkError(
             errorType(true, radioIP.toString(), "Radio not responding; reconnecting.", ErrorCode::ConnectionFailed));
         areYouThereTimer->stop();
         return;
     }
-    qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Sending Are You There";
+    qInfo(logUdp()).noquote() << "Sending control discovery probe attempt" << (areYouThereCounter + 1) << "of"
+                              << kAreYouThereMaxAttempts;
 
     areYouThereCounter++;
     UdpBase::sendControl(false, 0x03, 0x00);
@@ -1725,7 +1804,7 @@ void UdpHandler::sendAreYouThere()
 void UdpHandler::sendLogin()
 {
 
-    qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Sending login packet";
+    qInfo(logUdp()).noquote() << "Sending login request";
 
     tokRequest = static_cast<quint16>(QRandomGenerator::global()->generate());
 
@@ -1750,10 +1829,8 @@ void UdpHandler::sendLogin()
     return;
 }
 
-void UdpHandler::sendToken(uint8_t magic)
+QByteArray UdpHandler::createTokenPacket(uint8_t magic)
 {
-    qDebug(logUdp()).noquote() << this->metaObject()->className() << "Sending Token request: " << magic;
-
     token_packet p{};
     p.len = sizeof(p);
     p.sentid = myId;
@@ -1779,6 +1856,11 @@ void UdpHandler::sendToken(uint8_t magic)
         m_tokenRemovalRequest.begin(requestSequence, tokRequest, token);
     }
 
-    sendTrackedPacket(encodePacket(p));
-    return;
+    return encodePacket(p);
+}
+
+void UdpHandler::sendToken(uint8_t magic)
+{
+    qDebug(logUdp()).noquote().nospace() << "Sending authentication request type=0x" << Qt::hex << magic;
+    sendTrackedPacket(createTokenPacket(magic));
 }

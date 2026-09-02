@@ -30,6 +30,7 @@ struct RadioSessionRecoveryRecord
     // the record after the radio acknowledges token removal.
     QString radioAddress;
     QString ownerName;
+    qint64 ownerProcessId{0};
     quint16 tokenRequest{0};
     quint32 token{0};
     RadioSessionTransportIdentity control;
@@ -48,7 +49,10 @@ class RadioSessionRecoveryStore
     [[nodiscard]] static bool save(const RadioSessionRecoveryRecord& record);
     [[nodiscard]] static std::optional<RadioSessionRecoveryRecord> load(const QString& radioAddress,
                                                                         const QString& ownerName);
+    [[nodiscard]] static std::optional<RadioSessionRecoveryRecord> loadRecoverable(const QString& radioAddress,
+                                                                                   const QString& ownerName);
     [[nodiscard]] static std::optional<RadioSessionRecoveryRecord> loadForRadio(const QString& radioAddress);
+    [[nodiscard]] static bool ownerProcessIsRunning(const RadioSessionRecoveryRecord& record);
     static void removeOwned(const QString& radioAddress, const QString& ownerName);
 
   private:

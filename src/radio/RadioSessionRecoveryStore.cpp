@@ -1,5 +1,6 @@
 #include "RadioSessionRecoveryStore.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -9,10 +10,16 @@
 #include <QStandardPaths>
 #include <limits>
 
+#if defined(Q_OS_UNIX)
+#include <cerrno>
+#include <csignal>
+#endif
+
 namespace
 {
 constexpr auto kRadioAddressKey = "radioAddress";
 constexpr auto kOwnerNameKey = "ownerName";
+constexpr auto kOwnerProcessIdKey = "ownerProcessID";
 constexpr auto kTokenRequestKey = "tokenRequest";
 constexpr auto kTokenKey = "token";
 constexpr auto kControlKey = "control";
@@ -90,6 +97,7 @@ bool RadioSessionRecoveryStore::save(const RadioSessionRecoveryRecord& record)
     QJsonObject object;
     object.insert(QString::fromLatin1(kRadioAddressKey), record.radioAddress);
     object.insert(QString::fromLatin1(kOwnerNameKey), record.ownerName);
+    object.insert(QString::fromLatin1(kOwnerProcessIdKey), QCoreApplication::applicationPid());
     object.insert(QString::fromLatin1(kTokenRequestKey), static_cast<qint64>(record.tokenRequest));
     object.insert(QString::fromLatin1(kTokenKey), static_cast<qint64>(record.token));
     // A token-only record is still useful during the short interval between
@@ -133,10 +141,12 @@ std::optional<RadioSessionRecoveryRecord> RadioSessionRecoveryStore::load(const 
     RadioSessionRecoveryRecord record;
     record.radioAddress = object.value(QString::fromLatin1(kRadioAddressKey)).toString();
     record.ownerName = object.value(QString::fromLatin1(kOwnerNameKey)).toString();
+    record.ownerProcessId = object.value(QString::fromLatin1(kOwnerProcessIdKey)).toInteger(-1);
     const qint64 tokenRequest = object.value(QString::fromLatin1(kTokenRequestKey)).toInteger(-1);
     const qint64 token = object.value(QString::fromLatin1(kTokenKey)).toInteger(-1);
-    if (record.radioAddress != radioAddress || record.ownerName != ownerName || tokenRequest < 0 ||
-        tokenRequest > std::numeric_limits<quint16>::max() || token < 0 || token > std::numeric_limits<quint32>::max())
+    if (record.radioAddress != radioAddress || record.ownerName != ownerName || record.ownerProcessId <= 0 ||
+        tokenRequest < 0 || tokenRequest > std::numeric_limits<quint16>::max() || token < 0 ||
+        token > std::numeric_limits<quint32>::max())
     {
         return std::nullopt;
     }
@@ -165,6 +175,26 @@ std::optional<RadioSessionRecoveryRecord> RadioSessionRecoveryStore::load(const 
     return record;
 }
 
+std::optional<RadioSessionRecoveryRecord> RadioSessionRecoveryStore::loadRecoverable(const QString& radioAddress,
+                                                                                     const QString& ownerName)
+{
+#if !defined(Q_OS_UNIX)
+    // SDR9700 currently supports Linux and macOS. Refuse recovery on any
+    // future platform until it has an equivalent side-effect-free process
+    // liveness check; guessing here could tear down another live client.
+    Q_UNUSED(radioAddress);
+    Q_UNUSED(ownerName);
+    return std::nullopt;
+#else
+    const auto record = load(radioAddress, ownerName);
+    if (!record || ownerProcessIsRunning(*record))
+    {
+        return std::nullopt;
+    }
+    return record;
+#endif
+}
+
 std::optional<RadioSessionRecoveryRecord> RadioSessionRecoveryStore::loadForRadio(const QString& radioAddress)
 {
     QFile file(filePath());
@@ -184,7 +214,25 @@ std::optional<RadioSessionRecoveryRecord> RadioSessionRecoveryStore::loadForRadi
     {
         return std::nullopt;
     }
-    return load(radioAddress, ownerName);
+    return loadRecoverable(radioAddress, ownerName);
+}
+
+bool RadioSessionRecoveryStore::ownerProcessIsRunning(const RadioSessionRecoveryRecord& record)
+{
+#if defined(Q_OS_UNIX)
+    if (record.ownerProcessId <= 0)
+    {
+        return false;
+    }
+    errno = 0;
+    return ::kill(static_cast<pid_t>(record.ownerProcessId), 0) == 0 || errno == EPERM;
+#else
+    // loadRecoverable() refuses recovery before reaching this helper on an
+    // unsupported platform. Returning true preserves that fail-closed rule if
+    // another caller performs a direct liveness query in the future.
+    Q_UNUSED(record);
+    return true;
+#endif
 }
 
 void RadioSessionRecoveryStore::removeOwned(const QString& radioAddress, const QString& ownerName)

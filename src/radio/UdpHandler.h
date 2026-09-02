@@ -28,6 +28,7 @@
 #include "RadioSessionOwnership.h"
 #include "RadioSessionCorrelation.h"
 #include "RadioSessionRecoveryStore.h"
+#include "RetainedSessionRemovalPolicy.h"
 
 class UdpHandler : public UdpBase
 {
@@ -66,6 +67,7 @@ class UdpHandler : public UdpBase
                      bool over);
     void setPttActive(bool active);
     void queueDtmfPcm(const QByteArray& pcm);
+    void beginStandbyWakeHold();
 
   signals:
     void haveDataFromPort(QByteArray data);
@@ -88,6 +90,7 @@ class UdpHandler : public UdpBase
 
     void sendRequestStream();
     void sendLogin();
+    QByteArray createTokenPacket(uint8_t magic);
     void sendToken(uint8_t magic);
     bool requestRetainedSessionRecovery(const QString& ownerName);
     void closeStreams();
@@ -97,6 +100,9 @@ class UdpHandler : public UdpBase
     bool reserveStreamPorts();
     void startMediaStreamsWhenReady();
     void reclaimPredecessorTransports(const sdr9700::RadioSessionRecoveryRecord& predecessor);
+    void beginPredecessorTokenRemoval(const sdr9700::RadioSessionRecoveryRecord& predecessor);
+    void sendPredecessorTokenRemovalAttempt();
+    void completePredecessorTokenRemoval();
 
     bool gotA8ReplyID = false;
     bool gotAuthOK = false;
@@ -126,6 +132,9 @@ class UdpHandler : public UdpBase
     bool m_currentStreamGrantObserved = false;
     bool m_predecessorTransportsReclaimed = false;
     int m_staleSessionReclaimAttempts = 0;
+    QString m_predecessorOwnerName;
+    QByteArray m_predecessorRemovalPacket;
+    sdr9700::RetainedSessionRemovalPolicy m_predecessorRemovalPolicy;
     RadioSessionWatchdog m_sessionWatchdog;
 
     quint16 controlPort;
@@ -144,6 +153,7 @@ class UdpHandler : public UdpBase
     QString devName;
     QString compName;
     QString audioType;
+    bool m_foreignSessionReported{false};
     QString username;
     quint16 tokRequest{0};
     quint32 token{0};
@@ -155,6 +165,7 @@ class UdpHandler : public UdpBase
 
     QTimer* tokenTimer = nullptr;
     QTimer* civReadinessTimer = nullptr;
+    QTimer* predecessorRemovalTimer = nullptr;
 
     quint8 civId = 0;
     quint16 rxSampleRates = 0;

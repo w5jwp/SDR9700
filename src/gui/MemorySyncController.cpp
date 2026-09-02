@@ -114,7 +114,9 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
         m_startupScopeFrameCount = 0;
         m_startupStabilityTimer->stop();
         m_startupFallbackTimer->start();
-        m_owner->m_window->showToast(QStringLiteral("Waiting for stable radio data"), 4000);
+        // This brief stability gate is part of radio synchronization, not a
+        // separate operator-facing lifecycle stage. Leave the current
+        // connection toast in place until memory polling actually begins.
         m_periodicRefreshTimer->start();
         return;
     }
@@ -166,7 +168,7 @@ void MemorySyncController::startInitialRadioMemoryRefresh()
     m_startupFallbackTimer->stop();
     qInfo(logGui()).nospace() << "Initial memory sync stability gate satisfied scope_frames="
                               << m_startupScopeFrameCount;
-    m_owner->m_window->showToast(QStringLiteral("Syncing memories"), 4000);
+    m_owner->m_window->showToast(QStringLiteral("Synchronizing memories"), 0);
     requestRadioMemoryRefresh();
 }
 

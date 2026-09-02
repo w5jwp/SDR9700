@@ -72,6 +72,7 @@ set(SDR9700_CORE_SOURCES
     radio/RadioSessionOwnership.h
     radio/RadioSessionCorrelation.h
     radio/RadioSessionRecoveryStore.h
+    radio/RetainedSessionRemovalPolicy.h
     radio/RadioSessionRecoveryStore.cpp
     core/SMeterScale.h
     core/Vfo.h

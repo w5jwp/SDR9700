@@ -236,7 +236,7 @@ RadioBackend::RadioBackend(QObject* parent)
                 if (m_scopeSyncDegraded)
                 {
                     setScopeSyncDegraded(false);
-                    emit statusMessage(QStringLiteral("Spectrum scope sync complete"), MessageSeverity::Info);
+                    qInfo(logRadio()).noquote() << "Spectrum scope synchronization complete";
                 }
                 m_scopeDataReceived = true;
                 updateReadyState();
@@ -679,7 +679,16 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
         // that could start MainWindow's automatic reconnect timer.
         shutdownConnection(false, false, previousRadioWasReady);
     }
-    emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to %1").arg(host));
+    // Internal bootstrap replacements are implementation details of the same
+    // operator-requested connection attempt. Republishing "Connecting" here
+    // used to overwrite the more useful "Waking radio" toast during the
+    // bounded standby delay, making the UI appear to bounce between states.
+    // Preserve the current lifecycle message until the command plane either
+    // becomes usable or the attempt reaches its final failure.
+    if (!bootstrapReconnect)
+    {
+        emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Connecting to radio"));
+    }
 
     QHostAddress radioAddress;
     if (radioAddress.setAddress(host) && radioAddress.protocol() != QAbstractSocket::IPv4Protocol)
@@ -2703,10 +2712,7 @@ void RadioBackend::updateReadyState()
                                    requestPostReadyRadioState();
                                }
                            });
-        emit connectionStageChanged(ConnectionStage::SyncingRadioState,
-                                    m_scopeSyncDegraded
-                                        ? QStringLiteral("Radio state synced; syncing memories and spectrum scope")
-                                        : QStringLiteral("Radio state synced; syncing memories"));
+        emit connectionStageChanged(ConnectionStage::SyncingRadioState, QStringLiteral("Synchronizing memories"));
         invokeOnCurrentCommander([](Commander* c) { c->enableAudio(); });
     }
 }
@@ -2959,8 +2965,7 @@ void RadioBackend::onLanReady()
                        });
 
     emit connected();
-    emit connectionStageChanged(ConnectionStage::SyncingRadioState,
-                                QStringLiteral("Radio streams ready; syncing radio state"));
+    emit connectionStageChanged(ConnectionStage::SyncingRadioState, QStringLiteral("Synchronizing radio"));
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->start();
@@ -3187,15 +3192,17 @@ void RadioBackend::handleCommandPlaneUnavailable()
     case sdr9700::StandbyWakePolicy::Action::RetrySession:
         qInfo(logRadio()).noquote()
             << "IC-9700 command plane was silent; retrying once with a fresh LAN session before standby wake";
-        emit connectionStageChanged(ConnectionStage::Reconnecting,
-                                    QStringLiteral("Radio did not respond; retrying connection"));
+        // A single clean-session retry distinguishes a crashed predecessor
+        // from standby, but it requires no operator action and normally lasts
+        // only a few seconds. Keep it in the diagnostic log instead of
+        // replacing the persistent Connecting toast with transient chatter.
         reconnectBootstrapSession();
         return;
     case sdr9700::StandbyWakePolicy::Action::Wake:
     {
         const int wakeAttempt = m_standbyWakePolicy.wakeAttempts();
         qInfo(logRadio()).noquote().nospace() << "Sending IC-9700 standby wake attempt=" << wakeAttempt;
-        emit connectionStageChanged(ConnectionStage::Connecting, QStringLiteral("Waking radio from standby"));
+        emit connectionStageChanged(ConnectionStage::WaitingForRadio, QStringLiteral("Waking radio from standby mode"));
         invokeOnCurrentCommander([](Commander* commandSession) { commandSession->sendStandbyWake(); });
 
         // The radio needs time to boot its CI-V command plane. Keep the current

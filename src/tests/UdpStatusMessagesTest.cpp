@@ -9,7 +9,6 @@ class UdpStatusMessagesTest : public QObject
   private slots:
     void identifiesBusyStation();
     void handlesMissingStationName();
-    void describesConnectionLifecycle();
     void preservesSpecificConnectionFailures();
     void describesAutomaticReconnect();
 };
@@ -27,16 +26,6 @@ void UdpStatusMessagesTest::handlesMissingStationName()
              QStringLiteral("Waiting for IC-9700; in use by station at 192.0.2.10"));
     QCOMPARE(sdr9700::waitingForBusyRadioMessage({}, {}, {}),
              QStringLiteral("Waiting for radio; in use by another station"));
-}
-
-void UdpStatusMessagesTest::describesConnectionLifecycle()
-{
-    QCOMPARE(sdr9700::preparingRadioConnectionMessage(QStringLiteral("IC-9700")),
-             QStringLiteral("Found IC-9700; preparing connection"));
-    QCOMPARE(sdr9700::radioLoginAcceptedMessage(),
-             QStringLiteral("Radio login accepted; requesting CI-V and audio streams"));
-    QCOMPARE(sdr9700::recoveringRetainedSessionMessage(QStringLiteral("IC-9700")),
-             QStringLiteral("Recovering retained SDR9700 session on IC-9700"));
 }
 
 void UdpStatusMessagesTest::preservesSpecificConnectionFailures()

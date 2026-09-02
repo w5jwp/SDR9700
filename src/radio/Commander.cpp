@@ -174,6 +174,7 @@ void Commander::commSetup(quint16 radioCivAddr, UdpConnectionSettings settings, 
     connect(udp, &UdpHandler::setRadioUsage, this, &Commander::radioUsage);
     connect(this, &Commander::selectedRadio, udp, &UdpHandler::setCurrentRadio);
     connect(this, &Commander::requestEnableAudio, udp, &UdpHandler::enableAudio);
+    connect(this, &Commander::standbyWakeHoldStarted, udp, &UdpHandler::beginStandbyWakeHold);
     connect(udp, &UdpHandler::streamReady, this, &Commander::lanReady);
 
     commonSetup();
@@ -576,6 +577,10 @@ void Commander::sendStandbyWake()
     frame.append("\x18\x01", 2);
     frame.append('\xFD');
 
+    // Pause the provisional session's ordinary health watchdog before sending
+    // power-on. RadioBackend owns the longer, bounded boot hold and reconnects
+    // this transport afterward; silence during that interval is intentional.
+    emit standbyWakeHoldStarted();
     qInfo(logRadioTraffic()).noquote() << "CI-V TX standby wake" << frame.toHex(' ');
     ++m_schedulerDiagnostics.transmittedFrames;
     ++m_schedulerDiagnostics.directFrames;
@@ -1225,8 +1230,9 @@ void Commander::parseData(const QByteArray& dataInput)
                 // Echo of a local broadcast request.
                 if (radioPoweredOn)
                 {
-                    qDebug(logRadio()).noquote() << "Echo caught:" << data.toHex(' ');
-                    qWarning(logRadio()).noquote() << "Radio is available but may be powered-off";
+                    qDebug(logRadioTraffic()).noquote() << "Broadcast CI-V echo received" << data.toHex(' ');
+                    qWarning(logRadio()).noquote()
+                        << "CI-V broadcast was echoed without a directed reply; command plane may be unavailable";
                     queue->receiveValue(funcPowerControl, QVariant::fromValue<bool>(false), 0);
                     radioPoweredOn = false;
                 }
@@ -1700,7 +1706,8 @@ Commander::ReplyParseResult Commander::parseFeatureReply(Funcs func, QVariant& v
             {
                 this->model = kRadioModelId;
             }
-            qInfo(logRadio()).noquote() << QString("Have new radio ID: 0x%1").arg(radioCaps.modelID, 2, 16);
+            qInfo(logRadio()).noquote()
+                << QStringLiteral("Directed CI-V identity confirmed radioId=0x%1").arg(radioCaps.modelID, 2, 16);
             determineRadioCaps();
         }
         value.setValue(radioCaps.modelID);
