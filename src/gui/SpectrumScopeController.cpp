@@ -33,7 +33,7 @@ namespace
 {
 constexpr int kSpectrumToolbarHeight = 29;
 constexpr int kExchangeScopeSyncTimeoutMs = 2000;
-constexpr int kVfoShelfShadowHeightPx = 8;
+constexpr int kShelfShadowHeightPx = 8;
 } // namespace
 
 SpectrumScopeController::SpectrumScopeController(MainWindow* window) : QObject(window), m_window(window)
@@ -261,10 +261,10 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     vfoShelfShadowLayout->setContentsMargins(kControlStripMargins.left(), 0, kControlStripMargins.right(), 0);
     vfoShelfShadowLayout->setSpacing(0);
     auto* vfoShelfShadow = new QWidget(vfoShelfShadowRow);
-    vfoShelfShadow->setFixedHeight(kVfoShelfShadowHeightPx);
-    vfoShelfShadow->setStyleSheet(QStringLiteral(
-        "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 4, 8, 220), "
-        "stop:1 rgba(0, 8, 15, 0)); border-top: 1px solid #2a404f;"));
+    vfoShelfShadow->setFixedHeight(kShelfShadowHeightPx);
+    vfoShelfShadow->setStyleSheet(
+        QStringLiteral("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 4, 8, 220), "
+                       "stop:1 rgba(0, 8, 15, 0)); border-top: 1px solid #2a404f;"));
     vfoShelfShadowLayout->addWidget(vfoShelfShadow);
     vbox->addWidget(vfoShelfShadowRow);
     // Preserve the existing 20 px separation below the VFO controls while
@@ -501,7 +501,20 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     spectrumFrameLayout->addWidget(m_window->m_spectrumScopeDisplay);
     spectrumInsetLayout->addWidget(spectrumFrame);
     vbox->addWidget(spectrumInset, 1);
-    vbox->addSpacing(20);
+    auto* waterfallShelfShadowRow = new QWidget(m_window->centralWidget());
+    waterfallShelfShadowRow->setObjectName(QStringLiteral("waterfallShelfShadowRow"));
+    auto* waterfallShelfShadowLayout = new QHBoxLayout(waterfallShelfShadowRow);
+    waterfallShelfShadowLayout->setContentsMargins(kControlStripMargins.left(), 0, kControlStripMargins.right(), 0);
+    waterfallShelfShadowLayout->setSpacing(0);
+    auto* waterfallShelfShadow = new QWidget(waterfallShelfShadowRow);
+    waterfallShelfShadow->setObjectName(QStringLiteral("waterfallShelfShadow"));
+    waterfallShelfShadow->setFixedHeight(kShelfShadowHeightPx);
+    waterfallShelfShadow->setStyleSheet(
+        QStringLiteral("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 4, 8, 220), "
+                       "stop:1 rgba(0, 8, 15, 0)); border-top: 1px solid #2a404f;"));
+    waterfallShelfShadowLayout->addWidget(waterfallShelfShadow);
+    vbox->addWidget(waterfallShelfShadowRow);
+    vbox->addSpacing(17);
 
     m_window->m_spectrumScopeTuneCommitTimer = new QTimer(m_window);
     m_window->m_spectrumScopeTuneCommitTimer->setSingleShot(true);
