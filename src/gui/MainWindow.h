@@ -235,6 +235,7 @@ class MainWindow : public QMainWindow
     QLabel* m_cpuLabel{nullptr};
     QLabel* m_memLabel{nullptr};
     bool m_controlsLocked{false};
+    bool m_controlLockKnown{false};
 
 #ifdef HAVE_HIDAPI
     IcomRC28Manager* m_icomRC28Manager{nullptr};
@@ -297,6 +298,7 @@ class MainWindow : public QMainWindow
     void updateSystemStats();
     void toggleControlLock();
     void updateControlLockIndicator();
+    void syncControlLockFromRadioState();
     void updateSpectrumScopeBandLimits(quint64 hz);
     int tuningStepHz() const;
     void applyRadioTuningStep();

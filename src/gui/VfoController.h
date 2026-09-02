@@ -27,6 +27,7 @@ class VfoController : public QObject
     void clearFrequency();
     void setOperatingEnabled(bool enabled);
     void setUserInteractionEnabled(bool enabled);
+    void setTuningInteractionEnabled(bool enabled);
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
     void captureExchangeableControlState();

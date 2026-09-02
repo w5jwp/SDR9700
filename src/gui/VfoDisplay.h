@@ -24,6 +24,7 @@ class VfoDisplay : public QWidget
     void clearTransmitFrequency();
     void clearFrequency();
     void setOperatingEnabled(bool enabled);
+    void setTuningEnabled(bool enabled);
     void setBandText(const QString& text);
     void setModeText(const QString& text);
     void setSMeterValue(int rawValue);
@@ -58,4 +59,5 @@ class VfoDisplay : public QWidget
     VfoSMeter* m_sMeter{nullptr};
     QHash<QString, QPushButton*> m_receiverControlButtons;
     bool m_operatingEnabled{true};
+    bool m_tuningEnabled{true};
 };

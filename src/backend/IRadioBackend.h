@@ -75,6 +75,7 @@ class IRadioBackend : public QObject
     virtual bool setPtt(bool on) = 0;
     virtual void setTxPower(int level) = 0; // 0-255
     virtual void setTuningStep(int step) = 0;
+    virtual void setDialLockEnabled(bool on) = 0;
     virtual void selectVfo(Vfo vfo) = 0;
     virtual void exchangeMainSub() = 0;
     virtual void setVfoFrequencyHz(Vfo vfo, quint64 hz) = 0;

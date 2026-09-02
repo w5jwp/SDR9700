@@ -214,7 +214,7 @@ void RadioCommandController::applyOffsetSelection(duplexMode_t mode, quint64 off
 
 void RadioCommandController::showToneMenu(const QPoint& position)
 {
-    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_vfo || !m_window->m_model->isReady())
     {
         return;
     }
@@ -315,7 +315,7 @@ void RadioCommandController::showToneMenu(const QPoint& position)
 
 void RadioCommandController::applyToneSelection(rptAccessTxRx_t mode, ushort value)
 {
-    if (!m_window->m_vfo || m_window->m_controlsLocked)
+    if (!m_window->m_vfo)
     {
         return;
     }
@@ -342,7 +342,7 @@ void RadioCommandController::applyToneSelection(rptAccessTxRx_t mode, ushort val
 
 void RadioCommandController::showCompressorMenu(const QPoint& position)
 {
-    if (!m_window->m_vfo || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_vfo || !m_window->m_model->isReady())
     {
         return;
     }

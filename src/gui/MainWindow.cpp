@@ -35,6 +35,7 @@
 #include "core/IcomRC28Manager.h"
 #endif
 #include "models/RadioModel.h"
+#include "models/RadioState.h"
 #include "models/VfoModel.h"
 #include "models/SpectrumScopeModel.h"
 
@@ -64,6 +65,7 @@
 #include <QFormLayout>
 #include <QFile>
 #include <QHeaderView>
+#include <QIcon>
 #include <QKeySequence>
 #include <QMessageBox>
 #include <QMediaDevices>
@@ -165,6 +167,8 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
     connect(m_model, &RadioModel::errorOccurred, this, &MainWindow::onError);
     connect(m_model, &RadioModel::networkQualityChanged, this, &MainWindow::updateNetworkQuality);
     connect(m_model, &RadioModel::sessionHeartbeat, m_titleBar, &MainTitleBar::pulseRadioHeartbeat);
+    connect(m_model->radioState(), &sdr9700::RadioState::sharedStateChanged, this,
+            &MainWindow::syncControlLockFromRadioState);
     connect(m_memoryController, &MemoryController::initialMemorySyncChanged, this,
             [this](bool) { onRadioReadyChanged(m_model && m_model->isReady()); });
 
@@ -459,7 +463,7 @@ void MainWindow::buildToolBar()
     connect(m_titleBar, &MainTitleBar::volumeChanged, this,
             [this](int value)
             {
-                if (!radioUiReady() || m_controlsLocked)
+                if (!radioUiReady())
                 {
                     return;
                 }
@@ -671,7 +675,7 @@ void MainWindow::buildRadioControls()
         connect(m_titleBar, &MainTitleBar::lanModChanged, this,
                 [this](int value)
                 {
-                    if (!radioUiReady() || m_controlsLocked)
+                    if (!radioUiReady())
                     {
                         return;
                     }
@@ -946,16 +950,19 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     }
     if (m_mainVfoController)
     {
-        m_mainVfoController->setUserInteractionEnabled(controlsEnabled);
+        m_mainVfoController->setUserInteractionEnabled(enabled);
+        m_mainVfoController->setTuningInteractionEnabled(controlsEnabled);
     }
     if (m_subVfoController)
     {
-        m_subVfoController->setUserInteractionEnabled(controlsEnabled);
+        m_subVfoController->setUserInteractionEnabled(enabled);
+        m_subVfoController->setTuningInteractionEnabled(controlsEnabled);
     }
     if (m_titleBar)
     {
         m_titleBar->setVolumeEnabled(enabled);
-        m_titleBar->setLanModEnabled(controlsEnabled);
+        m_titleBar->setLanModEnabled(enabled);
+        m_titleBar->setLockEnabled(enabled && m_controlLockKnown);
     }
     if (m_pttBtn)
     {
@@ -964,10 +971,10 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     if (m_spectrumScopeDisplay)
     {
         const bool scopeReady = m_spectrumScopeController && m_spectrumScopeController->interactionReady();
-        m_spectrumScopeDisplay->setInteractionLocked(m_controlsLocked || !scopeReady);
+        m_spectrumScopeDisplay->setInteractionLocked(!scopeReady);
         if (m_vfoSelectionController)
         {
-            m_vfoSelectionController->setReceiverContextReady(!m_controlsLocked && scopeReady);
+            m_vfoSelectionController->setReceiverContextReady(scopeReady);
         }
     }
 }
@@ -1015,7 +1022,22 @@ void MainWindow::applyActiveVfoFromRadio()
 
 void MainWindow::toggleControlLock()
 {
-    m_controlsLocked = !m_controlsLocked;
+    if (!m_controlLockKnown || !m_model || !m_model->isReady())
+    {
+        return;
+    }
+    if (auto* backend = m_model->backend())
+    {
+        backend->setDialLockEnabled(!m_controlsLocked);
+    }
+}
+
+void MainWindow::syncControlLockFromRadioState()
+{
+    const auto* state = m_model ? m_model->radioState() : nullptr;
+    const std::optional<bool> reportedLock = state ? state->shared().dialLockEnabled : std::nullopt;
+    m_controlLockKnown = reportedLock.has_value();
+    m_controlsLocked = reportedLock.value_or(false);
     updateControlLockIndicator();
     setRadioControlsEnabled(radioUiReady());
     updateIcomRC28Leds();
@@ -1071,9 +1093,17 @@ void MainWindow::updateIcomRC28Leds() {}
 
 void MainWindow::updateControlLockIndicator()
 {
+    const bool presentConfirmedState = m_controlLockKnown && radioUiReady();
     if (m_titleBar)
     {
-        m_titleBar->setLocked(m_controlsLocked);
+        if (presentConfirmedState)
+        {
+            m_titleBar->setLocked(m_controlsLocked);
+        }
+        else
+        {
+            m_titleBar->setLockStateUnknown();
+        }
     }
 
     if (!m_lockIndicator)
@@ -1081,21 +1111,28 @@ void MainWindow::updateControlLockIndicator()
         return;
     }
 
-    m_lockIndicator->setText(QStringLiteral("LOCK"));
+    const QString lockIcon = !presentConfirmedState
+                                 ? QStringLiteral(":/images/icons/control_lock_unknown.svg")
+                                 : m_controlsLocked ? QStringLiteral(":/images/icons/control_lock_locked.svg")
+                                                    : QStringLiteral(":/images/icons/control_lock_unlocked.svg");
+    m_lockIndicator->setPixmap(QIcon(lockIcon).pixmap(QSize(21, 21)));
     m_lockIndicator->setStyleSheet(
-        m_controlsLocked ? QStringLiteral("QLabel { color: %1; background: %2; font-weight: bold; font-size: 21px; "
-                                          "border-radius: 4px; padding: 0px 1px; }")
-                               .arg(UiTheme::Color::PanelDark, UiTheme::Color::Warning)
-                         : QStringLiteral("QLabel { color: %1; font-weight: bold; font-size: 21px; }")
-                               .arg(UiTheme::Color::TextStatusSecondary));
-    const QString tooltip = m_controlsLocked ? QStringLiteral("Controls Locked\nClick to unlock.")
-                                             : QStringLiteral("Controls Unlocked\nClick to lock.");
+        presentConfirmedState && m_controlsLocked
+            ? QStringLiteral("QLabel { background: %1; border: 1px solid %2; border-radius: 4px; padding: 0px 1px; }")
+                  .arg(UiTheme::Color::PanelDark, UiTheme::Color::Warning)
+            : QStringLiteral("QLabel { background: transparent; border: none; padding: 0px 1px; }"));
+    const QString tooltip = !presentConfirmedState
+                                ? QStringLiteral("Dial lock state syncing")
+                                : m_controlsLocked ? QStringLiteral("Dial Locked\nClick to unlock.")
+                                                   : QStringLiteral("Dial Unlocked\nClick to lock.");
     m_lockIndicator->setToolTip(tooltip);
     if (m_lockWidget)
     {
         m_lockWidget->setToolTip(tooltip);
-        m_lockWidget->setAccessibleName(m_controlsLocked ? QStringLiteral("Controls locked")
-                                                         : QStringLiteral("Controls unlocked"));
+        m_lockWidget->setAccessibleName(!presentConfirmedState
+                                            ? QStringLiteral("Dial lock state syncing")
+                                            : m_controlsLocked ? QStringLiteral("Dial locked")
+                                                               : QStringLiteral("Dial unlocked"));
     }
 }
 
@@ -1385,6 +1422,7 @@ void MainWindow::onRadioReadyChanged(bool ready)
     const bool notifyReady = uiReady && !m_spectrumScopeStillSyncingAfterReady && !m_radioUiReadyNotified;
     m_radioUiReadyNotified = uiReady;
     setRadioControlsEnabled(uiReady);
+    updateControlLockIndicator();
     if (!m_connStateLabel || !connected)
     {
         return;

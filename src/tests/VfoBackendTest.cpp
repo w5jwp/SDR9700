@@ -75,6 +75,7 @@ class FakeRadioBackend : public IRadioBackend
     }
     void setTxPower(int value) override { txPower = value; }
     void setTuningStep(int) override {}
+    void setDialLockEnabled(bool enabled) override { dialLockEnabled = enabled; }
     void selectVfo(Vfo value) override { selectedVfo = value; }
     void exchangeMainSub() override { ++exchangeCalls; }
     void setVfoFrequencyHz(Vfo vfo, quint64 hz) override
@@ -143,6 +144,7 @@ class FakeRadioBackend : public IRadioBackend
     Vfo selectedVfo{Vfo::Main};
     Vfo requestedVfoState{Vfo::Main};
     bool dualWatchEnabled{false};
+    bool dialLockEnabled{false};
     bool dualWatchAccepted{true};
     int dualWatchCalls{0};
     int exchangeCalls{0};
@@ -488,9 +490,13 @@ void VfoBackendTest::radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate
     emit backend.radioValueConfirmed(funcSplitStatus, QVariant::fromValue(dmDupMinus), 0);
     QCOMPARE(state.receiver(Vfo::Main).duplexMode, std::optional<duplexMode_t>(dmDupMinus));
 
+    emit backend.radioValueConfirmed(funcDialLock, QVariant::fromValue(true), 0);
+    QCOMPARE(state.shared().dialLockEnabled, std::optional<bool>(true));
+
     emit backend.readyChanged(true);
     emit backend.readyChanged(false);
     QVERIFY(!state.receiver(Vfo::Main).frequencyHz.has_value());
+    QVERIFY(!state.shared().dialLockEnabled.has_value());
     // A temporary loss of readiness invalidates the live snapshot, but the
     // confirmed recall remains useful if this same radio session recovers.
     QCOMPARE(state.bandRecall(Vfo::Main, band2m)->duplexMode, std::optional<duplexMode_t>(dmDupMinus));

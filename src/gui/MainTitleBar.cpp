@@ -2,6 +2,7 @@
 #include "UiTheme.h"
 
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QKeySequence>
 #include <QMenu>
@@ -85,17 +86,15 @@ QString menuButtonStyle()
         .arg(UiTheme::Color::TextPrimary, UiTheme::Color::ButtonHover, UiTheme::Color::AccentDark);
 }
 
-QString muteButtonStyle(bool active)
+QString controlLockButtonStyle(bool locked)
 {
-    return active ? QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
-                                   " color: %3; font-size: 10px; font-weight: bold; padding: 0 6px; }"
-                                   "QPushButton:hover { background: %4; }")
-                        .arg(UiTheme::Color::AccentDark, UiTheme::Color::Accent, UiTheme::Color::TextBright,
-                             UiTheme::Color::AccentHover)
+    return locked ? QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
+                                   " padding: 0; }QPushButton:hover { background: %3; }")
+                        .arg(UiTheme::Color::PanelDark, UiTheme::Color::Warning, UiTheme::Color::ButtonHover)
                   : QStringLiteral("QPushButton { background: transparent; border: 1px solid %1; border-radius: 3px;"
-                                   " color: %2; font-size: 10px; font-weight: bold; padding: 0 6px; }"
-                                   "QPushButton:hover { background: %3; border-color: %4; }")
-                        .arg(UiTheme::Color::BorderLight, UiTheme::Color::TextMuted, UiTheme::Color::ButtonHover,
+                                   " padding: 0; }"
+                                   "QPushButton:hover { background: %2; border-color: %3; }")
+                        .arg(UiTheme::Color::BorderLight, UiTheme::Color::ButtonHover,
                              UiTheme::Color::ButtonHoverBorder);
 }
 
@@ -224,11 +223,11 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     root->addWidget(txSep);
     root->addSpacing(kTitleControlSpacing);
 
-    m_lockBtn = new QPushButton(QStringLiteral("LOCK"), this);
-    m_lockBtn->setFixedHeight(22);
+    m_lockBtn = new QPushButton(this);
+    m_lockBtn->setFixedSize(24, 22);
+    m_lockBtn->setIconSize(QSize(18, 18));
     m_lockBtn->setCheckable(false);
-    m_lockBtn->setStyleSheet(muteButtonStyle(false));
-    m_lockBtn->setToolTip(QStringLiteral("Toggle control lock"));
+    setLockStateUnknown();
     root->addWidget(m_lockBtn);
     root->addSpacing(kTitleControlSpacing);
 
@@ -410,7 +409,23 @@ void MainTitleBar::setLocked(bool locked)
 {
     if (m_lockBtn)
     {
-        m_lockBtn->setStyleSheet(muteButtonStyle(locked));
+        m_lockBtn->setIcon(QIcon(locked ? QStringLiteral(":/images/icons/control_lock_locked.svg")
+                                       : QStringLiteral(":/images/icons/control_lock_unlocked.svg")));
+        m_lockBtn->setStyleSheet(controlLockButtonStyle(locked));
+        m_lockBtn->setToolTip(locked ? QStringLiteral("Dial locked\nClick to unlock.")
+                                     : QStringLiteral("Dial unlocked\nClick to lock."));
+        m_lockBtn->setAccessibleName(locked ? QStringLiteral("Dial locked") : QStringLiteral("Dial unlocked"));
+    }
+}
+
+void MainTitleBar::setLockStateUnknown()
+{
+    if (m_lockBtn)
+    {
+        m_lockBtn->setIcon(QIcon(QStringLiteral(":/images/icons/control_lock_unknown.svg")));
+        m_lockBtn->setStyleSheet(controlLockButtonStyle(false));
+        m_lockBtn->setToolTip(QStringLiteral("Dial lock state syncing"));
+        m_lockBtn->setAccessibleName(QStringLiteral("Dial lock state syncing"));
     }
 }
 
@@ -484,9 +499,13 @@ void MainTitleBar::setVolumeEnabled(bool enabled)
     {
         m_speakerMuteBtn->setEnabled(enabled);
     }
+}
+
+void MainTitleBar::setLockEnabled(bool enabled)
+{
     if (m_lockBtn)
     {
-        m_lockBtn->setEnabled(true); // lock is always available regardless of radio state
+        m_lockBtn->setEnabled(enabled);
     }
 }
 

@@ -75,6 +75,7 @@ class RadioBackend : public IRadioBackend
     bool setPtt(bool on) override;
     void setTxPower(int level) override;
     void setTuningStep(int step) override;
+    void setDialLockEnabled(bool on) override;
     void selectVfo(Vfo vfo) override;
     void exchangeMainSub() override;
     void setVfoFrequencyHz(Vfo vfo, quint64 hz) override;

@@ -28,7 +28,9 @@ class MainTitleBar : public QWidget
     void setVolume(int value);
     void setMuted(bool muted);
     void setVolumeEnabled(bool enabled);
+    void setLockEnabled(bool enabled);
     void setLocked(bool locked);
+    void setLockStateUnknown();
     void setTxDuration(const QString& duration, bool transmitting);
     void setTxDurationActive(bool transmitting);
     void setLanMod(int value);

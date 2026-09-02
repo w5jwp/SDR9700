@@ -370,6 +370,11 @@ void VfoController::setUserInteractionEnabled(bool enabled)
     updateDisplayEnabled();
 }
 
+void VfoController::setTuningInteractionEnabled(bool enabled)
+{
+    m_display->setTuningEnabled(enabled);
+}
+
 void VfoController::setSelected(bool selected)
 {
     m_display->setSelected(selected);

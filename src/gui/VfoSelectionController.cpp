@@ -255,7 +255,7 @@ bool VfoSelectionController::requestDualWatch(bool enabled)
 
 void VfoSelectionController::setControlsEnabled(bool enabled)
 {
-    m_panel->setEnabled(enabled);
+    m_panel->setControlsEnabled(enabled);
 }
 
 void VfoSelectionController::setRadioReady(bool ready)

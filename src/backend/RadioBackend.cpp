@@ -1909,6 +1909,21 @@ void RadioBackend::setRitEnabled(bool on)
                              { commandSession->receiveCommand(funcRitStatus, QVariant::fromValue<bool>(on), 0); });
 }
 
+void RadioBackend::setDialLockEnabled(bool on)
+{
+    invokeOnCurrentCommander(
+        [on](Commander* commandSession)
+        {
+            commandSession->scheduleInteractiveAction(
+                funcDialLock, 0,
+                [commandSession, on]()
+                {
+                    commandSession->receiveCommandNoReadback(funcDialLock, QVariant::fromValue<bool>(on), 0);
+                    commandSession->receiveCommand(funcDialLock, QVariant(), 0);
+                });
+        });
+}
+
 void RadioBackend::setRitOffset(short hz)
 {
     const short bounded = qBound(static_cast<short>(-999), hz, static_cast<short>(999));
@@ -2647,6 +2662,7 @@ void RadioBackend::requestPostReadyRadioState()
                 funcMonitor,
                 funcVox,
                 funcIPPlus,
+                funcDialLock,
             };
 
             for (const Funcs command : statusCommands)
