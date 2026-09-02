@@ -1627,10 +1627,10 @@ void MainWindow::onConnectionStageChanged(ConnectionStage stage, const QString& 
     updateConnectionTooltip();
     if (!message.isEmpty())
     {
-        const ToastKind kind = stage == ConnectionStage::Failed                              ? ToastKind::Error
-                               : stage == ConnectionStage::Reconnecting ||
-                                       stage == ConnectionStage::WaitingForRadio              ? ToastKind::Warning
-                                                                                              : ToastKind::Info;
+        const ToastKind kind = stage == ConnectionStage::Failed ? ToastKind::Error
+                               : stage == ConnectionStage::Reconnecting || stage == ConnectionStage::WaitingForRadio
+                                   ? ToastKind::Warning
+                                   : ToastKind::Info;
         m_connectionToastMessage = message;
         showToast(m_connectionToastMessage, 0, kind);
     }

@@ -7,6 +7,7 @@
 #include "RadioSessionCorrelation.h"
 #include "RadioSessionRecoveryStore.h"
 #include "SpectrumTuningPolicy.h"
+#include "StandbyWakePolicy.h"
 #include "TransmitSafetyPolicy.h"
 #include "TransmitFrequencyPolicy.h"
 #include "TransmitConfigurationPolicy.h"
@@ -38,8 +39,28 @@ class OfflinePoliciesTest : public QObject
     void permitsRadioTeardownOnlyAfterStreamOwnership();
     void correlatesRadioSessionResponses();
     void retainedTokenResetPolicyIsSingleShot();
+    void boundsStandbyWakeBootstrap();
     void requiresCompleteTransportRecoveryIdentity();
 };
+
+void OfflinePoliciesTest::boundsStandbyWakeBootstrap()
+{
+    using Action = sdr9700::StandbyWakePolicy::Action;
+    sdr9700::StandbyWakePolicy policy;
+
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::RetrySession);
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Wake);
+    QCOMPARE(policy.wakeAttempts(), 1);
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Wake);
+    QCOMPARE(policy.wakeAttempts(), 2);
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Fail);
+
+    policy.reset();
+    QCOMPARE(policy.commandPlaneReady(), Action::Continue);
+    QVERIFY(policy.complete());
+    QCOMPARE(policy.commandPlaneUnavailable(), Action::Continue);
+    QCOMPARE(policy.wakeAttempts(), 0);
+}
 
 void OfflinePoliciesTest::requiresCompleteTransportRecoveryIdentity()
 {

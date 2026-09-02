@@ -133,6 +133,7 @@ set(SDR9700_APP_SOURCES
     backend/TransmitConfigurationPolicy.h
     backend/DualWatchTransitionPolicy.h
     backend/ConnectionRetryPolicy.h
+    backend/StandbyWakePolicy.h
     backend/ScopeController.h
     backend/ScopeController.cpp
     backend/RadioRouter.h

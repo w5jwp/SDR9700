@@ -152,12 +152,14 @@ void UdpHandler::init()
             {
                 if (!m_shuttingDown && m_civProbeSent && !m_civDataObserved)
                 {
-                    qWarning(logUdp()).noquote()
-                        << "CI-V identity probe timed out; retained stream is not command-ready";
-                    emit haveNetworkError(
-                        errorType(false, radioIP.toString(),
-                                  "CI-V stream did not respond to radio commands; reconnecting.",
-                                  ErrorCode::Disconnected));
+                    // Audio and unsolicited scope frames are insufficient here:
+                    // both can arrive from a retained or sleeping media session.
+                    // Report a typed bootstrap failure so the backend can first
+                    // rule out a stale session and only then attempt power-on.
+                    qWarning(logUdp()).noquote() << "CI-V identity probe timed out; command plane is unavailable";
+                    emit haveNetworkError(errorType(false, radioIP.toString(),
+                                                    "CI-V stream did not respond to radio commands.",
+                                                    ErrorCode::CommandPlaneUnavailable));
                 }
             });
 
@@ -636,7 +638,8 @@ void UdpHandler::receiveFromCivStream(const QByteArray& data)
     {
         m_civDataObserved = true;
         civReadinessTimer->stop();
-        qInfo(logUdp()).noquote() << "Directed CI-V identity reply proved command plane ready; releasing startup commands";
+        qInfo(logUdp()).noquote()
+            << "Directed CI-V identity reply proved command plane ready; releasing startup commands";
         emit streamReady();
     }
     if (!m_civDataObserved)
@@ -818,8 +821,8 @@ void UdpHandler::dataReceived()
                 }
                 else if (!m_shuttingDown)
                 {
-                    qDebug(logUdp()).noquote() << this->metaObject()->className()
-                                               << ": Ignoring duplicate ready response";
+                    qDebug(logUdp()).noquote()
+                        << this->metaObject()->className() << ": Ignoring duplicate ready response";
                 }
             }
             break;
@@ -919,9 +922,9 @@ void UdpHandler::dataReceived()
                     // live UDP identities. Preserve the complete identity set;
                     // replacing it with a token-only aggregate would silently
                     // disable transport reclaim after a later crash.
-                    auto recoveryRecord =
-                        sdr9700::RadioSessionRecoveryStore::load(radioIP.toString(), compName).value_or(
-                            sdr9700::RadioSessionRecoveryRecord{radioIP.toString(), compName, 0, 0, {}, {}, {}});
+                    auto recoveryRecord = sdr9700::RadioSessionRecoveryStore::load(radioIP.toString(), compName)
+                                              .value_or(sdr9700::RadioSessionRecoveryRecord{
+                                                  radioIP.toString(), compName, 0, 0, {}, {}, {}});
                     recoveryRecord.tokenRequest = tokRequest;
                     recoveryRecord.token = token;
                     if (m_sessionOwnership.permitsRadioTeardown() &&
@@ -1098,8 +1101,8 @@ void UdpHandler::dataReceived()
                     // authorize teardown of another client's active stream.
                     m_sessionOwnership.acquire();
                     setDepartureAllowed(true);
-                    const sdr9700::RadioSessionRecoveryRecord recoveryRecord{radioIP.toString(), compName, tokRequest,
-                                                                             token, {}, {}, {}};
+                    const sdr9700::RadioSessionRecoveryRecord recoveryRecord{
+                        radioIP.toString(), compName, tokRequest, token, {}, {}, {}};
                     if (!sdr9700::RadioSessionRecoveryStore::save(recoveryRecord))
                     {
                         qWarning(logUdp()).noquote() << "Could not save the radio session recovery record";
@@ -1167,7 +1170,6 @@ void UdpHandler::dataReceived()
                         QObject::connect(this, &UdpHandler::haveSetVolume, audio, &UdpAudio::setVolume);
                         QObject::connect(audio, &UdpAudio::haveRxLevels, this, &UdpHandler::getRxLevels);
                         QObject::connect(audio, &UdpAudio::haveTxLevels, this, &UdpHandler::getTxLevels);
-
                     }
 
                     qInfo(logUdp()).noquote().nospace()
@@ -1709,8 +1711,8 @@ void UdpHandler::sendAreYouThere()
     {
         qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Radio not responding.";
         status.message = "Radio not responding!";
-        emit haveNetworkError(errorType(true, radioIP.toString(), "Radio not responding; reconnecting.",
-                                        ErrorCode::ConnectionFailed));
+        emit haveNetworkError(
+            errorType(true, radioIP.toString(), "Radio not responding; reconnecting.", ErrorCode::ConnectionFailed));
         areYouThereTimer->stop();
         return;
     }

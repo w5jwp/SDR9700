@@ -777,6 +777,10 @@ enum class ErrorCode
     Disconnected,
     InvalidRadio,
     PortReservationFailed,
+    // LAN login and media allocation succeeded, but a directed CI-V probe did
+    // not. Keep this distinct from a generic disconnect so RadioBackend can
+    // run the bounded retained-session/standby bootstrap policy.
+    CommandPlaneUnavailable,
 };
 
 struct errorType

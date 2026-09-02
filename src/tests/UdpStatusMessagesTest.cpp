@@ -48,9 +48,8 @@ void UdpStatusMessagesTest::preservesSpecificConnectionFailures()
              QStringLiteral("CI-V stream did not respond to radio commands; reconnecting."));
     QCOMPARE(sdr9700::connectionErrorMessage(errorType(false, {}, {}, ErrorCode::Disconnected)),
              QStringLiteral("Radio disconnected"));
-    QCOMPARE(sdr9700::connectionErrorMessage(
-                 errorType(true, {}, QStringLiteral("The radio rejected the username or password."),
-                           ErrorCode::AuthFailure)),
+    QCOMPARE(sdr9700::connectionErrorMessage(errorType(
+                 true, {}, QStringLiteral("The radio rejected the username or password."), ErrorCode::AuthFailure)),
              QStringLiteral("Login denied; check the radio username and password"));
     QCOMPARE(sdr9700::connectionErrorMessage(errorType(true, {}, {}, ErrorCode::ConnectionFailed)),
              QStringLiteral("Radio connection failed"));

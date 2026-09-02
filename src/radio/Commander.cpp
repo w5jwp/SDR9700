@@ -564,6 +564,24 @@ void Commander::prepDataAndSend(QByteArray data)
     emit dataForComm(data);
 }
 
+void Commander::sendStandbyWake()
+{
+    // IC-9700 CI-V Reference Guide, command 18 01: at 115200 baud the
+    // power-on frame requires a long FE synchronization fill before the
+    // standard CI-V envelope. The guide calls for approximately 119 FE bytes;
+    // 150 extra bytes safely exceeds that approximate minimum over LAN.
+    static constexpr int kExtraPreambleBytes = 150;
+    QByteArray frame(kExtraPreambleBytes, '\xFE');
+    frame.append(payloadPrefix);
+    frame.append("\x18\x01", 2);
+    frame.append('\xFD');
+
+    qInfo(logRadioTraffic()).noquote() << "CI-V TX standby wake" << frame.toHex(' ');
+    ++m_schedulerDiagnostics.transmittedFrames;
+    ++m_schedulerDiagnostics.directFrames;
+    emit dataForComm(frame);
+}
+
 void Commander::rememberPendingReply(Funcs func, uchar receiver)
 {
     static constexpr int kMaxPendingReplies = 64;
