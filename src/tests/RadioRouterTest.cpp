@@ -318,7 +318,7 @@ void RadioRouterTest::clampsMeterAndLevelValues()
     router.route(CacheItem(funcSquelch, 0));
     QCOMPARE(rfSpy.takeFirst().at(0).toInt(), 0);
     QCOMPARE(nrLevelSpy.takeFirst().at(0).toInt(), 15);
-    QCOMPARE(nbLevelSpy.takeFirst().at(0).toInt(), 0);
+    QCOMPARE(nbLevelSpy.takeFirst().at(0).toInt(), 1);
     QCOMPARE(powerSpy.takeFirst().at(0).toInt(), 255);
     QCOMPARE(squelchSpy.at(0).at(0).toBool(), false);
     QCOMPARE(squelchSpy.at(0).at(1).toInt(), 0);

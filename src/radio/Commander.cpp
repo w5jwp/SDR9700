@@ -973,6 +973,10 @@ FuncType Commander::getCommand(Funcs func, QByteArray& payload, int value, uchar
                 case funcAfGain:
                 case funcRfGain:
                 case funcSquelch:
+                case funcNoiseReduction:
+                case funcNRLevel:
+                case funcNoiseBlanker:
+                case funcNBLevel:
                 case funcRFPower:
                 case funcScopeMode:
                 case funcScopeSpan:

@@ -84,8 +84,10 @@ class RadioBackend : public IRadioBackend
     void setVfoAgcMode(Vfo vfo, const QString& mode) override;
     void setVfoAttenuatorEnabled(Vfo vfo, bool on) override;
     void setVfoNbEnabled(Vfo vfo, bool on) override;
+    void setVfoNbLevel(Vfo vfo, int level) override;
     void setVfoNotch(Vfo vfo, VfoNotch notch) override;
     void setVfoNrEnabled(Vfo vfo, bool on) override;
+    void setVfoNrLevel(Vfo vfo, int level) override;
     void setVfoPreampLevel(Vfo vfo, int level) override;
     void setVfoRfGain(Vfo vfo, int level) override;
     void setVfoSquelch(Vfo vfo, int level) override;
