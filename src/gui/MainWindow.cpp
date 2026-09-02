@@ -21,6 +21,7 @@
 #include "UtilityWindow.h"
 #include "ConfigurationManager.h"
 #include "backend/ConnectionRetryPolicy.h"
+#include "radio/UdpStatusMessages.h"
 #include "MemoryStore.h"
 #include "AppBuildConfig.h"
 #include "AppInfo.h"
@@ -1626,9 +1627,10 @@ void MainWindow::onConnectionStageChanged(ConnectionStage stage, const QString& 
     updateConnectionTooltip();
     if (!message.isEmpty())
     {
-        const ToastKind kind = stage == ConnectionStage::Failed         ? ToastKind::Error
-                               : stage == ConnectionStage::Reconnecting ? ToastKind::Warning
-                                                                        : ToastKind::Info;
+        const ToastKind kind = stage == ConnectionStage::Failed                              ? ToastKind::Error
+                               : stage == ConnectionStage::Reconnecting ||
+                                       stage == ConnectionStage::WaitingForRadio              ? ToastKind::Warning
+                                                                                              : ToastKind::Info;
         m_connectionToastMessage = message;
         showToast(m_connectionToastMessage, 0, kind);
     }
@@ -1676,6 +1678,8 @@ bool MainWindow::scheduleRadioReconnect()
     }
 
     m_reconnecting = true;
+    m_connectionToastMessage = sdr9700::reconnectingMessage(m_connectionToastMessage);
+    showToast(m_connectionToastMessage, 0, ToastKind::Warning);
     if (m_connStateLabel)
     {
         m_connStateName = QStringLiteral("Reconnecting");

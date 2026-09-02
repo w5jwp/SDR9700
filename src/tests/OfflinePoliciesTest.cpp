@@ -4,6 +4,8 @@
 #include "MainSubExchangePolicy.h"
 #include "PttConfirmationPolicy.h"
 #include "RadioSessionOwnership.h"
+#include "RadioSessionCorrelation.h"
+#include "RadioSessionRecoveryStore.h"
 #include "SpectrumTuningPolicy.h"
 #include "TransmitSafetyPolicy.h"
 #include "TransmitFrequencyPolicy.h"
@@ -34,7 +36,55 @@ class OfflinePoliciesTest : public QObject
     void serializesRepeatedMainSubExchanges();
     void requiresDualWatchStateAndSubIdentity();
     void permitsRadioTeardownOnlyAfterStreamOwnership();
+    void correlatesRadioSessionResponses();
+    void retainedTokenResetPolicyIsSingleShot();
+    void requiresCompleteTransportRecoveryIdentity();
 };
+
+void OfflinePoliciesTest::requiresCompleteTransportRecoveryIdentity()
+{
+    sdr9700::RadioSessionRecoveryRecord record;
+    QVERIFY(!record.hasTransportIdentities());
+    record.control = {50001, 50001, 0x11111111, 0x22222222};
+    record.civ = {50002, 50002, 0x33333333, 0x44444444};
+    record.audio = {50003, 50003, 0x55555555, 0x66666666};
+    QVERIFY(record.hasTransportIdentities());
+    record.audio.remotePort = 0;
+    QVERIFY(!record.hasTransportIdentities());
+}
+
+void OfflinePoliciesTest::correlatesRadioSessionResponses()
+{
+    sdr9700::RadioSessionRequest request;
+    request.begin(0x1234, 0x5678, 0x9abcdef0);
+
+    QVERIFY(request.matches(0x1234, 0x5678, 0x9abcdef0));
+    QVERIFY(request.matchesIdentity(0x1234, 0x5678, 0x9abcdef0));
+    QVERIFY(!request.matches(0x1235, 0x5678, 0x9abcdef0));
+    QVERIFY(!request.matches(0x1234, 0x5679, 0x9abcdef0));
+    QVERIFY(!request.matches(0x1234, 0x5678, 0x9abcdef1));
+    QVERIFY(request.matchesLogin(0x1234, 0x5678));
+    QVERIFY(request.matchesAuthenticationResponse(0x1234));
+    // A token-reissue response is correlated by request identity, not by its
+    // newly returned six-byte authentication identifier.
+    QVERIFY(request.matchesAuthenticationResponse(0x1234));
+    QVERIFY(!request.matchesAuthenticationResponse(0x1235));
+    request.clear();
+    QVERIFY(!request.matches(0x1234, 0x5678, 0x9abcdef0));
+    QVERIFY(request.matchesIdentity(0x1234, 0x5678, 0x9abcdef0));
+
+    QVERIFY(sdr9700::matchesRadioSessionEnvelope(0x11111111, 0x22222222, 0x11111111, 0x22222222));
+    QVERIFY(!sdr9700::matchesRadioSessionEnvelope(0x33333333, 0x22222222, 0x11111111, 0x22222222));
+    QVERIFY(!sdr9700::matchesRadioSessionEnvelope(0x11111111, 0x44444444, 0x11111111, 0x22222222));
+}
+
+void OfflinePoliciesTest::retainedTokenResetPolicyIsSingleShot()
+{
+    QVERIFY(sdr9700::shouldResetReissuedTokenAfterStreamRejection(true, false, 0xffffffff));
+    QVERIFY(!sdr9700::shouldResetReissuedTokenAfterStreamRejection(false, false, 0xffffffff));
+    QVERIFY(!sdr9700::shouldResetReissuedTokenAfterStreamRejection(true, true, 0xffffffff));
+    QVERIFY(!sdr9700::shouldResetReissuedTokenAfterStreamRejection(true, false, 0));
+}
 
 void OfflinePoliciesTest::permitsRadioTeardownOnlyAfterStreamOwnership()
 {

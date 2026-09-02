@@ -20,6 +20,7 @@ class MemorySyncController : public QObject
     void forceRadioMemorySync();
     void setMemoryPollIntervalSeconds(int seconds);
     void handleRadioReadyChanged(bool ready);
+    void handleSpectrumActivity();
     void handleRadioMemoryReceived(quint32 key);
     void requestRadioMemoryRefresh();
     void requestRadioMemoryRefreshForOperation(Completion completion);
@@ -37,6 +38,7 @@ class MemorySyncController : public QObject
 
   private:
     void startScheduledRadioMemoryRefresh();
+    void startInitialRadioMemoryRefresh();
     void requestNextRadioMemory();
     bool startMissingMemoryRetry();
     void finishRadioMemoryRefresh(bool timedOut = false);
@@ -47,6 +49,8 @@ class MemorySyncController : public QObject
     QTimer* m_periodicRefreshTimer{nullptr};
     QTimer* m_syncTimeoutTimer{nullptr};
     QTimer* m_replyGraceTimer{nullptr};
+    QTimer* m_startupStabilityTimer{nullptr};
+    QTimer* m_startupFallbackTimer{nullptr};
     QSet<quint32> m_receivedMemoryKeys;
     QSet<quint32> m_expectedMemoryKeys;
     // The initial pass contains every radio slot. Retry passes replace this
@@ -59,6 +63,9 @@ class MemorySyncController : public QObject
     bool m_refreshInProgress{false};
     bool m_initialSyncComplete{false};
     bool m_scheduledRefreshInProgress{false};
+    bool m_radioReady{false};
+    bool m_initialSyncPending{false};
+    int m_startupScopeFrameCount{0};
     int m_operationSyncAttempt{0};
     int m_missingRetryRound{0};
     int m_lastUnansweredSlotCount{0};

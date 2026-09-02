@@ -84,7 +84,7 @@ class UdpBase : public QObject
   public:
     ~UdpBase();
 
-    bool init(quint16 bindPort);
+    bool init(quint16 bindPort, QUdpSocket* boundSocket = nullptr);
     bool isSocketBound() const;
 
     void dataReceived(const QByteArray& r);
@@ -100,12 +100,18 @@ class UdpBase : public QObject
     quint32 packetsSentCount() const { return packetsSent; }
     quint32 packetsLostCount() const { return packetsLost; }
     qint64 lastPacketAgeMs() const { return msSinceLastReceived(); }
+    quint16 boundLocalPort() const { return localPort; }
+    quint32 localSessionId() const { return myId; }
+    quint32 remoteSessionId() const { return remoteId; }
+    quint16 remotePort() const { return port; }
 
   protected:
     QUdpSocket* udp = nullptr;
     uint32_t myId = 0;
     uint32_t remoteId = 0;
-    uint16_t authSeq = 0x30;
+    // Authentication request sequencing is scoped to each fresh control
+    // association. Start at zero, matching the deterministic lifecycle probe.
+    uint16_t authSeq = 0;
     uint16_t sendSeqB = 0;
     uint16_t sendSeq = 1;
     uint16_t lastReceivedSeq = 1;
@@ -142,7 +148,8 @@ class UdpBase : public QObject
     QMap<quint16, SEQBUFENTRY> txSeqBuf;
     QMap<quint16, int> rxMissing;
 
-    void sendTrackedPacket(QByteArray d);
+    void sendTrackedPacket(QByteArray d, int copies = 1);
+    void sendUntrackedPacket(const QByteArray& d, int copies = 1);
     void purgeOldEntries();
 
     QTimer* areYouThereTimer = nullptr; // Sends discovery handshakes until the radio replies "I am here."

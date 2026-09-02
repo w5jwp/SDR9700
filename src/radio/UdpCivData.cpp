@@ -1,26 +1,33 @@
 #include "UdpCivData.h"
 #include "LogCategories.h"
 
+#include <algorithm>
+
 namespace
 {
-constexpr int kOpenStartRetryIntervalMs = 250;
-constexpr int kOpenStartMaxAttempts = 4;
+constexpr int kOpenStartRetryIntervalMs = 100;
+constexpr int kOpenStartMaxAttempts = 50;
 
 bool isScopeDataDatagram(const QByteArray& datagram)
 {
     return datagram.size() > DATA_SIZE + 5 && static_cast<uchar>(datagram.at(DATA_SIZE + 4)) == 0x27 &&
            static_cast<uchar>(datagram.at(DATA_SIZE + 5)) == 0x00;
 }
+
+bool isScopeDataPayload(const QByteArray& payload)
+{
+    return payload.size() > 5 && static_cast<uchar>(payload.at(4)) == 0x27 && static_cast<uchar>(payload.at(5)) == 0x00;
+}
 } // namespace
 
-UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, quint16 localPort)
+UdpCivData::UdpCivData(QHostAddress local, QHostAddress ip, quint16 civPort, quint16 localPort, QUdpSocket* boundSocket)
 {
     qInfo(logUdp()).noquote() << "Starting UdpCivData";
     localIP = local;
     port = civPort;
     radioIP = ip;
 
-    if (!UdpBase::init(localPort))
+    if (!UdpBase::init(localPort, boundSocket))
     {
         return;
     }
@@ -68,7 +75,12 @@ void UdpCivData::requestDataRestart()
 {
     if (!m_closeSent)
     {
-        sendOpenClose(false);
+        m_openStartRequestCount = 0;
+        requestDataStart();
+        if (startCivDataTimer != nullptr && !startCivDataTimer->isActive())
+        {
+            startCivDataTimer->start(kOpenStartRetryIntervalMs);
+        }
     }
 }
 
@@ -119,12 +131,7 @@ void UdpCivData::send(QByteArray d)
 
 void UdpCivData::sendOpenClose(bool close)
 {
-    uint8_t magic = 0x04;
-
-    if (close)
-    {
-        magic = 0x00;
-    }
+    const quint8 magic = close ? CIV_STREAM_CLOSED : CIV_STREAM_OPEN;
     qDebug(logUdp()).noquote().nospace() << "UdpCivData::sendOpenClose close=" << close << " remoteId=0x" << Qt::hex
                                          << remoteId;
 
@@ -138,7 +145,12 @@ void UdpCivData::sendOpenClose(bool close)
 
     sendSeqB++;
 
-    sendTrackedPacket(encodePacket(p));
+    // Captured RS-BA1 behavior, and the deterministic lifecycle probe used to
+    // validate retained-session recovery, send the identical pipe-open/close
+    // datagram twice. The IC-9700 can acknowledge a replacement transport yet
+    // leave its CI-V pipe dormant when only one open datagram follows cleanup
+    // of a retained predecessor session.
+    sendUntrackedPacket(encodePacket(p), 2);
     return;
 }
 
@@ -182,23 +194,8 @@ void UdpCivData::dataReceived()
                     m_sequenceGate.reset();
                 }
                 remoteId = in->sentid;
-                // Request the CI-V data stream until the radio starts sending
-                // frames. Packet captures from stale-session recovery showed
-                // the radio can acknowledge 0x06 but ignore the first open
-                // packet, so keep a bounded retry alive until real data arrives.
-                m_openStartRequestCount = 0;
-                requestDataStart();
-                if (startCivDataTimer != nullptr && !startCivDataTimer->isActive())
-                {
-                    startCivDataTimer->start(kOpenStartRetryIntervalMs);
-                }
                 if (!m_readyEmitted)
                 {
-                    // UdpHandler must not announce streamReady before this
-                    // point. CI-V command packets include remoteId; packets sent
-                    // earlier are tracked with rcvdid=0 and can leave the radio
-                    // repeatedly requesting retransmits instead of answering
-                    // startup 03/04 frequency and mode probes.
                     m_readyEmitted = true;
                     emit ready();
                 }
@@ -225,12 +222,6 @@ void UdpCivData::dataReceived()
                                                      << in->datalen << "packet length" << in->len;
                         break;
                     }
-                    // Stop start requests once valid CI-V data arrives.
-                    if (startCivDataTimer != nullptr)
-                    {
-                        startCivDataTimer->stop();
-                    }
-                    m_openStartRequestCount = 0;
                     markPacketReceived();
                     // Large 0x27 scope data datagrams arrive continuously once
                     // the Spectrum Scope is enabled. Do not log them here; the
@@ -256,6 +247,20 @@ void UdpCivData::dataReceived()
 
 void UdpCivData::deliverSequencedPayloads(const CivSequenceGateResult& result)
 {
+    // A retained radio stream can send syntactically valid datagrams from the
+    // predecessor sequence space. They are not proof that this replacement's
+    // CI-V pipe opened. Stop open retries only when the sequence gate actually
+    // accepts data for delivery to Commander.
+    const bool usefulCommandData = std::any_of(result.payloads.cbegin(), result.payloads.cend(),
+                                               [](const QByteArray& payload) { return !isScopeDataPayload(payload); });
+    if (usefulCommandData)
+    {
+        if (startCivDataTimer != nullptr)
+        {
+            startCivDataTimer->stop();
+        }
+        m_openStartRequestCount = 0;
+    }
     for (const QByteArray& payload : result.payloads)
     {
         emit receive(payload);

@@ -26,6 +26,8 @@
 #include "UdpAudio.h"
 #include "RadioSessionWatchdog.h"
 #include "RadioSessionOwnership.h"
+#include "RadioSessionCorrelation.h"
+#include "RadioSessionRecoveryStore.h"
 
 class UdpHandler : public UdpBase
 {
@@ -87,12 +89,14 @@ class UdpHandler : public UdpBase
     void sendRequestStream();
     void sendLogin();
     void sendToken(uint8_t magic);
-    bool requestStaleSessionReclaim(const QString& ownerName);
+    bool requestRetainedSessionRecovery(const QString& ownerName);
     void closeStreams();
     bool releaseAuthenticationToken(bool waitForAcknowledgement);
     void beginStreamShutdown();
     void waitForStreamShutdownSettle(int timeoutMs);
     bool reserveStreamPorts();
+    void startMediaStreamsWhenReady();
+    void reclaimPredecessorTransports(const sdr9700::RadioSessionRecoveryRecord& predecessor);
 
     bool gotA8ReplyID = false;
     bool gotAuthOK = false;
@@ -105,10 +109,22 @@ class UdpHandler : public UdpBase
     bool m_disconnectStatusReceived = false;
     bool m_tokenRemovalAcknowledged = false;
     bool m_staleSessionReclaimInProgress = false;
+    bool m_retainedTokenResetAttempted = false;
     sdr9700::RadioSessionOwnership m_sessionOwnership;
+    sdr9700::RadioSessionRequest m_loginRequest;
+    sdr9700::RadioSessionRequest m_tokenRenewalRequest;
+    sdr9700::RadioSessionRequest m_tokenRemovalRequest;
+    sdr9700::RadioSessionRequest m_streamRequest;
     bool m_civStreamReady = false;
+    bool m_civProbeSent = false;
+    bool m_civDataObserved = false;
+    bool m_preReadinessPayloadLogged = false;
+    bool m_civTransportReady = false;
+    bool m_audioTransportReady = false;
     bool m_healthFailureReported = false;
     bool m_audioSilenceReported = false;
+    bool m_currentStreamGrantObserved = false;
+    bool m_predecessorTransportsReclaimed = false;
     int m_staleSessionReclaimAttempts = 0;
     RadioSessionWatchdog m_sessionWatchdog;
 
@@ -138,6 +154,7 @@ class UdpHandler : public UdpBase
     QByteArray passwordEncoded;
 
     QTimer* tokenTimer = nullptr;
+    QTimer* civReadinessTimer = nullptr;
 
     quint8 civId = 0;
     quint16 rxSampleRates = 0;

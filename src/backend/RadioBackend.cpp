@@ -13,6 +13,7 @@
 #include "LogCategories.h"
 #include "RadioCapabilities.h"
 #include "RadioIdentities.h"
+#include "UdpStatusMessages.h"
 #include "ShutdownTiming.h"
 #include "TransmitFrequencyPolicy.h"
 
@@ -223,6 +224,14 @@ RadioBackend::RadioBackend(QObject* parent)
     connect(m_scopeController, &ScopeController::scopeDataReceived, this,
             [this]()
             {
+                // A retained frame can arrive while startup is deliberately
+                // turning scope output off to synchronize VFO state. Do not
+                // let that stale frame satisfy this session's scope readiness
+                // or stop the subsequent enable retry loop.
+                if (!m_scopeEnableRequested)
+                {
+                    return;
+                }
                 if (m_scopeSyncDegraded)
                 {
                     setScopeSyncDegraded(false);
@@ -1186,6 +1195,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_commander = nullptr;
     m_radioReady = false;
     m_scopeDataReceived = false;
+    m_scopeEnableRequested = false;
     setScopeSyncDegraded(false);
     resetScopeController();
     m_initialFrequencyReceived = false;
@@ -2659,16 +2669,11 @@ void RadioBackend::updateReadyState()
         {
             m_vfoStatePollTimer->start();
         }
-        // Let MemoryController establish the startup memory poll before the
-        // broader post-ready status snapshot queues dozens of CI-V reads. This
-        // is intentionally a small, documented backout point: if future packet
-        // captures show the IC-9700 handles the full burst without delaying
-        // memory replies, this can return to a direct requestPostReadyRadioState()
-        // call.
-        // The status snapshot is now paced and bounded by Commander, so it no
-        // longer needs the full half-second separation previously used to
-        // protect memory synchronization from an immediate command burst.
-        QTimer::singleShot(200, this,
+        // Give a newly opened or recovered CI-V stream time to demonstrate
+        // useful spectrum traffic before the broader status snapshot joins
+        // startup. MemoryController applies the same recovery window before
+        // beginning its separately paced 420-slot sweep.
+        QTimer::singleShot(3000, this,
                            [this]()
                            {
                                if (m_radioReady && m_commander)
@@ -2928,7 +2933,8 @@ void RadioBackend::onLanReady()
                        });
 
     emit connected();
-    emit connectionStageChanged(ConnectionStage::SyncingRadioState, QStringLiteral("Connected; syncing radio state"));
+    emit connectionStageChanged(ConnectionStage::SyncingRadioState,
+                                QStringLiteral("Radio streams ready; syncing radio state"));
     if (m_syncWatchdogTimer)
     {
         m_syncWatchdogTimer->start();
@@ -2959,6 +2965,7 @@ void RadioBackend::onLanReady()
             return;
         }
         const ushort lanModLevel = static_cast<ushort>(m_lanModLevel);
+        m_scopeEnableRequested = true;
         invokeOnCurrentCommander(
             [lanModLevel](Commander* commandSession)
             {
@@ -3113,30 +3120,7 @@ void RadioBackend::onLanReady()
 
 void RadioBackend::onPortError(errorType err)
 {
-    QString message;
-    switch (err.code)
-    {
-    case ErrorCode::AuthFailure:
-        message = QStringLiteral("Login denied; check the radio username and password");
-        break;
-    case ErrorCode::ConnectionFailed:
-        message = err.message.trimmed();
-        if (message.isEmpty())
-        {
-            message = QStringLiteral("Radio connection failed");
-        }
-        break;
-    case ErrorCode::Disconnected:
-        message = QStringLiteral("Radio disconnected");
-        break;
-    default:
-        message = err.message.trimmed();
-        if (message.isEmpty())
-        {
-            message = QStringLiteral("Radio connection failed");
-        }
-        break;
-    }
+    const QString message = sdr9700::connectionErrorMessage(err);
 
     // Tear down the failed transport without emitting a generic disconnect
     // toast. The typed error below is the authoritative explanation and also
