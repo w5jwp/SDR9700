@@ -14,6 +14,17 @@ inline constexpr const char* AccentBright = "#38d8ff";
 inline constexpr const char* ControlActive = "#2b4355";
 inline constexpr const char* ControlActiveHover = "#3c596f";
 inline constexpr const char* ControlActiveBorder = "#8eabc1";
+inline constexpr const char* ControlActiveGradient =
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #52728c, stop:0.48 #3e5d75, stop:1 #2e485d)";
+inline constexpr const char* ControlNeutralGradient =
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #414a53, stop:0.48 #333b43, stop:1 #262c32)";
+inline constexpr const char* ControlNeutralHoverGradient =
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4c5863, stop:0.48 #3a454e, stop:1 #2c343b)";
+inline constexpr const char* ScrollHandle = "#3e5d75";
+inline constexpr const char* ScrollHandleHover = "#52728c";
+inline constexpr const char* ScrollHandlePressed = "#63839c";
+inline constexpr const char* ScrollBorderHover = "#a9bfd0";
+inline constexpr const char* ScrollBorderPressed = "#d1dce5";
 
 inline constexpr const char* Panel = "#1d1f24";
 inline constexpr const char* PanelDark = "#1a1e24";
@@ -65,6 +76,7 @@ inline constexpr QColor MeterGreen{0x4d, 0xd8, 0x7a};
 inline constexpr QColor MeterAmber{0xff, 0xb8, 0x4d};
 inline constexpr QColor MeterRed{0xff, 0x4d, 0x4d};
 inline constexpr QColor MeterScaleText{0x7f, 0xa4, 0xc8};
+inline constexpr QColor ScopeShelfEdge{0x2a, 0x40, 0x4f};
 } // namespace Color
 
 inline QColor spectrumSignalColor(double strength)

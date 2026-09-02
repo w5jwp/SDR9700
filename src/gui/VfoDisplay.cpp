@@ -61,9 +61,10 @@ QString receiverControlStyle()
                           "font-size: 9px; font-weight: bold; padding: 0px 5px; } "
                           "QPushButton:hover { border-color: %3; color: %4; } "
                           "QPushButton[active=\"true\"] { background: %5; border-color: %3; color: %4; } "
+                          "QPushButton[active=\"true\"]:hover { background: %6; border-color: %3; color: %4; } "
                           "QPushButton:disabled { background: #080b0f; border-color: %1; color: %2; }")
         .arg(UiTheme::Color::Border, UiTheme::Color::TextStatusSecondary, UiTheme::Color::ControlActiveBorder,
-             UiTheme::Color::TextBright, UiTheme::Color::ControlActive);
+             UiTheme::Color::TextBright, UiTheme::Color::ControlActive, UiTheme::Color::ControlActiveHover);
 }
 } // namespace
 
@@ -598,7 +599,7 @@ void VfoDisplay::setReceiverControlState(const QString& control, const QString& 
     button->update();
 }
 
-void VfoDisplay::setReceiverControlToolTip(const QString& control, const QString& toolTip)
+void VfoDisplay::setReceiverControlToolTip(const QString& control, const QString& toolTip) const
 {
     if (QPushButton* button = m_receiverControlButtons.value(control, nullptr))
     {

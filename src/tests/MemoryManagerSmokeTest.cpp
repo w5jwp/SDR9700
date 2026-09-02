@@ -764,14 +764,19 @@ void MemoryManagerSmokeTest::persistentStatusMessageCanBeClearedByOwner()
     statusBarController->showStatusMessage(maximumLength, 0);
     QCOMPARE(statusMessageLabel->text(), maximumLength);
 
-    const QString rejectedLength(StatusBarController::kMaximumStatusMessageCharacters + 1, QLatin1Char('x'));
+    const QString elidedLength(StatusBarController::kMaximumStatusMessageCharacters + 1, QLatin1Char('x'));
     QTest::ignoreMessage(
         QtWarningMsg,
-        "Status message rejected because it exceeds the maximum length characters=73 recommended=64 maximum=72");
-    statusBarController->showStatusMessage(rejectedLength, 0);
-    QCOMPARE(statusMessageLabel->text(), maximumLength);
+        "Status message elided because it exceeds the maximum length characters=73 recommended=64 maximum=72");
+    statusBarController->showStatusMessage(elidedLength, 0);
+    QCOMPARE(statusMessageLabel->text().size(), StatusBarController::kMaximumStatusMessageCharacters);
+    QVERIFY(statusMessageLabel->text().endsWith(QChar(0x2026)));
+    QCOMPARE(statusMessageLabel->toolTip(), elidedLength);
     statusBarController->clearPersistentStatusMessage(maximumLength);
+    QVERIFY(!statusMessageLabel->text().isEmpty());
+    statusBarController->clearPersistentStatusMessage(elidedLength);
     QVERIFY(statusMessageLabel->text().isEmpty());
+    QVERIFY(statusMessageLabel->toolTip().isEmpty());
 
     const QStringList punctuatedMessages = {
         QStringLiteral("Complete."),         QStringLiteral("Wait..."),   QStringLiteral("Warning!"),
@@ -831,6 +836,7 @@ void MemoryManagerSmokeTest::titleBarSpeakerTogglesMute()
     MainTitleBar titleBar;
     auto* speakerButton = titleBar.findChild<QPushButton*>(QStringLiteral("titleSpeakerMuteButton"));
     QVERIFY(speakerButton != nullptr);
+    QVERIFY(!speakerButton->icon().isNull());
     QVERIFY(speakerButton->text().isEmpty());
     QCOMPARE(speakerButton->toolTip(), QStringLiteral("Mute audio"));
 
@@ -850,7 +856,9 @@ void MemoryManagerSmokeTest::titleBarSpeakerTogglesMute()
     QTest::mouseClick(speakerButton, Qt::LeftButton);
     QCOMPARE(muteSpy.count(), 2);
     titleBar.setMuted(false);
-    QCOMPARE(speakerButton->text(), QStringLiteral("🔊"));
+    QVERIFY(speakerButton->text().isEmpty());
+    QVERIFY(!speakerButton->icon().isNull());
+    QCOMPARE(speakerButton->toolTip(), QStringLiteral("Mute audio"));
 }
 
 QTEST_MAIN(MemoryManagerSmokeTest)

@@ -504,12 +504,11 @@ void StatusBarController::showStatusMessage(const QString& msg, int durationMs, 
     const QString message = normalizedStatusMessage(msg);
     if (message.size() > kMaximumStatusMessageCharacters)
     {
-        qWarning(logGui()).nospace() << "Status message rejected because it exceeds the maximum length characters="
+        qWarning(logGui()).nospace() << "Status message elided because it exceeds the maximum length characters="
                                      << message.size() << " recommended=" << kRecommendedStatusMessageCharacters
                                      << " maximum=" << kMaximumStatusMessageCharacters;
-        return;
     }
-    if (message.size() > kRecommendedStatusMessageCharacters)
+    else if (message.size() > kRecommendedStatusMessageCharacters)
     {
         qWarning(logGui()).nospace() << "Status message exceeds the recommended length characters=" << message.size()
                                      << " recommended=" << kRecommendedStatusMessageCharacters
@@ -559,7 +558,11 @@ void StatusBarController::applyStatusMessage(const QString& message, MainWindow:
         bold = true;
     }
 
-    m_window->m_statusMessageLabel->setText(message);
+    const bool elided = message.size() > kMaximumStatusMessageCharacters;
+    const QString displayedMessage =
+        elided ? message.left(kMaximumStatusMessageCharacters - 1) + QChar(0x2026) : message;
+    m_window->m_statusMessageLabel->setText(displayedMessage);
+    m_window->m_statusMessageLabel->setToolTip(elided ? message : QString());
     m_window->m_statusMessageLabel->setStyleSheet(statusLabelStyle(color, bold));
 }
 

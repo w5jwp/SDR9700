@@ -709,8 +709,7 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     const int w = width();
     const int specTop = 0;
     const int specDrawH = specH;
-    const QRect spectrumPlotRect(plotLeftX(), specTop, qMax(0, w - plotLeftX()),
-                                 qMax(0, specDrawH));
+    const QRect spectrumPlotRect(plotLeftX(), specTop, qMax(0, w - plotLeftX()), qMax(0, specDrawH));
     p.drawPixmap(0, 0, m_staticLayer);
 
     if (!m_displaySpectrumBins.isEmpty())
@@ -828,7 +827,7 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     scaleShadow.setColorAt(0.0, QColor(0x00, 0x08, 0x0f, 0));
     scaleShadow.setColorAt(1.0, QColor(0x00, 0x04, 0x08, 220));
     p.fillRect(0, shadowTop, w, specH - shadowTop, scaleShadow);
-    p.fillRect(0, specH - 1, w, 1, QColor(0x2a, 0x40, 0x4f));
+    p.fillRect(0, specH - 1, w, 1, UiTheme::Color::ScopeShelfEdge);
 
     // Echo the shelf treatment beneath the panadapter toolbar, using a softer
     // shadow so the toolbar is separated without crowding the spectrum plot.
@@ -837,7 +836,7 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     toolbarShadow.setColorAt(0.0, QColor(0x00, 0x04, 0x08, 180));
     toolbarShadow.setColorAt(1.0, QColor(0x00, 0x08, 0x0f, 0));
     p.fillRect(0, 0, w, toolbarShadowHeight, toolbarShadow);
-    p.fillRect(0, 0, w, 1, QColor(0x2a, 0x40, 0x4f));
+    p.fillRect(0, 0, w, 1, UiTheme::Color::ScopeShelfEdge);
 }
 
 void SpectrumScopeCanvas::mousePressEvent(QMouseEvent* ev)
