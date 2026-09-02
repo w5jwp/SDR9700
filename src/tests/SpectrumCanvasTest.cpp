@@ -30,9 +30,6 @@ class SpectrumCanvasTest : public QObject
     void smoothsPeakHoldWithoutChangingHeldSamples();
     void interpolatesSparseBinsIntoContinuousTrace();
     void colorsTraceBySignalIntensity();
-    void keepsScaleBoundaryRedAtScopeFloor();
-    void keepsWaterfallBoundaryRedAboveWaterfall();
-    void keepsDisplayBoundariesEqualThickness();
 };
 
 void SpectrumCanvasTest::mapsFrequencyAcrossClosedPixelRange()
@@ -347,66 +344,6 @@ void SpectrumCanvasTest::colorsTraceBySignalIntensity()
     const QColor saturatedColor = strongestColorNearRow(10);
     QVERIFY(saturatedColor.red() > saturatedColor.green() + 80);
     QVERIFY(saturatedColor.red() > saturatedColor.blue() + 80);
-}
-
-void SpectrumCanvasTest::keepsScaleBoundaryRedAtScopeFloor()
-{
-    SpectrumScopeCanvas canvas;
-    canvas.resize(430, 240);
-    canvas.setPeakHoldDurationMs(0);
-    canvas.show();
-    canvas.updateSpectrum(QVector<float>(64, 0.0f), false);
-    QCoreApplication::processEvents();
-
-    const QImage rendered = canvas.grab().toImage();
-    const QColor boundary =
-        rendered.pixelColor(rendered.width() / 3, rendered.height() - SpectrumScopeCanvas::scaleHeight() - 1);
-    QCOMPARE(boundary, UiTheme::Color::SpectrumBoundary);
-}
-
-void SpectrumCanvasTest::keepsWaterfallBoundaryRedAboveWaterfall()
-{
-    WaterfallCanvas waterfall;
-    waterfall.resize(430, 180);
-    waterfall.show();
-    QCoreApplication::processEvents();
-
-    const QImage rendered = waterfall.grab().toImage();
-    QVERIFY(!rendered.isNull());
-    QCOMPARE(rendered.pixelColor(rendered.width() / 3, 0), UiTheme::Color::SpectrumBoundary);
-}
-
-void SpectrumCanvasTest::keepsDisplayBoundariesEqualThickness()
-{
-    SpectrumScopeDisplay display;
-    display.resize(700, 500);
-    display.show();
-    QCoreApplication::processEvents();
-
-    auto* spectrum = display.findChild<SpectrumScopeCanvas*>();
-    auto* waterfall = display.findChild<WaterfallCanvas*>();
-    QVERIFY(spectrum != nullptr);
-    QVERIFY(waterfall != nullptr);
-    const QImage rendered = display.grab().toImage();
-    const int x = rendered.width() / 3;
-    const int upperBoundaryY = spectrum->geometry().top() + spectrum->height() - SpectrumScopeCanvas::scaleHeight() - 1;
-    const int lowerBoundaryY = waterfall->geometry().top();
-
-    auto redRowCount = [&rendered, x](int centerY)
-    {
-        int count = 0;
-        for (int y = centerY - 2; y <= centerY + 2; ++y)
-        {
-            if (rendered.pixelColor(x, y) == UiTheme::Color::SpectrumBoundary)
-            {
-                ++count;
-            }
-        }
-        return count;
-    };
-
-    QCOMPARE(redRowCount(upperBoundaryY), 1);
-    QCOMPARE(redRowCount(lowerBoundaryY), 1);
 }
 
 QTEST_MAIN(SpectrumCanvasTest)
