@@ -2,7 +2,9 @@
 #include "VfoDisplay.h"
 #include "VfoSelectionPanel.h"
 #include "VfoSMeter.h"
+#include "UiTheme.h"
 
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -79,7 +81,11 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QVERIFY(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton")) != nullptr);
     QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton")) != nullptr);
     auto* txPowerButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTXPWRButton"));
+    auto* headerTxBadge = mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"));
+    auto* headerIdentityButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoIdentityButton"));
     QVERIFY(txPowerButton != nullptr);
+    QVERIFY(headerTxBadge != nullptr);
+    QVERIFY(headerIdentityButton != nullptr);
     QCOMPARE(txPowerButton->width(), 68);
     QCOMPARE(txPowerButton->text(), QStringLiteral("PWR 0%"));
     QVERIFY(subController.display()->findChild<QPushButton*>(QStringLiteral("vfoTXPWRButton")) == nullptr);
@@ -148,13 +154,23 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     mainController.setTransmitting(true);
     QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->property("transmitting"),
              QVariant(true));
+    QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->text(), QStringLiteral("--"));
+    mainController.display()->setTransmitSwr(1.23);
+    QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->text(),
+             QStringLiteral("1.23"));
+    mainController.display()->setTransmitSwr(99.0);
+    QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->text(),
+             QStringLiteral("6.00"));
     QCOMPARE(mainSMeter->accessibleName(), QStringLiteral("RF power meter"));
     QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("RF power 0.0 watts"));
     mainController.display()->setTransmitPowerWatts(42.0);
     QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("RF power 42.0 watts"));
     mainController.setTransmitting(false);
+    QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->text(), QStringLiteral("TX"));
     QCOMPARE(mainSMeter->accessibleName(), QStringLiteral("Signal strength meter"));
+    mainController.display()->setTransmitSwr(2.34);
     mainController.setTransmitting(true);
+    QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->text(), QStringLiteral("--"));
     QCOMPARE(mainSMeter->accessibleDescription(), QStringLiteral("RF power 0.0 watts"));
     mainController.setTransmitting(false);
 
@@ -163,13 +179,11 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     mainController.display()->show();
     parent.show();
     QApplication::processEvents();
-    const auto* txBadge = mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"));
+    auto* txBadge = mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"));
     const auto* receiverButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoAGCButton"));
     const auto* toneButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"));
     QCOMPARE(toneButton->width(), 80);
     const auto* rightReceiverButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoRFGButton"));
-    const auto* sqlButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton"));
-    const auto* bandButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoBandButton"));
     const auto* modeButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoModeButton"));
     const auto* identityButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoIdentityButton"));
     const int renderedInset = identityButton->y();
@@ -178,7 +192,18 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QCOMPARE(receiverButton->y() - toneBottom - 1, 40);
     QCOMPARE(identityButton->x(), renderedInset);
     QCOMPARE(mainController.display()->width() - rightReceiverButton->geometry().right() - 1, renderedInset);
-    QCOMPARE(bandButton->x() - sqlButton->geometry().right() - 1, txBadge->x() - modeButton->geometry().right() - 1);
+    QCOMPARE(txBadge->geometry().left() - identityButton->geometry().right() - 1, 30);
+    QVERIFY(txBadge->geometry().right() < txPowerButton->geometry().left());
+    QCOMPARE(mainController.display()->width() - modeButton->geometry().right() - 1, renderedInset);
+
+    // The active badge replaces "TX" with the live SWR. Verify the repolished
+    // dynamic-property style keeps the border red after that text transition.
+    mainController.setTransmitting(true);
+    mainController.display()->setTransmitSwr(1.23);
+    QApplication::processEvents();
+    const QImage activeBadge = txBadge->grab().toImage();
+    QCOMPARE(activeBadge.pixelColor(activeBadge.width() / 2, 0), QColor(UiTheme::Color::Danger));
+    mainController.setTransmitting(false);
 }
 
 void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()

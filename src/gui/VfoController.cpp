@@ -114,6 +114,7 @@ VfoController::VfoController(Vfo vfo, IRadioBackend* backend, sdr9700::RadioStat
         if (m_vfo == Vfo::Main)
         {
             connect(m_backend, &IRadioBackend::powerMeterChanged, m_display, &VfoDisplay::setTransmitPowerWatts);
+            connect(m_backend, &IRadioBackend::swrChanged, m_display, &VfoDisplay::setTransmitSwr);
             connect(m_backend, &IRadioBackend::xfcChanged, this,
                     [this](bool enabled)
                     {

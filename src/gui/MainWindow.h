@@ -227,8 +227,6 @@ class MainWindow : public QMainWindow
     QLabel* m_connDetailLabel{nullptr};
     QLabel* m_netTitleLabel{nullptr};
     QLabel* m_netQualLabel{nullptr};
-    QLabel* m_txIndicator{nullptr};
-    QLabel* m_txSwrLabel{nullptr};
     QLabel* m_dateLabel{nullptr};
     QLabel* m_timeLabel{nullptr};
     bool m_statusClockUtc{true};
@@ -292,7 +290,7 @@ class MainWindow : public QMainWindow
     void clearPersistentToast(const QString& expectedMessage);
     void updateNetworkQuality(int rttMs);
 
-    void updateTxIndicator(bool on);
+    void updateTransmitState(bool on);
     void updateStatusClock();
     void toggleStatusClockMode();
     void updateSystemStats();

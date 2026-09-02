@@ -30,6 +30,7 @@ class VfoDisplay : public QWidget
     void setSMeterValue(int rawValue);
     void setTransmitPowerMode(bool enabled);
     void setTransmitPowerWatts(double watts);
+    void setTransmitSwr(double swr);
     void setMaxTransmitPowerWatts(double watts);
     void setSelected(bool selected);
     void setTransmitting(bool transmitting);
@@ -60,4 +61,7 @@ class VfoDisplay : public QWidget
     QHash<QString, QPushButton*> m_receiverControlButtons;
     bool m_operatingEnabled{true};
     bool m_tuningEnabled{true};
+    bool m_transmitting{false};
+    bool m_transmitSwrValid{false};
+    double m_transmitSwr{1.0};
 };
