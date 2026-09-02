@@ -167,6 +167,16 @@ default, which provides enough time to send and validate three authentication-
 token renewals at approximately 20, 40, and 60 seconds. `--run-time` overrides
 that interval. RS-BA1 transport keepalives continue throughout the run.
 
+After the radio grants stream ownership, the tool writes a private crash journal
+in the operating system's temporary directory. It first records the granted
+authentication token, then atomically adds the control, CI-V, and audio endpoint
+and session-ID pairs after both media handshakes finish. On the next invocation,
+a journal left by a dead process causes the tool to replay departures from the
+predecessor's exact transport identities, remove the predecessor token with a
+correlated acknowledgement, and only then start a fresh login. If no usable
+journal exists but the radio reissues retained authentication, a rejected stream
+request triggers acknowledged token removal and one fresh-login retry.
+
 At the end of the interval it performs another directed CI-V identity probe.
 It passes only when that post-run command-plane validation succeeds and the
 owned session completes its disconnect sequence.
@@ -196,4 +206,10 @@ Pressing Control-C intentionally simulates an abruptly vanished client. The
 process emits one local `ABORT` record and exits immediately with status 130.
 It does not close the CI-V pipe, send transport departures, remove its token, or
 perform any other radio-side disconnect action. The resulting retained session
-is deliberate test state for a later recovery run.
+and crash journal are deliberate test state for a later recovery run.
+
+Run the hardware-independent protocol and recovery-journal checks with:
+
+```bash
+python3 -m unittest resources/tools/tests/test_ic9700_rsba1_shared.py
+```
