@@ -147,7 +147,12 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
                      ->findChild<QPushButton*>(QStringLiteral("vfo%1Button").arg(control))
                      ->isEnabled());
     }
+    auto* txBadge = mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"));
+    QVERIFY(txBadge);
+    QVERIFY(!txBadge->isEnabled());
+    mainController.setFrequencyHz(145500000ULL);
     mainController.setOperatingEnabled(true);
+    QVERIFY(txBadge->isEnabled());
     mainController.display()->setTransmitPowerWatts(42.0);
     mainController.setTransmitting(true);
     QCOMPARE(mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"))->property("transmitting"),
@@ -177,7 +182,6 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     mainController.display()->show();
     parent.show();
     QApplication::processEvents();
-    auto* txBadge = mainController.display()->findChild<QLabel*>(QStringLiteral("vfoTxBadge"));
     const auto* receiverButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoAGCButton"));
     const auto* toneButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoTONEButton"));
     QCOMPARE(toneButton->width(), 80);
