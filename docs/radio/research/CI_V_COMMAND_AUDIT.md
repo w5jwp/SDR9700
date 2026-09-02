@@ -1,6 +1,6 @@
 # Icom IC-9700 CI-V Command Audit
 
-Source: Icom IC-9700 CI-V Reference Guide, version shown by the PDF metadata as modified 2023-03-30. The repository research copy is `resources/manuals/IC-9700_ENG_CI-V_4.pdf`.
+Source: Icom IC-9700 CI-V Reference Guide, version shown by the PDF metadata as modified 2023-03-30. The repository research copy is `resources/manuals/IC_9700_ENG_CI_V_4.pdf`.
 
 This audit compares the manual command table against SDR9700's compiled IC-9700 command table in `src/radio/RadioCapabilities.h` and command translations in `src/radio/Commander.cpp`. The **Implemented** column means the exact CI-V command prefix, or at least one command under that family, has an active encoding or decoding path. `Partial` means SDR9700 implements only some subcommands/registers under that manual command family. This is an implementation inventory, not a hardware-verification record; radio behavior still requires logs, captures, or direct testing.
 

@@ -83,7 +83,7 @@ cppcheck --enable=all --inconclusive --std=c++20 \
   --suppress=missingInclude \
   --suppress=normalCheckLevelMaxBranches \
   --suppress=checkersReport \
-  --suppressions-list=.cppcheck-suppressions \
+  --suppressions-list=.cppcheck_suppressions \
   -I src -i src/build src
 ```
 
@@ -97,7 +97,7 @@ The command suppresses only missing external/include-model details and analyzer
 status reports. Keep all source correctness categories enabled. Add a
 source-specific suppression only
 for a demonstrated false positive that cannot reasonably be expressed more
-clearly in code, and document its reason in `.cppcheck-suppressions`.
+clearly in code, and document its reason in `.cppcheck_suppressions`.
 
 Any findings from these tools that are not already suppressed must be included
 in the review report.

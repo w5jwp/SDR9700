@@ -57,7 +57,7 @@ jobs:
             --suppress=missingInclude \
             --suppress=normalCheckLevelMaxBranches \
             --suppress=checkersReport \
-            --suppressions-list=.cppcheck-suppressions \
+            --suppressions-list=.cppcheck_suppressions \
             -I src -i src/build src
       - name: Test
         run: ctest --test-dir src/build --output-on-failure

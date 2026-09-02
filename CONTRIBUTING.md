@@ -94,7 +94,7 @@ cppcheck --enable=all --inconclusive --std=c++20 \
   --suppress=missingInclude \
   --suppress=normalCheckLevelMaxBranches \
   --suppress=checkersReport \
-  --suppressions-list=.cppcheck-suppressions \
+  --suppressions-list=.cppcheck_suppressions \
   -I src -i src/build src
 ```
 
