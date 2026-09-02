@@ -120,9 +120,9 @@ inline constexpr int ControlSliderHeight = 24;
 inline constexpr int InlineSliderBlockHeight = 42;
 inline constexpr int ControlButtonHeight = 40;
 inline constexpr int MainWindowMinWidth = 1160;
-// Accommodates the enlarged panadapter and waterfall introduced with the
-// dual-VFO layout while retaining the standard inset above the VFO block.
-inline constexpr int MainWindowMinHeight = 917;
+// Accommodates the enlarged panadapter and waterfall plus its lower shelf
+// shadow while retaining the standard spacing around the major control areas.
+inline constexpr int MainWindowMinHeight = 922;
 inline constexpr int StatusNetworkWidth = 78;
 inline constexpr int StatusTxWidth = 80;
 inline constexpr int StatusClockWidth = 92;
