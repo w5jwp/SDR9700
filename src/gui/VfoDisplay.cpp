@@ -62,8 +62,8 @@ QString receiverControlStyle()
                           "QPushButton:hover { border-color: %3; color: %4; } "
                           "QPushButton[active=\"true\"] { background: %5; border-color: %3; color: %4; } "
                           "QPushButton:disabled { background: #080b0f; border-color: %1; color: %2; }")
-        .arg(UiTheme::Color::Border, UiTheme::Color::TextStatusSecondary, UiTheme::Color::Accent,
-             UiTheme::Color::TextBright, UiTheme::Color::AccentDark);
+        .arg(UiTheme::Color::Border, UiTheme::Color::TextStatusSecondary, UiTheme::Color::ControlActiveBorder,
+             UiTheme::Color::TextBright, UiTheme::Color::ControlActive);
 }
 } // namespace
 

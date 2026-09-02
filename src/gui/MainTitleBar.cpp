@@ -475,6 +475,7 @@ void MainTitleBar::paintEvent(QPaintEvent* event)
     Q_UNUSED(event)
     QPainter painter(this);
     painter.fillRect(rect(), QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
+    painter.fillRect(0, height() - 1, width(), 1, QColor(QString::fromLatin1(UiTheme::Color::WindowChromeShadow)));
 }
 
 void MainTitleBar::mousePressEvent(QMouseEvent* event)

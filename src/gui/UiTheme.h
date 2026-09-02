@@ -11,10 +11,14 @@ inline constexpr const char* Accent = "#00b4d8";
 inline constexpr const char* AccentDark = "#0d4f68";
 inline constexpr const char* AccentHover = "#11617d";
 inline constexpr const char* AccentBright = "#38d8ff";
+inline constexpr const char* ControlActive = "#2b4355";
+inline constexpr const char* ControlActiveHover = "#3c596f";
+inline constexpr const char* ControlActiveBorder = "#8eabc1";
 
 inline constexpr const char* Panel = "#1d1f24";
 inline constexpr const char* PanelDark = "#1a1e24";
 inline constexpr const char* WindowChrome = "#1e1e1e";
+inline constexpr const char* WindowChromeShadow = "#14181d";
 inline constexpr const char* ContentBackground = "#1d2329";
 inline constexpr const char* MenuBar = "#242b33";
 inline constexpr const char* MenuPanel = "#20242b";

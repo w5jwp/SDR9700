@@ -205,7 +205,7 @@ void StatusBarController::buildStatusBar()
     m_window->statusBar()->setStyleSheet(QStringLiteral("QStatusBar { background: %1; border-top: 1px solid %2; }"
                                                         "QStatusBar::item { border: none; }"
                                                         "QLabel { background: transparent; }")
-                                             .arg(UiTheme::Color::WindowChrome, UiTheme::Color::StatusBorder));
+                                             .arg(UiTheme::Color::WindowChrome, UiTheme::Color::WindowChromeShadow));
 
     auto* container = new QWidget(m_window);
     container->setObjectName(QStringLiteral("statusBarContent"));

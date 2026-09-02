@@ -266,9 +266,10 @@ void MainWindow::buildToolBar()
 #endif
 
     m_titleBar = new MainTitleBar(this);
-    m_titleBar->setTitle(
-        QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 v%2</span>")
-            .arg(QString::fromLatin1(APP_NAME).toHtmlEscaped(), QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
+    const QString sliderFillColor = m_titleBar->palette().color(QPalette::Highlight).name(QColor::HexRgb);
+    m_titleBar->setTitle(QStringLiteral("<span style='color:%1; font-size:13px; font-weight:bold;'>%2 v%3</span>")
+                             .arg(sliderFillColor, QString::fromLatin1(APP_NAME).toHtmlEscaped(),
+                                  QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
 
     auto* fileMenu = new QMenu(QStringLiteral("&File"), this);
 #if !defined(Q_OS_MAC)
