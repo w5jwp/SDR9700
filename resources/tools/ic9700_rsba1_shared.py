@@ -68,6 +68,23 @@ def now() -> float:
     return time.monotonic()
 
 
+def routed_local_address(host: str, remote_port: int) -> str:
+    """Return the local IPv4 address selected by the route to the radio.
+
+    Connecting a UDP socket does not send a packet, but it asks the operating
+    system to select the interface that would carry traffic to the destination.
+    Recovery uses that address with the predecessor's recorded port so the
+    departure has the exact endpoint identity expected by the radio without
+    exposing the socket on unrelated local interfaces.
+    """
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect((host, remote_port))
+        return probe.getsockname()[0]
+    finally:
+        probe.close()
+
+
 def install_abrupt_interrupt_handler() -> None:
     """Make Ctrl-C emulate a client process disappearing without teardown.
 
@@ -318,7 +335,9 @@ class Stream:
         self.role = role
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.setblocking(False)
-        self.socket.bind(("0.0.0.0", 0))
+        # connect() selects the routed local interface and assigns an ephemeral
+        # port. An explicit wildcard bind would needlessly expose the socket on
+        # every interface and provides no protocol benefit here.
         self.socket.connect((host, remote_port))
         local_port = self.socket.getsockname()[1]
         self.local_id = (random.getrandbits(16) << 16) | local_port
@@ -423,7 +442,8 @@ def _retire_transport(host: str, identity: TransportIdentity,
     """Send departure as the vanished transport from its exact local port."""
     transport = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        transport.bind(("0.0.0.0", identity.local_port))
+        local_address = routed_local_address(host, identity.remote_port)
+        transport.bind((local_address, identity.local_port))
         transport.connect((host, identity.remote_port))
         departure = framed(
             16, 5, 0, identity.local_id, identity.remote_id)

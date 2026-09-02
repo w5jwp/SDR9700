@@ -19,6 +19,39 @@ sys.path.insert(0, str(TOOLS_DIRECTORY))
 import ic9700_rsba1_shared as shared
 
 
+class DatagramBindingTest(unittest.TestCase):
+    def test_route_probe_returns_selected_local_address(self) -> None:
+        datagram = mock.Mock()
+        datagram.getsockname.return_value = ("192.0.2.10", 41000)
+        with mock.patch.object(shared.socket, "socket", return_value=datagram):
+            address = shared.routed_local_address("192.0.2.1", 50002)
+
+        self.assertEqual(address, "192.0.2.10")
+        datagram.connect.assert_called_once_with(("192.0.2.1", 50002))
+        datagram.close.assert_called_once_with()
+
+    def test_stream_uses_connected_socket_route_without_wildcard_bind(self) -> None:
+        datagram = mock.Mock()
+        datagram.getsockname.return_value = ("192.0.2.10", 41000)
+        with mock.patch.object(shared.socket, "socket", return_value=datagram):
+            shared.Stream("192.0.2.1", 50002, "CI-V")
+
+        datagram.bind.assert_not_called()
+        datagram.connect.assert_called_once_with(("192.0.2.1", 50002))
+
+    def test_recovery_binds_predecessor_port_only_on_routed_address(self) -> None:
+        datagram = mock.Mock()
+        identity = shared.TransportIdentity(41002, 50002, 1, 2)
+        with (mock.patch.object(shared.socket, "socket", return_value=datagram),
+              mock.patch.object(
+                  shared, "routed_local_address", return_value="192.0.2.10")):
+            shared._retire_transport("192.0.2.1", identity, "CI-V")
+
+        datagram.bind.assert_called_once_with(("192.0.2.10", 41002))
+        datagram.connect.assert_called_once_with(("192.0.2.1", 50002))
+        datagram.close.assert_called_once_with()
+
+
 class SessionPacketTest(unittest.TestCase):
     def test_stream_request_matches_complete_audio_session(self) -> None:
         session = shared.PowerSession.__new__(shared.PowerSession)
