@@ -1111,9 +1111,8 @@ void MainWindow::updateControlLockIndicator()
         return;
     }
 
-    const QString lockIcon = !presentConfirmedState
-                                 ? QStringLiteral(":/images/icons/control_lock_unknown.svg")
-                                 : m_controlsLocked ? QStringLiteral(":/images/icons/control_lock_locked.svg")
+    const QString lockIcon = !presentConfirmedState ? QStringLiteral(":/images/icons/control_lock_unknown.svg")
+                             : m_controlsLocked     ? QStringLiteral(":/images/icons/control_lock_locked.svg")
                                                     : QStringLiteral(":/images/icons/control_lock_unlocked.svg");
     m_lockIndicator->setPixmap(QIcon(lockIcon).pixmap(QSize(21, 21)));
     m_lockIndicator->setStyleSheet(
@@ -1121,17 +1120,15 @@ void MainWindow::updateControlLockIndicator()
             ? QStringLiteral("QLabel { background: %1; border: 1px solid %2; border-radius: 4px; padding: 0px 1px; }")
                   .arg(UiTheme::Color::PanelDark, UiTheme::Color::Warning)
             : QStringLiteral("QLabel { background: transparent; border: none; padding: 0px 1px; }"));
-    const QString tooltip = !presentConfirmedState
-                                ? QStringLiteral("Dial lock state syncing")
-                                : m_controlsLocked ? QStringLiteral("Dial Locked\nClick to unlock.")
+    const QString tooltip = !presentConfirmedState ? QStringLiteral("Dial lock state syncing")
+                            : m_controlsLocked     ? QStringLiteral("Dial Locked\nClick to unlock.")
                                                    : QStringLiteral("Dial Unlocked\nClick to lock.");
     m_lockIndicator->setToolTip(tooltip);
     if (m_lockWidget)
     {
         m_lockWidget->setToolTip(tooltip);
-        m_lockWidget->setAccessibleName(!presentConfirmedState
-                                            ? QStringLiteral("Dial lock state syncing")
-                                            : m_controlsLocked ? QStringLiteral("Dial locked")
+        m_lockWidget->setAccessibleName(!presentConfirmedState ? QStringLiteral("Dial lock state syncing")
+                                        : m_controlsLocked     ? QStringLiteral("Dial locked")
                                                                : QStringLiteral("Dial unlocked"));
     }
 }

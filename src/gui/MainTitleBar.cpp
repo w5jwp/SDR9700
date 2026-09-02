@@ -88,14 +88,14 @@ QString menuButtonStyle()
 
 QString controlLockButtonStyle(bool locked)
 {
-    return locked ? QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
-                                   " padding: 0; }QPushButton:hover { background: %3; }")
-                        .arg(UiTheme::Color::PanelDark, UiTheme::Color::Warning, UiTheme::Color::ButtonHover)
-                  : QStringLiteral("QPushButton { background: transparent; border: 1px solid %1; border-radius: 3px;"
-                                   " padding: 0; }"
-                                   "QPushButton:hover { background: %2; border-color: %3; }")
-                        .arg(UiTheme::Color::BorderLight, UiTheme::Color::ButtonHover,
-                             UiTheme::Color::ButtonHoverBorder);
+    return locked
+               ? QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
+                                " padding: 0; }QPushButton:hover { background: %3; }")
+                     .arg(UiTheme::Color::PanelDark, UiTheme::Color::Warning, UiTheme::Color::ButtonHover)
+               : QStringLiteral("QPushButton { background: transparent; border: 1px solid %1; border-radius: 3px;"
+                                " padding: 0; }"
+                                "QPushButton:hover { background: %2; border-color: %3; }")
+                     .arg(UiTheme::Color::BorderLight, UiTheme::Color::ButtonHover, UiTheme::Color::ButtonHoverBorder);
 }
 
 QString txDurationStyle(bool active)
@@ -410,7 +410,7 @@ void MainTitleBar::setLocked(bool locked)
     if (m_lockBtn)
     {
         m_lockBtn->setIcon(QIcon(locked ? QStringLiteral(":/images/icons/control_lock_locked.svg")
-                                       : QStringLiteral(":/images/icons/control_lock_unlocked.svg")));
+                                        : QStringLiteral(":/images/icons/control_lock_unlocked.svg")));
         m_lockBtn->setStyleSheet(controlLockButtonStyle(locked));
         m_lockBtn->setToolTip(locked ? QStringLiteral("Dial locked\nClick to unlock.")
                                      : QStringLiteral("Dial unlocked\nClick to lock."));
