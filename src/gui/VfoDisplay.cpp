@@ -106,10 +106,10 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     m_identityButton = new QPushButton(vfoName(vfo), this);
     m_identityButton->setObjectName(QStringLiteral("vfoIdentityButton"));
     m_identityButton->setFixedSize(kIdentityButtonWidth, kHeaderButtonHeight);
-    m_identityButton->setCursor(Qt::PointingHandCursor);
-    m_identityButton->setAccessibleName(QStringLiteral("Select %1").arg(title));
+    m_identityButton->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_identityButton->setFocusPolicy(Qt::NoFocus);
+    m_identityButton->setAccessibleName(QStringLiteral("%1 indicator").arg(title));
     m_identityButton->setStyleSheet(receiverControlStyle());
-    connect(m_identityButton, &QPushButton::clicked, this, &VfoDisplay::vfoClicked);
 
     m_bandButton = new QPushButton(QStringLiteral("--"), this);
     m_bandButton->setObjectName(QStringLiteral("vfoBandButton"));

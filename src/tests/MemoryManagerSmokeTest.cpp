@@ -632,15 +632,16 @@ void MemoryManagerSmokeTest::compressorMenuReflectsConfirmedLevel()
                            QVERIFY(menu != nullptr);
                            auto* slider = menu->findChild<QSlider*>();
                            QVERIFY(slider != nullptr);
-                           QVERIFY(!slider->isEnabled());
+                           QVERIFY(slider->isEnabled());
+                           QCOMPARE(slider->value(), 0);
                            const QList<QLabel*> labels = menu->findChildren<QLabel*>();
                            QVERIFY(std::any_of(labels.cbegin(), labels.cend(), [](const QLabel* label)
-                                               { return label->text() == QStringLiteral("Level --"); }));
+                                               { return label->text() == QStringLiteral("0%"); }));
                            model.vfo()->applyCompressorLevel(64);
                            QVERIFY(slider->isEnabled());
-                           QCOMPARE(slider->value(), 64);
+                           QCOMPARE(slider->value(), 0);
                            model.vfo()->clearCompressorLevel();
-                           QVERIFY(!slider->isEnabled());
+                           QVERIFY(slider->isEnabled());
                            inspectedUnknown = true;
                            menu->close();
                        });
@@ -657,17 +658,16 @@ void MemoryManagerSmokeTest::compressorMenuReflectsConfirmedLevel()
                            auto* slider = menu->findChild<QSlider*>();
                            QVERIFY(slider != nullptr);
                            QVERIFY(slider->isEnabled());
-                           QCOMPARE(slider->value(), 192);
+                           QCOMPARE(slider->value(), 0);
                            const QList<QAction*> actions = menu->actions();
                            const auto enabledAction =
                                std::find_if(actions.cbegin(), actions.cend(), [](const QAction* action)
                                             { return action->text() == QStringLiteral("Enabled"); });
-                           QVERIFY(enabledAction != actions.cend());
-                           QVERIFY(!(*enabledAction)->isChecked());
+                           QVERIFY(enabledAction == actions.cend());
                            model.vfo()->applyCompressor(true);
-                           QVERIFY((*enabledAction)->isChecked());
+                           QCOMPARE(slider->value(), 192);
                            model.vfo()->applyCompressor(false);
-                           QVERIFY(!(*enabledAction)->isChecked());
+                           QCOMPARE(slider->value(), 0);
                            slider->setValue(200);
                            inspectedConfirmed = true;
                            menu->close();

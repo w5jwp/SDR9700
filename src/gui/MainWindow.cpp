@@ -679,7 +679,7 @@ void MainWindow::buildRadioControls()
     m_pttBtn->setFixedSize(kSelectorButtonSize);
     m_pttBtn->setAccessibleName(QStringLiteral("PTT"));
     m_pttBtn->setAccessibleDescription(QStringLiteral("Hold to transmit."));
-    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QStringLiteral("OFF"));
+    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QString());
     m_pttBtn->setCheckable(false);
     m_pttBtn->hide();
 
@@ -1972,7 +1972,7 @@ void MainWindow::onPttChanged(bool on)
     updateTransmitState(on);
     m_pttBtn->setProperty("pttActive", on);
     m_pttBtn->update();
-    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), on ? QStringLiteral("ON") : QStringLiteral("OFF"));
+    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QString());
 }
 
 void MainWindow::onDuplexModeChanged(duplexMode_t mode)

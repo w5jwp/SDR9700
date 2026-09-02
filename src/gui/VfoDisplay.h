@@ -44,7 +44,6 @@ class VfoDisplay : public QWidget
 
   signals:
     void frequencySubmitted(const QString& text);
-    void vfoClicked();
     void bandClicked();
     void modeClicked();
     void receiverControlClicked(const QString& control);
