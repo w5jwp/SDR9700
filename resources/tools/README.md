@@ -11,9 +11,10 @@ repository root.
 
 | Tool | Purpose | Resulting radio state |
 | --- | --- | --- |
-| `automation-bridge/ic9700_vfo_hardware_stress.py` | Stress-tests VFO selection, bands, MAIN/SUB exchange, Dual Watch, and busy gates. | Finishes in a documented baseline. |
-| `automation-bridge/ic9700_test_receive_controls.py` | Tests frequencies and receive controls independently on MAIN and SUB. | Restores checked control values, but not the initial bands, frequencies, or modes. |
-| `automation-bridge/ic9700_shared_control_sweep.py` | Sweeps shared controls, including AF gain, LAN modulation, and TX power without transmitting. | Restores each swept value. |
+| `automation_bridge/automation_client.py` | Sends one JSON request to an opted-in SDR9700 automation bridge. | Depends on the requested action. Transmit actions are always rejected. |
+| `automation_bridge/ic9700_vfo_hardware_stress.py` | Stress-tests VFO selection, bands, MAIN/SUB exchange, Dual Watch, and busy gates. | Finishes in a documented baseline. |
+| `automation_bridge/ic9700_test_receive_controls.py` | Tests frequencies and receive controls independently on MAIN and SUB. | Restores checked control values, but not the initial bands, frequencies, or modes. |
+| `automation_bridge/ic9700_shared_control_sweep.py` | Sweeps shared controls, including AF gain, LAN modulation, and TX power without transmitting. | Restores each swept value. |
 | `ic9700_rsba1_standby.py` | Connects directly to the radio, requests standby, and validates that directed CI-V replies stop. | Standby. |
 | `ic9700_rsba1_wake.py` | Connects directly to the radio, runs a bounded wake sequence, and validates directed CI-V command readiness. | Awake. |
 | `ic9700_rsba1_lifecycle.py` | Connects directly, wakes when necessary, holds a healthy session for a requested interval, validates it, and disconnects. | Awake and disconnected. |
@@ -21,9 +22,9 @@ repository root.
 The `ic9700_rsba1_shared.py` support module provides common IC-9700 RS-BA1
 functionality used by other scripts. It exits with an error if run directly.
 
-## SDR9700 automation-bridge tools
+## SDR9700 automation bridge tools
 
-The scripts under `automation-bridge/` exercise a running SDR9700 instance
+The scripts under `automation_bridge/` exercise a running SDR9700 instance
 through its opt-in local automation bridge. Start a fully synchronized
 application explicitly with automation enabled:
 
@@ -36,7 +37,19 @@ operating system's temporary directory. They require both the discovery record
 and application state to say transmit is unavailable. They never request PTT
 or DTMF Send, but they do retune the radio and change controls.
 
-### `automation-bridge/ic9700_vfo_hardware_stress.py`
+### `automation_bridge/automation_client.py`
+
+Use the general-purpose client to send one allowlisted JSON request:
+
+```bash
+python3 resources/tools/automation_bridge/automation_client.py '{"action":"get_state"}'
+```
+
+Pass `--discovery` to select a specific discovery record, `--hold` to keep the
+connection open briefly after the response, or `--match` to filter `ui_list`
+results by their control descriptions.
+
+### `automation_bridge/ic9700_vfo_hardware_stress.py`
 
 A normal run:
 
@@ -51,7 +64,7 @@ A normal run:
 Run the complete test:
 
 ```bash
-python3 resources/tools/automation-bridge/ic9700_vfo_hardware_stress.py
+python3 resources/tools/automation_bridge/ic9700_vfo_hardware_stress.py
 ```
 
 Optional flags:
@@ -65,7 +78,7 @@ A complete run finishes with Dual Watch enabled, MAIN selected, MAIN on
 145.250 MHz in the 2 m band, and SUB on 432.100 MHz in the 70 cm band. It does
 not restore the original state.
 
-### `automation-bridge/ic9700_test_receive_controls.py`
+### `automation_bridge/ic9700_test_receive_controls.py`
 
 This tool verifies that controls affect the intended receiver without bleeding
 into the other VFO. It:
@@ -80,7 +93,7 @@ into the other VFO. It:
 Run it with:
 
 ```bash
-python3 resources/tools/automation-bridge/ic9700_test_receive_controls.py
+python3 resources/tools/automation_bridge/ic9700_test_receive_controls.py
 ```
 
 Each toggle and slider is restored to the value observed before its individual
@@ -88,13 +101,13 @@ check. Initial bands, frequencies, modes, selected VFO, and Dual Watch state are
 not restored. The final state is printed in the `CONTROL MATRIX COMPLETE` JSON
 record.
 
-### `automation-bridge/ic9700_shared_control_sweep.py`
+### `automation_bridge/ic9700_shared_control_sweep.py`
 
 This tool sweeps LAN modulation, application AF gain, and MAIN VFO transmit
 power through representative values:
 
 ```bash
-python3 resources/tools/automation-bridge/ic9700_shared_control_sweep.py
+python3 resources/tools/automation_bridge/ic9700_shared_control_sweep.py
 ```
 
 The power setting changes, but the automation bridge cannot key the radio and

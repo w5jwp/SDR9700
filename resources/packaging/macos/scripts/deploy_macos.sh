@@ -122,7 +122,7 @@ fi
 
 # Reject missing bundled dependencies and every non-system absolute load path,
 # install ID, or rpath before any signature can hide a packaging error.
-"$(dirname "$0")/verify-macos-bundle.sh" "${app_path}"
+"$(dirname "$0")/verify_macos_bundle.sh" "${app_path}"
 
 # Sign only after all bundle contents and load commands are final. This ad-hoc
 # signature is for local testing; release signing is a separate packaging step.

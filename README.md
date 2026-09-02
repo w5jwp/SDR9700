@@ -13,7 +13,7 @@ control, spectrum and waterfall display, gain/PTT controls, radio-backed memory
 management, optional RC-28 integration, and RX/TX audio routing through Qt
 Multimedia.
 
-![Icom IC-9700 Transceiver](resources/images/radio/ic-9700.webp)
+![Icom IC-9700 Transceiver](resources/images/radio/ic_9700.webp)
 
 ## Screenshots
 

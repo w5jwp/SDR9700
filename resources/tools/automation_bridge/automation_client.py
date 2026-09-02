@@ -1,4 +1,4 @@
-#!/ usr / bin / env python3
+#!/usr/bin/env python3
 """Send one allowlisted JSON request to an opted-in SDR9700 process."""
 
 import argparse

@@ -35,26 +35,26 @@ bundle:
 	    echo "The bundle target is only available on macOS."; \
 	    exit 1; \
 	fi
-	./resources/packaging/macos/scripts/deploy-macos.sh $(BUILD_DIR)/bin/SDR9700.app
+	./resources/packaging/macos/scripts/deploy_macos.sh $(BUILD_DIR)/bin/SDR9700.app
 
 verify-bundle:
-	./resources/packaging/macos/scripts/verify-macos-bundle.sh $(BUILD_DIR)/bin/SDR9700.app
+	./resources/packaging/macos/scripts/verify_macos_bundle.sh $(BUILD_DIR)/bin/SDR9700.app
 
 sign:
-	./resources/packaging/macos/scripts/sign-macos.sh $(BUILD_DIR)/bin/SDR9700.app
+	./resources/packaging/macos/scripts/sign_macos.sh $(BUILD_DIR)/bin/SDR9700.app
 
 dmg: bundle
-	./resources/packaging/macos/scripts/package-macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
+	./resources/packaging/macos/scripts/package_macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
 
 release-dmg: bundle sign
-	./resources/packaging/macos/scripts/package-macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
+	./resources/packaging/macos/scripts/package_macos.sh $(BUILD_DIR)/bin/SDR9700.app $(BUILD_DIR)/package
 
 notarize:
 	@if [ -z "$(DMG)" ]; then \
 	    echo "Usage: make notarize DMG=src/build/package/SDR9700-<version>-macOS-apple-silicon.dmg"; \
 	    exit 1; \
 	fi
-	./resources/packaging/macos/scripts/notarize-macos.sh "$(DMG)"
+	./resources/packaging/macos/scripts/notarize_macos.sh "$(DMG)"
 
 install:
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
@@ -83,8 +83,8 @@ install:
 	        privilege="sudo"; \
 	    fi; \
 	    $$privilege install -d -m 0755 /etc/udev/rules.d; \
-	    $$privilege install -m 0644 resources/packaging/linux/60-sdr9700-rc28.rules \
-	        /etc/udev/rules.d/60-sdr9700-rc28.rules; \
+	    $$privilege install -m 0644 resources/packaging/linux/60_sdr9700_rc28.rules \
+	        /etc/udev/rules.d/60_sdr9700_rc28.rules; \
 	    if command -v udevadm >/dev/null 2>&1; then \
 	        $$privilege udevadm control --reload-rules; \
 	        $$privilege udevadm trigger --subsystem-match=hidraw; \

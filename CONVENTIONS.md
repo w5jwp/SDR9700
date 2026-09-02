@@ -35,6 +35,11 @@ tests, build scripts, and documentation that describes implementation details.
 
 ## Formatting
 
+Use underscores, not hyphens, as separators in project-owned file and directory
+names. Preserve ecosystem-mandated discovery names when renaming would prevent
+the owning tool from finding the file. Current exceptions are `.clang-format`,
+`.github/copilot-instructions.md`, and `.github/codeql/codeql-config.yml`.
+
 `.clang-format` is the source of truth for C, C++, and Qt source formatting.
 Run it before submitting source changes.
 
