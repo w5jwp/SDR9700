@@ -119,6 +119,12 @@ void VfoSelectionPanel::setRadioReady(bool ready)
     updateButtonStyles();
 }
 
+void VfoSelectionPanel::setControlsEnabled(bool enabled)
+{
+    m_controlsEnabled = enabled;
+    updateControlsEnabled();
+}
+
 void VfoSelectionPanel::setDualWatchPending(bool pending)
 {
     m_dualWatchPending = pending;
@@ -127,7 +133,8 @@ void VfoSelectionPanel::setDualWatchPending(bool pending)
 
 void VfoSelectionPanel::updateControlsEnabled()
 {
-    const bool contextAvailable = m_radioReady && m_receiverContextReady && !m_exchangePending && !m_dualWatchPending;
+    const bool contextAvailable =
+        m_controlsEnabled && m_radioReady && m_receiverContextReady && !m_exchangePending && !m_dualWatchPending;
     m_mainButton->setEnabled(contextAvailable);
     m_subButton->setEnabled(contextAvailable);
     m_dualWatchButton->setEnabled(contextAvailable);

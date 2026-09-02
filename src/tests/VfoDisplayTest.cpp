@@ -15,6 +15,7 @@ class VfoDisplayTest : public QObject
   private slots:
     void controllersKeepIndependentIdentityAndFrequency();
     void selectionPanelPublishesRequestsAndAppliesConfirmedState();
+    void dialLockDisablesTuningButLeavesOperationalControlsEnabled();
 };
 
 void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
@@ -307,6 +308,41 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
     QCOMPARE(exchangeDivider->width(), 108);
     QCOMPARE(exchangeButton->x(), dualWatchButton->x());
     QCOMPARE(exchangeDivider->x(), dualWatchButton->x());
+}
+
+void VfoDisplayTest::dialLockDisablesTuningButLeavesOperationalControlsEnabled()
+{
+    QWidget parent;
+    VfoController controller(Vfo::Main, nullptr, nullptr, &parent);
+    controller.setFrequencyHz(145500000ULL);
+    controller.setTuningInteractionEnabled(false);
+
+    auto* frequencyEdit = controller.display()->findChild<QLineEdit*>();
+    auto* bandButton = controller.display()->findChild<QPushButton*>(QStringLiteral("vfoBandButton"));
+    auto* modeButton = controller.display()->findChild<QPushButton*>(QStringLiteral("vfoModeButton"));
+    auto* squelchButton = controller.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton"));
+    QVERIFY(frequencyEdit != nullptr);
+    QVERIFY(bandButton != nullptr);
+    QVERIFY(modeButton != nullptr);
+    QVERIFY(squelchButton != nullptr);
+    QVERIFY(!frequencyEdit->isEnabled());
+    QVERIFY(!bandButton->isEnabled());
+    QVERIFY(!modeButton->isEnabled());
+    QVERIFY(squelchButton->isEnabled());
+
+    VfoSelectionPanel panel;
+    QPushButton pttButton(QStringLiteral("PTT"));
+    panel.setPttButton(&pttButton);
+    panel.setRadioReady(true);
+    panel.setControlsEnabled(false);
+    QVERIFY(pttButton.isEnabled());
+    for (QPushButton* button : panel.findChildren<QPushButton*>())
+    {
+        if (button != &pttButton)
+        {
+            QVERIFY(!button->isEnabled());
+        }
+    }
 }
 
 QTEST_MAIN(VfoDisplayTest)

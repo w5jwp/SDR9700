@@ -19,6 +19,7 @@ class VfoSelectionPanel : public QWidget
     void setExchangePending(bool pending);
     void setReceiverContextReady(bool ready);
     void setRadioReady(bool ready);
+    void setControlsEnabled(bool enabled);
     void setPttButton(QPushButton* button);
     Vfo selectedVfo() const { return m_selectedVfo; }
     bool dualWatchEnabled() const { return m_dualWatchEnabled; }
@@ -46,4 +47,5 @@ class VfoSelectionPanel : public QWidget
     bool m_exchangePending{false};
     bool m_receiverContextReady{true};
     bool m_radioReady{false};
+    bool m_controlsEnabled{true};
 };

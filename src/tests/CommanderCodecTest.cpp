@@ -28,6 +28,7 @@ class CommanderCodecTest : public QObject
     void parsesMemoryFields();
     void serializesOutboundCommandValues();
     void serializesStandbyWakeFrame();
+    void serializesDialLockSetAndRead();
     void rejectsUnknownOutboundValueTypes();
     void acknowledgementsAreDiagnosticOnly();
     void tracksPendingReplyPressure();
@@ -858,6 +859,18 @@ void CommanderCodecTest::serializesOutboundCommandValues()
     QVERIFY(m_commander.appendSetCommandValue(funcSatelliteMemory, QVariant::fromValue<uint>(42), 0,
                                               satelliteMemoryCommand, payload));
     QCOMPARE(payload, QByteArray::fromHex("0042"));
+}
+
+void CommanderCodecTest::serializesDialLockSetAndRead()
+{
+    QSignalSpy wireSpy(&m_commander, &Commander::dataForComm);
+
+    m_commander.receiveCommandNoReadback(funcDialLock, QVariant::fromValue<bool>(true), 0);
+    m_commander.receiveCommand(funcDialLock, QVariant(), 0);
+
+    QCOMPARE(wireSpy.count(), 2);
+    QVERIFY(wireSpy.at(0).at(0).toByteArray().contains(QByteArray::fromHex("165001")));
+    QVERIFY(wireSpy.at(1).at(0).toByteArray().contains(QByteArray::fromHex("1650")));
 }
 
 void CommanderCodecTest::rejectsUnknownOutboundValueTypes()

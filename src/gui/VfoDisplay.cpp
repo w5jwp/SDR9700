@@ -365,16 +365,7 @@ void VfoDisplay::clearFrequency()
 void VfoDisplay::setOperatingEnabled(bool enabled)
 {
     m_operatingEnabled = enabled;
-    m_frequencyEdit->setEnabled(enabled);
-    m_bandButton->setEnabled(enabled);
-    m_modeButton->setEnabled(enabled);
-    for (QPushButton* button : {m_bandButton, m_modeButton})
-    {
-        button->setProperty("active", enabled);
-        button->style()->unpolish(button);
-        button->style()->polish(button);
-        button->update();
-    }
+    setTuningEnabled(m_tuningEnabled);
     for (QPushButton* button : std::as_const(m_receiverControlButtons))
     {
         button->setEnabled(enabled);
@@ -382,6 +373,23 @@ void VfoDisplay::setOperatingEnabled(bool enabled)
     if (!enabled)
     {
         setSMeterValue(0);
+    }
+    update();
+}
+
+void VfoDisplay::setTuningEnabled(bool enabled)
+{
+    m_tuningEnabled = enabled;
+    const bool tuningAvailable = m_operatingEnabled && enabled;
+    m_frequencyEdit->setEnabled(tuningAvailable);
+    m_bandButton->setEnabled(tuningAvailable);
+    m_modeButton->setEnabled(tuningAvailable);
+    for (QPushButton* button : {m_bandButton, m_modeButton})
+    {
+        button->setProperty("active", tuningAvailable);
+        button->style()->unpolish(button);
+        button->style()->polish(button);
+        button->update();
     }
     update();
 }

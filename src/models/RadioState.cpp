@@ -246,6 +246,10 @@ void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiv
         }
         emit sharedStateChanged();
         return;
+    case funcDialLock:
+        m_shared.dialLockEnabled = value.toBool();
+        emit sharedStateChanged();
+        return;
     default:
         return;
     }
@@ -273,6 +277,7 @@ void RadioState::setReady(bool ready)
         invalidateReceiver(Vfo::Sub);
         m_shared.selectedVfo.reset();
         m_shared.dualWatchEnabled.reset();
+        m_shared.dialLockEnabled.reset();
     }
     emit sharedStateChanged();
 }

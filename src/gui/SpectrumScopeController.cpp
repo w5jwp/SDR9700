@@ -639,7 +639,7 @@ void SpectrumScopeController::updateSpectrumScopeBandLimits(quint64 hz)
 
 void SpectrumScopeController::applySpectrumScopeSettings()
 {
-    if (!m_window->m_model || !m_window->m_model->isReady() || m_window->m_controlsLocked)
+    if (!m_window->m_model || !m_window->m_model->isReady())
     {
         return;
     }
@@ -672,8 +672,7 @@ quint64 SpectrumScopeController::roundFrequencyToStep(quint64 hz) const
 
 void SpectrumScopeController::panSpectrumScopeToCenter(quint64 centerHz)
 {
-    if (!m_window->m_spectrumScopeDisplay || !m_window->m_spectrumScope || !m_window->m_model->isReady() ||
-        m_window->m_controlsLocked)
+    if (!m_window->m_spectrumScopeDisplay || !m_window->m_spectrumScope || !m_window->m_model->isReady())
     {
         return;
     }
@@ -869,7 +868,7 @@ void SpectrumScopeController::updateScopeFrameGate()
 
 void SpectrumScopeController::updateInteractionLock()
 {
-    const bool ready = m_scopeFramesEnabled && !m_window->m_controlsLocked;
+    const bool ready = m_scopeFramesEnabled;
     if (m_window->m_spectrumScopeDisplay)
     {
         m_window->m_spectrumScopeDisplay->setInteractionLocked(!ready);
@@ -976,7 +975,7 @@ void SpectrumScopeController::recenterActiveVfo(bool clearDisplay)
     // the local canvas leaves the radio streaming that same fixed range, so
     // the next frame immediately moves the display back. Restore center mode
     // and the configured span before accepting new frames.
-    if (m_window->m_model && m_window->m_model->isReady() && !m_window->m_controlsLocked)
+    if (m_window->m_model && m_window->m_model->isReady())
     {
         if (auto* backend = m_window->m_model->backend())
         {

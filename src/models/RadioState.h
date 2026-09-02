@@ -75,6 +75,7 @@ class RadioState final : public QObject
         bool transmitting{false};
         std::optional<Vfo> selectedVfo;
         std::optional<bool> dualWatchEnabled;
+        std::optional<bool> dialLockEnabled;
     };
 
     explicit RadioState(IRadioBackend* backend, QObject* parent = nullptr);
