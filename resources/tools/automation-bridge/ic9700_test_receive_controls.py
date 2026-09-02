@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise every receive-side VFO control through SDR9700 automation."""
+"""Test every receive-side VFO control through SDR9700 automation."""
 
 import glob
 import json
@@ -270,4 +270,3 @@ print("CONTROL MATRIX COMPLETE", json.dumps({"frequencyTransitions": frequency_t
                                               "requests": requests,
                                               "elapsedSeconds": round(time.monotonic() - started, 2),
                                               "final": final}, sort_keys=True), flush=True)
-

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sweep every main-window numeric slider without invoking PTT."""
+"""Sweep shared main-window controls without invoking PTT."""
 
 import glob
 import json
@@ -107,4 +107,3 @@ final_state = request({"action": "get_state"})["state"]
 if final_state.get("transmitAllowed") is not False or final_state.get("transmitting") is not False:
     raise RuntimeError(f"unsafe final state: {final_state}")
 print("SHARED VALUE SWEEP COMPLETE", flush=True)
-
