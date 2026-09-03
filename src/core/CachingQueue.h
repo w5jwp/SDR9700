@@ -253,6 +253,7 @@ class CachingQueue : public QObject
     void clear();
     void resetSessionState();
     CacheItem getCache(Funcs func, uchar receiver = 0);
+    CacheItem peekCache(Funcs func, uchar receiver = 0);
     CachingQueueDiagnostics diagnostics();
 
     void setRadioCaps(radioCapabilities* caps);

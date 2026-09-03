@@ -684,7 +684,8 @@ void UdpHandler::receiveDataFromUserToRadio(QByteArray data)
 {
     if (civ != nullptr)
     {
-        qDebug(logUdp()).noquote().nospace() << "CI-V handoff civPort=" << civPort << " bytes=" << data.size();
+        qDebug(logRadioTraffic()).noquote().nospace()
+            << "UdpHandler::CivHandoff port=" << civPort << " len=" << data.size();
         civ->send(data);
     }
     else
@@ -923,9 +924,10 @@ void UdpHandler::dataReceived()
                 m_tokenRenewalRequest.clear();
                 if (in->response == 0x0000 || initialAuthentication)
                 {
-                    qDebug(logUdp()).noquote() << this->metaObject()->className()
-                                               << (in->response == 0x0000 ? "Token renewal successful"
-                                                                          : "Radio reissued authentication token");
+                    qDebug(logUdp()).noquote().nospace()
+                        << this->metaObject()->className() << "::"
+                        << (in->response == 0x0000 ? "Token renewal successful"
+                                                   : "Radio reissued authentication token");
                     tokenTimer->start(TOKEN_RENEWAL);
                     gotAuthOK = true;
                     // Token renewal changes authentication fields but not the
@@ -1202,7 +1204,7 @@ void UdpHandler::dataReceived()
                     }
 
                     qInfo(logUdp()).noquote().nospace()
-                        << this->metaObject()->className() << ": stream request accepted device=" << devName;
+                        << this->metaObject()->className() << "::StreamRequestAccepted device=" << devName;
                 }
             }
             break;
@@ -1263,7 +1265,8 @@ void UdpHandler::dataReceived()
                     emit haveNetworkError(errorType(true, radioIP.toString(),
                                                     "The radio rejected the username or password.",
                                                     ErrorCode::AuthFailure));
-                    qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Invalid Username/Password";
+                    qInfo(logUdp()).noquote().nospace()
+                        << this->metaObject()->className() << "::AuthenticationRejected reason=invalid-credentials";
                 }
                 else if (!isAuthenticated)
                 {
@@ -1489,19 +1492,19 @@ void UdpHandler::dataReceived()
                 const char* tmpRad = r.constData();
                 memcpy(&rad, tmpRad + CAPABILITIES_SIZE + i * RADIO_CAP_SIZE, RADIO_CAP_SIZE);
                 radios.append(rad);
-                qInfo(logUdp()).noquote() << this->metaObject()->className()
-                                          << QString("Received radio capabilities, Name: %1, Audio: %2, CIV: %3, MAC: "
-                                                     "%4:%5:%6:%7:%8:%9 CAPF: %10")
-                                                 .arg(boundedLatin1(rad.name, sizeof(rad.name)))
-                                                 .arg(boundedLatin1(rad.audio, sizeof(rad.audio)))
-                                                 .arg((quint8)rad.civ, 2, 16, QChar('0'))
-                                                 .arg(rad.macaddress[0], 2, 16, QChar('0'))
-                                                 .arg(rad.macaddress[1], 2, 16, QChar('0'))
-                                                 .arg(rad.macaddress[2], 2, 16, QChar('0'))
-                                                 .arg(rad.macaddress[3], 2, 16, QChar('0'))
-                                                 .arg(rad.macaddress[4], 2, 16, QChar('0'))
-                                                 .arg(rad.macaddress[5], 2, 16, QChar('0'))
-                                                 .arg(rad.capf, 4, 16, QChar('0'));
+                qInfo(logUdp()).noquote().nospace()
+                    << this->metaObject()->className()
+                    << QString("::RadioCapabilities name=%1 audio=%2 civ=%3 mac=%4:%5:%6:%7:%8:%9 capf=%10")
+                           .arg(boundedLatin1(rad.name, sizeof(rad.name)))
+                           .arg(boundedLatin1(rad.audio, sizeof(rad.audio)))
+                           .arg((quint8)rad.civ, 2, 16, QChar('0'))
+                           .arg(rad.macaddress[0], 2, 16, QChar('0'))
+                           .arg(rad.macaddress[1], 2, 16, QChar('0'))
+                           .arg(rad.macaddress[2], 2, 16, QChar('0'))
+                           .arg(rad.macaddress[3], 2, 16, QChar('0'))
+                           .arg(rad.macaddress[4], 2, 16, QChar('0'))
+                           .arg(rad.macaddress[5], 2, 16, QChar('0'))
+                           .arg(rad.capf, 4, 16, QChar('0'));
             }
 
             emit requestRadioSelection(radios);
@@ -1860,6 +1863,6 @@ QByteArray UdpHandler::createTokenPacket(uint8_t magic)
 
 void UdpHandler::sendToken(uint8_t magic)
 {
-    qDebug(logUdp()).noquote().nospace() << "Sending authentication request type=0x" << Qt::hex << magic;
+    qDebug(logUdp()).noquote().nospace() << "UdpHandler::AuthenticationRequest type=0x" << Qt::hex << magic;
     sendTrackedPacket(createTokenPacket(magic));
 }

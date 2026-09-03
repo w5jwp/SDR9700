@@ -3,6 +3,7 @@
 #include "UtilityWindow.h"
 
 class QComboBox;
+class QCheckBox;
 class QPlainTextEdit;
 class QPushButton;
 class QTimer;
@@ -24,8 +25,10 @@ class ApplicationLogDialog : public sdr9700::ui::UtilityWindow
     void refreshLog();
     void exportLog();
     void resetLogView();
+    void clearCivTrafficReporting();
 
     QComboBox* m_categoryCombo{nullptr};
+    QCheckBox* m_civTrafficCheckBox{nullptr};
     QPlainTextEdit* m_logView{nullptr};
     QPushButton* m_pauseButton{nullptr};
     QTimer* m_refreshTimer{nullptr};

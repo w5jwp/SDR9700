@@ -112,8 +112,9 @@ void UdpCivData::requestDataStart()
 
 void UdpCivData::send(QByteArray d)
 {
-    qDebug(logUdp()).noquote().nospace() << "UdpCivData::send port=" << port << " radioIP=" << radioIP.toString()
-                                         << " len=" << d.length() << " data=" << QString::fromLatin1(d.toHex(' '));
+    qDebug(logRadioTraffic()).noquote().nospace()
+        << "UdpCivData::TX port=" << port << " radioIP=" << radioIP.toString() << " len=" << d.length()
+        << " data=" << QString::fromLatin1(d.toHex(' '));
     data_packet p{};
     p.len = (quint32)sizeof(p) + d.length();
     p.sentid = myId;
@@ -181,7 +182,7 @@ void UdpCivData::dataReceived()
             // startup/memory-sync evidence we actually need in field logs.
             if (in->type != 0x00)
             {
-                qDebug(logUdp()).noquote().nospace() << "UdpCivData: control type=0x" << Qt::hex << int(in->type);
+                qDebug(logUdp()).noquote().nospace() << "UdpCivData::Control type=0x" << Qt::hex << int(in->type);
             }
             if (in->type == 0x04)
             {
@@ -230,8 +231,9 @@ void UdpCivData::dataReceived()
                     // and memory-sync state.
                     if (!scopeDataDatagram)
                     {
-                        qDebug(logUdp()).noquote().nospace() << "UdpCivData: RX len=" << r.length()
-                                                             << " hex=" << QString::fromLatin1(r.left(16).toHex(' '));
+                        qDebug(logRadioTraffic()).noquote().nospace()
+                            << "UdpCivData::RX len=" << r.length()
+                            << " hex=" << QString::fromLatin1(r.left(16).toHex(' '));
                     }
                     const CivSequenceGateResult gateResult = m_sequenceGate.accept(in->seq, r.mid(DATA_SIZE));
                     deliverSequencedPayloads(gateResult);

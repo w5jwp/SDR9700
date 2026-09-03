@@ -3124,96 +3124,91 @@ void RadioBackend::onLanReady()
     m_smeterPollTimer = new QTimer(this);
     m_smeterPollTimer->setInterval(100);
     m_smeterPollTimer->setTimerType(Qt::PreciseTimer);
-    connect(m_smeterPollTimer, &QTimer::timeout, this,
-            [this, session, commandSession]()
+    connect(
+        m_smeterPollTimer, &QTimer::timeout, this,
+        [this, session, commandSession]()
+        {
+            if (!isCurrentSession(session, commandSession) || !m_radioReady)
             {
-                if (!isCurrentSession(session, commandSession) || !m_radioReady)
-                {
-                    return;
-                }
-                if (m_pttState.transmitMetersActive())
-                {
-                    const int pollTick = m_txMeterPollTick++;
-                    invokeOnCurrentCommander(
-                        [pollTick](Commander* commandSession)
-                        {
-                            commandSession->scheduleMeterRead(funcSWRMeter, kMainReceiver);
-                            commandSession->scheduleMeterRead(funcPowerMeter, kMainReceiver);
-                            commandSession->scheduleMeterRead(funcALCMeter, kMainReceiver);
-                            if (pollTick % 2 == 0)
-                            {
-                                commandSession->scheduleMeterRead(funcCompMeter, kMainReceiver);
-                            }
-                            if (pollTick % 5 == 0)
-                            {
-                                commandSession->scheduleMeterRead(funcVdMeter, kMainReceiver);
-                                commandSession->scheduleMeterRead(funcIdMeter, kMainReceiver);
-                            }
-                        });
-                    return;
-                }
-
-                m_txMeterPollTick = 0;
-                if (m_smeterPollPending)
-                {
-                    const qint64 elapsedMs =
-                        m_smeterPollPendingClock.isValid() ? m_smeterPollPendingClock.elapsed() : 0;
-                    if (elapsedMs < m_smeterPollDeadlineMs)
-                    {
-                        return;
-                    }
-
-                    const uchar timedOutReceiver = m_smeterPollPendingReceiver;
-                    invokeOnCurrentCommander([timedOutReceiver](Commander* commandSession)
-                                             { commandSession->abortSMeterRead(timedOutReceiver); });
-                    m_smeterPollPending = false;
-                    m_smeterPollPendingClock.invalidate();
-                    ++m_smeterPollTimeoutCount;
-                    qWarning(logRadio()).noquote().nospace()
-                        << "S-meter poll timed out receiver=" << m_smeterPollPendingReceiver
-                        << " elapsedMs=" << elapsedMs << " deadlineMs=" << m_smeterPollDeadlineMs
-                        << " timeoutCount=" << m_smeterPollTimeoutCount;
-                    m_smeterPollDeadlineMs = 0;
-                    return;
-                }
-                if (m_smeterPollQueued)
-                {
-                    return;
-                }
-                if (m_dualWatchTransition.pending())
-                {
-                    return;
-                }
-
-                static constexpr qint64 kPostTuneMeterHoldoffMs = 250;
-                const bool tuningHoldoffActive =
-                    m_meterPollTuneHoldoff.isValid() && m_meterPollTuneHoldoff.elapsed() < kPostTuneMeterHoldoffMs;
-                if (!sdr9700::backend::receiverMeterPollAllowed(m_radioReady, m_pttState.safetyActive(),
-                                                                m_mainSubExchangePending, tuningHoldoffActive))
-                {
-                    return;
-                }
-
-                const Vfo activeVfo = m_activeVfo;
-                const Vfo targetVfo =
-                    sdr9700::backend::meterPollTarget(activeVfo, m_dualWatchEnabled, m_smeterPollTick++);
-                const uchar receiver = sdr9700::backend::receiverForVfo(targetVfo);
-                m_smeterPollQueued = true;
-                m_smeterPollPendingReceiver = receiver;
-                m_smeterPollDeadlineMs = 0;
-                // CI-V 15 02 has no receiver byte. Sample the inactive side in
-                // the same serialized receiver-scoped path as every other
-                // receiver-less transaction. This is required even when the
-                // target matches the logical UI selection because background
-                // routing intentionally restores the radio's physical context
-                // to MAIN. A direct select/read/restore burst here could steal
-                // the context between another transaction's select and write.
+                return;
+            }
+            if (m_pttState.transmitMetersActive())
+            {
+                const int pollTick = m_txMeterPollTick++;
                 invokeOnCurrentCommander(
-                    [activeVfo, receiver](Commander* commandSession)
+                    [pollTick](Commander* commandSession)
                     {
-                        commandSession->scheduleSMeterRead(receiver, activeVfo == Vfo::Sub);
+                        commandSession->scheduleMeterRead(funcSWRMeter, kMainReceiver);
+                        commandSession->scheduleMeterRead(funcPowerMeter, kMainReceiver);
+                        commandSession->scheduleMeterRead(funcALCMeter, kMainReceiver);
+                        if (pollTick % 2 == 0)
+                        {
+                            commandSession->scheduleMeterRead(funcCompMeter, kMainReceiver);
+                        }
+                        if (pollTick % 5 == 0)
+                        {
+                            commandSession->scheduleMeterRead(funcVdMeter, kMainReceiver);
+                            commandSession->scheduleMeterRead(funcIdMeter, kMainReceiver);
+                        }
                     });
-            });
+                return;
+            }
+
+            m_txMeterPollTick = 0;
+            if (m_smeterPollPending)
+            {
+                const qint64 elapsedMs = m_smeterPollPendingClock.isValid() ? m_smeterPollPendingClock.elapsed() : 0;
+                if (elapsedMs < m_smeterPollDeadlineMs)
+                {
+                    return;
+                }
+
+                const uchar timedOutReceiver = m_smeterPollPendingReceiver;
+                invokeOnCurrentCommander([timedOutReceiver](Commander* commandSession)
+                                         { commandSession->abortSMeterRead(timedOutReceiver); });
+                m_smeterPollPending = false;
+                m_smeterPollPendingClock.invalidate();
+                ++m_smeterPollTimeoutCount;
+                qWarning(logRadio()).noquote().nospace()
+                    << "S-meter poll timed out receiver=" << m_smeterPollPendingReceiver << " elapsedMs=" << elapsedMs
+                    << " deadlineMs=" << m_smeterPollDeadlineMs << " timeoutCount=" << m_smeterPollTimeoutCount;
+                m_smeterPollDeadlineMs = 0;
+                return;
+            }
+            if (m_smeterPollQueued)
+            {
+                return;
+            }
+            if (m_dualWatchTransition.pending())
+            {
+                return;
+            }
+
+            static constexpr qint64 kPostTuneMeterHoldoffMs = 250;
+            const bool tuningHoldoffActive =
+                m_meterPollTuneHoldoff.isValid() && m_meterPollTuneHoldoff.elapsed() < kPostTuneMeterHoldoffMs;
+            if (!sdr9700::backend::receiverMeterPollAllowed(m_radioReady, m_pttState.safetyActive(),
+                                                            m_mainSubExchangePending, tuningHoldoffActive))
+            {
+                return;
+            }
+
+            const Vfo activeVfo = m_activeVfo;
+            const Vfo targetVfo = sdr9700::backend::meterPollTarget(activeVfo, m_dualWatchEnabled, m_smeterPollTick++);
+            const uchar receiver = sdr9700::backend::receiverForVfo(targetVfo);
+            m_smeterPollQueued = true;
+            m_smeterPollPendingReceiver = receiver;
+            m_smeterPollDeadlineMs = 0;
+            // CI-V 15 02 has no receiver byte. Sample the inactive side in
+            // the same serialized receiver-scoped path as every other
+            // receiver-less transaction. This is required even when the
+            // target matches the logical UI selection because background
+            // routing intentionally restores the radio's physical context
+            // to MAIN. A direct select/read/restore burst here could steal
+            // the context between another transaction's select and write.
+            invokeOnCurrentCommander([activeVfo, receiver](Commander* commandSession)
+                                     { commandSession->scheduleSMeterRead(receiver, activeVfo == Vfo::Sub); });
+        });
     m_smeterPollTimer->start();
 }
 

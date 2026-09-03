@@ -216,11 +216,7 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                     case funcModeGet:
                     case funcModeSet:
                     case funcSelectedMode:
-                    {
-                        const auto mi = value.value<ModeInfo>();
-                        qInfo(logGui()).noquote() << "VFO route: mode" << mi.name.toUpper() << "to MAIN VFO";
                         break;
-                    }
                     case funcUnselectedFreq:
                     case funcUnselectedMode:
                         // Command 25/26 unselected data is the inactive VFO inside the MAIN band,
@@ -1509,6 +1505,7 @@ void MainWindow::onFrequencyChanged(quint64 hz)
 
 void MainWindow::onModeChanged(const QString& mode)
 {
+    qInfo(logGui()).noquote() << "VFO route: mode" << mode.toUpper() << "to MAIN VFO";
     if (!m_activeMemoryId.isEmpty())
     {
         if (mode.compare(m_activeMemoryMode, Qt::CaseInsensitive) == 0)

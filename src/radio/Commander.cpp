@@ -548,7 +548,7 @@ void Commander::logSchedulerDiagnostics()
     const CommanderCorrelationDiagnostics correlation = correlationDiagnostics();
     const CachingQueueDiagnostics cacheQueue = queue->diagnostics();
     qInfo(logRadio()).noquote().nospace()
-        << "CI-V scheduler metrics queued=" << diagnostics.queuedCommands << " highWater=" << diagnostics.highWaterMark
+        << "CivScheduler::Metrics queued=" << diagnostics.queuedCommands << " highWater=" << diagnostics.highWaterMark
         << " dispatched=" << diagnostics.dispatchedCommands << " coalesced=" << diagnostics.coalescedCommands
         << " dropped=" << diagnostics.droppedCommands << " pendingReplies=" << correlation.pendingReplies
         << " pendingHighWater=" << correlation.pendingReplyHighWaterMark
@@ -592,7 +592,8 @@ void Commander::prepDataAndSend(QByteArray data)
     if (data[4] != '\x15')
     {
         // Meter polling is high-volume; keep CI-V traffic useful by suppressing it.
-        qInfo(logRadioTraffic()).noquote() << "TX" << data.toHex(' ');
+        qInfo(logRadioTraffic()).noquote().nospace()
+            << "CivData::TX len=" << data.size() << " hex=" << QString::fromLatin1(data.toHex(' '));
     }
     ++m_schedulerDiagnostics.transmittedFrames;
     if (m_dispatchingScheduledCommand)
@@ -622,7 +623,9 @@ void Commander::sendStandbyWake()
     // power-on. RadioBackend owns the longer, bounded boot hold and reconnects
     // this transport afterward; silence during that interval is intentional.
     emit standbyWakeHoldStarted();
-    qInfo(logRadioTraffic()).noquote() << "TX standby wake" << frame.toHex(' ');
+    qInfo(logRadioTraffic()).noquote().nospace()
+        << "CivData::TX len=" << frame.size() << " hex=" << QString::fromLatin1(frame.toHex(' '))
+        << " purpose=standby-wake";
     ++m_schedulerDiagnostics.transmittedFrames;
     ++m_schedulerDiagnostics.directFrames;
     emit dataForComm(frame);
@@ -1203,7 +1206,8 @@ void Commander::handleNewData(const QByteArray& data)
     const bool scopeDataFrame = data.size() > 64 && static_cast<uchar>(data[4]) == 0x27;
     if (!scopeDataFrame)
     {
-        qInfo(logRadioTraffic()).noquote() << "RX" << data.toHex(' ');
+        qInfo(logRadioTraffic()).noquote().nospace()
+            << "CivData::RX len=" << data.size() << " hex=" << QString::fromLatin1(data.toHex(' '));
     }
     // Spectrum Scope frames arrive continuously and are hundreds of bytes long.
     // Logging every frame hides startup and memory-sync evidence, which is
@@ -1395,7 +1399,10 @@ Commander::ReplyParseResult Commander::parseModeReply(Funcs& func, QVariant& val
     }
 
     ModeInfo mode;
-    const CacheItem cachedMode = queue->getCache(func, receiver);
+    // This lookup supplements the reply currently being parsed. It must not
+    // schedule a refresh: the fresh mode value is already in hand and will be
+    // written to the cache when parsing completes.
+    const CacheItem cachedMode = queue->peekCache(func, receiver);
     if (cachedMode.value.isValid())
     {
         mode = cachedMode.value.value<ModeInfo>();
@@ -1520,7 +1527,7 @@ Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant
             const quint8 rawSwr = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
             const double swr = getMeterCal(meterSWR, rawSwr);
             qDebug(logRadioTraffic()).noquote().nospace()
-                << "SWR meter raw=" << static_cast<int>(rawSwr) << " calibrated=" << swr;
+                << "CivData::Decoded command=SWR Meter raw=" << static_cast<int>(rawSwr) << " calibrated=" << swr;
             value.setValue(swr);
             return ReplyParseResult::Parsed;
         }
@@ -1533,7 +1540,7 @@ Commander::ReplyParseResult Commander::parseLevelMeterReply(Funcs func, QVariant
             const quint8 rawAlc = bcdHexToUChar(payloadIn.at(0), payloadIn.at(1));
             const double alc = getMeterCal(meterALC, rawAlc);
             qDebug(logRadioTraffic()).noquote().nospace()
-                << "ALC meter raw=" << static_cast<int>(rawAlc) << " calibrated=" << alc;
+                << "CivData::Decoded command=ALC Meter raw=" << static_cast<int>(rawAlc) << " calibrated=" << alc;
             value.setValue(alc);
             return ReplyParseResult::Parsed;
         }
@@ -2542,15 +2549,13 @@ void Commander::parseCommand(FrameOrigin origin)
     case funcFB:
     {
         ++m_correlationDiagnostics.acceptedAcknowledgements;
-        qDebug(logRadio()).noquote()
-            << "Radio accepted a CI-V command (FB); acknowledgement is not command-identifying";
+        qDebug(logRadio()).noquote() << "Radio accepted a CI-V command (FB)";
         break;
     }
     case funcFA:
     {
         ++m_correlationDiagnostics.rejectedAcknowledgements;
-        qWarning(logRadio()).noquote()
-            << "Radio rejected a CI-V command (FA); acknowledgement does not identify which command";
+        qWarning(logRadio()).noquote() << "Radio rejected a CI-V command (FA)";
         break;
     }
     default:
@@ -2563,10 +2568,23 @@ void Commander::parseCommand(FrameOrigin origin)
         func != funcVdMeter && func != funcIdMeter)
     {
         // Spectrum and meter replies are high-volume and obscure useful traffic.
-        QString message = QString("Received from radio: %1").arg(funcString[func]);
-        if (!payloadIn.isEmpty())
+        QString commandName = funcString[func];
+        QByteArray decodedData = payloadIn;
+        if (func == funcFB)
         {
-            message.append(QString(" data=%1").arg(QString::fromLatin1(payloadIn.toHex(' '))));
+            commandName = QStringLiteral("Command OK");
+            decodedData = QByteArray(1, static_cast<char>(0xfb));
+        }
+        else if (func == funcFA)
+        {
+            commandName = QStringLiteral("Command Error");
+            decodedData = QByteArray(1, static_cast<char>(0xfa));
+        }
+
+        QString message = QStringLiteral("CivData::Decoded command=%1").arg(commandName);
+        if (!decodedData.isEmpty())
+        {
+            message.append(QStringLiteral(" data=%1").arg(QString::fromLatin1(decodedData.toHex(' '))));
         }
         qDebug(logRadioTraffic()).noquote() << message;
     }
