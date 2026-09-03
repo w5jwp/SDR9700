@@ -6,7 +6,6 @@
 
 class QLabel;
 class QGridLayout;
-class QGroupBox;
 class QProgressBar;
 
 class MetersDialog : public sdr9700::ui::UtilityWindow
@@ -27,7 +26,6 @@ class MetersDialog : public sdr9700::ui::UtilityWindow
     void setVoltageMeter(double volts);
     void setCurrentMeter(double amps);
     void setTransmitAudioLevel(int peak, int rms);
-    void setTransmitActive(bool active);
 
   private:
     struct MeterRow
@@ -41,7 +39,6 @@ class MetersDialog : public sdr9700::ui::UtilityWindow
     void setMeterRow(const MeterRow& row, int value, const QString& text);
     void setMeterFillColor(MeterRow& row, const char* color);
 
-    QGroupBox* m_transmitSection{nullptr};
     MeterRow m_sMeter;
     MeterRow m_powerMeter;
     MeterRow m_swrMeter;

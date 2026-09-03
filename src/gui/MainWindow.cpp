@@ -1831,7 +1831,6 @@ void MainWindow::showMetersDialog()
     if (m_model && m_model->isReady())
     {
         m_metersDialog->resetMeters();
-        m_metersDialog->setTransmitActive(m_txActive);
         if (m_meterSnapshot.sMeterValid)
         {
             m_metersDialog->setSMeter(m_meterSnapshot.sMeter);
@@ -1865,7 +1864,6 @@ void MainWindow::showMetersDialog()
     else
     {
         m_metersDialog->resetMeters();
-        m_metersDialog->setTransmitActive(false);
     }
     m_metersDialog->showCentered();
 }
@@ -1973,10 +1971,6 @@ void MainWindow::onPttChanged(bool on)
         }
     }
     updateTransmitState(on);
-    if (m_metersDialog)
-    {
-        m_metersDialog->setTransmitActive(on);
-    }
     m_pttBtn->setProperty("pttActive", on);
     m_pttBtn->update();
     setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QString());

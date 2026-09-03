@@ -44,12 +44,16 @@ void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
     QVERIFY(meters.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")) == nullptr);
     QVERIFY(meters.findChild<QPushButton*>(QStringLiteral("metersCloseButton")) == nullptr);
     QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("receiveMeters")) != nullptr);
-    auto* transmitMeters = meters.findChild<QGroupBox*>(QStringLiteral("transmitMeters"));
-    QVERIFY(transmitMeters != nullptr);
-    QVERIFY(!transmitMeters->isEnabled());
+    QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("transmitMeters")) != nullptr);
+    QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("audioMeters")) != nullptr);
     QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("radioMeters")) != nullptr);
-    meters.setTransmitActive(true);
-    QVERIFY(transmitMeters->isEnabled());
+    QStringList groupTitles;
+    for (const auto* group : meters.findChildren<QGroupBox*>())
+    {
+        groupTitles.append(group->title());
+    }
+    QCOMPARE(groupTitles, QStringList({QStringLiteral("AUDIO"), QStringLiteral("RADIO"), QStringLiteral("RECEIVE"),
+                                       QStringLiteral("TRANSMIT")}));
 }
 
 void PanelAccessibilityTest::metersSurviveRepeatedUpdatesAndDestruction()
