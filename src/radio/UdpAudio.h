@@ -96,7 +96,7 @@ class UdpAudio : public UdpBase
     QByteArray m_dtmfPcm;
     QByteArray m_dtmfFrame;
     QByteArray m_txSilenceFrame;
-    int m_dtmfPcmOffset{0};
+    qsizetype m_dtmfPcmOffset{0};
     QTimer* m_dtmfTimer{nullptr};
     bool m_dtmfTimerActive{false};
     int m_txSilencePacketBytes = 640; // 20 ms, 16 kHz, mono 16-bit PCM.

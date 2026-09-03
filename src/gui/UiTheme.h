@@ -14,6 +14,8 @@ inline constexpr const char* AccentBright = "#38d8ff";
 inline constexpr const char* ControlActive = "#2b4355";
 inline constexpr const char* ControlActiveHover = "#3c596f";
 inline constexpr const char* ControlActiveBorder = "#8eabc1";
+inline constexpr const char* CompoundControlBorder = "#71808e";
+inline constexpr const char* ControlPressed = "#252c33";
 inline constexpr const char* ControlActiveGradient =
     "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #52728c, stop:0.48 #3e5d75, stop:1 #2e485d)";
 inline constexpr const char* ControlNeutralGradient =

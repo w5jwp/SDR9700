@@ -11,6 +11,7 @@ class MeterControllerTest : public QObject
     void batchesUpdatesIntoOneSnapshot();
     void clampsMeterValues();
     void resetTransmitMetersPreservesReceiveMeter();
+    void resetReceiveMeterPreservesTransmitMeters();
     void swrRequiresForwardPower();
     void resetPublishesDefaultSnapshotImmediately();
 };
@@ -81,6 +82,24 @@ void MeterControllerTest::resetTransmitMetersPreservesReceiveMeter()
     QCOMPARE(snapshot.powerWatts, 0.0);
     QCOMPARE(snapshot.swr, 1.0);
     QVERIFY(!snapshot.swrValid);
+}
+
+void MeterControllerTest::resetReceiveMeterPreservesTransmitMeters()
+{
+    MeterController controller;
+    MeterSnapshot snapshot;
+    connect(&controller, &MeterController::snapshotChanged, this,
+            [&snapshot](const MeterSnapshot& value) { snapshot = value; });
+
+    controller.setSMeter(90);
+    controller.setPowerMeter(25.0);
+    QTRY_VERIFY(snapshot.sMeterValid);
+
+    controller.resetReceiveMeter();
+    QTRY_VERIFY(!snapshot.sMeterValid);
+    QCOMPARE(snapshot.sMeter, 0);
+    QCOMPARE(snapshot.powerWatts, 25.0);
+    QVERIFY(snapshot.powerValid);
 }
 
 void MeterControllerTest::swrRequiresForwardPower()

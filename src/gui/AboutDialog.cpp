@@ -27,7 +27,8 @@ AboutDialog::AboutDialog(QWidget* parent)
     : sdr9700::ui::UtilityWindow(QStringLiteral("About %1").arg(QLatin1String(APP_NAME)), parent)
 {
     const QString title = QStringLiteral("About %1").arg(QLatin1String(APP_NAME));
-    setFixedSize(380, 340);
+    setMinimumSize(360, 320);
+    resize(380, 340);
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);

@@ -62,8 +62,9 @@ std::optional<CpuTicks> SystemStatsProvider::readCpuTicks() const
     natural_t cpuCount = 0;
     natural_t infoCount = 0;
     processor_info_array_t info = nullptr;
-    const kern_return_t result =
-        host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &cpuCount, &info, &infoCount);
+    const host_t host = mach_host_self();
+    const kern_return_t result = host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &cpuCount, &info, &infoCount);
+    mach_port_deallocate(mach_task_self(), host);
     if (result != KERN_SUCCESS || !info)
     {
         return std::nullopt;

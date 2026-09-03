@@ -30,4 +30,5 @@ class AppSettings
     QHash<QString, QString> m_values;
     QTimer m_deferredSaveTimer;
     bool m_deferredSavePending{false};
+    bool m_writesBlocked{false};
 };

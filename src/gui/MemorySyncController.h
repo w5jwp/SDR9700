@@ -35,6 +35,8 @@ class MemorySyncController : public QObject
     // without inferring it from transient progress-label text.
     int lastUnansweredSlotCount() const;
     int missingRetryRound() const;
+    int memoryPollIntervalSeconds() const { return m_memoryPollIntervalSeconds; }
+    bool periodicRefreshScheduled() const;
 
   private:
     void startScheduledRadioMemoryRefresh();

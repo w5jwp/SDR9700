@@ -22,8 +22,6 @@ constexpr int kVfoButtonWidth = 54;
 constexpr int kRoutingDividerSpacing = 18;
 constexpr int kPttDividerSpacing = 15;
 constexpr int kButtonRadius = 3;
-constexpr const char* kCompoundBorder = "#71808e";
-constexpr const char* kSilverPressed = "#252c33";
 
 enum class SegmentPosition
 {
@@ -56,16 +54,16 @@ QString selectionButtonStyle(SegmentPosition position, int fontPixelSize = 10)
                           "QPushButton:pressed { background: %9; } "
                           "QPushButton[active=\"true\"] { background: %10; border-color: %11; color: %8; }")
         .arg(UiTheme::Color::ControlNeutralGradient)
-        .arg(kCompoundBorder)
+        .arg(UiTheme::Color::CompoundControlBorder)
         .arg(innerBorder)
         .arg(corners)
         .arg(UiTheme::Color::TextPrimary)
         .arg(UiTheme::Color::ControlNeutralHoverGradient)
-        .arg(kCompoundBorder)
+        .arg(UiTheme::Color::CompoundControlBorder)
         .arg(UiTheme::Color::TextBright)
-        .arg(kSilverPressed)
+        .arg(UiTheme::Color::ControlPressed)
         .arg(UiTheme::Color::ControlActiveGradient)
-        .arg(kCompoundBorder)
+        .arg(UiTheme::Color::CompoundControlBorder)
         .arg(fontPixelSize);
 }
 
@@ -241,6 +239,15 @@ void VfoSelectionPanel::updateButtonStyles()
     m_mainButton->setProperty("active", m_radioReady && m_selectedVfo == Vfo::Main);
     m_subButton->setProperty("active", m_radioReady && m_selectedVfo == Vfo::Sub);
     m_dualWatchButton->setProperty("active", m_radioReady && m_dualWatchEnabled);
+    m_mainButton->setAccessibleDescription(m_radioReady && m_selectedVfo == Vfo::Main
+                                               ? QStringLiteral("Selected receiver.")
+                                               : QStringLiteral("Not selected."));
+    m_subButton->setAccessibleDescription(m_radioReady && m_selectedVfo == Vfo::Sub
+                                              ? QStringLiteral("Selected receiver.")
+                                              : QStringLiteral("Not selected."));
+    m_dualWatchButton->setAccessibleDescription(m_radioReady && m_dualWatchEnabled
+                                                    ? QStringLiteral("Dual watch is on.")
+                                                    : QStringLiteral("Dual watch is off."));
     refreshStyle(m_mainButton);
     refreshStyle(m_subButton);
     refreshStyle(m_exchangeButton);

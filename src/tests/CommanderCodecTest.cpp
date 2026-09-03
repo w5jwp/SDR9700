@@ -813,6 +813,15 @@ void CommanderCodecTest::parsesMemoryFields()
     QCOMPARE(memory.channel, quint16(42));
     QCOMPARE(memory.frequency.Hz, quint64(145825000));
     QCOMPARE(QByteArray(memory.name, 8), QByteArray("SAT TEST"));
+
+    for (quint8 polarity = 0; polarity <= 3; ++polarity)
+    {
+        const char encoded = static_cast<char>(((polarity << 3) & 0x10) | (polarity & 0x01));
+        m_commander.parseMemoryField(MemParserFormat('p', 0, 1), QByteArray(1, encoded), memory);
+        m_commander.parseMemoryField(MemParserFormat('P', 0, 1), QByteArray(1, encoded), memory);
+        QCOMPARE(memory.dtcsp, polarity);
+        QCOMPARE(memory.dtcspB, polarity);
+    }
 }
 
 void CommanderCodecTest::serializesOutboundCommandValues()

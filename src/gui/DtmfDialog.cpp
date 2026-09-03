@@ -30,7 +30,7 @@ constexpr DtmfKey kKeys[4][4] = {
 
 DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLiteral("DTMF"), parent)
 {
-    setFixedWidth(260);
+    setMinimumWidth(260);
     auto* root = new QVBoxLayout(this);
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
@@ -47,6 +47,8 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
 
     m_display = new QLineEdit(content);
     m_display->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_display->setAccessibleName(QStringLiteral("DTMF digits"));
+    m_display->setAccessibleDescription(QStringLiteral("Digits that will be sent to the radio."));
     m_display->setPlaceholderText(QStringLiteral("Digits…"));
     m_display->setMaxLength(kMaxDtmfDigits);
     m_display->setValidator(
@@ -97,6 +99,7 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
             const QString label = QString::fromLatin1(kKeys[row][col].label);
             const bool isAlpha = kKeys[row][col].isAlpha;
             auto* btn = new QPushButton(label, content);
+            btn->setAccessibleName(QStringLiteral("DTMF %1").arg(label));
             btn->setFixedSize(52, 38);
             btn->setStyleSheet(isAlpha ? alphaKeyStyle : keyStyle);
             connect(btn, &QPushButton::clicked, this, [this, label]() { appendDigit(label); });
@@ -132,6 +135,9 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
     auto* clearBtn = new QPushButton(QStringLiteral("Clear"), content);
     auto* bsBtn = new QPushButton(QStringLiteral("⌫"), content);
     m_sendButton = new QPushButton(QStringLiteral("Send"), content);
+    clearBtn->setAccessibleDescription(QStringLiteral("Clear all entered DTMF digits."));
+    bsBtn->setAccessibleName(QStringLiteral("Delete last DTMF digit"));
+    m_sendButton->setAccessibleDescription(QStringLiteral("Transmit the entered DTMF digits."));
     m_sendButton->setEnabled(false);
 
     clearBtn->setFixedSize(52, 32);
@@ -179,7 +185,8 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
                 }
             });
 
-    setFixedSize(260, sizeHint().height());
+    setMinimumHeight(sizeHint().height());
+    resize(260, sizeHint().height());
 }
 
 void DtmfDialog::appendDigit(const QString& digit)

@@ -2,6 +2,7 @@
 
 #include "ConfirmationDialog.h"
 #include "AppSettings.h"
+#include "MemorySyncPolicy.h"
 #include "UdpBase.h"
 
 #include <QCoreApplication>
@@ -294,7 +295,20 @@ QJsonObject cleanConfigurationSettings(const QJsonDocument& doc)
     QJsonObject memoryManager;
     insertCleanSetting(&memoryManager, memoryManagerSource, QStringLiteral("pollIntervalSeconds"),
                        [](const QJsonValue& value, QJsonValue* normalized)
-                       { return intStringValue(value, 30, 3600, normalized); });
+                       {
+                           QJsonValue candidate;
+                           if (!intStringValue(value, 0, 3600, &candidate))
+                           {
+                               return false;
+                           }
+                           const int seconds = candidate.toString().toInt();
+                           if (sdr9700::normalizeMemoryPollIntervalSeconds(seconds) != seconds)
+                           {
+                               return false;
+                           }
+                           *normalized = candidate;
+                           return true;
+                       });
     insertCleanSetting(&memoryManager, memoryManagerSource, QStringLiteral("showSpecialMemories"), boolStringValue);
     insertCleanSetting(&memoryManager, memoryManagerSource, QStringLiteral("showSatelliteMemories"), boolStringValue);
     if (!memoryManager.isEmpty())

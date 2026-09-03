@@ -224,7 +224,13 @@ void RadioModel::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
 void RadioModel::onPttChanged(bool on)
 {
     m_vfo->applyPtt(on);
-    if (!on)
+    if (on)
+    {
+        // Receive-strength samples are no longer current while the radio is
+        // transmitting and receive-meter polling is suspended.
+        m_meterController->resetReceiveMeter();
+    }
+    else
     {
         m_meterController->resetTransmitMeters();
     }

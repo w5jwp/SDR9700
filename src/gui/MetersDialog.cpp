@@ -87,7 +87,7 @@ QString sMeterText(int value)
 
 MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLiteral("Meters"), parent)
 {
-    setFixedWidth(500);
+    setMinimumWidth(500);
     auto* root = new QVBoxLayout(this);
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
@@ -126,7 +126,8 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
     m_swrMeter = addMeterRow(transmitGrid, 2, QStringLiteral("SWR"), QStringLiteral("Standing wave ratio"));
 
     resetMeters();
-    setFixedSize(500, sizeHint().height());
+    setMinimumHeight(sizeHint().height());
+    resize(500, sizeHint().height());
 }
 
 MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, const QString& label,
@@ -139,6 +140,8 @@ MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, c
     labelWidget->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 12px; }").arg(UiTheme::Color::TextMuted));
 
     auto* bar = new QProgressBar(this);
+    bar->setAccessibleName(label);
+    bar->setAccessibleDescription(description);
     bar->setRange(0, kMeterScale);
     bar->setTextVisible(false);
     bar->setFixedHeight(14);

@@ -983,9 +983,6 @@ void MainWindow::resetRadioOwnedControlsForSync()
     if (m_mainVfoController)
     {
         m_mainVfoController->setLanModLevel(m_lanModValue);
-    }
-    if (m_mainVfoController)
-    {
         m_mainVfoController->clearFrequency();
     }
     if (m_subVfoController)
@@ -1780,8 +1777,8 @@ void MainWindow::applyAudioSettings()
     }
 
     const AppSettings& settings = AppSettings::instance();
-    const QByteArray inputID = settings.value("audioInputDeviceID").toByteArray();
-    const QByteArray outputID = settings.value("audioOutputDeviceID").toByteArray();
+    const QByteArray inputID = QByteArray::fromBase64(settings.value("audioInputDeviceID").toString().toLatin1());
+    const QByteArray outputID = QByteArray::fromBase64(settings.value("audioOutputDeviceID").toString().toLatin1());
     const QList<QAudioDevice> inputs = QMediaDevices::audioInputs();
     const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
 

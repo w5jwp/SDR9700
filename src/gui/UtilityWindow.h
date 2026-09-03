@@ -28,8 +28,9 @@ class UtilityWindow : public QDialog
         setWindowModality(Qt::NonModal);
         setAttribute(Qt::WA_DeleteOnClose, false);
         setAttribute(Qt::WA_QuitOnClose, false);
+        setProperty("utilityWindow", true);
         setStyleSheet(
-            QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
+            QStringLiteral("QDialog[utilityWindow=\"true\"] { background: %1; border: 1px solid %2; }")
                 .arg(QLatin1String(UiTheme::Color::ContentBackground), QLatin1String(UiTheme::Color::Border)));
     }
 

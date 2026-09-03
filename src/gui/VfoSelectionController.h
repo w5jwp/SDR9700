@@ -26,7 +26,7 @@ class VfoSelectionController : public QObject
     void setRadioReady(bool ready);
     void setReceiverContextReady(bool ready);
     void runWhenSelected(Vfo vfo, std::function<void()> action);
-    void selectVfo(Vfo vfo);
+    bool selectVfo(Vfo vfo);
     bool requestMainSubExchange();
     bool requestDualWatch(bool enabled);
     void completeExchangeScopeSync();
@@ -38,6 +38,8 @@ class VfoSelectionController : public QObject
   private:
     void reset();
     void requestSelection(Vfo vfo);
+    bool receiverContextAvailable() const;
+    bool receiverPairAvailable() const;
     void setPttReady(bool ready);
     void updateTransmitIndicators();
 
@@ -52,6 +54,10 @@ class VfoSelectionController : public QObject
     bool m_pttReady{true};
     bool m_transmitting{false};
     bool m_radioReady{false};
+    bool m_controlsEnabled{false};
+    bool m_receiverContextReady{true};
+    bool m_dualWatchEnabled{false};
+    bool m_dualWatchPending{false};
     std::function<void()> m_selectedAction;
     QTimer* m_selectionTimeoutTimer{nullptr};
     int m_selectionRetryCount{0};

@@ -160,7 +160,8 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
     qRegisterMetaType<QVector<Ax25Frame>>();
     qRegisterMetaType<Ax25DecoderStats>();
     setObjectName(QStringLiteral("dataDecoderWindow"));
-    setFixedSize(kWindowSize);
+    setMinimumSize(760, 480);
+    resize(kWindowSize);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);

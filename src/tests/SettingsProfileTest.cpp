@@ -23,6 +23,7 @@ class SettingsProfileTest : public QObject
     void storesAllSettingsGroupsAndValueTypes();
     void removesSettings();
     void rejectsUnknownSettings();
+    void corruptedProfileKeyIsPreserved();
     void profilePasswordIsEncryptedAndRoundTrips();
     void corruptedProfilePasswordIsPreserved();
     void managesProfileLifecycleAndLastSelection();
@@ -142,6 +143,34 @@ void SettingsProfileTest::rejectsUnknownSettings()
     QVERIFY(!settings.contains(QStringLiteral("unknownSetting")));
 }
 
+void SettingsProfileTest::corruptedProfileKeyIsPreserved()
+{
+    const QString keyPath = QDir(sdr9700::configDirectory()).filePath(QStringLiteral("profile-key.bin"));
+    const QByteArray corruptKey("short-key");
+    QFile keyFile(keyPath);
+    QVERIFY(keyFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(keyFile.write(corruptKey), static_cast<qint64>(corruptKey.size()));
+    keyFile.close();
+
+    const RadioProfile profile{
+        QUuid::createUuid(),        QStringLiteral("Key recovery"), QStringLiteral("192.0.2.20"), 50001,
+        QStringLiteral("operator"), QStringLiteral("password"),
+    };
+    QTest::ignoreMessage(QtCriticalMsg, QRegularExpression(QStringLiteral("Preserved unreadable profile key as:.*")));
+    RadioProfileStore& store = RadioProfileStore::instance();
+    QVERIFY(store.addProfile(profile));
+
+    QFile preservedKey(keyPath + QStringLiteral(".corrupt"));
+    QVERIFY(preservedKey.open(QIODevice::ReadOnly));
+    QCOMPARE(preservedKey.readAll(), corruptKey);
+    preservedKey.close();
+    QVERIFY(QFileInfo(keyPath).size() >= 32);
+
+    QVERIFY(store.removeProfile(profile.id));
+    QVERIFY(QFile::remove(keyPath));
+    QVERIFY(preservedKey.remove());
+}
+
 void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()
 {
     RadioProfileStore& store = RadioProfileStore::instance();
@@ -169,6 +198,21 @@ void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()
     QCOMPARE(loaded->port, profile.port);
     QCOMPARE(loaded->username, profile.username);
     QCOMPARE(loaded->password, profile.password);
+
+    // Saving an unrelated profile field must reuse the existing ciphertext;
+    // deriving a fresh PBKDF2 key for every profile made routine saves scale
+    // poorly with the number of remembered radios.
+    QVERIFY(store.setLastProfileId(profile.id));
+    const QJsonObject resavedProfile = settingsDocument()
+                                           .value(QStringLiteral("radioChooser"))
+                                           .toObject()
+                                           .value(QStringLiteral("radioProfiles"))
+                                           .toObject()
+                                           .value(QStringLiteral("profiles"))
+                                           .toArray()
+                                           .at(0)
+                                           .toObject();
+    QCOMPARE(resavedProfile.value(QStringLiteral("password")).toString(), storedPassword);
 }
 
 void SettingsProfileTest::corruptedProfilePasswordIsPreserved()
@@ -254,7 +298,7 @@ void SettingsProfileTest::managesProfileLifecycleAndLastSelection()
     QVERIFY(store.lastProfileId().isNull());
     QVERIFY(memoryDatabase.memories(second.id, &databaseError).isEmpty());
     QVERIFY(!memoryDatabase.syncState(second.id, &databaseError).completedAt.isValid());
-    QVERIFY(store.removeProfile(QUuid::createUuid()));
+    QVERIFY(!store.removeProfile(QUuid::createUuid()));
 
     store.load();
     QCOMPARE(store.profiles().size(), 1);

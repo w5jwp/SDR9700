@@ -14,7 +14,7 @@ class PanelAccessibilityTest : public QObject
 
   private slots:
     void dtmfControlsHaveUsableInitialState();
-    void utilityDialogsAreFixedAndFrameless();
+    void utilityDialogsAreResizableAndFrameless();
     void invalidTransmitMetersCanBeCleared();
     void metersSurviveRepeatedUpdatesAndDestruction();
 };
@@ -29,6 +29,10 @@ void PanelAccessibilityTest::dtmfControlsHaveUsableInitialState()
     QVERIFY(display->isEnabled());
     const auto buttons = dialog.findChildren<QPushButton*>();
     QVERIFY(buttons.size() >= 19);
+    for (const auto* button : buttons)
+    {
+        QVERIFY(!button->accessibleName().isEmpty() || !button->accessibleDescription().isEmpty());
+    }
 }
 
 void PanelAccessibilityTest::invalidTransmitMetersCanBeCleared()
@@ -62,14 +66,15 @@ void PanelAccessibilityTest::invalidTransmitMetersCanBeCleared()
     QVERIFY(labelTexts.contains(QStringLiteral("-- A")));
 }
 
-void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
+void PanelAccessibilityTest::utilityDialogsAreResizableAndFrameless()
 {
     DtmfDialog dtmf;
     MetersDialog meters;
     for (QDialog* dialog : {static_cast<QDialog*>(&dtmf), static_cast<QDialog*>(&meters)})
     {
         QVERIFY(dialog->windowFlags().testFlag(Qt::FramelessWindowHint));
-        QCOMPARE(dialog->minimumSize(), dialog->maximumSize());
+        QVERIFY(dialog->maximumWidth() > dialog->minimumWidth());
+        QVERIFY(dialog->maximumHeight() > dialog->minimumHeight());
         auto* closeButton = dialog->findChild<QPushButton*>(QString(), Qt::FindChildrenRecursively);
         QVERIFY(closeButton != nullptr);
     }

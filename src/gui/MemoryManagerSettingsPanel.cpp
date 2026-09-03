@@ -2,6 +2,7 @@
 
 #include "AppSettings.h"
 #include "MainWindowHelpers.h"
+#include "MemorySyncPolicy.h"
 #include "SettingsPanelStyle.h"
 
 #include <QCheckBox>
@@ -33,13 +34,13 @@ MemoryManagerSettingsPanel::MemoryManagerSettingsPanel(QWidget* parent) : QWidge
     pollIntervalCombo->addItem(QStringLiteral("15 Minutes"), 15 * 60);
     pollIntervalCombo->addItem(QStringLiteral("30 Minutes"), 30 * 60);
     pollIntervalCombo->addItem(QStringLiteral("60 Minutes"), 60 * 60);
-    const int storedPollInterval =
+    const int storedPollInterval = sdr9700::normalizeMemoryPollIntervalSeconds(
         AppSettings::instance()
-            .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
-            .toInt();
+            .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey),
+                   sdr9700::kDefaultMemoryPollIntervalSeconds)
+            .toInt());
     const int storedIndex = pollIntervalCombo->findData(storedPollInterval);
-    pollIntervalCombo->setCurrentIndex(
-        storedIndex >= 0 ? storedIndex : pollIntervalCombo->findData(kDefaultMemoryPollIntervalSeconds));
+    pollIntervalCombo->setCurrentIndex(storedIndex);
     syncLayout->addRow(QStringLiteral("Poll interval:"), pollIntervalCombo);
 
     root->addWidget(syncGroup);

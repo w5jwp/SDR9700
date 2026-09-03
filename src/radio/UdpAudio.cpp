@@ -234,7 +234,7 @@ void UdpAudio::sendNextDtmfFrame()
         return;
     }
 
-    const int take = qMin(m_txSilencePacketBytes, m_dtmfPcm.size() - m_dtmfPcmOffset);
+    const qsizetype take = qMin(qsizetype(m_txSilencePacketBytes), m_dtmfPcm.size() - m_dtmfPcmOffset);
     // DTMF is not the normal voice path, but it still runs on the same 20 ms
     // transmit cadence. Reuse this scratch frame so repeated tone chunks do not
     // create allocator noise while the radio is keyed.
@@ -243,7 +243,7 @@ void UdpAudio::sendNextDtmfFrame()
         m_dtmfFrame.resize(m_txSilencePacketBytes);
     }
     std::memset(m_dtmfFrame.data(), 0, size_t(m_dtmfFrame.size()));
-    memcpy(m_dtmfFrame.data(), m_dtmfPcm.constData() + m_dtmfPcmOffset, take);
+    memcpy(m_dtmfFrame.data(), m_dtmfPcm.constData() + m_dtmfPcmOffset, size_t(take));
     m_dtmfPcmOffset += take;
     sendAudioBuffer(m_dtmfFrame);
 

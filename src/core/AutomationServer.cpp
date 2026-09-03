@@ -1,6 +1,7 @@
 #include "AutomationServer.h"
 
 #include "LogCategories.h"
+#include "AppPaths.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -10,7 +11,7 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSaveFile>
-#include <QStandardPaths>
+#include <QUuid>
 
 namespace
 {
@@ -52,14 +53,15 @@ bool AutomationServer::start(const RequestHandler& handler)
     }
 
     m_handler = handler;
-    QString name = QStringLiteral("sdr9700-automation-%1").arg(QCoreApplication::applicationPid());
+    const QString endpointToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QString name =
+        QStringLiteral("sdr9700-automation-%1-%2").arg(QCoreApplication::applicationPid()).arg(endpointToken);
 #if defined(Q_OS_MACOS)
     // The per-user macOS temporary directory is too long for the platform's
     // Unix-domain socket path limit. /private/tmp is the canonical short
     // filesystem location; owner-only endpoint permissions are applied below.
     name = QDir(QStringLiteral("/private/tmp")).filePath(name);
 #endif
-    QLocalServer::removeServer(name);
     if (!m_server->listen(name))
     {
         qCritical(logSystem()).noquote() << "Automation bridge could not listen:" << m_server->errorString();
@@ -213,14 +215,28 @@ void AutomationServer::processLine(QLocalSocket* socket, const QByteArray& line)
 
 bool AutomationServer::writeDiscoveryFile()
 {
-    const QString tempDirectory = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    const QString discoveryDirectory = QDir(sdr9700::configDirectory()).filePath(QStringLiteral("automation"));
+    if (!QDir().mkpath(discoveryDirectory) ||
+        !QFile::setPermissions(discoveryDirectory,
+                               QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner))
+    {
+        qCritical(logSystem()).noquote() << "Automation discovery directory could not be secured";
+        return false;
+    }
     m_discoveryFilePath =
-        QDir(tempDirectory)
+        QDir(discoveryDirectory)
             .filePath(QStringLiteral("sdr9700-automation-%1.json").arg(QCoreApplication::applicationPid()));
     QSaveFile file(m_discoveryFilePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
         qCritical(logSystem()).noquote() << "Automation discovery file could not be opened:" << file.errorString();
+        m_discoveryFilePath.clear();
+        return false;
+    }
+    if (!file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner))
+    {
+        qCritical(logSystem()).noquote() << "Automation discovery file permissions could not be restricted";
+        file.cancelWriting();
         m_discoveryFilePath.clear();
         return false;
     }
@@ -236,7 +252,13 @@ bool AutomationServer::writeDiscoveryFile()
         m_discoveryFilePath.clear();
         return false;
     }
-    QFile::setPermissions(m_discoveryFilePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!QFile::setPermissions(m_discoveryFilePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner))
+    {
+        qCritical(logSystem()).noquote() << "Automation discovery file permissions could not be restricted";
+        QFile::remove(m_discoveryFilePath);
+        m_discoveryFilePath.clear();
+        return false;
+    }
     return true;
 }
 

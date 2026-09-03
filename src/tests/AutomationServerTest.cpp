@@ -1,6 +1,9 @@
 #include "AutomationServer.h"
+#include "AppPaths.h"
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QLocalSocket>
 #include <QSignalSpy>
@@ -39,6 +42,12 @@ class AutomationServerTest final : public QObject
                                    {QStringLiteral("sequence"), request.value(QStringLiteral("sequence"))}};
             }));
         QVERIFY(QFile::exists(server.discoveryFilePath()));
+        const QFileInfo discoveryInfo(server.discoveryFilePath());
+        QCOMPARE(discoveryInfo.dir().absolutePath(),
+                 QDir(sdr9700::configDirectory()).filePath(QStringLiteral("automation")));
+        QCOMPARE(discoveryInfo.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                                                QFileDevice::ReadOther | QFileDevice::WriteOther),
+                 QFileDevice::Permissions{});
 
         QSignalSpy clientCountSpy(&server, &AutomationServer::clientCountChanged);
         QLocalSocket client;
@@ -61,7 +70,10 @@ class AutomationServerTest final : public QObject
         }
 
         client.disconnectFromServer();
-        QVERIFY(client.waitForDisconnected(2000) || client.state() == QLocalSocket::UnconnectedState);
+        if (client.state() != QLocalSocket::UnconnectedState)
+        {
+            QVERIFY(client.waitForDisconnected(2000));
+        }
         QTRY_COMPARE(server.clientCount(), 0);
         QVERIFY(clientCountSpy.count() >= 2);
         const QString discoveryPath = server.discoveryFilePath();

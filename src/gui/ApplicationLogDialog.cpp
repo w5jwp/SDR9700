@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFontDatabase>
+#include <QHideEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
@@ -19,6 +20,7 @@
 #include <QCheckBox>
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QShowEvent>
 #include <QTextStream>
 #include <QTextCursor>
 #include <QTimer>
@@ -27,14 +29,16 @@
 namespace
 {
 constexpr QSize kApplicationLogWindowSize{1100, 700};
-}
+constexpr int kMaximumDisplayedLogLines = 50000;
+} // namespace
 
 ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     : sdr9700::ui::UtilityWindow(QStringLiteral("Application Log"), parent)
 {
     setObjectName(QStringLiteral("applicationLogWindow"));
     setModal(false);
-    setFixedSize(kApplicationLogWindowSize);
+    setMinimumSize(720, 480);
+    resize(kApplicationLogWindowSize);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -90,6 +94,7 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
 
     m_logView = new QPlainTextEdit(content);
     m_logView->setReadOnly(true);
+    m_logView->document()->setMaximumBlockCount(kMaximumDisplayedLogLines);
     m_logView->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_logView->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     m_logView->setAccessibleName(QStringLiteral("Application log messages"));
@@ -130,6 +135,14 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
                 if (!m_paused)
                 {
                     refreshLog();
+                    if (isVisible())
+                    {
+                        m_refreshTimer->start();
+                    }
+                }
+                else
+                {
+                    m_refreshTimer->stop();
                 }
             });
     connect(includeCivCheckBox, &QCheckBox::toggled, this,
@@ -137,10 +150,26 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
 
     connect(m_categoryCombo, &QComboBox::currentIndexChanged, this, &ApplicationLogDialog::resetLogView);
     m_refreshTimer = new QTimer(this);
+    m_refreshTimer->setObjectName(QStringLiteral("applicationLogRefreshTimer"));
     m_refreshTimer->setInterval(1000);
     connect(m_refreshTimer, &QTimer::timeout, this, &ApplicationLogDialog::refreshLog);
-    m_refreshTimer->start();
     refreshLog();
+}
+
+void ApplicationLogDialog::hideEvent(QHideEvent* event)
+{
+    m_refreshTimer->stop();
+    sdr9700::ui::UtilityWindow::hideEvent(event);
+}
+
+void ApplicationLogDialog::showEvent(QShowEvent* event)
+{
+    sdr9700::ui::UtilityWindow::showEvent(event);
+    if (!m_paused)
+    {
+        refreshLog();
+        m_refreshTimer->start();
+    }
 }
 
 void ApplicationLogDialog::resetLogView()

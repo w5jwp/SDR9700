@@ -79,7 +79,11 @@ class FakeRadioBackend : public IRadioBackend
     void setTxPower(int value) override { txPower = value; }
     void setTuningStep(int) override {}
     void setDialLockEnabled(bool enabled) override { dialLockEnabled = enabled; }
-    void selectVfo(Vfo value) override { selectedVfo = value; }
+    void selectVfo(Vfo value) override
+    {
+        selectedVfo = value;
+        ++selectVfoCalls;
+    }
     void exchangeMainSub() override { ++exchangeCalls; }
     void setVfoFrequencyHz(Vfo vfo, quint64 hz) override
     {
@@ -173,6 +177,7 @@ class FakeRadioBackend : public IRadioBackend
     int txPower{-1};
     int frequencyCalls{0};
     int modeCalls{0};
+    int selectVfoCalls{0};
     Vfo selectedVfo{Vfo::Main};
     Vfo requestedVfoState{Vfo::Main};
     bool dualWatchEnabled{false};
@@ -230,6 +235,7 @@ class VfoBackendTest : public QObject
     void bandRecallRejectsPressureUntilCompleteIdentitySettles();
     void uiSelectionIgnoresBackgroundReceiverRouting();
     void dualWatchRequestReportsBackendAcceptance();
+    void receiverPairActionsRespectLifecycleGates();
 };
 
 void VfoBackendTest::filtersMenuKeepsControlColumnsAligned()
@@ -389,6 +395,7 @@ void VfoBackendTest::dualWatchRequestReportsBackendAcceptance()
     VfoController subController(Vfo::Sub, &backend, &state, &parent);
     VfoSelectionController selection(&backend, &mainController, &subController, &parent);
     selection.setRadioReady(true);
+    selection.setControlsEnabled(true);
 
     backend.dualWatchAccepted = false;
     QVERIFY(!backend.dualWatchAccepted);
@@ -411,8 +418,10 @@ void VfoBackendTest::uiSelectionIgnoresBackgroundReceiverRouting()
     VfoController subController(Vfo::Sub, &backend, &state, &parent);
     VfoSelectionController selection(&backend, &mainController, &subController, &parent);
     selection.setRadioReady(true);
+    selection.setControlsEnabled(true);
+    emit backend.radioValueConfirmed(funcVFODualWatch, true, 0);
 
-    selection.selectVfo(Vfo::Sub);
+    QVERIFY(selection.selectVfo(Vfo::Sub));
     QCOMPARE(backend.selectedVfo, Vfo::Sub);
     QCOMPARE(selection.selectedVfo(), Vfo::Main);
 
@@ -427,6 +436,43 @@ void VfoBackendTest::uiSelectionIgnoresBackgroundReceiverRouting()
     // MAIN. That is not an operator selection and must not move the UI.
     emit backend.radioValueConfirmed(funcVFOBandMS, false, 0);
     QCOMPARE(selection.selectedVfo(), Vfo::Sub);
+}
+
+void VfoBackendTest::receiverPairActionsRespectLifecycleGates()
+{
+    FakeRadioBackend backend;
+    sdr9700::RadioState state(&backend);
+    QWidget parent;
+    VfoController mainController(Vfo::Main, &backend, &state, &parent);
+    VfoController subController(Vfo::Sub, &backend, &state, &parent);
+    VfoSelectionController selection(&backend, &mainController, &subController, &parent);
+
+    QVERIFY(!selection.selectVfo(Vfo::Sub));
+    QVERIFY(!selection.requestMainSubExchange());
+    QCOMPARE(backend.selectVfoCalls, 0);
+    QCOMPARE(backend.exchangeCalls, 0);
+
+    selection.setRadioReady(true);
+    selection.setControlsEnabled(true);
+    QVERIFY(!selection.selectVfo(Vfo::Sub));
+    QVERIFY(!selection.requestMainSubExchange());
+
+    emit backend.radioValueConfirmed(funcVFODualWatch, true, 0);
+    selection.setReceiverContextReady(false);
+    QVERIFY(!selection.selectVfo(Vfo::Sub));
+    QVERIFY(!selection.requestMainSubExchange());
+
+    selection.setReceiverContextReady(true);
+    QVERIFY(selection.selectVfo(Vfo::Sub));
+    QCOMPARE(backend.selectVfoCalls, 1);
+    QVERIFY(!selection.selectVfo(Vfo::Sub));
+    QVERIFY(!selection.requestMainSubExchange());
+
+    emit backend.radioValueConfirmed(funcVFOBandMS, true, 0);
+    QVERIFY(selection.requestMainSubExchange());
+    QCOMPARE(backend.exchangeCalls, 1);
+    QVERIFY(!selection.selectVfo(Vfo::Main));
+    QVERIFY(!selection.requestMainSubExchange());
 }
 
 void VfoBackendTest::controllerFrequencyRequestWaitsForRadioConfirmation()
