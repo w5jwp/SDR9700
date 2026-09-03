@@ -133,8 +133,7 @@ QJsonObject AutomationController::stateSnapshot() const
                        {QStringLiteral("controlsLocked"), m_window->m_controlsLocked},
                        {QStringLiteral("selectedVfo"), vfoName(m_window->m_vfoSelectionController->selectedVfo())},
                        {QStringLiteral("dialLock"),
-                        shared.dialLockEnabled ? QJsonValue(*shared.dialLockEnabled)
-                                               : QJsonValue(QJsonValue::Null)},
+                        shared.dialLockEnabled ? QJsonValue(*shared.dialLockEnabled) : QJsonValue(QJsonValue::Null)},
                        {QStringLiteral("afGain"), optionalJsonValue(shared.afGain)},
                        {QStringLiteral("txPower"), optionalJsonValue(shared.txPower)},
                        {QStringLiteral("lanModLevel"), optionalJsonValue(shared.lanModLevel)},

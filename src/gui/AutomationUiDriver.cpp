@@ -358,7 +358,8 @@ QJsonObject AutomationUiDriver::setValue(const QJsonObject& request)
         if (auto* menu = qobject_cast<QMenu*>(combo->window()))
         {
             QPointer<QMenu> guarded(menu);
-            QTimer::singleShot(0, this, [guarded]()
+            QTimer::singleShot(0, this,
+                               [guarded]()
                                {
                                    if (guarded)
                                    {
