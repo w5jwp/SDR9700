@@ -74,7 +74,7 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
     };
     connect(m_mainController, &VfoController::bandMenuRequested, this, showBandMenu);
     connect(m_subController, &VfoController::bandMenuRequested, this, showBandMenu);
-    connect(m_panel, &VfoSelectionPanel::vfoRequested, this, &VfoSelectionController::requestSelection);
+    connect(m_panel, &VfoSelectionPanel::vfoRequested, this, [this](Vfo vfo) { selectVfo(vfo); });
     connect(m_panel, &VfoSelectionPanel::dualWatchRequested, this, [this](bool enabled) { requestDualWatch(enabled); });
     connect(m_panel, &VfoSelectionPanel::exchangeRequested, this, [this]() { requestMainSubExchange(); });
     if (m_backend)
@@ -111,6 +111,7 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
         connect(m_backend, &IRadioBackend::dualWatchTransitionPendingChanged, this,
                 [this](bool pending)
                 {
+                    m_dualWatchPending = pending;
                     m_panel->setDualWatchPending(pending);
                     setPttReady(!pending && !m_selectionPending && !m_exchangePolicy.pending());
                 });
@@ -163,6 +164,7 @@ VfoSelectionController::VfoSelectionController(IRadioBackend* backend, VfoContro
                     else if (func == funcVFODualWatch)
                     {
                         const bool enabled = value.toBool();
+                        m_dualWatchEnabled = enabled;
                         m_panel->setDualWatchEnabled(enabled);
                         m_subController->setOperatingEnabled(enabled);
                         if (!enabled)
@@ -228,14 +230,23 @@ void VfoSelectionController::runWhenSelected(Vfo vfo, std::function<void()> acti
     m_selectedAction = std::move(action);
 }
 
-void VfoSelectionController::selectVfo(Vfo vfo)
+bool VfoSelectionController::selectVfo(Vfo vfo)
 {
+    if (!receiverPairAvailable() || m_selectionPending)
+    {
+        return false;
+    }
+    if (m_selectedVfo == vfo)
+    {
+        return true;
+    }
     requestSelection(vfo);
+    return true;
 }
 
 bool VfoSelectionController::requestMainSubExchange()
 {
-    if (!m_backend || !m_radioReady || m_transmitting || !m_exchangePolicy.request())
+    if (!receiverPairAvailable() || m_selectionPending || !m_exchangePolicy.request())
     {
         return false;
     }
@@ -250,7 +261,7 @@ bool VfoSelectionController::requestMainSubExchange()
 
 bool VfoSelectionController::requestDualWatch(bool enabled)
 {
-    if (!m_backend || !m_radioReady || m_transmitting || m_exchangePolicy.pending())
+    if (!receiverContextAvailable() || m_selectionPending)
     {
         return false;
     }
@@ -259,6 +270,7 @@ bool VfoSelectionController::requestDualWatch(bool enabled)
 
 void VfoSelectionController::setControlsEnabled(bool enabled)
 {
+    m_controlsEnabled = enabled;
     m_panel->setControlsEnabled(enabled);
 }
 
@@ -272,7 +284,19 @@ void VfoSelectionController::setRadioReady(bool ready)
 
 void VfoSelectionController::setReceiverContextReady(bool ready)
 {
+    m_receiverContextReady = ready;
     m_panel->setReceiverContextReady(ready);
+}
+
+bool VfoSelectionController::receiverContextAvailable() const
+{
+    return m_backend && m_controlsEnabled && m_radioReady && m_receiverContextReady && !m_transmitting &&
+           !m_exchangePolicy.pending() && !m_dualWatchPending;
+}
+
+bool VfoSelectionController::receiverPairAvailable() const
+{
+    return receiverContextAvailable() && m_dualWatchEnabled;
 }
 
 void VfoSelectionController::reset()
@@ -288,6 +312,8 @@ void VfoSelectionController::reset()
     m_panel->setDualWatchPending(false);
     setPttReady(true);
     m_transmitting = false;
+    m_dualWatchEnabled = false;
+    m_dualWatchPending = false;
     m_panel->setSelectedVfo(Vfo::Main);
     m_mainController->setSelected(m_radioReady);
     m_subController->setSelected(false);

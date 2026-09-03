@@ -198,7 +198,11 @@ QJsonObject AutomationController::execute(const QJsonObject& request)
         {
             return reject(QStringLiteral("invalid_vfo"), QStringLiteral("vfo must be MAIN or SUB"));
         }
-        m_window->m_vfoSelectionController->selectVfo(*vfo);
+        if (!m_window->m_vfoSelectionController->selectVfo(*vfo))
+        {
+            return reject(QStringLiteral("request_rejected"),
+                          QStringLiteral("VFO selection requires ready dual-watch receivers"));
+        }
     }
     else if (action == QLatin1String("set_frequency"))
     {
