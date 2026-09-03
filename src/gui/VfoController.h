@@ -63,6 +63,7 @@ class VfoController : public QObject
 
     const sdr9700::RadioState::Receiver* confirmedReceiverState() const;
     QString confirmedMode() const;
+    std::optional<int> confirmedFilter() const;
     std::optional<duplexMode_t> confirmedDuplexMode() const;
     std::optional<quint64> confirmedRepeaterOffsetHz() const;
     std::optional<rptAccessTxRx_t> confirmedToneAccessMode() const;

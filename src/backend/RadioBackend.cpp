@@ -1587,6 +1587,24 @@ void RadioBackend::setVfoMode(Vfo vfo, const QString& mode)
                             });
 }
 
+void RadioBackend::setVfoFilter(Vfo vfo, const QString& mode, int filter)
+{
+    ModeInfo modeInfo;
+    if (!populateModeInfo(mode, &modeInfo))
+    {
+        qWarning(logRadio()).noquote() << "Ignoring filter selection for unsupported VFO mode:" << mode;
+        return;
+    }
+    modeInfo.filter = static_cast<quint8>(qBound(1, filter, 3));
+    routeVfoReceiverCommand(vfo, funcModeSet,
+                            [modeInfo](Commander* commandSession, uchar receiver)
+                            {
+                                commandSession->receiveCommandNoReadback(funcModeSet, QVariant::fromValue(modeInfo),
+                                                                         receiver);
+                                commandSession->receiveCommand(funcModeGet, QVariant(), receiver);
+                            });
+}
+
 void RadioBackend::applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall)
 {
     if (recall.frequencyHz == 0 || m_pttState.safetyActive())

@@ -80,6 +80,7 @@ class IRadioBackend : public QObject
     virtual void exchangeMainSub() = 0;
     virtual void setVfoFrequencyHz(Vfo vfo, quint64 hz) = 0;
     virtual void setVfoMode(Vfo vfo, const QString& mode) = 0;
+    virtual void setVfoFilter(Vfo vfo, const QString& mode, int filter) = 0;
     virtual void applyVfoBandRecall(Vfo vfo, const VfoBandRecallRequest& recall) = 0;
     virtual void requestVfoState(Vfo vfo) = 0;
     virtual void setVfoAgcMode(Vfo vfo, const QString& mode) = 0;

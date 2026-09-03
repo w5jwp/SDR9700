@@ -87,11 +87,13 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
         m_txBadge->setAccessibleName(QStringLiteral("%1 transmit indicator").arg(title));
         m_txBadge->setStyleSheet(
             QStringLiteral("QLabel#vfoTxBadge { background: #080b0f; border: 1px solid %1; border-radius: 0; "
-                           "color: %1; font-size: %3px; font-weight: bold; } "
-                           "QLabel#vfoTxBadge[transmitting=\"true\"] { background: %2; border: 1px solid %1; "
-                           "color: %4; }")
-                .arg(UiTheme::Color::Danger, UiTheme::Color::PttActive)
+                           "color: %2; font-size: %4px; font-weight: bold; } "
+                           "QLabel#vfoTxBadge:enabled { border-color: %3; color: %3; } "
+                           "QLabel#vfoTxBadge[transmitting=\"true\"]:enabled { background: %5; border-color: %3; "
+                           "color: %6; }")
+                .arg(UiTheme::Color::Border, UiTheme::Color::TextStatusLabel, UiTheme::Color::Danger)
                 .arg(kTitleFontPixelSize)
+                .arg(UiTheme::Color::PttActive)
                 .arg(UiTheme::Color::TextBright));
     }
 
@@ -307,8 +309,8 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     receiverControlLayout->setContentsMargins(0, 0, 0, 0);
     receiverControlLayout->setSpacing(kReceiverControlSpacing);
     const QStringList controls = {
-        QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("NB"),  QStringLiteral("NOTCH"),
-        QStringLiteral("NR"),  QStringLiteral("PRE"), QStringLiteral("RFG"),
+        QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("FILTERS"),
+        QStringLiteral("PRE"), QStringLiteral("RFG"),
     };
     for (const QString& control : controls)
     {
@@ -369,6 +371,10 @@ void VfoDisplay::setOperatingEnabled(bool enabled)
 {
     m_operatingEnabled = enabled;
     setTuningEnabled(m_tuningEnabled);
+    if (m_txBadge)
+    {
+        m_txBadge->setEnabled(enabled);
+    }
     for (QPushButton* button : std::as_const(m_receiverControlButtons))
     {
         button->setEnabled(enabled);
@@ -514,6 +520,14 @@ void VfoDisplay::setReceiverControlState(const QString& control, const QString& 
     button->style()->unpolish(button);
     button->style()->polish(button);
     button->update();
+}
+
+void VfoDisplay::setReceiverControlToolTip(const QString& control, const QString& toolTip)
+{
+    if (QPushButton* button = m_receiverControlButtons.value(control, nullptr))
+    {
+        button->setToolTip(toolTip);
+    }
 }
 
 QPoint VfoDisplay::bandMenuPosition() const
