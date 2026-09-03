@@ -3725,8 +3725,8 @@ void Commander::setPttActive(bool active)
         return;
     }
 
-    QMetaObject::invokeMethod(udp, [udpSession = udp, active]() { udpSession->setPttActive(active); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        udp, [udpSession = udp, active]() { udpSession->setPttActive(active); }, Qt::QueuedConnection);
 }
 
 void Commander::sendDtmfPcm(const QByteArray& pcm)
@@ -3735,8 +3735,7 @@ void Commander::sendDtmfPcm(const QByteArray& pcm)
     {
         return;
     }
-    QMetaObject::invokeMethod(udp, [udpSession = udp, pcm]() { udpSession->queueDtmfPcm(pcm); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(udp, [udpSession = udp, pcm]() { udpSession->queueDtmfPcm(pcm); }, Qt::QueuedConnection);
 }
 
 void Commander::readCurrentFrequencyAndMode()

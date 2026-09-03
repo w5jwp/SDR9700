@@ -54,9 +54,8 @@ bool AutomationServer::start(const RequestHandler& handler)
 
     m_handler = handler;
     const QString endpointToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QString name = QStringLiteral("sdr9700-automation-%1-%2")
-                       .arg(QCoreApplication::applicationPid())
-                       .arg(endpointToken);
+    QString name =
+        QStringLiteral("sdr9700-automation-%1-%2").arg(QCoreApplication::applicationPid()).arg(endpointToken);
 #if defined(Q_OS_MACOS)
     // The per-user macOS temporary directory is too long for the platform's
     // Unix-domain socket path limit. /private/tmp is the canonical short

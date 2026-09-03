@@ -243,7 +243,12 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     // physical receiver.
     auto* vfoSelection = window.findChild<VfoSelectionController*>();
     QVERIFY(vfoSelection != nullptr);
-    vfoSelection->selectVfo(Vfo::Sub);
+    model.backend()->radioValueConfirmed(funcVFODualWatch, QVariant::fromValue<bool>(true), 0);
+    QCoreApplication::processEvents();
+    vfoSelection->setControlsEnabled(true);
+    vfoSelection->setRadioReady(true);
+    vfoSelection->setReceiverContextReady(true);
+    QVERIFY(vfoSelection->selectVfo(Vfo::Sub));
     model.backend()->radioValueConfirmed(funcVFOBandMS, QVariant::fromValue<bool>(true), 0);
     QCoreApplication::processEvents();
     QVERIFY(QMetaObject::invokeMethod(memoryTable, "cellDoubleClicked", Q_ARG(int, 0), Q_ARG(int, 0)));
@@ -398,7 +403,8 @@ void MemoryManagerSmokeTest::newInstallationCanAddRadioProfile()
 
     RadioChooserDialog dialog;
     QVERIFY(dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
-    QCOMPARE(dialog.minimumSize(), dialog.maximumSize());
+    QVERIFY(dialog.maximumWidth() > dialog.minimumWidth());
+    QVERIFY(dialog.maximumHeight() > dialog.minimumHeight());
     auto* addButton = dialog.findChild<QPushButton*>(QStringLiteral("addRadioProfileButton"));
     auto* saveButton = dialog.findChild<QPushButton*>(QStringLiteral("saveRadioProfileButton"));
     auto* connectButton = dialog.findChild<QPushButton*>(QStringLiteral("connectRadioButton"));
@@ -447,7 +453,8 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
         memoryWindowIt != topLevelWidgets.cend() ? qobject_cast<QDialog*>(*memoryWindowIt) : nullptr;
     QVERIFY(memoryWindow != nullptr);
     QVERIFY(memoryWindow->windowFlags().testFlag(Qt::FramelessWindowHint));
-    QCOMPARE(memoryWindow->minimumSize(), memoryWindow->maximumSize());
+    QVERIFY(memoryWindow->maximumWidth() > memoryWindow->minimumWidth());
+    QVERIFY(memoryWindow->maximumHeight() > memoryWindow->minimumHeight());
     auto* table = memoryWindow->findChild<QTableWidget*>(QStringLiteral("memoryManagerTable"));
     auto* windowMenu = window.findChild<QMenu*>(QStringLiteral("windowMenu"));
     QVERIFY(table != nullptr);

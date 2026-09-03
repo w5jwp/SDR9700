@@ -180,6 +180,9 @@ bool MemoryDatabase::ensureSchema(QString* error)
         setError(error, QStringLiteral("The memory database was created by a newer SDR9700 version."));
         return false;
     }
+    // Migrations are additive and idempotent: create every object required by
+    // the current schema before advancing user_version. Future destructive or
+    // data-transforming migrations must be explicit versioned steps here.
     if (!query.exec(QStringLiteral("CREATE TABLE IF NOT EXISTS radio_memories ("
                                    "profile_id TEXT NOT NULL, memory_group INTEGER NOT NULL, channel INTEGER NOT NULL, "
                                    "payload BLOB NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, "

@@ -44,7 +44,8 @@ void GuiSmokeTest::settingsDialogOpensSearchesAndCloses()
         QString::fromLatin1(sdr9700::ui::main_window::kMemoryShowSatelliteMemoriesSettingsKey));
     SettingsDialog dialog(SettingsDialog::Page::MemoryManager);
     QVERIFY(dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
-    QCOMPARE(dialog.minimumSize(), dialog.maximumSize());
+    QVERIFY(dialog.maximumWidth() > dialog.minimumWidth());
+    QVERIFY(dialog.maximumHeight() > dialog.minimumHeight());
     dialog.show();
 
     QTRY_VERIFY(dialog.isVisible());

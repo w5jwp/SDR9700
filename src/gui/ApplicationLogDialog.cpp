@@ -30,7 +30,7 @@ namespace
 {
 constexpr QSize kApplicationLogWindowSize{1100, 700};
 constexpr int kMaximumDisplayedLogLines = 50000;
-}
+} // namespace
 
 ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     : sdr9700::ui::UtilityWindow(QStringLiteral("Application Log"), parent)

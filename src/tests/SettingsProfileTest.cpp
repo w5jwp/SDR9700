@@ -204,14 +204,14 @@ void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()
     // poorly with the number of remembered radios.
     QVERIFY(store.setLastProfileId(profile.id));
     const QJsonObject resavedProfile = settingsDocument()
-                                                 .value(QStringLiteral("radioChooser"))
-                                                 .toObject()
-                                                 .value(QStringLiteral("radioProfiles"))
-                                                 .toObject()
-                                                 .value(QStringLiteral("profiles"))
-                                                 .toArray()
-                                                 .at(0)
-                                                 .toObject();
+                                           .value(QStringLiteral("radioChooser"))
+                                           .toObject()
+                                           .value(QStringLiteral("radioProfiles"))
+                                           .toObject()
+                                           .value(QStringLiteral("profiles"))
+                                           .toArray()
+                                           .at(0)
+                                           .toObject();
     QCOMPARE(resavedProfile.value(QStringLiteral("password")).toString(), storedPassword);
 }
 

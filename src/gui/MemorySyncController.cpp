@@ -28,11 +28,10 @@ MemorySyncController::MemorySyncController(MemoryController* owner) : QObject(ow
     connect(m_refreshTimer, &QTimer::timeout, this, &MemorySyncController::requestNextRadioMemory);
 
     m_periodicRefreshTimer = new QTimer(this);
-    setMemoryPollIntervalSeconds(
-        AppSettings::instance()
-            .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey),
-                   sdr9700::kDefaultMemoryPollIntervalSeconds)
-            .toInt());
+    setMemoryPollIntervalSeconds(AppSettings::instance()
+                                     .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey),
+                                            sdr9700::kDefaultMemoryPollIntervalSeconds)
+                                     .toInt());
     connect(m_periodicRefreshTimer, &QTimer::timeout, this, &MemorySyncController::startScheduledRadioMemoryRefresh);
 
     m_syncTimeoutTimer = new QTimer(this);
