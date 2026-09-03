@@ -1,6 +1,7 @@
 #include "StatusBarController.h"
 
 #include "AppSettings.h"
+#include "LogCategories.h"
 #include "MainTitleBar.h"
 #include "MainWindowHelpers.h"
 #include "MetersDialog.h"
@@ -19,7 +20,7 @@ using namespace sdr9700::ui::main_window;
 
 namespace
 {
-constexpr int kClockSeparatorGap = 6;
+constexpr int kStatusBarElementSpacing = 11;
 
 QString automationIndicatorStyle(bool clientConnected)
 {
@@ -30,7 +31,7 @@ QString automationIndicatorStyle(bool clientConnected)
         .arg(background);
 }
 
-QString normalizedToastMessage(QString message)
+QString normalizedStatusMessage(QString message)
 {
     message = message.trimmed();
     while (!message.isEmpty())
@@ -47,6 +48,7 @@ QString normalizedToastMessage(QString message)
     }
     return message;
 }
+
 } // namespace
 
 StatusBarController::StatusBarController(MainWindow* window) : QObject(window), m_window(window) {}
@@ -210,7 +212,7 @@ void StatusBarController::buildStatusBar()
     container->setStyleSheet(
         QStringLiteral("QWidget#statusBarContent { background: %1; }").arg(UiTheme::Color::WindowChrome));
     auto* hbox = new QHBoxLayout(container);
-    hbox->setContentsMargins(6, 0, 6, 0);
+    hbox->setContentsMargins(0, 0, kStatusBarElementSpacing, 0);
     hbox->setSpacing(0);
 
     auto makeSep = [this]() -> QLabel*
@@ -269,19 +271,21 @@ void StatusBarController::buildStatusBar()
         widget->setMinimumWidth(width);
         widget->setMaximumWidth(width);
     };
-
     m_window->m_txDurationTimer = new QTimer(m_window);
     m_window->m_txDurationTimer->setInterval(250);
     connect(m_window->m_txDurationTimer, &QTimer::timeout, this, &StatusBarController::updateTxDurationLabel);
 
-    m_window->m_toastLabel = new QLabel(QString(), m_window);
-    m_window->m_toastLabel->setObjectName(QStringLiteral("statusToastLabel"));
-    m_window->m_toastLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusPrimary));
-    m_window->m_toastLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    hbox->addWidget(m_window->m_toastLabel);
-    m_window->m_statusLabel = m_window->m_toastLabel;
+    auto* statusMessageContainer = new QWidget(m_window);
+    auto* statusMessageLayout = new QHBoxLayout(statusMessageContainer);
+    statusMessageLayout->setContentsMargins(kStatusBarElementSpacing, 0, UiTheme::Size::StatusSeparatorWidth, 0);
+    statusMessageLayout->setSpacing(0);
 
-    hbox->addStretch(1);
+    m_window->m_statusMessageLabel = new QLabel(QString(), statusMessageContainer);
+    m_window->m_statusMessageLabel->setObjectName(QStringLiteral("statusMessageLabel"));
+    m_window->m_statusMessageLabel->setStyleSheet(statusLabelStyle(UiTheme::Color::TextStatusPrimary));
+    m_window->m_statusMessageLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    statusMessageLayout->addWidget(m_window->m_statusMessageLabel);
+    hbox->addWidget(statusMessageContainer, 1);
 
     // The bridge is opt-in at process startup, and this compact indicator is
     // visible for the lifetime of an automation-enabled session. The orange
@@ -402,7 +406,6 @@ void StatusBarController::buildStatusBar()
     }
 
     hbox->addWidget(makeSep());
-    hbox->addSpacing(kClockSeparatorGap);
 
     auto* clockStatusPanel = new ClickableStatusPanel(m_window);
     applyStatusContainerWidth(clockStatusPanel, uniformStackWidth);
@@ -429,18 +432,18 @@ void StatusBarController::buildStatusBar()
     hbox->addWidget(clockStatusPanel);
 
     // Never use showMessage(); it hides permanent widgets. All transient
-    // messages go through showToast() which overlays m_window->m_statusLabel directly.
+    // messages update m_statusMessageLabel through showStatusMessage().
     m_window->statusBar()->addWidget(container, 1);
 
-    // Toast timer restores connection status after a toast expires.
-    m_window->m_toastTimer = new QTimer(m_window);
-    m_window->m_toastTimer->setSingleShot(true);
-    connect(m_window->m_toastTimer, &QTimer::timeout, this,
+    // Status message timer restores connection status after a status message expires.
+    m_window->m_statusMessageTimer = new QTimer(m_window);
+    m_window->m_statusMessageTimer->setSingleShot(true);
+    connect(m_window->m_statusMessageTimer, &QTimer::timeout, this,
             [this]()
             {
-                if (m_window->m_toastLabel)
+                if (m_window->m_statusMessageLabel)
                 {
-                    applyToast(m_persistentMessage, m_persistentKind);
+                    applyStatusMessage(m_persistentMessage, m_persistentKind);
                 }
             });
 
@@ -486,65 +489,78 @@ void StatusBarController::setAutomationEnabled(bool enabled)
     }
 }
 
-void StatusBarController::showToast(const QString& msg, int durationMs)
+void StatusBarController::showStatusMessage(const QString& msg, int durationMs)
 {
-    showToast(msg, durationMs, MainWindow::ToastKind::Info);
+    showStatusMessage(msg, durationMs, MainWindow::StatusMessageKind::Info);
 }
 
-void StatusBarController::showToast(const QString& msg, int durationMs, MainWindow::ToastKind kind)
+void StatusBarController::showStatusMessage(const QString& msg, int durationMs, MainWindow::StatusMessageKind kind)
 {
-    if (!m_window->m_toastLabel || !m_window->m_toastTimer)
+    if (!m_window->m_statusMessageLabel || !m_window->m_statusMessageTimer)
     {
         return;
     }
 
-    const QString message = normalizedToastMessage(msg);
+    const QString message = normalizedStatusMessage(msg);
+    if (message.size() > kMaximumStatusMessageCharacters)
+    {
+        qWarning(logGui()).nospace() << "Status message rejected because it exceeds the maximum length characters="
+                                     << message.size() << " recommended=" << kRecommendedStatusMessageCharacters
+                                     << " maximum=" << kMaximumStatusMessageCharacters;
+        return;
+    }
+    if (message.size() > kRecommendedStatusMessageCharacters)
+    {
+        qWarning(logGui()).nospace() << "Status message exceeds the recommended length characters=" << message.size()
+                                     << " recommended=" << kRecommendedStatusMessageCharacters
+                                     << " maximum=" << kMaximumStatusMessageCharacters;
+    }
     if (durationMs <= 0)
     {
         m_persistentMessage = message;
         m_persistentKind = kind;
     }
 
-    applyToast(message, kind);
-    m_window->m_toastTimer->stop();
+    applyStatusMessage(message, kind);
+    m_window->m_statusMessageTimer->stop();
     if (durationMs > 0)
     {
-        m_window->m_toastTimer->start(durationMs);
+        m_window->m_statusMessageTimer->start(durationMs);
     }
 }
 
-void StatusBarController::clearPersistentToast(const QString& expectedMessage)
+void StatusBarController::clearPersistentStatusMessage(const QString& expectedMessage)
 {
-    if (m_persistentMessage != normalizedToastMessage(expectedMessage))
+    if (m_persistentMessage != normalizedStatusMessage(expectedMessage))
     {
         return;
     }
 
     m_persistentMessage.clear();
-    m_persistentKind = MainWindow::ToastKind::Info;
-    if (!m_window->m_toastTimer || !m_window->m_toastTimer->isActive())
+    m_persistentKind = MainWindow::StatusMessageKind::Info;
+    if (!m_window->m_statusMessageTimer || !m_window->m_statusMessageTimer->isActive())
     {
-        applyToast(QString(), MainWindow::ToastKind::Info);
+        applyStatusMessage(QString(), MainWindow::StatusMessageKind::Info);
     }
 }
 
-void StatusBarController::applyToast(const QString& message, MainWindow::ToastKind kind)
+void StatusBarController::applyStatusMessage(const QString& message, MainWindow::StatusMessageKind kind)
 {
     const char* color = UiTheme::Color::TextStatusPrimary;
     bool bold = false;
-    if (kind == MainWindow::ToastKind::Warning)
+    if (kind == MainWindow::StatusMessageKind::Warning)
     {
         color = UiTheme::Color::Warning;
         bold = true;
     }
-    else if (kind == MainWindow::ToastKind::Error)
+    else if (kind == MainWindow::StatusMessageKind::Error)
     {
         color = UiTheme::Color::Danger;
         bold = true;
     }
 
-    m_window->m_toastLabel->setText(message);
-    m_window->m_toastLabel->setStyleSheet(statusLabelStyle(color, bold));
+    m_window->m_statusMessageLabel->setText(message);
+    m_window->m_statusMessageLabel->setStyleSheet(statusLabelStyle(color, bold));
 }
 
 void StatusBarController::updateNetworkQuality(int rttMs)

@@ -295,7 +295,7 @@ void MemoryViewController::buildMemoryWindow()
             {
                 if (m_owner->exportRadioMemories())
                 {
-                    m_owner->m_window->showToast(QStringLiteral("Memories exported"));
+                    m_owner->m_window->showStatusMessage(QStringLiteral("Memories exported"));
                 }
             });
 

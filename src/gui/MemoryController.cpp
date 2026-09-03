@@ -184,9 +184,9 @@ bool MemoryController::memoryOperationInProgress() const
     return m_memoryViewController->operationInProgress();
 }
 
-void MemoryController::showMemoryToast(const QString& message)
+void MemoryController::showMemoryStatusMessage(const QString& message)
 {
-    m_window->showToast(message);
+    m_window->showStatusMessage(message);
 }
 
 void MemoryController::handleRadioMemoryReceived(MemoryType memory)

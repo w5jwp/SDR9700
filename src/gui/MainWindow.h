@@ -222,7 +222,7 @@ class MainWindow : public QMainWindow
     QLabel* m_lockIndicator{nullptr};
     QWidget* m_automationIndicatorContainer{nullptr};
     QLabel* m_automationIndicator{nullptr};
-    QLabel* m_toastLabel{nullptr};
+    QLabel* m_statusMessageLabel{nullptr};
     QLabel* m_connStateLabel{nullptr};
     QLabel* m_connDetailLabel{nullptr};
     QLabel* m_netTitleLabel{nullptr};
@@ -247,11 +247,10 @@ class MainWindow : public QMainWindow
     bool m_icomRC28AutoSnap{false};
 #endif
 
-    QLabel* m_statusLabel{nullptr};
     QAction* m_radioConnectionAction{nullptr};
 
     QString m_connStateName;
-    QTimer* m_toastTimer{nullptr};
+    QTimer* m_statusMessageTimer{nullptr};
 
     QTimer* m_reconnectTimer{nullptr};
     QTimer* m_audioSettingsApplyTimer{nullptr};
@@ -262,7 +261,7 @@ class MainWindow : public QMainWindow
     bool m_allowChooserOnDisconnect{false};
     bool m_radioUiReadyNotified{false};
     bool m_spectrumScopeStillSyncingAfterReady{false};
-    QString m_connectionToastMessage;
+    QString m_connectionStatusMessage;
 
     QTimer* m_txDurationTimer{nullptr};
     QElapsedTimer m_txElapsed;
@@ -280,14 +279,14 @@ class MainWindow : public QMainWindow
 
     void updateSpectrumVfoMarker();
     void updateTxDurationLabel();
-    enum class ToastKind
+    enum class StatusMessageKind
     {
         Info,
         Warning,
         Error,
     };
-    void showToast(const QString& msg, int durationMs = 4000, ToastKind kind = ToastKind::Info);
-    void clearPersistentToast(const QString& expectedMessage);
+    void showStatusMessage(const QString& msg, int durationMs = 4000, StatusMessageKind kind = StatusMessageKind::Info);
+    void clearPersistentStatusMessage(const QString& expectedMessage);
     void updateNetworkQuality(int rttMs);
 
     void updateTransmitState(bool on);

@@ -52,8 +52,8 @@ void IcomRC28Controller::initialize()
             [this](const QString& deviceName)
             {
                 qInfo(logIcomRC28()).noquote() << "Multiple devices detected:" << deviceName;
-                m_window->showToast(QStringLiteral("Duplicate accessory blocked (%1)").arg(deviceName), 8000,
-                                    MainWindow::ToastKind::Warning);
+                m_window->showStatusMessage(QStringLiteral("Duplicate accessory blocked (%1)").arg(deviceName), 8000,
+                                            MainWindow::StatusMessageKind::Warning);
             });
     connect(m_window->m_icomRC28Manager, &IcomRC28Manager::connectionChanged, this,
             [this](bool connected, const QString& deviceName)
@@ -73,9 +73,10 @@ void IcomRC28Controller::initialize()
                     m_window->m_icomRC28PttLatched = false;
                     setIcomRC28Ptt(false);
                 }
-                m_window->showToast(connected ? QStringLiteral("Accessory connected (%1)").arg(deviceName)
-                                              : QStringLiteral("Accessory disconnected (%1)").arg(deviceName),
-                                    4000, connected ? MainWindow::ToastKind::Info : MainWindow::ToastKind::Warning);
+                m_window->showStatusMessage(
+                    connected ? QStringLiteral("Accessory connected (%1)").arg(deviceName)
+                              : QStringLiteral("Accessory disconnected (%1)").arg(deviceName),
+                    4000, connected ? MainWindow::StatusMessageKind::Info : MainWindow::StatusMessageKind::Warning);
             });
     m_window->m_icomRC28Manager->loadSettings();
 #endif

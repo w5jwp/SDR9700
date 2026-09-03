@@ -1175,8 +1175,8 @@ void MemoryEditorForm::show(const QString& memoryId)
                     {
                         dialogGuard->accept();
                     }
-                    m_owner->m_window->showToast(editing ? QStringLiteral("Memory updated")
-                                                         : QStringLiteral("Memory stored"));
+                    m_owner->m_window->showStatusMessage(editing ? QStringLiteral("Memory updated")
+                                                                 : QStringLiteral("Memory stored"));
                 });
         });
 

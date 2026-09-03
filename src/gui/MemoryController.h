@@ -54,7 +54,7 @@ class MemoryController : public QObject
 
     bool memoryRefreshInProgress() const;
     bool memoryOperationInProgress() const;
-    void showMemoryToast(const QString& message);
+    void showMemoryStatusMessage(const QString& message);
     QWidget* popupParent() const;
 
   signals:
