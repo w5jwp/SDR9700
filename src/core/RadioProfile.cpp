@@ -77,6 +77,17 @@ void secureZero(QByteArray& data)
     }
 }
 
+QString nextPreservedPath(const QString& path)
+{
+    QString preservedPath = path + QStringLiteral(".corrupt");
+    int suffix = 1;
+    while (QFileInfo::exists(preservedPath))
+    {
+        preservedPath = path + QStringLiteral(".corrupt.%1").arg(suffix++);
+    }
+    return preservedPath;
+}
+
 QByteArray readOrCreateProfileKey()
 {
     const QString path = profileKeyPath();
@@ -95,6 +106,16 @@ QByteArray readOrCreateProfileKey()
             return result;
         }
         secureZero(key);
+
+        const QString preservedPath = nextPreservedPath(path);
+        keyFile.close();
+        if (!QFile::rename(path, preservedPath))
+        {
+            qCritical(logSystem()).noquote()
+                << "Could not preserve unreadable profile key; refusing to replace:" << path;
+            return {};
+        }
+        qCritical(logSystem()).noquote() << "Preserved unreadable profile key as:" << preservedPath;
     }
 
     const QByteArray key = randomBytes(kPasswordKeyBytes);
@@ -108,6 +129,10 @@ QByteArray readOrCreateProfileKey()
     if (!saveFile.open(QIODevice::WriteOnly))
     {
         return {};
+    }
+    if (!saveFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner))
+    {
+        qWarning(logSystem()).noquote() << "Could not set owner-only permissions on temporary profile key";
     }
     if (saveFile.write(key) != key.size() || !saveFile.commit())
     {

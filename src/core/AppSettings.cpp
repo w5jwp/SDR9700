@@ -240,11 +240,19 @@ bool AppSettings::save()
 bool AppSettings::writeFile() const
 {
     const QString path = configPath();
+    if (m_writesBlocked)
+    {
+        qCritical(logSystem()).noquote()
+            << "Refusing to overwrite unreadable application settings; preserve or remove the file first:" << path;
+        return false;
+    }
     QDir().mkpath(QFileInfo(path).absolutePath());
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
+        qCritical(logSystem()).noquote() << "Could not open application settings for writing:" << path
+                                         << file.errorString();
         return false;
     }
 
@@ -283,10 +291,12 @@ bool AppSettings::writeFile() const
     const QByteArray data = QJsonDocument(settings).toJson(QJsonDocument::Indented);
     if (file.write(data) != static_cast<qint64>(data.size()))
     {
+        qCritical(logSystem()).noquote() << "Could not write application settings:" << path << file.errorString();
         return false;
     }
     if (!file.commit())
     {
+        qCritical(logSystem()).noquote() << "Could not commit application settings:" << path << file.errorString();
         return false;
     }
 
@@ -299,7 +309,27 @@ bool AppSettings::writeFile() const
 
 void AppSettings::load()
 {
-    loadJson(configPath());
+    const QString path = configPath();
+    if (!QFileInfo::exists(path) || loadJson(path))
+    {
+        return;
+    }
+
+    QString preservedPath = path + QStringLiteral(".corrupt");
+    int suffix = 1;
+    while (QFileInfo::exists(preservedPath))
+    {
+        preservedPath = path + QStringLiteral(".corrupt.%1").arg(suffix++);
+    }
+    if (QFile::rename(path, preservedPath))
+    {
+        qCritical(logSystem()).noquote() << "Preserved unreadable application settings as:" << preservedPath;
+        return;
+    }
+
+    m_writesBlocked = true;
+    qCritical(logSystem()).noquote() << "Could not preserve unreadable application settings; writes are disabled:"
+                                     << path;
 }
 
 bool AppSettings::loadJson(const QString& path)
@@ -307,6 +337,7 @@ bool AppSettings::loadJson(const QString& path)
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
+        qCritical(logSystem()).noquote() << "Could not read application settings:" << path << file.errorString();
         return false;
     }
 
@@ -314,6 +345,15 @@ bool AppSettings::loadJson(const QString& path)
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject())
     {
+        if (error.error != QJsonParseError::NoError)
+        {
+            qCritical(logSystem()).noquote() << "Could not parse application settings:" << path << error.errorString()
+                                             << "at offset" << error.offset;
+        }
+        else
+        {
+            qCritical(logSystem()).noquote() << "Application settings root is not a JSON object:" << path;
+        }
         return false;
     }
 

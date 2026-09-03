@@ -23,6 +23,7 @@ class SettingsProfileTest : public QObject
     void storesAllSettingsGroupsAndValueTypes();
     void removesSettings();
     void rejectsUnknownSettings();
+    void corruptedProfileKeyIsPreserved();
     void profilePasswordIsEncryptedAndRoundTrips();
     void corruptedProfilePasswordIsPreserved();
     void managesProfileLifecycleAndLastSelection();
@@ -140,6 +141,34 @@ void SettingsProfileTest::rejectsUnknownSettings()
     QTest::ignoreMessage(QtWarningMsg, "Refusing to save unknown application setting: unknownSetting");
     QVERIFY(!settings.setValue(QStringLiteral("unknownSetting"), 42));
     QVERIFY(!settings.contains(QStringLiteral("unknownSetting")));
+}
+
+void SettingsProfileTest::corruptedProfileKeyIsPreserved()
+{
+    const QString keyPath = QDir(sdr9700::configDirectory()).filePath(QStringLiteral("profile-key.bin"));
+    const QByteArray corruptKey("short-key");
+    QFile keyFile(keyPath);
+    QVERIFY(keyFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(keyFile.write(corruptKey), static_cast<qint64>(corruptKey.size()));
+    keyFile.close();
+
+    const RadioProfile profile{
+        QUuid::createUuid(),        QStringLiteral("Key recovery"), QStringLiteral("192.0.2.20"), 50001,
+        QStringLiteral("operator"), QStringLiteral("password"),
+    };
+    QTest::ignoreMessage(QtCriticalMsg, QRegularExpression(QStringLiteral("Preserved unreadable profile key as:.*")));
+    RadioProfileStore& store = RadioProfileStore::instance();
+    QVERIFY(store.addProfile(profile));
+
+    QFile preservedKey(keyPath + QStringLiteral(".corrupt"));
+    QVERIFY(preservedKey.open(QIODevice::ReadOnly));
+    QCOMPARE(preservedKey.readAll(), corruptKey);
+    preservedKey.close();
+    QVERIFY(QFileInfo(keyPath).size() >= 32);
+
+    QVERIFY(store.removeProfile(profile.id));
+    QVERIFY(QFile::remove(keyPath));
+    QVERIFY(preservedKey.remove());
 }
 
 void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()

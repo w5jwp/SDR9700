@@ -4,6 +4,10 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
@@ -61,6 +65,7 @@ class SettingsProcessTest : public QObject
     void persistsAcrossProcesses();
     void flushesDeferredSetting();
     void malformedFileStartsWithDefaults();
+    void malformedFileIsPreservedBeforeWritingDefaults();
     void cleanupTestCase();
 };
 
@@ -86,11 +91,42 @@ void SettingsProcessTest::flushesDeferredSetting()
 
 void SettingsProcessTest::malformedFileStartsWithDefaults()
 {
+    const QByteArray malformedData("{not-json");
     QFile file(AppSettings::configPath());
     QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    QCOMPARE(file.write("{not-json"), qint64(9));
+    QCOMPARE(file.write(malformedData), static_cast<qint64>(malformedData.size()));
     file.close();
     QCOMPARE(launchChild(QStringLiteral("default")), 0);
+    QVERIFY(!QFileInfo::exists(AppSettings::configPath()));
+    QFile preservedFile(AppSettings::configPath() + QStringLiteral(".corrupt"));
+    QVERIFY(preservedFile.open(QIODevice::ReadOnly));
+    QCOMPARE(preservedFile.readAll(), malformedData);
+    preservedFile.close();
+    QVERIFY(preservedFile.remove());
+}
+
+void SettingsProcessTest::malformedFileIsPreservedBeforeWritingDefaults()
+{
+    const QByteArray malformedData("{valuable-but-not-valid-json");
+    QFile file(AppSettings::configPath());
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(file.write(malformedData), static_cast<qint64>(malformedData.size()));
+    file.close();
+
+    QCOMPARE(launchChild(QStringLiteral("write")), 0);
+
+    QFile preservedFile(AppSettings::configPath() + QStringLiteral(".corrupt"));
+    QVERIFY(preservedFile.open(QIODevice::ReadOnly));
+    QCOMPARE(preservedFile.readAll(), malformedData);
+
+    QFile replacementFile(AppSettings::configPath());
+    QVERIFY(replacementFile.open(QIODevice::ReadOnly));
+    QJsonParseError error;
+    const QJsonDocument replacement = QJsonDocument::fromJson(replacementFile.readAll(), &error);
+    QCOMPARE(error.error, QJsonParseError::NoError);
+    QCOMPARE(
+        replacement.object().value(QStringLiteral("radio")).toObject().value(QStringLiteral("volumeLevel")).toString(),
+        QStringLiteral("173"));
 }
 
 void SettingsProcessTest::cleanupTestCase()
