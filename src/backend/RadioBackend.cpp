@@ -275,7 +275,8 @@ RadioBackend::RadioBackend(QObject* parent)
 
                     m_smeterPollPending = false;
                     m_smeterPollQueued = false;
-                    m_smeterPollPendingTicks = 0;
+                    m_smeterPollDeadlineMs = 0;
+                    m_smeterPollPendingClock.invalidate();
                 }
                 emit radioValueUpdated(func, value, receiver);
             });
@@ -889,7 +890,7 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                     << (m_mainSubExchangeClock.isValid() ? m_mainSubExchangeClock.elapsed() : -1);
             });
     connect(m_commander, &Commander::commandTransmitted, this,
-            [this, session, commandSession](Funcs func, uchar receiver)
+            [this, session, commandSession](Funcs func, uchar receiver, qint64 replyTimeoutMs)
             {
                 if (!isCurrentSession(session, commandSession) || func != funcSMeter || !m_smeterPollQueued ||
                     receiver != m_smeterPollPendingReceiver)
@@ -898,7 +899,8 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 }
                 m_smeterPollQueued = false;
                 m_smeterPollPending = true;
-                m_smeterPollPendingTicks = 0;
+                m_smeterPollDeadlineMs = replyTimeoutMs;
+                m_smeterPollPendingClock.start();
             });
     connect(m_commander, &RadioCommander::haveAudioData, this,
             [this, session, commandSession](audioPacket pkt)
@@ -1152,7 +1154,9 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_vfoStatePollPhase = 0;
     m_smeterPollPending = false;
     m_smeterPollQueued = false;
-    m_smeterPollPendingTicks = 0;
+    m_smeterPollDeadlineMs = 0;
+    m_smeterPollTimeoutCount = 0;
+    m_smeterPollPendingClock.invalidate();
     m_smeterPollTick = 0;
     m_mainSubExchangePending = false;
     m_mainSubExchangeDispatched = false;
@@ -2345,7 +2349,8 @@ bool RadioBackend::setPtt(bool on)
 
         armTransmitSafety();
         const auto selectedMemory = m_selectedRadioMemory;
-        qInfo(logRadio()).noquote() << "PTT route target= MAIN memory=" << (selectedMemory.has_value() ? "yes" : "no");
+        qInfo(logRadio()).noquote().nospace()
+            << "PTT route target=MAIN memory=" << (selectedMemory.has_value() ? "yes" : "no");
         invokeOnCurrentCommander(
             [selectedMemory](Commander* commandSession)
             {
@@ -3151,16 +3156,24 @@ void RadioBackend::onLanReady()
                 m_txMeterPollTick = 0;
                 if (m_smeterPollPending)
                 {
-                    if (++m_smeterPollPendingTicks < 3)
+                    const qint64 elapsedMs =
+                        m_smeterPollPendingClock.isValid() ? m_smeterPollPendingClock.elapsed() : 0;
+                    if (elapsedMs < m_smeterPollDeadlineMs)
                     {
                         return;
                     }
 
-                    invokeOnCurrentCommander([](Commander* commandSession)
-                                             { commandSession->discardPendingReplies(funcSMeter); });
+                    const uchar timedOutReceiver = m_smeterPollPendingReceiver;
+                    invokeOnCurrentCommander([timedOutReceiver](Commander* commandSession)
+                                             { commandSession->abortSMeterRead(timedOutReceiver); });
                     m_smeterPollPending = false;
-                    m_smeterPollPendingTicks = 0;
-                    qWarning(logRadio()).noquote() << "S-meter poll timed out";
+                    m_smeterPollPendingClock.invalidate();
+                    ++m_smeterPollTimeoutCount;
+                    qWarning(logRadio()).noquote().nospace()
+                        << "S-meter poll timed out receiver=" << m_smeterPollPendingReceiver
+                        << " elapsedMs=" << elapsedMs << " deadlineMs=" << m_smeterPollDeadlineMs
+                        << " timeoutCount=" << m_smeterPollTimeoutCount;
+                    m_smeterPollDeadlineMs = 0;
                     return;
                 }
                 if (m_smeterPollQueued)
@@ -3187,7 +3200,7 @@ void RadioBackend::onLanReady()
                 const uchar receiver = sdr9700::backend::receiverForVfo(targetVfo);
                 m_smeterPollQueued = true;
                 m_smeterPollPendingReceiver = receiver;
-                m_smeterPollPendingTicks = 0;
+                m_smeterPollDeadlineMs = 0;
                 // CI-V 15 02 has no receiver byte. Sample the inactive side in
                 // the same serialized receiver-scoped path as every other
                 // receiver-less transaction. This is required even when the
@@ -3198,19 +3211,7 @@ void RadioBackend::onLanReady()
                 invokeOnCurrentCommander(
                     [activeVfo, receiver](Commander* commandSession)
                     {
-                        commandSession->scheduleMeterAction(
-                            funcSMeter, receiver,
-                            [commandSession, activeVfo, receiver]()
-                            {
-                                commandSession->executeReceiverScopedAction(
-                                    receiver,
-                                    [commandSession, activeVfo, receiver]()
-                                    {
-                                        commandSession->receiveCommand(funcSMeter, QVariant(), receiver);
-                                        commandSession->receiveCommandNoReadback(
-                                            funcScopeMainSub, QVariant::fromValue<bool>(activeVfo == Vfo::Sub), 0);
-                                    });
-                            });
+                        commandSession->scheduleSMeterRead(receiver, activeVfo == Vfo::Sub);
                     });
             });
     m_smeterPollTimer->start();

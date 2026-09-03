@@ -1,10 +1,13 @@
 #include "ApplicationLogDialog.h"
 #include "ApplicationLog.h"
+#include "DialogFooter.h"
 #include "LogCategories.h"
 #include "LoggingConfiguration.h"
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialogButtonBox>
+#include <QHBoxLayout>
 #include <QPushButton>
 #include <QPlainTextEdit>
 #include <QTimer>
@@ -54,13 +57,26 @@ void ApplicationLogDialogTest::providesLiveLogControls()
     auto* civCheckBox = dialog.findChild<QCheckBox*>(QStringLiteral("includeCivLogCheckBox"));
     auto* categoryCombo = dialog.findChild<QComboBox*>(QStringLiteral("applicationLogCategoryCombo"));
     auto* logView = dialog.findChild<QPlainTextEdit*>();
+    auto* buttonBox = dialog.findChild<QDialogButtonBox*>(QStringLiteral("dialogButtonBox"));
+    auto* footerSeparator = dialog.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator"));
+    auto* footerRow = dialog.findChild<QWidget*>(QStringLiteral("dialogFooterRow"));
     QVERIFY(pauseButton != nullptr);
     QVERIFY(clearButton != nullptr);
     QVERIFY(civCheckBox != nullptr);
+    QCOMPARE(civCheckBox->text(), QStringLiteral("Report CI-V Traffic"));
+    QCOMPARE(civCheckBox->accessibleDescription(), QStringLiteral("Include raw CI-V traffic in the application log."));
     QVERIFY(categoryCombo != nullptr);
     QCOMPARE(categoryCombo->currentText(), QStringLiteral("All categories"));
     QVERIFY(categoryCombo->minimumWidth() >= 190);
     QVERIFY(logView != nullptr);
+    QVERIFY(buttonBox != nullptr);
+    QVERIFY(buttonBox->button(QDialogButtonBox::Close) == nullptr);
+    QVERIFY(footerSeparator != nullptr);
+    QVERIFY(footerSeparator->isHidden());
+    QVERIFY(footerRow != nullptr);
+    auto* footerRowLayout = qobject_cast<QHBoxLayout*>(footerRow->layout());
+    QVERIFY(footerRowLayout != nullptr);
+    QCOMPARE(footerRowLayout->contentsMargins().bottom(), sdr9700::ui::kDialogFooterSpacing);
     QVERIFY(logView->document()->maximumBlockCount() > 0);
     auto* refreshTimer = dialog.findChild<QTimer*>(QStringLiteral("applicationLogRefreshTimer"));
     QVERIFY(refreshTimer != nullptr);

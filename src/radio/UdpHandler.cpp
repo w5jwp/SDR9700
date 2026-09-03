@@ -684,8 +684,7 @@ void UdpHandler::receiveDataFromUserToRadio(QByteArray data)
 {
     if (civ != nullptr)
     {
-        qDebug(logUdp()).noquote().nospace()
-            << "CI-V TX civPort=" << civPort << " data=" << QString::fromLatin1(data.toHex(' '));
+        qDebug(logUdp()).noquote().nospace() << "CI-V handoff civPort=" << civPort << " bytes=" << data.size();
         civ->send(data);
     }
     else

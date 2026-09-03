@@ -73,10 +73,9 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     m_categoryCombo->addItem(QStringLiteral("All categories"), QString());
     filterRow->addWidget(m_categoryCombo);
     filterRow->addSpacing(32);
-    auto* includeCivCheckBox = new QCheckBox(QStringLiteral("Include CI-V data"), content);
+    auto* includeCivCheckBox = new QCheckBox(QStringLiteral("Report CI-V Traffic"), content);
     includeCivCheckBox->setObjectName(QStringLiteral("includeCivLogCheckBox"));
-    includeCivCheckBox->setAccessibleDescription(
-        QStringLiteral("Include high-volume raw CI-V transmit and receive messages in the application log."));
+    includeCivCheckBox->setAccessibleDescription(QStringLiteral("Include raw CI-V traffic in the application log."));
     includeCivCheckBox->setStyleSheet(
         QStringLiteral("QCheckBox { color: %1; spacing: 8px; }"
                        "QCheckBox:focus { color: %2; }"
@@ -105,6 +104,10 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     contentLayout->addWidget(m_logView, 1);
 
     const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    if (auto* separator = footer.widget->findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")))
+    {
+        separator->hide();
+    }
     m_pauseButton = footer.buttonBox->addButton(QStringLiteral("Pause"), QDialogButtonBox::ActionRole);
     m_pauseButton->setObjectName(QStringLiteral("applicationLogPauseButton"));
     m_pauseButton->setAccessibleDescription(
@@ -114,10 +117,8 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     clearButton->setAccessibleDescription(QStringLiteral("Clear all retained application log messages."));
     auto* exportButton = footer.buttonBox->addButton(QStringLiteral("Export…"), QDialogButtonBox::ActionRole);
     exportButton->setAccessibleName(QStringLiteral("Export application log"));
-    footer.buttonBox->addButton(QDialogButtonBox::Close);
     contentLayout->addWidget(footer.widget);
     connect(exportButton, &QPushButton::clicked, this, &ApplicationLogDialog::exportLog);
-    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
     connect(clearButton, &QPushButton::clicked, this,
             [this]()
             {

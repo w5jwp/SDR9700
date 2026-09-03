@@ -323,9 +323,45 @@ void Commander::scheduleMeterRead(Funcs func, uchar receiver)
     enqueueScheduledRead(ScheduledCommandClass::Meter, func, receiver);
 }
 
-void Commander::scheduleMeterAction(Funcs func, uchar receiver, std::function<void()> action)
+void Commander::scheduleSMeterRead(uchar receiver, bool restoreScopeSub)
 {
-    enqueueScheduledAction(ScheduledCommandClass::Meter, func, receiver, std::move(action));
+    enqueueScheduledAction(ScheduledCommandClass::Meter, funcSMeter, receiver,
+                           [this, receiver, restoreScopeSub]()
+                           {
+                               if (receiver == 0)
+                               {
+                                   receiveCommand(funcSMeter, QVariant(), receiver);
+                                   return;
+                               }
+
+                               Q_ASSERT(!m_receiverScopedReadActive);
+                               m_receiverScopedReadActive = true;
+                               m_smeterScopedReadActive = true;
+                               m_smeterRestoreScopeSub = restoreScopeSub;
+                               receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoSub), 0);
+                               QTimer::singleShot(50, this,
+                                                  [this, receiver]()
+                                                  {
+                                                      if (!m_shutdownComplete && m_smeterScopedReadActive)
+                                                      {
+                                                          receiveCommand(funcSMeter, QVariant(), receiver);
+                                                      }
+                                                  });
+                           });
+}
+
+void Commander::abortSMeterRead(uchar receiver)
+{
+    if (receiver == 1)
+    {
+        ++m_correlationDiagnostics.subSMeterTimeouts;
+    }
+    else
+    {
+        ++m_correlationDiagnostics.mainSMeterTimeouts;
+    }
+    discardPendingReplies(funcSMeter);
+    finishSMeterRead();
 }
 
 void Commander::scheduleStartupRead(Funcs func, uchar receiver)
@@ -518,13 +554,16 @@ void Commander::logSchedulerDiagnostics()
         << " pendingHighWater=" << correlation.pendingReplyHighWaterMark
         << " pendingOverflows=" << correlation.pendingReplyOverflows
         << " pendingExpirations=" << correlation.pendingReplyExpirations
-        << " unmatchedReplies=" << correlation.unmatchedReplyFrames
+        << " unattributedDirectedValues=" << correlation.unattributedDirectedValues
         << " deferredReads=" << correlation.deferredReplyReads
         << " droppedDeferredReads=" << correlation.droppedReplyReads << " cacheQueueDepth=" << cacheQueue.depth
         << " cacheQueueHighWater=" << cacheQueue.highWaterMark << " cacheQueueOldestMs=" << cacheQueue.oldestItemAgeMs
         << " cacheQueueDropped=" << cacheQueue.droppedForCapacity
         << " transmittedFrames=" << diagnostics.transmittedFrames << " scheduledFrames=" << diagnostics.scheduledFrames
-        << " directFrames=" << diagnostics.directFrames << " intervalDispatched="
+        << " directFrames=" << diagnostics.directFrames << " sMeterMain=" << correlation.mainSMeterReplies << '/'
+        << correlation.mainSMeterRequests << " sMeterMainTimeouts=" << correlation.mainSMeterTimeouts
+        << " sMeterSub=" << correlation.subSMeterReplies << '/' << correlation.subSMeterRequests
+        << " sMeterSubTimeouts=" << correlation.subSMeterTimeouts << " intervalDispatched="
         << (diagnostics.dispatchedCommands - m_lastLoggedSchedulerDiagnostics.dispatchedCommands)
         << " intervalCoalesced=" << (diagnostics.coalescedCommands - m_lastLoggedSchedulerDiagnostics.coalescedCommands)
         << " intervalDropped=" << (diagnostics.droppedCommands - m_lastLoggedSchedulerDiagnostics.droppedCommands)
@@ -541,6 +580,8 @@ void Commander::resetScheduledCommands()
     m_consecutiveInteractiveDispatches = 0;
     m_dispatchingScheduledCommand = false;
     m_mainSubExchangeConfirmationPending = false;
+    m_smeterScopedReadActive = false;
+    m_smeterRestoreScopeSub = false;
 }
 
 void Commander::prepDataAndSend(QByteArray data)
@@ -551,7 +592,7 @@ void Commander::prepDataAndSend(QByteArray data)
     if (data[4] != '\x15')
     {
         // Meter polling is high-volume; keep CI-V traffic useful by suppressing it.
-        qInfo(logRadioTraffic()).noquote() << "CI-V TX" << data.toHex(' ');
+        qInfo(logRadioTraffic()).noquote() << "TX" << data.toHex(' ');
     }
     ++m_schedulerDiagnostics.transmittedFrames;
     if (m_dispatchingScheduledCommand)
@@ -581,7 +622,7 @@ void Commander::sendStandbyWake()
     // power-on. RadioBackend owns the longer, bounded boot hold and reconnects
     // this transport afterward; silence during that interval is intentional.
     emit standbyWakeHoldStarted();
-    qInfo(logRadioTraffic()).noquote() << "CI-V TX standby wake" << frame.toHex(' ');
+    qInfo(logRadioTraffic()).noquote() << "TX standby wake" << frame.toHex(' ');
     ++m_schedulerDiagnostics.transmittedFrames;
     ++m_schedulerDiagnostics.directFrames;
     emit dataForComm(frame);
@@ -656,7 +697,6 @@ bool Commander::takePendingReplyReceiver(Funcs func, uchar* receiver)
         }
     }
 
-    ++m_correlationDiagnostics.unmatchedReplyFrames;
     return false;
 }
 
@@ -871,6 +911,19 @@ void Commander::finishReceiverScopedAction()
     {
         m_scheduledCommandTimer->start();
     }
+}
+
+void Commander::finishSMeterRead()
+{
+    if (!m_smeterScopedReadActive)
+    {
+        return;
+    }
+
+    m_smeterScopedReadActive = false;
+    receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
+    receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(m_smeterRestoreScopeSub), 0);
+    QTimer::singleShot(25, this, &Commander::finishReceiverScopedAction);
 }
 
 void Commander::dispatchMainSubExchange()
@@ -1150,7 +1203,7 @@ void Commander::handleNewData(const QByteArray& data)
     const bool scopeDataFrame = data.size() > 64 && static_cast<uchar>(data[4]) == 0x27;
     if (!scopeDataFrame)
     {
-        qInfo(logRadioTraffic()).noquote() << "CI-V RX" << data.toHex(' ');
+        qInfo(logRadioTraffic()).noquote() << "RX" << data.toHex(' ');
     }
     // Spectrum Scope frames arrive continuously and are hundreds of bytes long.
     // Logging every frame hides startup and memory-sync evidence, which is
@@ -2510,8 +2563,12 @@ void Commander::parseCommand(FrameOrigin origin)
         func != funcVdMeter && func != funcIdMeter)
     {
         // Spectrum and meter replies are high-volume and obscure useful traffic.
-        qDebug(logRadioTraffic()).noquote() << QString("Received from radio: %1").arg(funcString[func]);
-        qDebug(logRadioTraffic()).noquote() << payloadIn.toHex(' ');
+        QString message = QString("Received from radio: %1").arg(funcString[func]);
+        if (!payloadIn.isEmpty())
+        {
+            message.append(QString(" data=%1").arg(QString::fromLatin1(payloadIn.toHex(' '))));
+        }
+        qDebug(logRadioTraffic()).noquote() << message;
     }
 
 #ifdef DEBUG_PARSE
@@ -2552,6 +2609,22 @@ void Commander::parseCommand(FrameOrigin origin)
         }
     }
 
+    if (correlationFunc == funcSMeter && receiver == 1 && pendingCorrelationFound)
+    {
+        finishSMeterRead();
+    }
+    if (correlationFunc == funcSMeter && pendingCorrelationFound)
+    {
+        if (receiver == 1)
+        {
+            ++m_correlationDiagnostics.subSMeterReplies;
+        }
+        else
+        {
+            ++m_correlationDiagnostics.mainSMeterReplies;
+        }
+    }
+
     const bool ambiguousFrequencyOrModeBroadcast =
         origin == FrameOrigin::UnsolicitedBroadcast && !explicitlyIdentifiesReceiver &&
         (correlationFunc == funcFreq || correlationFunc == funcFreqTR || correlationFunc == funcFreqGet ||
@@ -2567,7 +2640,7 @@ void Commander::parseCommand(FrameOrigin origin)
     if (origin == FrameOrigin::SolicitedReply && !explicitlyIdentifiesReceiver && !pendingCorrelationFound &&
         value.isValid())
     {
-        ++m_correlationDiagnostics.unmatchedReplyFrames;
+        ++m_correlationDiagnostics.unattributedDirectedValues;
         if (replyFamilyDraining(correlationFunc))
         {
             ++m_correlationDiagnostics.drainedReplyFrames;
@@ -4438,11 +4511,22 @@ void Commander::receiveCommand(Funcs func, QVariant value, uchar receiver)
         {
             rememberPendingReply(func, receiver);
         }
+        if (func == funcSMeter && !value.isValid())
+        {
+            if (receiver == 1)
+            {
+                ++m_correlationDiagnostics.subSMeterRequests;
+            }
+            else
+            {
+                ++m_correlationDiagnostics.mainSMeterRequests;
+            }
+        }
         // Register command correlation before emitting dataForComm. Most
         // production connections are queued across threads, but this ordering
         // also remains correct for direct test or diagnostic connections that
         // can deliver an immediate reply synchronously.
-        emit commandTransmitted(func, receiver);
+        emit commandTransmitted(func, receiver, m_rttEstimator.replyTimeoutMs());
         prepDataAndSend(payload);
     }
     else
