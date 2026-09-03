@@ -33,6 +33,7 @@ class MeterController : public QObject
 
   public slots:
     void reset();
+    void resetReceiveMeter();
     void resetTransmitMeters();
     void setSMeter(int value);
     void setPowerMeter(double watts);

@@ -224,10 +224,15 @@ void OfflinePoliciesTest::serializesRepeatedMainSubExchanges()
 
 void OfflinePoliciesTest::clampsMemoryPollingInterval()
 {
-    QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(0), 0);
-    QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(-1), 30);
-    QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(600), 600);
-    QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(9999), 3600);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(0), 0);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(300), 300);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(600), 600);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(900), 900);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(1800), 1800);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(3600), 3600);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(-1), sdr9700::kDefaultMemoryPollIntervalSeconds);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(30), sdr9700::kDefaultMemoryPollIntervalSeconds);
+    QCOMPARE(sdr9700::normalizeMemoryPollIntervalSeconds(9999), sdr9700::kDefaultMemoryPollIntervalSeconds);
 }
 
 void OfflinePoliciesTest::tracksMemorySynchronization()

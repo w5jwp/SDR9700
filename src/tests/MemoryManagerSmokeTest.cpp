@@ -166,6 +166,12 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     QTRY_VERIFY_WITH_TIMEOUT(statusLabel->text().startsWith(QStringLiteral("Finalizing radio memory sync")), 500);
     auto* syncController = controller->findChild<MemorySyncController*>();
     QVERIFY(syncController != nullptr);
+    syncController->setMemoryPollIntervalSeconds(0);
+    QCOMPARE(syncController->memoryPollIntervalSeconds(), 0);
+    QVERIFY(!syncController->periodicRefreshScheduled());
+    syncController->setMemoryPollIntervalSeconds(600);
+    QCOMPARE(syncController->memoryPollIntervalSeconds(), 600);
+    QVERIFY(syncController->periodicRefreshScheduled());
     QTRY_COMPARE_WITH_TIMEOUT(syncController->missingRetryRound(), 1, 1500);
 
     MemoryType recoveredReply;

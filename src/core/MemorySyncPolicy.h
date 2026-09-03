@@ -6,13 +6,23 @@
 
 namespace sdr9700
 {
-inline int clampMemoryPollIntervalSeconds(int seconds)
+inline constexpr int kMemoryPollingOff = 0;
+inline constexpr int kDefaultMemoryPollIntervalSeconds = 600;
+
+inline int normalizeMemoryPollIntervalSeconds(int seconds)
 {
-    if (seconds == 0)
+    switch (seconds)
     {
-        return 0;
+    case kMemoryPollingOff:
+    case 300:
+    case 600:
+    case 900:
+    case 1800:
+    case 3600:
+        return seconds;
+    default:
+        return kDefaultMemoryPollIntervalSeconds;
     }
-    return qBound(30, seconds, 3600);
 }
 
 inline bool memorySyncComplete(const QSet<quint32>& expected, const QSet<quint32>& received)

@@ -51,6 +51,13 @@ void MeterController::resetTransmitMeters()
     scheduleFlush();
 }
 
+void MeterController::resetReceiveMeter()
+{
+    m_snapshot.sMeter = 0;
+    m_snapshot.sMeterValid = false;
+    scheduleFlush();
+}
+
 void MeterController::setSMeter(int value)
 {
     m_snapshot.sMeter = qBound(0, value, 255);

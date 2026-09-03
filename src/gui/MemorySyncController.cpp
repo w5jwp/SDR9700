@@ -30,7 +30,8 @@ MemorySyncController::MemorySyncController(MemoryController* owner) : QObject(ow
     m_periodicRefreshTimer = new QTimer(this);
     setMemoryPollIntervalSeconds(
         AppSettings::instance()
-            .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
+            .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey),
+                   sdr9700::kDefaultMemoryPollIntervalSeconds)
             .toInt());
     connect(m_periodicRefreshTimer, &QTimer::timeout, this, &MemorySyncController::startScheduledRadioMemoryRefresh);
 
@@ -96,7 +97,7 @@ void MemorySyncController::forceRadioMemorySync()
 
 void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
 {
-    m_memoryPollIntervalSeconds = sdr9700::clampMemoryPollIntervalSeconds(seconds);
+    m_memoryPollIntervalSeconds = sdr9700::normalizeMemoryPollIntervalSeconds(seconds);
     if (m_memoryPollIntervalSeconds == 0)
     {
         m_periodicRefreshTimer->stop();
@@ -108,6 +109,11 @@ void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
     {
         m_periodicRefreshTimer->start();
     }
+}
+
+bool MemorySyncController::periodicRefreshScheduled() const
+{
+    return m_periodicRefreshTimer && m_periodicRefreshTimer->isActive();
 }
 
 void MemorySyncController::handleRadioReadyChanged(bool ready)
