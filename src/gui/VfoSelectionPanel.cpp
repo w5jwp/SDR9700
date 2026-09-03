@@ -35,11 +35,11 @@ enum class SegmentPosition
 
 QString selectionButtonStyle(SegmentPosition position, int fontPixelSize = 10)
 {
-    const QString innerBorder =
-        position == SegmentPosition::MiddleRight ? QStringLiteral("border-top: none; border-left: none; ")
-        : position == SegmentPosition::MiddleLeft || position == SegmentPosition::Bottom
-            ? QStringLiteral("border-top: none; ")
-            : QString();
+    const QString innerBorder = position == SegmentPosition::MiddleRight
+                                    ? QStringLiteral("border-top: none; border-left: none; ")
+                                : position == SegmentPosition::MiddleLeft || position == SegmentPosition::Bottom
+                                    ? QStringLiteral("border-top: none; ")
+                                    : QString();
     QString corners;
     if (position == SegmentPosition::Top)
     {
