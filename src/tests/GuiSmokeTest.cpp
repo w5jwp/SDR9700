@@ -62,8 +62,14 @@ void GuiSmokeTest::settingsDialogOpensSearchesAndCloses()
     QVERIFY(category->isExpanded());
     auto* showSpecial = dialog.findChild<QCheckBox*>(QStringLiteral("memoryManagerShowSpecialMemories"));
     auto* showSatellite = dialog.findChild<QCheckBox*>(QStringLiteral("memoryManagerShowSatelliteMemories"));
+    auto* pollInterval = dialog.findChild<QComboBox*>(QStringLiteral("memoryManagerPollInterval"));
     QVERIFY(showSpecial != nullptr);
     QVERIFY(showSatellite != nullptr);
+    QVERIFY(pollInterval != nullptr);
+    QCOMPARE(pollInterval->count(), 6);
+    QCOMPARE(pollInterval->itemText(0), QStringLiteral("Off"));
+    QCOMPARE(pollInterval->itemData(0).toInt(), 0);
+    QCOMPARE(pollInterval->itemData(5).toInt(), 3600);
     QVERIFY(!showSpecial->isChecked());
     QVERIFY(!showSatellite->isChecked());
     const QList<QLabel*> descriptions = dialog.findChildren<QLabel*>();
@@ -138,12 +144,19 @@ void GuiSmokeTest::rc28ButtonActionsAreOrderedAndSupported()
     auto* actions = dialog.findChild<QComboBox*>(QStringLiteral("icomRC28F1PressAction"));
     QVERIFY(actions != nullptr);
 
-    const QStringList expectedLabels = {QStringLiteral("None"),   QStringLiteral("Lock"), QStringLiteral("Mode"),
-                                        QStringLiteral("Mute"),   QStringLiteral("Step"), QStringLiteral("Step Down"),
+    const QStringList expectedLabels = {QStringLiteral("None"),
+                                        QStringLiteral("Lock"),
+                                        QStringLiteral("Switch Receiver"),
+                                        QStringLiteral("Swap MAIN and SUB"),
+                                        QStringLiteral("Mode"),
+                                        QStringLiteral("Mute"),
+                                        QStringLiteral("Step"),
+                                        QStringLiteral("Step Down"),
                                         QStringLiteral("Step Up")};
-    const QStringList expectedIds = {QStringLiteral("None"),      QStringLiteral("ToggleLock"),
-                                     QStringLiteral("CycleMode"), QStringLiteral("ToggleMute"),
-                                     QStringLiteral("CycleStep"), QStringLiteral("StepDown"),
+    const QStringList expectedIds = {QStringLiteral("None"),          QStringLiteral("ToggleLock"),
+                                     QStringLiteral("ToggleMainSub"), QStringLiteral("ExchangeMainSub"),
+                                     QStringLiteral("CycleMode"),     QStringLiteral("ToggleMute"),
+                                     QStringLiteral("CycleStep"),     QStringLiteral("StepDown"),
                                      QStringLiteral("StepUp")};
     QCOMPARE(actions->count(), expectedLabels.size());
     for (int i = 0; i < actions->count(); ++i)

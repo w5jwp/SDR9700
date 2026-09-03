@@ -447,11 +447,11 @@ inline QString radioBandMenuLabel(availableBands band)
     const RadioBandDef* def = radioBandDefinition(band);
     if (!def)
     {
-        return QStringLiteral("Band");
+        return QStringLiteral("BAND");
     }
 
     const int defaultMhz = static_cast<int>((def->defaultFrequency + 500000ULL) / 1000000ULL);
-    return QStringLiteral("%1 (%2 MHz)").arg(radioString(def->name), QString::number(defaultMhz));
+    return QStringLiteral("%1 (%2 MHZ)").arg(radioString(def->name).toUpper(), QString::number(defaultMhz));
 }
 
 inline quint64 radioBandDefaultFrequency(availableBands band)

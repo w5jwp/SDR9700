@@ -2,6 +2,7 @@
 #include "MetersDialog.h"
 
 #include <QGroupBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QTest>
@@ -14,6 +15,7 @@ class PanelAccessibilityTest : public QObject
   private slots:
     void dtmfControlsHaveUsableInitialState();
     void utilityDialogsAreFixedAndFrameless();
+    void invalidTransmitMetersCanBeCleared();
     void metersSurviveRepeatedUpdatesAndDestruction();
 };
 
@@ -27,6 +29,37 @@ void PanelAccessibilityTest::dtmfControlsHaveUsableInitialState()
     QVERIFY(display->isEnabled());
     const auto buttons = dialog.findChildren<QPushButton*>();
     QVERIFY(buttons.size() >= 19);
+}
+
+void PanelAccessibilityTest::invalidTransmitMetersCanBeCleared()
+{
+    MetersDialog meters;
+    meters.setPowerMeter(38.0);
+    meters.setAlc(1.0);
+    meters.setCompressionMeter(4.0);
+    meters.setVoltageMeter(13.8);
+    meters.setCurrentMeter(8.2);
+
+    meters.clearPowerMeter();
+    meters.clearAlc();
+    meters.clearCompressionMeter();
+    meters.clearVoltageMeter();
+    meters.clearCurrentMeter();
+
+    QStringList labelTexts;
+    for (const auto* label : meters.findChildren<QLabel*>())
+    {
+        labelTexts.append(label->text());
+    }
+    QVERIFY(!labelTexts.contains(QStringLiteral("38.0 W")));
+    QVERIFY(!labelTexts.contains(QStringLiteral("1.00")));
+    QVERIFY(!labelTexts.contains(QStringLiteral("4.0 dB")));
+    QVERIFY(!labelTexts.contains(QStringLiteral("13.8 V")));
+    QVERIFY(!labelTexts.contains(QStringLiteral("8.2 A")));
+    QVERIFY(labelTexts.contains(QStringLiteral("-- W")));
+    QVERIFY(labelTexts.contains(QStringLiteral("-- dB")));
+    QVERIFY(labelTexts.contains(QStringLiteral("-- V")));
+    QVERIFY(labelTexts.contains(QStringLiteral("-- A")));
 }
 
 void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
@@ -43,6 +76,8 @@ void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
 
     QVERIFY(meters.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")) == nullptr);
     QVERIFY(meters.findChild<QPushButton*>(QStringLiteral("metersCloseButton")) == nullptr);
+    QVERIFY(dtmf.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")) == nullptr);
+    QVERIFY(dtmf.findChild<QWidget*>(QStringLiteral("dialogButtonBox")) == nullptr);
     QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("receiveMeters")) != nullptr);
     QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("transmitMeters")) != nullptr);
     QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("audioMeters")) != nullptr);
@@ -52,8 +87,8 @@ void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
     {
         groupTitles.append(group->title());
     }
-    QCOMPARE(groupTitles, QStringList({QStringLiteral("AUDIO"), QStringLiteral("RADIO"), QStringLiteral("RECEIVE"),
-                                       QStringLiteral("TRANSMIT")}));
+    QCOMPARE(groupTitles, QStringList({QStringLiteral("Audio"), QStringLiteral("Radio"), QStringLiteral("Receive"),
+                                       QStringLiteral("Transmit")}));
 }
 
 void PanelAccessibilityTest::metersSurviveRepeatedUpdatesAndDestruction()

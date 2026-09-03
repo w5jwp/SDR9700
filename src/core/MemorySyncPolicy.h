@@ -8,6 +8,10 @@ namespace sdr9700
 {
 inline int clampMemoryPollIntervalSeconds(int seconds)
 {
+    if (seconds == 0)
+    {
+        return 0;
+    }
     return qBound(30, seconds, 3600);
 }
 

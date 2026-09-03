@@ -633,7 +633,7 @@ void VfoController::updateReceiverControlDisplay()
         QStringLiteral("FILTERS"), QStringLiteral("%1 • %2 • %3 • %4").arg(filterLabel, nbLabel, notchLabel, nrLabel));
     m_display->setReceiverControlState(QStringLiteral("PRE"), QString(), (m_preampLevel & 0x01) != 0);
     const int rfPercent = qBound(0, qRound(m_rfGain * 100.0 / 255.0), 100);
-    m_display->setReceiverControlState(QStringLiteral("RFG"), QString::number(rfPercent), m_rfGain > 0);
+    m_display->setReceiverControlState(QStringLiteral("RFG"), QStringLiteral("%1%").arg(rfPercent), m_rfGain > 0);
     const std::optional<duplexMode_t> duplexMode = confirmedDuplexMode();
     const std::optional<quint64> repeaterOffsetHz = confirmedRepeaterOffsetHz();
     const bool offsetKnown = duplexMode.has_value() && repeaterOffsetHz.has_value();

@@ -5,10 +5,10 @@
 #include "SettingsPanelStyle.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
-#include <QSpinBox>
 #include <QVBoxLayout>
 
 using namespace sdr9700::ui::main_window;
@@ -25,15 +25,22 @@ MemoryManagerSettingsPanel::MemoryManagerSettingsPanel(QWidget* parent) : QWidge
     syncLayout->setContentsMargins(10, 12, 10, 10);
     syncLayout->setSpacing(8);
 
-    auto* const pollIntervalSpin = new QSpinBox(syncGroup);
-    pollIntervalSpin->setRange(kMemoryPollIntervalMinSeconds, kMemoryPollIntervalMaxSeconds);
-    pollIntervalSpin->setSingleStep(30);
-    pollIntervalSpin->setSuffix(QStringLiteral(" seconds"));
-    pollIntervalSpin->setValue(
+    auto* const pollIntervalCombo = new QComboBox(syncGroup);
+    pollIntervalCombo->setObjectName(QStringLiteral("memoryManagerPollInterval"));
+    pollIntervalCombo->addItem(QStringLiteral("Off"), 0);
+    pollIntervalCombo->addItem(QStringLiteral("5 Minutes"), 5 * 60);
+    pollIntervalCombo->addItem(QStringLiteral("10 Minutes"), 10 * 60);
+    pollIntervalCombo->addItem(QStringLiteral("15 Minutes"), 15 * 60);
+    pollIntervalCombo->addItem(QStringLiteral("30 Minutes"), 30 * 60);
+    pollIntervalCombo->addItem(QStringLiteral("60 Minutes"), 60 * 60);
+    const int storedPollInterval =
         AppSettings::instance()
             .value(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), kDefaultMemoryPollIntervalSeconds)
-            .toInt());
-    syncLayout->addRow(QStringLiteral("Poll interval:"), pollIntervalSpin);
+            .toInt();
+    const int storedIndex = pollIntervalCombo->findData(storedPollInterval);
+    pollIntervalCombo->setCurrentIndex(
+        storedIndex >= 0 ? storedIndex : pollIntervalCombo->findData(kDefaultMemoryPollIntervalSeconds));
+    syncLayout->addRow(QStringLiteral("Poll interval:"), pollIntervalCombo);
 
     root->addWidget(syncGroup);
 
@@ -77,10 +84,13 @@ MemoryManagerSettingsPanel::MemoryManagerSettingsPanel(QWidget* parent) : QWidge
     root->addWidget(visibilityGroup);
     root->addStretch(1);
 
-    connect(pollIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int seconds)
-            { AppSettings::instance().setValue(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), seconds); });
-    connect(pollIntervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &MemoryManagerSettingsPanel::pollIntervalSecondsChanged);
+    connect(pollIntervalCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this, pollIntervalCombo](int index)
+            {
+                const int seconds = pollIntervalCombo->itemData(index).toInt();
+                AppSettings::instance().setValue(QString::fromLatin1(kMemoryPollIntervalSecondsSettingsKey), seconds);
+                emit pollIntervalSecondsChanged(seconds);
+            });
     connect(showSpecialCheck, &QCheckBox::toggled, this, [](bool show)
             { AppSettings::instance().setValue(QString::fromLatin1(kMemoryShowSpecialMemoriesSettingsKey), show); });
     connect(showSpecialCheck, &QCheckBox::toggled, this, &MemoryManagerSettingsPanel::showSpecialMemoriesChanged);

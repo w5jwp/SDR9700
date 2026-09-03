@@ -250,6 +250,11 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
     body->addWidget(divider);
 
     auto* pageHost = new QWidget(content);
+    pageHost->setObjectName(QStringLiteral("settingsPageHost"));
+    pageHost->setAutoFillBackground(true);
+    QPalette pagePalette = pageHost->palette();
+    pagePalette.setColor(QPalette::Window, QColor(UiTheme::Color::ContentBackground));
+    pageHost->setPalette(pagePalette);
     m_pageLayout = new QVBoxLayout(pageHost);
     m_pageLayout->setContentsMargins(0, 0, 0, 0);
     m_pageLayout->setSpacing(8);
@@ -258,6 +263,9 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
                                    .arg(QLatin1String(UiTheme::Color::TextPrimary)));
     m_pageLayout->addWidget(m_pageTitle);
     m_pages = new CurrentPageStackedWidget(pageHost);
+    m_pages->setObjectName(QStringLiteral("settingsPages"));
+    m_pages->setAutoFillBackground(false);
+    m_pages->setStyleSheet(QStringLiteral("QStackedWidget#settingsPages { background: transparent; border: none; }"));
     connect(m_pages, &QStackedWidget::currentChanged, m_pages, &QWidget::updateGeometry);
     connect(m_pages, &QStackedWidget::currentChanged, this,
             [this]()
@@ -272,6 +280,8 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
     m_pageScroll->setFrameShape(QFrame::NoFrame);
     m_pageScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_pageScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_pageScroll->viewport()->setAutoFillBackground(true);
+    m_pageScroll->viewport()->setPalette(pagePalette);
     connect(m_pageScroll->verticalScrollBar(), &QScrollBar::rangeChanged, this,
             [this](int, int) { updatePageScrollGutter(); });
     m_pageScroll->setWidget(pageHost);

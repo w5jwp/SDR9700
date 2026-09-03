@@ -1555,6 +1555,10 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
             {
                 m_metersDialog->setPowerMeter(m_meterSnapshot.powerWatts);
             }
+            else
+            {
+                m_metersDialog->clearPowerMeter();
+            }
             if (m_meterSnapshot.swrValid)
             {
                 m_metersDialog->setSwr(m_meterSnapshot.swr);
@@ -1567,17 +1571,33 @@ void MainWindow::onMeterSnapshotChanged(const MeterSnapshot& snapshot)
             {
                 m_metersDialog->setAlc(m_meterSnapshot.alc);
             }
+            else
+            {
+                m_metersDialog->clearAlc();
+            }
             if (m_meterSnapshot.compressionValid)
             {
                 m_metersDialog->setCompressionMeter(m_meterSnapshot.compressionDb);
+            }
+            else
+            {
+                m_metersDialog->clearCompressionMeter();
             }
             if (m_meterSnapshot.voltageValid)
             {
                 m_metersDialog->setVoltageMeter(m_meterSnapshot.voltageVolts);
             }
+            else
+            {
+                m_metersDialog->clearVoltageMeter();
+            }
             if (m_meterSnapshot.currentValid)
             {
                 m_metersDialog->setCurrentMeter(m_meterSnapshot.currentAmps);
+            }
+            else
+            {
+                m_metersDialog->clearCurrentMeter();
             }
             m_metersDialog->setTransmitAudioLevel(m_meterSnapshot.txAudioPeak, m_meterSnapshot.txAudioRms);
         }

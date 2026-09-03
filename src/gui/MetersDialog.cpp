@@ -1,5 +1,6 @@
 #include "MetersDialog.h"
 #include "SMeterScale.h"
+#include "SettingsPanelStyle.h"
 #include "UiTheme.h"
 
 #include <QFontDatabase>
@@ -43,23 +44,13 @@ QString standardMeterFill()
         .arg(QLatin1String(UiTheme::Color::ControlActive), QLatin1String(UiTheme::Color::ScrollHandleHover));
 }
 
-QString meterSectionStyle()
-{
-    return QStringLiteral("QGroupBox { background: %1; color: %2; border: 1px solid %3; border-radius: 3px;"
-                          " margin-top: 10px; }"
-                          "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left;"
-                          " padding: 0 4px; left: 8px; font-size: 10px; font-weight: bold; }")
-        .arg(QLatin1String(UiTheme::Color::PanelDark), QLatin1String(UiTheme::Color::TextPrimary),
-             QLatin1String(UiTheme::Color::BorderMedium));
-}
-
 QGridLayout* createMeterSection(QVBoxLayout* parentLayout, const QString& title, const QString& objectName)
 {
     auto* group = new QGroupBox(title);
     group->setObjectName(objectName);
-    group->setStyleSheet(meterSectionStyle());
+    group->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* grid = new QGridLayout(group);
-    grid->setContentsMargins(10, 8, 10, 10);
+    grid->setContentsMargins(10, 8, 10, 8);
     grid->setHorizontalSpacing(8);
     grid->setVerticalSpacing(7);
     grid->setColumnStretch(1, 1);
@@ -111,7 +102,7 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
     contentLayout->setSpacing(6);
     root->addWidget(content);
 
-    auto* audioGrid = createMeterSection(contentLayout, QStringLiteral("AUDIO"), QStringLiteral("audioMeters"));
+    auto* audioGrid = createMeterSection(contentLayout, QStringLiteral("Audio"), QStringLiteral("audioMeters"));
     m_txAudioAverageMeter = addMeterRow(audioGrid, 0, QStringLiteral("Audio Average"),
                                         QStringLiteral("Local microphone input average level; high at 60% or above"));
     m_txAudioPeakMeter = addMeterRow(audioGrid, 1, QStringLiteral("Audio Peak"),
@@ -119,17 +110,17 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
     m_compressionMeter =
         addMeterRow(audioGrid, 2, QStringLiteral("Compression"), QStringLiteral("Transmit compression"));
 
-    auto* radioGrid = createMeterSection(contentLayout, QStringLiteral("RADIO"), QStringLiteral("radioMeters"));
+    auto* radioGrid = createMeterSection(contentLayout, QStringLiteral("Radio"), QStringLiteral("radioMeters"));
     m_currentMeter =
         addMeterRow(radioGrid, 0, QStringLiteral("Current"), QStringLiteral("Final amplifier drain current (Id)"));
     m_voltageMeter =
         addMeterRow(radioGrid, 1, QStringLiteral("Voltage"), QStringLiteral("Final amplifier drain voltage (Vd)"));
 
-    auto* receiveGrid = createMeterSection(contentLayout, QStringLiteral("RECEIVE"), QStringLiteral("receiveMeters"));
+    auto* receiveGrid = createMeterSection(contentLayout, QStringLiteral("Receive"), QStringLiteral("receiveMeters"));
     m_sMeter = addMeterRow(receiveGrid, 0, QStringLiteral("S-Meter"), QStringLiteral("Receive signal strength"));
 
     auto* transmitGrid =
-        createMeterSection(contentLayout, QStringLiteral("TRANSMIT"), QStringLiteral("transmitMeters"));
+        createMeterSection(contentLayout, QStringLiteral("Transmit"), QStringLiteral("transmitMeters"));
     m_alcMeter = addMeterRow(transmitGrid, 0, QStringLiteral("ALC"), QStringLiteral("Automatic level control"));
     m_powerMeter = addMeterRow(transmitGrid, 1, QStringLiteral("RF Power"), QStringLiteral("Transmit output power"));
     m_swrMeter = addMeterRow(transmitGrid, 2, QStringLiteral("SWR"), QStringLiteral("Standing wave ratio"));
@@ -226,6 +217,11 @@ void MetersDialog::setPowerMeter(double watts)
                 QStringLiteral("%1 W").arg(bounded, 0, 'f', 1));
 }
 
+void MetersDialog::clearPowerMeter()
+{
+    setMeterRow(m_powerMeter, 0, QStringLiteral("-- W"));
+}
+
 void MetersDialog::setSwr(double swr)
 {
     const double bounded = qBound(kSwrMeterMin, swr, kSwrMeterMax);
@@ -244,11 +240,21 @@ void MetersDialog::setAlc(double alc)
     setMeterRow(m_alcMeter, scaledValue(bounded, kAlcMeterMax), QStringLiteral("%1").arg(bounded, 0, 'f', 2));
 }
 
+void MetersDialog::clearAlc()
+{
+    setMeterRow(m_alcMeter, 0, QStringLiteral("--"));
+}
+
 void MetersDialog::setCompressionMeter(double db)
 {
     const double bounded = qBound(0.0, db, kCompressionMeterMaxDb);
     setMeterRow(m_compressionMeter, scaledValue(bounded, kCompressionMeterMaxDb),
                 QStringLiteral("%1 dB").arg(bounded, 0, 'f', 1));
+}
+
+void MetersDialog::clearCompressionMeter()
+{
+    setMeterRow(m_compressionMeter, 0, QStringLiteral("-- dB"));
 }
 
 void MetersDialog::setVoltageMeter(double volts)
@@ -257,10 +263,20 @@ void MetersDialog::setVoltageMeter(double volts)
     setMeterRow(m_voltageMeter, scaledValue(bounded, kVoltageMeterMax), QStringLiteral("%1 V").arg(bounded, 0, 'f', 1));
 }
 
+void MetersDialog::clearVoltageMeter()
+{
+    setMeterRow(m_voltageMeter, 0, QStringLiteral("-- V"));
+}
+
 void MetersDialog::setCurrentMeter(double amps)
 {
     const double bounded = qBound(0.0, amps, kCurrentMeterMax);
     setMeterRow(m_currentMeter, scaledValue(bounded, kCurrentMeterMax), QStringLiteral("%1 A").arg(bounded, 0, 'f', 1));
+}
+
+void MetersDialog::clearCurrentMeter()
+{
+    setMeterRow(m_currentMeter, 0, QStringLiteral("-- A"));
 }
 
 void MetersDialog::setTransmitAudioLevel(int peak, int rms)

@@ -69,5 +69,6 @@ class MemorySyncController : public QObject
     int m_operationSyncAttempt{0};
     int m_missingRetryRound{0};
     int m_lastUnansweredSlotCount{0};
+    int m_memoryPollIntervalSeconds{0};
     Completion m_operationCompletion;
 };

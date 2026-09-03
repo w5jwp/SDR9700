@@ -19,12 +19,17 @@ class MetersDialog : public sdr9700::ui::UtilityWindow
     void resetMeters();
     void setSMeter(int value);
     void setPowerMeter(double watts);
+    void clearPowerMeter();
     void setSwr(double swr);
     void clearSwr();
     void setAlc(double alc);
+    void clearAlc();
     void setCompressionMeter(double db);
+    void clearCompressionMeter();
     void setVoltageMeter(double volts);
+    void clearVoltageMeter();
     void setCurrentMeter(double amps);
+    void clearCurrentMeter();
     void setTransmitAudioLevel(int peak, int rms);
 
   private:

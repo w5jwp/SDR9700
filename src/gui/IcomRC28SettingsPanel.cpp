@@ -27,8 +27,15 @@ struct ActionItem
 };
 
 constexpr ActionItem kActions[] = {
-    {"None", "None"},      {"ToggleLock", "Lock"},    {"CycleMode", "Mode"}, {"ToggleMute", "Mute"},
-    {"CycleStep", "Step"}, {"StepDown", "Step Down"}, {"StepUp", "Step Up"},
+    {"None", "None"},
+    {"ToggleLock", "Lock"},
+    {"ToggleMainSub", "Switch Receiver"},
+    {"ExchangeMainSub", "Swap MAIN and SUB"},
+    {"CycleMode", "Mode"},
+    {"ToggleMute", "Mute"},
+    {"CycleStep", "Step"},
+    {"StepDown", "Step Down"},
+    {"StepUp", "Step Up"},
 };
 
 void populateActionCombo(QComboBox* combo, const QString& current)
@@ -37,7 +44,7 @@ void populateActionCombo(QComboBox* combo, const QString& current)
     {
         for (const auto& item : kActions)
         {
-            combo->addItem(QString::fromLatin1(item.label), QString::fromLatin1(item.id));
+            combo->addItem(QString::fromUtf8(item.label), QString::fromLatin1(item.id));
         }
     }
 
@@ -49,7 +56,7 @@ QString actionLabel(const QString& actionId)
 {
     const auto it = std::find_if(std::begin(kActions), std::end(kActions),
                                  [&actionId](const ActionItem& item) { return actionId == QLatin1String(item.id); });
-    return it != std::end(kActions) ? QString::fromLatin1(it->label) : actionId;
+    return it != std::end(kActions) ? QString::fromUtf8(it->label) : actionId;
 }
 
 } // namespace
@@ -104,7 +111,8 @@ void IcomRC28SettingsPanel::buildUi()
     mapGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* mapForm = new QFormLayout(mapGroup);
     mapForm->setLabelAlignment(Qt::AlignRight);
-    mapForm->setSpacing(6);
+    mapForm->setHorizontalSpacing(6);
+    mapForm->setVerticalSpacing(11);
     m_f1PressCombo = new QComboBox(mapGroup);
     m_f1HoldCombo = new QComboBox(mapGroup);
     m_f2PressCombo = new QComboBox(mapGroup);

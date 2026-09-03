@@ -32,12 +32,10 @@ constexpr int kHeaderButtonHeight = 18;
 constexpr int kIdentityButtonWidth = 38;
 constexpr int kBandButtonWidth = 52;
 constexpr int kModeButtonWidth = 52;
-constexpr int kSquelchButtonWidth = 58;
 constexpr int kTxPowerButtonWidth = 68;
 constexpr int kLanModButtonWidth = 68;
 constexpr int kFrequencyEditTimeoutMs = 10000;
 constexpr int kHeaderControlSpacing = 6;
-constexpr int kHeaderGroupSpacing = 12;
 constexpr int kReceiverControlHeight = 18;
 constexpr int kReceiverControlSpacing = 6;
 constexpr int kSecondaryControlWidth = 80;
@@ -141,7 +139,6 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
         m_receiverControlButtons.insert(control, button);
         return button;
     };
-    QPushButton* squelchButton = createHeaderControl(QStringLiteral("SQL"), kSquelchButtonWidth);
     QPushButton* txPowerButton =
         vfo == Vfo::Main ? createHeaderControl(QStringLiteral("TX PWR"), kTxPowerButtonWidth) : nullptr;
     QPushButton* lanModButton =
@@ -159,7 +156,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     };
 
     headerLayout->addWidget(m_identityButton);
-    headerLayout->addSpacing(kHeaderGroupSpacing);
+    headerLayout->addStretch(1);
     if (m_txBadge)
     {
         headerLayout->addWidget(m_txBadge);
@@ -168,7 +165,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     {
         headerLayout->addWidget(createHeaderPlaceholder(kTxBadgeWidth, QStringLiteral("vfoTxBadgePlaceholder")));
     }
-    headerLayout->addSpacing(kHeaderGroupSpacing);
+    headerLayout->addStretch(1);
     if (lanModButton)
     {
         headerLayout->addWidget(lanModButton);
@@ -185,9 +182,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     {
         headerLayout->addWidget(createHeaderPlaceholder(kTxPowerButtonWidth, QStringLiteral("vfoTxPowerPlaceholder")));
     }
-    headerLayout->addSpacing(kHeaderGroupSpacing);
-    headerLayout->addWidget(squelchButton);
-    headerLayout->addSpacing(kHeaderGroupSpacing);
+    headerLayout->addStretch(1);
     headerLayout->addWidget(m_bandButton);
     headerLayout->addWidget(m_modeButton);
 
@@ -344,7 +339,7 @@ VfoDisplay::VfoDisplay(Vfo vfo, QWidget* parent) : QWidget(parent), m_vfo(vfo)
     receiverControlLayout->setSpacing(kReceiverControlSpacing);
     const QStringList controls = {
         QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("FILTERS"),
-        QStringLiteral("PRE"), QStringLiteral("RFG"),
+        QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("SQL"),
     };
     for (const QString& control : controls)
     {

@@ -96,7 +96,18 @@ void MemorySyncController::forceRadioMemorySync()
 
 void MemorySyncController::setMemoryPollIntervalSeconds(int seconds)
 {
-    m_periodicRefreshTimer->setInterval(sdr9700::clampMemoryPollIntervalSeconds(seconds) * 1000);
+    m_memoryPollIntervalSeconds = sdr9700::clampMemoryPollIntervalSeconds(seconds);
+    if (m_memoryPollIntervalSeconds == 0)
+    {
+        m_periodicRefreshTimer->stop();
+        return;
+    }
+
+    m_periodicRefreshTimer->setInterval(m_memoryPollIntervalSeconds * 1000);
+    if (m_radioReady)
+    {
+        m_periodicRefreshTimer->start();
+    }
 }
 
 void MemorySyncController::handleRadioReadyChanged(bool ready)
@@ -117,7 +128,10 @@ void MemorySyncController::handleRadioReadyChanged(bool ready)
         // This brief stability gate is part of radio synchronization, not a
         // separate operator-facing lifecycle stage. Leave the current
         // connection status message in place until memory polling actually begins.
-        m_periodicRefreshTimer->start();
+        if (m_memoryPollIntervalSeconds > 0)
+        {
+            m_periodicRefreshTimer->start();
+        }
         return;
     }
 

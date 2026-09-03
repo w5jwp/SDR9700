@@ -3,12 +3,12 @@
 #include "AppSettings.h"
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
-#include "DialogFooter.h"
 #include "MemoryController.h"
 #include "MemoryConstants.h"
 #include "MemoryRecordHelpers.h"
 #include "MemoryViewHelpers.h"
 #include "MemorySyncController.h"
+#include "UiTheme.h"
 #include "UtilityWindow.h"
 
 #include <QAbstractItemView>
@@ -24,6 +24,12 @@
 #include <QVBoxLayout>
 
 using namespace sdr9700::memory;
+
+namespace
+{
+constexpr int kMemorySectionSpacing = 8;
+constexpr int kMemoryFooterHeight = 24;
+} // namespace
 
 MemoryViewController::MemoryViewController(MemoryController* owner) : QObject(owner), m_owner(owner)
 {
@@ -108,20 +114,25 @@ void MemoryViewController::buildMemoryWindow()
 
     auto* panel = new QWidget(m_owner->m_window->m_memoryWindow);
     auto* root = new QHBoxLayout(panel);
-    root->setContentsMargins(kMemoryWindowMargins.left(), kMemoryWindowMargins.top(), kMemoryWindowMargins.right(), 0);
+    root->setContentsMargins(kMemoryWindowMargins.left(), kMemoryWindowMargins.top(), kMemoryWindowMargins.right(),
+                             kMemoryWindowMargins.bottom());
     root->setSpacing(kMemoryWindowSpacing);
 
     auto* leftPane = new QWidget(panel);
     leftPane->setFixedWidth(kMemoryWindowSize.width() - kMemoryWindowMargins.left() - kMemoryWindowMargins.right());
     auto* leftRoot = new QVBoxLayout(leftPane);
     leftRoot->setContentsMargins(0, 0, 0, 0);
-    leftRoot->setSpacing(sdr9700::ui::kDialogFooterSpacing);
+    leftRoot->setSpacing(kMemorySectionSpacing);
 
     auto* toolbar = new QHBoxLayout;
     toolbar->setContentsMargins(kNoMargins);
     toolbar->setSpacing(kMemoryToolbarSpacing);
+    const QString toolbarGroupStyle =
+        QStringLiteral("QGroupBox { border: 1px solid %1; border-radius: 3px; background: transparent; }")
+            .arg(QLatin1String(UiTheme::Color::BorderMedium));
 
     auto* filterGroup = new QGroupBox(panel);
+    filterGroup->setStyleSheet(toolbarGroupStyle);
     auto* filterLayout = new QHBoxLayout(filterGroup);
     filterLayout->setContentsMargins(kMemoryToolbarGroupMargins);
     filterLayout->setSpacing(kMemoryToolbarGroupSpacing);
@@ -146,6 +157,7 @@ void MemoryViewController::buildMemoryWindow()
     toolbar->addStretch(1);
 
     auto* syncGroup = new QGroupBox(panel);
+    syncGroup->setStyleSheet(toolbarGroupStyle);
     auto* syncLayout = new QHBoxLayout(syncGroup);
     syncLayout->setContentsMargins(kMemoryToolbarGroupMargins);
     syncLayout->setSpacing(kMemoryToolbarGroupSpacing);
@@ -157,6 +169,7 @@ void MemoryViewController::buildMemoryWindow()
     toolbar->addStretch(1);
 
     auto* reorderGroup = new QGroupBox(panel);
+    reorderGroup->setStyleSheet(toolbarGroupStyle);
     auto* reorderLayout = new QHBoxLayout(reorderGroup);
     reorderLayout->setContentsMargins(kMemoryToolbarGroupMargins);
     reorderLayout->setSpacing(kMemoryToolbarGroupSpacing);
@@ -168,6 +181,7 @@ void MemoryViewController::buildMemoryWindow()
     toolbar->addStretch(1);
 
     auto* memoryGroup = new QGroupBox(panel);
+    memoryGroup->setStyleSheet(toolbarGroupStyle);
     auto* memoryLayout = new QHBoxLayout(memoryGroup);
     memoryLayout->setContentsMargins(kMemoryToolbarGroupMargins);
     memoryLayout->setSpacing(kMemoryToolbarGroupSpacing);
@@ -183,6 +197,7 @@ void MemoryViewController::buildMemoryWindow()
     toolbar->addStretch(1);
 
     auto* transferGroup = new QGroupBox(panel);
+    transferGroup->setStyleSheet(toolbarGroupStyle);
     auto* transferLayout = new QHBoxLayout(transferGroup);
     transferLayout->setContentsMargins(kMemoryToolbarGroupMargins);
     transferLayout->setSpacing(kMemoryToolbarGroupSpacing);
@@ -235,13 +250,18 @@ void MemoryViewController::buildMemoryWindow()
         kMemoryChannelColumn, new BracketAlignedItemDelegate(m_owner->m_window->m_memoryTable));
     leftRoot->addWidget(m_owner->m_window->m_memoryTable, 1);
 
-    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(panel);
-    m_owner->m_window->m_memoryCountLabel = new QLabel(panel);
+    auto* footer = new QWidget(panel);
+    footer->setObjectName(QStringLiteral("memoryManagerFooter"));
+    footer->setFixedHeight(kMemoryFooterHeight);
+    auto* footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(0, 0, 0, 0);
+    footerLayout->setSpacing(12);
+    m_owner->m_window->m_memoryCountLabel = new QLabel(footer);
     m_owner->m_window->m_memoryCountLabel->setObjectName(QStringLiteral("memoryManagerStatusLabel"));
     m_owner->m_window->m_memoryCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_owner->m_window->m_memoryCountLabel->setContentsMargins(kMemoryFooterTextLeftPadding, 0, 0, 0);
     m_owner->m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
-    m_owner->m_window->m_memoryProgressBar = new QProgressBar(panel);
+    m_owner->m_window->m_memoryProgressBar = new QProgressBar(footer);
     m_owner->m_window->m_memoryProgressBar->setObjectName(QStringLiteral("memoryManagerProgressBar"));
     m_owner->m_window->m_memoryProgressBar->setFixedWidth(220);
     m_owner->m_window->m_memoryProgressBar->setTextVisible(false);
@@ -250,14 +270,11 @@ void MemoryViewController::buildMemoryWindow()
         QStringLiteral("QProgressBar { background: %1; border: 1px solid %2; border-radius: 3px; height: 8px; }"
                        "QProgressBar::chunk { background: %3; border-radius: 2px; }")
             .arg(UiTheme::Color::Field, UiTheme::Color::BorderMedium, UiTheme::Color::Accent));
-    footer.rowLayout->insertWidget(0, m_owner->m_window->m_memoryCountLabel, 1);
-    footer.rowLayout->insertWidget(1, m_owner->m_window->m_memoryProgressBar);
-    footer.buttonBox->addButton(QDialogButtonBox::Close);
-    leftRoot->addWidget(footer.widget);
+    footerLayout->addWidget(m_owner->m_window->m_memoryCountLabel, 1);
+    footerLayout->addWidget(m_owner->m_window->m_memoryProgressBar);
+    leftRoot->addWidget(footer);
 
     root->addWidget(leftPane, 1);
-
-    connect(footer.buttonBox, &QDialogButtonBox::rejected, m_owner->m_window->m_memoryWindow, &QWidget::hide);
 
     auto* windowLayout = new QVBoxLayout(m_owner->m_window->m_memoryWindow);
     windowLayout->setContentsMargins(kNoMargins);
@@ -513,7 +530,7 @@ void MemoryViewController::rebuild()
             else
             {
                 m_owner->m_window->m_memoryCountLabel->setText(
-                    QStringLiteral("%1 %2 total")
+                    QStringLiteral("%1 %2")
                         .arg(totalCount)
                         .arg(totalCount == 1 ? QStringLiteral("memory") : QStringLiteral("memories")));
             }
