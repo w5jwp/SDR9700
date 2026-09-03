@@ -15,6 +15,7 @@ repository root.
 | `automation_bridge/ic9700_vfo_hardware_stress.py` | Stress-tests VFO selection, bands, MAIN/SUB exchange, Dual Watch, and busy gates. | Finishes in a documented baseline. |
 | `automation_bridge/ic9700_test_receive_controls.py` | Tests frequencies and receive controls independently on MAIN and SUB. | Restores checked control values, but not the initial bands, frequencies, or modes. |
 | `automation_bridge/ic9700_shared_control_sweep.py` | Sweeps shared controls, including AF gain, LAN modulation, and TX power without transmitting. | Restores each swept value. |
+| `automation_bridge/validate_automation_coverage.py` | Cross-checks backend commands and live UI controls against declared hardware coverage. | Read-only. |
 | `ic9700_rsba1_standby.py` | Connects directly to the radio, requests standby, and validates that directed CI-V replies stop. | Standby. |
 | `ic9700_rsba1_wake.py` | Connects directly to the radio, runs a bounded wake sequence, and validates directed CI-V command readiness. | Awake. |
 | `ic9700_rsba1_lifecycle.py` | Connects directly, wakes when necessary, holds a healthy session for a requested interval, validates it, and disconnects. | Awake and disconnected. |
@@ -32,10 +33,21 @@ application explicitly with automation enabled:
 ./src/build/bin/SDR9700 --enable-automation --log=radio,udp,ci-v
 ```
 
-These tools discover the newest `sdr9700-automation-*.json` record in the
-operating system's temporary directory. They require both the discovery record
+These tools discover the newest live `sdr9700-automation-*.json` record beneath
+SDR9700's platform configuration directory. They skip stale records and require both the discovery record
 and application state to say transmit is unavailable. They never request PTT
 or DTMF Send, but they do retune the radio and change controls.
+
+Run the double inventory before hardware stress:
+
+```bash
+python3 resources/tools/automation_bridge/validate_automation_coverage.py
+```
+
+The static half fails when an `IRadioBackend` operation is added or removed
+without a disposition. The runtime half fails when a visible interactive
+control is unclassified. Reported `coverage-gap` entries remain incomplete
+until a test supplies radio-derived confirmation.
 
 ### `automation_bridge/automation_client.py`
 
@@ -45,9 +57,8 @@ Use the general-purpose client to send one allowlisted JSON request:
 python3 resources/tools/automation_bridge/automation_client.py '{"action":"get_state"}'
 ```
 
-Pass `--discovery` to select a specific discovery record, `--hold` to keep the
-connection open briefly after the response, or `--match` to filter `ui_list`
-results by their control descriptions.
+Pass `--hold` to keep the connection open briefly after the response or
+`--match` to filter `ui_list` results by their control descriptions.
 
 ### `automation_bridge/ic9700_vfo_hardware_stress.py`
 

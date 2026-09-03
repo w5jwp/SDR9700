@@ -1,23 +1,14 @@
 #!/usr/bin/env python3
 """Exercise receive-only VFO transitions through SDR9700's automation bridge."""
 
-import glob
 import json
-import os
-import socket
 import sys
-import tempfile
 import time
 
+from automation_common import load_endpoint, request as send_request
 
-DISCOVERY = max(
-    glob.glob(os.path.join(tempfile.gettempdir(), "sdr9700-automation-*.json")),
-    key=os.path.getmtime,
-)
-with open(DISCOVERY, encoding="utf-8") as stream:
-    ENDPOINT = json.load(stream)
-if ENDPOINT.get("transmitAllowed") is not False:
-    raise RuntimeError("Automation endpoint does not explicitly prohibit transmit")
+
+ENDPOINT = load_endpoint()
 
 COUNTS = {"requests": 0, "confirmed_transitions": 0, "expected_rejections": 0}
 DIAGNOSTIC = "--diagnostic" in sys.argv
@@ -29,18 +20,8 @@ BAND_TRANSITION_NUMBER = 0
 
 
 def request(payload):
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.settimeout(5)
-        client.connect(ENDPOINT["socket"])
-        client.sendall(json.dumps(payload, separators=(",", ":")).encode() + b"\n")
-        response = bytearray()
-        while not response.endswith(b"\n"):
-            chunk = client.recv(65536)
-            if not chunk:
-                raise RuntimeError("automation connection closed before response")
-            response.extend(chunk)
     COUNTS["requests"] += 1
-    return json.loads(response)
+    return send_request(ENDPOINT, payload)
 
 
 def state():
@@ -96,7 +77,15 @@ def set_dual(enabled):
 
 
 def select_vfo(vfo):
-    accepted({"action": "select_vfo", "vfo": vfo})
+    deadline = time.monotonic() + 12.0
+    while True:
+        response = request({"action": "select_vfo", "vfo": vfo})
+        if response.get("ok"):
+            break
+        if response.get("error") != "request_rejected" or time.monotonic() >= deadline:
+            raise RuntimeError(f"VFO selection gate did not become available: {response}")
+        COUNTS["expected_rejections"] += 1
+        time.sleep(0.05)
     return wait_for(f"selected {vfo}", lambda s: s.get("selectedVfo") == vfo)
 
 
@@ -126,7 +115,11 @@ def select_band(vfo, band):
 def exchange():
     global EXCHANGE_NUMBER
     EXCHANGE_NUMBER += 1
-    before = state()
+    before = wait_for(
+        "complete MAIN/SUB identity before exchange",
+        lambda s: all(s["receivers"][vfo].get(field) is not None
+                      for vfo in ("MAIN", "SUB") for field in ("frequencyHz", "band", "mode", "filter")),
+    )
     main_before = before["receivers"]["MAIN"]
     sub_before = before["receivers"]["SUB"]
     main_hz = main_before.get("frequencyHz")
@@ -207,31 +200,34 @@ set_frequency("SUB", 432_100_000)
 
 if not SKIP_BAND:
     # Exercise selection confirmation in both directions repeatedly.
-    for iteration in range(2 if DIAGNOSTIC else 50):
+    selection_iterations = 2 if DIAGNOSTIC else 50
+    for iteration in range(selection_iterations):
         select_vfo("SUB" if iteration % 2 == 0 else "MAIN")
-    print("PHASE selection 50 complete", flush=True)
+    print(f"PHASE selection {selection_iterations} complete", flush=True)
 
     # Rotate every supported band through both receivers. The companion receiver
     # is moved first when needed so the IC-9700 never has to retain one band on
     # both VFOs as the settled result.
     band_pairs = (("2m", "70cm"), ("70cm", "23cm"), ("23cm", "2m"))
-    for iteration in range(2 if DIAGNOSTIC else 250):
+    band_iterations = 2 if DIAGNOSTIC else 250
+    for iteration in range(band_iterations):
         main_band, sub_band = band_pairs[iteration % len(band_pairs)]
         select_band("SUB", sub_band)
         select_band("MAIN", main_band)
         settled = state()
         if settled["receivers"]["MAIN"].get("band") == settled["receivers"]["SUB"].get("band"):
             raise RuntimeError(f"same-band settled state after rotation: {settled}")
-    print("PHASE band rotation 500 transitions complete", flush=True)
+    print(f"PHASE band rotation {band_iterations * 2} transitions complete", flush=True)
 
 # Restore unique frequencies, then verify a large number of fully confirmed
 # exchanges. Each iteration waits for the radio-derived state to swap.
 normalize_pair("2m", "70cm")
 set_frequency("MAIN", 145_250_000)
 set_frequency("SUB", 432_100_000)
-for _ in range(2 if DIAGNOSTIC else 100):
+exchange_iterations = 2 if DIAGNOSTIC else 100
+for _ in range(exchange_iterations):
     exchange()
-print("PHASE confirmed exchange 100 complete", flush=True)
+print(f"PHASE confirmed exchange {exchange_iterations} complete", flush=True)
 
 if DIAGNOSTIC:
     print("DIAGNOSTIC COMPLETE", flush=True)
