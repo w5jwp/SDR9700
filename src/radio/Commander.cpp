@@ -3446,7 +3446,7 @@ void Commander::parseMemoryField(const MemParserFormat& format, const QByteArray
         memory.dtcsp = (quint8(data[0] >> 3 & 0x02) | quint8(data[0] & 0x01));
         break;
     case 'P':
-        memory.dtcspB = (quint8(data[0] >> 3 & 0x10) | quint8(data[0] & 0x01));
+        memory.dtcspB = (quint8(data[0] >> 3 & 0x02) | quint8(data[0] & 0x01));
         break;
     case 'q':
         memory.dtcs = bcdHexToUInt(data[0], data[1]);
