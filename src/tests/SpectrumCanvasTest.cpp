@@ -30,6 +30,7 @@ class SpectrumCanvasTest : public QObject
     void smoothsPeakHoldWithoutChangingHeldSamples();
     void interpolatesSparseBinsIntoContinuousTrace();
     void colorsTraceBySignalIntensity();
+    void paintsNeutralShelfEdges();
 };
 
 void SpectrumCanvasTest::mapsFrequencyAcrossClosedPixelRange()
@@ -344,6 +345,22 @@ void SpectrumCanvasTest::colorsTraceBySignalIntensity()
     const QColor saturatedColor = strongestColorNearRow(10);
     QVERIFY(saturatedColor.red() > saturatedColor.green() + 80);
     QVERIFY(saturatedColor.red() > saturatedColor.blue() + 80);
+}
+
+void SpectrumCanvasTest::paintsNeutralShelfEdges()
+{
+    SpectrumScopeCanvas spectrum;
+    spectrum.resize(320, 180);
+    QPixmap spectrumImage(spectrum.size());
+    spectrum.render(&spectrumImage);
+    const int spectrumEdgeY = spectrum.height() - SpectrumScopeCanvas::scaleHeight() - 1;
+    QCOMPARE(spectrumImage.toImage().pixelColor(20, spectrumEdgeY), UiTheme::Color::ScopeShelfEdge);
+
+    WaterfallCanvas waterfall;
+    waterfall.resize(320, 120);
+    QPixmap waterfallImage(waterfall.size());
+    waterfall.render(&waterfallImage);
+    QCOMPARE(waterfallImage.toImage().pixelColor(20, 0), UiTheme::Color::ScopeShelfEdge);
 }
 
 QTEST_MAIN(SpectrumCanvasTest)

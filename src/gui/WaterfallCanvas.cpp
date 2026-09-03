@@ -1,4 +1,5 @@
 #include "WaterfallCanvas.h"
+#include "UiTheme.h"
 #include <QLinearGradient>
 #include <QPainter>
 
@@ -6,7 +7,7 @@ namespace
 {
 const QColor kWaterfallBg(0x00, 0x24, 0xd8);
 constexpr int kControlShelfShadowHeightPx = 8;
-}
+} // namespace
 
 WaterfallCanvas::WaterfallCanvas(QWidget* parent) : QWidget(parent)
 {
@@ -37,5 +38,5 @@ void WaterfallCanvas::paintEvent(QPaintEvent* event)
     shelfShadow.setColorAt(0.0, QColor(0x00, 0x04, 0x08, 220));
     shelfShadow.setColorAt(1.0, QColor(0x00, 0x08, 0x0f, 0));
     p.fillRect(0, 0, width(), shadowHeight, shelfShadow);
-    p.fillRect(0, 0, width(), 1, QColor(0x2a, 0x40, 0x4f));
+    p.fillRect(0, 0, width(), 1, UiTheme::Color::ScopeShelfEdge);
 }

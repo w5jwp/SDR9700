@@ -63,6 +63,14 @@ void TwoLineButton::paintEvent(QPaintEvent* event)
     secondaryFont.setPixelSize(10);
 
     const QFontMetrics primaryMetrics(primaryFont);
+    if (m_secondary.isEmpty())
+    {
+        painter.setPen(textColor);
+        painter.setFont(primaryFont);
+        painter.drawText(content, Qt::AlignCenter, m_primary);
+        return;
+    }
+
     const QFontMetrics secondaryMetrics(secondaryFont);
     constexpr int kLineSpacing = 1;
     const int textHeight = primaryMetrics.height() + kLineSpacing + secondaryMetrics.height();

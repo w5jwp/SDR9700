@@ -104,11 +104,31 @@ class FakeRadioBackend : public IRadioBackend
     void requestVfoState(Vfo value) override { requestedVfoState = value; }
     void setVfoAgcMode(Vfo, const QString&) override {}
     void setVfoAttenuatorEnabled(Vfo, bool) override {}
-    void setVfoNbEnabled(Vfo, bool) override {}
-    void setVfoNbLevel(Vfo, int) override {}
-    void setVfoNotch(Vfo, VfoNotch) override {}
-    void setVfoNrEnabled(Vfo, bool) override {}
-    void setVfoNrLevel(Vfo, int) override {}
+    void setVfoNbEnabled(Vfo, bool enabled) override
+    {
+        requestedNbEnabled = enabled;
+        ++vfoNbEnabledCalls;
+    }
+    void setVfoNbLevel(Vfo, int level) override
+    {
+        requestedNbLevel = level;
+        ++vfoNbLevelCalls;
+    }
+    void setVfoNotch(Vfo, VfoNotch notch) override
+    {
+        requestedNotch = notch;
+        ++vfoNotchCalls;
+    }
+    void setVfoNrEnabled(Vfo, bool enabled) override
+    {
+        requestedNrEnabled = enabled;
+        ++vfoNrEnabledCalls;
+    }
+    void setVfoNrLevel(Vfo, int level) override
+    {
+        requestedNrLevel = level;
+        ++vfoNrLevelCalls;
+    }
     void setVfoPreampLevel(Vfo, int) override {}
     void setVfoRfGain(Vfo, int) override {}
     void setVfoSquelch(Vfo, int) override {}
@@ -174,6 +194,16 @@ class FakeRadioBackend : public IRadioBackend
     QString requestedFilterMode;
     int requestedFilter{0};
     int vfoFilterCalls{0};
+    bool requestedNbEnabled{false};
+    int requestedNbLevel{0};
+    int vfoNbEnabledCalls{0};
+    int vfoNbLevelCalls{0};
+    VfoNotch requestedNotch{VfoNotch::Off};
+    int vfoNotchCalls{0};
+    bool requestedNrEnabled{false};
+    int requestedNrLevel{0};
+    int vfoNrEnabledCalls{0};
+    int vfoNrLevelCalls{0};
 };
 
 class VfoBackendTest : public QObject
@@ -219,6 +249,8 @@ void VfoBackendTest::filtersMenuKeepsControlColumnsAligned()
     emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(mode), 0);
     emit backend.radioValueUpdated(funcNBLevel, 128, 0);
     emit backend.radioValueUpdated(funcNRLevel, 128, 0);
+    emit backend.radioValueUpdated(funcAutoNotch, false, 0);
+    emit backend.radioValueUpdated(funcManualNotch, false, 0);
 
     auto* filtersButton = controller.display()->findChild<QPushButton*>(QStringLiteral("vfoFILTERSButton"));
     QVERIFY(filtersButton);
@@ -253,11 +285,26 @@ void VfoBackendTest::filtersMenuKeepsControlColumnsAligned()
                            auto* filterCombo = menu->findChild<QComboBox*>(QStringLiteral("vfoFiltersFILTERCombo"));
                            QVERIFY(filterCombo);
                            filterCombo->setCurrentIndex(2);
-                           QCOMPARE(filterCombo->currentText(), QStringLiteral("FIL3"));
+                           QCOMPARE(filterCombo->currentText(), QStringLiteral("FIL2"));
                            QCOMPARE(backend.vfoFilterCalls, 1);
                            QCOMPARE(backend.requestedFilterVfo, Vfo::Main);
                            QCOMPARE(backend.requestedFilterMode, QStringLiteral("FM"));
                            QCOMPARE(backend.requestedFilter, 3);
+                           ModeInfo confirmedMode;
+                           confirmedMode.mk = modeFM;
+                           confirmedMode.name = QStringLiteral("FM");
+                           confirmedMode.filter = 3;
+                           emit backend.radioValueConfirmed(funcModeGet, QVariant::fromValue(confirmedMode), 0);
+                           QCOMPARE(filterCombo->currentText(), QStringLiteral("FIL3"));
+
+                           auto* notchCombo = menu->findChild<QComboBox*>(QStringLiteral("vfoFiltersNOTCHCombo"));
+                           QVERIFY(notchCombo);
+                           notchCombo->setCurrentIndex(1);
+                           QCOMPARE(backend.vfoNotchCalls, 1);
+                           QCOMPARE(backend.requestedNotch, VfoNotch::Auto);
+                           QCOMPARE(notchCombo->currentText(), QStringLiteral("OFF"));
+                           emit backend.radioValueUpdated(funcManualNotch, true, 0);
+                           QCOMPARE(notchCombo->currentText(), QStringLiteral("ON"));
                            inspected = true;
                            menu->close();
                        });
@@ -455,8 +502,12 @@ void VfoBackendTest::vfoDisplayConsumesConfirmedRadioStateWithoutReceiverBleed()
     QCOMPARE(mainFiltersButton->property("active"), QVariant(true));
     emit backend.radioValueUpdated(funcNBLevel, 255, 0);
     emit backend.radioValueUpdated(funcNRLevel, 0, 0);
+    emit backend.radioValueUpdated(funcAutoNotch, false, 0);
+    emit backend.radioValueUpdated(funcManualNotch, false, 0);
     emit backend.radioValueUpdated(funcNoiseBlanker, true, 1);
     emit backend.radioValueUpdated(funcNBLevel, 128, 1);
+    emit backend.radioValueUpdated(funcAutoNotch, false, 1);
+    emit backend.radioValueUpdated(funcManualNotch, false, 1);
     QCOMPARE(mainFiltersButton->toolTip(), QStringLiteral("FIL1 • NB 10 • NOTCH OFF • NR 1"));
     QCOMPARE(subFiltersButton->toolTip(), QStringLiteral("FIL1 • NB 6 • NOTCH OFF • NR —"));
 

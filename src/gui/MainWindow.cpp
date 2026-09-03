@@ -266,9 +266,10 @@ void MainWindow::buildToolBar()
 #endif
 
     m_titleBar = new MainTitleBar(this);
-    m_titleBar->setTitle(
-        QStringLiteral("<span style='color:#2a82da; font-size:13px; font-weight:bold;'>%1 v%2</span>")
-            .arg(QString::fromLatin1(APP_NAME).toHtmlEscaped(), QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
+    const QString sliderFillColor = m_titleBar->palette().color(QPalette::Highlight).name(QColor::HexRgb);
+    m_titleBar->setTitle(QStringLiteral("<span style='color:%1; font-size:13px; font-weight:bold;'>%2 v%3</span>")
+                             .arg(sliderFillColor, QString::fromLatin1(APP_NAME).toHtmlEscaped(),
+                                  QString::fromLatin1(APP_VERSION).toHtmlEscaped()));
 
     auto* fileMenu = new QMenu(QStringLiteral("&File"), this);
 #if !defined(Q_OS_MAC)
@@ -575,9 +576,9 @@ void MainWindow::showSettingsDialog()
                 }
 
                 m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
-                if (m_titleBar)
+                if (m_mainVfoController)
                 {
-                    m_titleBar->setLanMod(m_lanModValue);
+                    m_mainVfoController->setLanModLevel(m_lanModValue);
                 }
                 m_model->setLanModLevel(m_lanModValue);
                 m_spectrumScopeDisplay->setInvertMouseWheel(
@@ -669,21 +670,6 @@ void MainWindow::reloadMemoryTable()
 void MainWindow::buildRadioControls()
 {
     m_lanModValue = qBound(0, AppSettings::instance().value("LANModLevel", 128).toInt(), 255);
-    if (m_titleBar)
-    {
-        m_titleBar->setLanMod(m_lanModValue);
-        connect(m_titleBar, &MainTitleBar::lanModChanged, this,
-                [this](int value)
-                {
-                    if (!radioUiReady())
-                    {
-                        return;
-                    }
-                    m_lanModValue = qBound(0, value, 255);
-                    AppSettings::instance().setValueDeferred(QStringLiteral("LANModLevel"), m_lanModValue);
-                    m_model->setLanModLevel(m_lanModValue);
-                });
-    }
     const int appVolume = appVolumeSettingValue();
     m_currentAfGain = appVolume;
     if (m_titleBar)
@@ -694,7 +680,7 @@ void MainWindow::buildRadioControls()
     m_pttBtn->setFixedSize(kSelectorButtonSize);
     m_pttBtn->setAccessibleName(QStringLiteral("PTT"));
     m_pttBtn->setAccessibleDescription(QStringLiteral("Hold to transmit."));
-    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QStringLiteral("OFF"));
+    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QString());
     m_pttBtn->setCheckable(false);
     m_pttBtn->hide();
 
@@ -961,7 +947,6 @@ void MainWindow::setRadioControlsEnabled(bool enabled)
     if (m_titleBar)
     {
         m_titleBar->setVolumeEnabled(enabled);
-        m_titleBar->setLanModEnabled(enabled);
         m_titleBar->setLockEnabled(enabled && m_controlLockKnown);
     }
     if (m_pttBtn)
@@ -995,9 +980,9 @@ void MainWindow::resetRadioOwnedControlsForSync()
     m_toneFrequency = 670;
     m_dtcsCode = 23;
 
-    if (m_titleBar)
+    if (m_mainVfoController)
     {
-        m_titleBar->setLanMod(m_lanModValue);
+        m_mainVfoController->setLanModLevel(m_lanModValue);
     }
     if (m_mainVfoController)
     {
@@ -1988,7 +1973,7 @@ void MainWindow::onPttChanged(bool on)
     updateTransmitState(on);
     m_pttBtn->setProperty("pttActive", on);
     m_pttBtn->update();
-    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), on ? QStringLiteral("ON") : QStringLiteral("OFF"));
+    setSelectorButtonLines(m_pttBtn, QStringLiteral("PTT"), QString());
 }
 
 void MainWindow::onDuplexModeChanged(duplexMode_t mode)

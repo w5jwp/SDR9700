@@ -1,5 +1,6 @@
 #include "SpectrumScopeDisplay.h"
 #include "SpectrumScopeCanvas.h"
+#include "UiTheme.h"
 #include "WaterfallCanvas.h"
 #include "WaterfallController.h"
 
@@ -71,22 +72,26 @@ SpectrumScopeDisplay::SpectrumScopeDisplay(QWidget* parent) : QWidget(parent)
     m_panScrollBar->setEnabled(false);
     m_panScrollBar->setToolTip(QStringLiteral("Pan Spectrum Scope"));
     m_panScrollBar->setAccessibleName(QStringLiteral("Spectrum Scope pan"));
-    m_panScrollBar->setStyleSheet(QStringLiteral(
-        "QScrollBar:horizontal { background: #061116; border-top: 1px solid #0d2630; border-bottom: 0; "
-        "height: 16px; margin: 0px; }"
-        "QScrollBar::groove:horizontal { background: #061116; border: 1px solid #173542; border-radius: 4px; }"
-        "QScrollBar::handle:horizontal { background: #2c8195; border: 1px solid #6fb5c8; border-radius: 4px; "
-        "min-width: 34px; margin: 2px 1px; }"
-        "QScrollBar::handle:horizontal:hover { background: #3b9eb5; border-color: #9bd8e9; }"
-        "QScrollBar::handle:horizontal:pressed { background: #4bb9d2; border-color: #d6f5ff; }"
-        "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { background: transparent; border: none; "
-        "width: 0px; }"
-        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
-        "QScrollBar:disabled { background: #061116; }"
-        "QScrollBar::groove:horizontal:disabled { background: #061116; border-color: #173542; }"
-        "QScrollBar::handle:horizontal:disabled { background: transparent; border: none; min-width: 0px; }"
-        "QScrollBar::add-page:horizontal:disabled, QScrollBar::sub-page:horizontal:disabled { background: "
-        "transparent; }"));
+    m_panScrollBar->setStyleSheet(
+        QStringLiteral(
+            "QScrollBar:horizontal { background: #061116; border-top: 1px solid #0d2630; border-bottom: 0; "
+            "height: 16px; margin: 0px; }"
+            "QScrollBar::groove:horizontal { background: #061116; border: 1px solid #173542; border-radius: 4px; }"
+            "QScrollBar::handle:horizontal { background: %1; border: 1px solid %2; border-radius: 4px; "
+            "min-width: 34px; margin: 2px 1px; }"
+            "QScrollBar::handle:horizontal:hover { background: %3; border-color: %4; }"
+            "QScrollBar::handle:horizontal:pressed { background: %5; border-color: %6; }"
+            "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { background: transparent; border: none; "
+            "width: 0px; }"
+            "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
+            "QScrollBar:disabled { background: #061116; }"
+            "QScrollBar::groove:horizontal:disabled { background: #061116; border-color: #173542; }"
+            "QScrollBar::handle:horizontal:disabled { background: transparent; border: none; min-width: 0px; }"
+            "QScrollBar::add-page:horizontal:disabled, QScrollBar::sub-page:horizontal:disabled { background: "
+            "transparent; }")
+            .arg(UiTheme::Color::ScrollHandle, UiTheme::Color::ControlActiveBorder, UiTheme::Color::ScrollHandleHover,
+                 UiTheme::Color::ScrollBorderHover, UiTheme::Color::ScrollHandlePressed,
+                 UiTheme::Color::ScrollBorderPressed));
     m_spanCombo->setFixedSize(kSpanComboWidth, kSpanComboHeight);
     m_spanCombo->setFocusPolicy(Qt::NoFocus);
     m_spanCombo->setToolTip(QStringLiteral("Spectrum Scope span"));

@@ -61,11 +61,11 @@ constexpr int kTitleBarHeight = 32;
 constexpr int kWindowButtonSize = 32;
 constexpr int kVolumeSliderWidth = 110;
 constexpr int kVolumeLabelWidth = 30;
-constexpr int kLanModSliderWidth = 118;
-constexpr int kLanModLabelWidth = 36;
 constexpr int kTxDurationWidth = 62;
 constexpr int kTitleControlSpacing = 8;
-constexpr int kVolumeValueSpacing = 2;
+constexpr int kTitleSeparatorSpacing = 16;
+constexpr int kTitleControlGroupLeftOffset = 40;
+constexpr int kVolumeValueSpacing = 6;
 constexpr int kHeartbeatIndicatorWidth = 10;
 constexpr int kHeartbeatIndicatorSpacing = 12;
 constexpr int kHeartbeatLitDurationMs = 100;
@@ -189,37 +189,11 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
 
     root->addStretch(1);
 
-    auto* lanModText = new QLabel(QStringLiteral("LAN MOD"), this);
-    lanModText->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
-            .arg(UiTheme::Color::TextMuted));
-    root->addWidget(lanModText);
-    root->addSpacing(4);
-
-    m_lanModSlider = new QSlider(Qt::Horizontal, this);
-    m_lanModSlider->setObjectName(QStringLiteral("titleLanModSlider"));
-    m_lanModSlider->setRange(0, 255);
-    m_lanModSlider->setFixedSize(kLanModSliderWidth, 20);
-    m_lanModSlider->setAccessibleName(QStringLiteral("LAN modulation level"));
-    root->addWidget(m_lanModSlider);
-    root->addSpacing(2);
-
-    m_lanModLabel = new QLabel(QStringLiteral("0%"), this);
-    m_lanModLabel->setObjectName(QStringLiteral("titleLanModValue"));
-    m_lanModLabel->setFixedWidth(kLanModLabelWidth);
-    m_lanModLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_lanModLabel->setStyleSheet(
-        QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
-            .arg(UiTheme::Color::TextMuted));
-    root->addWidget(m_lanModLabel);
-    root->addSpacing(kTitleControlSpacing);
-
-    // Volume controls
-    auto* volSep = new QWidget(this);
-    volSep->setFixedSize(1, 18);
-    volSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
-    root->addWidget(volSep);
-    root->addSpacing(kTitleControlSpacing);
+    auto* controlGroupSep = new QWidget(this);
+    controlGroupSep->setFixedSize(1, 18);
+    controlGroupSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
+    root->addWidget(controlGroupSep);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     m_txDurationButton = new QPushButton(QStringLiteral("00:00:00"), this);
     m_txDurationButton->setFixedSize(kTxDurationWidth, 22);
@@ -227,13 +201,13 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     m_txDurationButton->setStyleSheet(txDurationStyle(false));
     m_txDurationButton->setToolTip(QStringLiteral("Reset transmit duration"));
     root->addWidget(m_txDurationButton);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     auto* txSep = new QWidget(this);
     txSep->setFixedSize(1, 18);
     txSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
     root->addWidget(txSep);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     m_lockBtn = new QPushButton(this);
     m_lockBtn->setFixedSize(24, 22);
@@ -241,13 +215,13 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     m_lockBtn->setCheckable(false);
     setLockStateUnknown();
     root->addWidget(m_lockBtn);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     auto* btnSep = new QWidget(this);
     btnSep->setFixedSize(1, 18);
     btnSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
     root->addWidget(btnSep);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     m_speakerMuteBtn = new QPushButton(this);
     m_speakerMuteBtn->setObjectName(QStringLiteral("titleSpeakerMuteButton"));
@@ -278,13 +252,14 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
         QStringLiteral("QLabel { color: %1; font-size: 10px; font-weight: bold; background: transparent; }")
             .arg(UiTheme::Color::TextMuted));
     root->addWidget(m_volumeLabel);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
 
     auto* chromeSep = new QWidget(this);
     chromeSep->setFixedSize(1, 18);
     chromeSep->setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::Border));
     root->addWidget(chromeSep);
-    root->addSpacing(kTitleControlSpacing);
+    root->addSpacing(kTitleSeparatorSpacing);
+    root->addSpacing(kTitleControlGroupLeftOffset);
 
     m_minimizeBtn = new QPushButton(QStringLiteral("−"), this);
     m_minimizeBtn->setFixedSize(kWindowButtonSize, kTitleBarHeight);
@@ -310,13 +285,6 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
                 }
                 emit volumeChanged(v);
             });
-    connect(m_lanModSlider, &QSlider::valueChanged, this,
-            [this](int value)
-            {
-                m_lanModLabel->setText(QStringLiteral("%1%").arg(value * 100 / 255));
-                emit lanModChanged(value);
-            });
-
     connect(m_speakerMuteBtn, &QPushButton::clicked, this, &MainTitleBar::muteToggled);
     connect(m_lockBtn, &QPushButton::clicked, this, &MainTitleBar::lockToggled);
     connect(m_txDurationButton, &QPushButton::clicked, this, &MainTitleBar::txDurationResetRequested);
@@ -460,26 +428,6 @@ void MainTitleBar::setTxDurationActive(bool transmitting)
     }
 }
 
-void MainTitleBar::setLanMod(int value)
-{
-    if (!m_lanModSlider)
-    {
-        return;
-    }
-    const int bounded = qBound(0, value, 255);
-    const QSignalBlocker blocker(m_lanModSlider);
-    m_lanModSlider->setValue(bounded);
-    m_lanModLabel->setText(QStringLiteral("%1%").arg(bounded * 100 / 255));
-}
-
-void MainTitleBar::setLanModEnabled(bool enabled)
-{
-    if (m_lanModSlider)
-    {
-        m_lanModSlider->setEnabled(enabled);
-    }
-}
-
 void MainTitleBar::pulseRadioHeartbeat()
 {
     if (!m_heartbeatIndicator || !m_heartbeatFadeTimer)
@@ -527,6 +475,7 @@ void MainTitleBar::paintEvent(QPaintEvent* event)
     Q_UNUSED(event)
     QPainter painter(this);
     painter.fillRect(rect(), QColor(QString::fromLatin1(UiTheme::Color::WindowChrome)));
+    painter.fillRect(0, height() - 1, width(), 1, QColor(QString::fromLatin1(UiTheme::Color::WindowChromeShadow)));
 }
 
 void MainTitleBar::mousePressEvent(QMouseEvent* event)
