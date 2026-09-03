@@ -33,6 +33,7 @@ namespace
 {
 constexpr int kSpectrumToolbarHeight = 29;
 constexpr int kExchangeScopeSyncTimeoutMs = 2000;
+constexpr int kVfoShelfShadowHeightPx = 8;
 } // namespace
 
 SpectrumScopeController::SpectrumScopeController(MainWindow* window) : QObject(window), m_window(window)
@@ -74,7 +75,7 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     vfoStrip->setStyleSheet(
         QStringLiteral("QWidget#vfoDisplayStrip { background: %1; }").arg(UiTheme::Color::ContentBackground));
     auto* vfoLayout = new QHBoxLayout(vfoStrip);
-    vfoLayout->setContentsMargins(kControlStripMargins.left(), 0, kControlStripMargins.right(), 6);
+    vfoLayout->setContentsMargins(kControlStripMargins.left(), 0, kControlStripMargins.right(), 0);
     vfoLayout->setSpacing(0);
 
     auto* vfoBlock = new QWidget(vfoStrip);
@@ -255,9 +256,20 @@ void SpectrumScopeController::buildSpectrumScope(QVBoxLayout* vbox)
     // visible edge-to-edge separation below the title bar.
     vbox->addSpacing(19);
     vbox->addWidget(vfoStrip);
-    // The VFO strip already contributes a 6 px bottom inset. Add 14 px here
-    // so the 20 px top gap matches the spectrum frame's side and bottom insets.
-    vbox->addSpacing(14);
+    auto* vfoShelfShadowRow = new QWidget(m_window->centralWidget());
+    auto* vfoShelfShadowLayout = new QHBoxLayout(vfoShelfShadowRow);
+    vfoShelfShadowLayout->setContentsMargins(kControlStripMargins.left(), 0, kControlStripMargins.right(), 0);
+    vfoShelfShadowLayout->setSpacing(0);
+    auto* vfoShelfShadow = new QWidget(vfoShelfShadowRow);
+    vfoShelfShadow->setFixedHeight(kVfoShelfShadowHeightPx);
+    vfoShelfShadow->setStyleSheet(QStringLiteral(
+        "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 4, 8, 220), "
+        "stop:1 rgba(0, 8, 15, 0)); border-top: 1px solid #2a404f;"));
+    vfoShelfShadowLayout->addWidget(vfoShelfShadow);
+    vbox->addWidget(vfoShelfShadowRow);
+    // Preserve the existing 20 px separation below the VFO controls while
+    // using the first eight pixels for the shelf shadow.
+    vbox->addSpacing(12);
 
     m_window->m_spectrumScopeDisplay = new SpectrumScopeDisplay(m_window->centralWidget());
     m_window->m_spectrumScopeDisplay->setInvertMouseWheel(

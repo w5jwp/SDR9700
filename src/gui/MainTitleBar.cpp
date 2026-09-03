@@ -98,6 +98,18 @@ QString controlLockButtonStyle(bool locked)
                      .arg(UiTheme::Color::BorderLight, UiTheme::Color::ButtonHover, UiTheme::Color::ButtonHoverBorder);
 }
 
+QString audioMuteButtonStyle(bool muted)
+{
+    if (!muted)
+    {
+        return controlLockButtonStyle(false);
+    }
+    return QStringLiteral("QPushButton { background: transparent; border: 1px solid %1; border-radius: 3px;"
+                          " padding: 0; }"
+                          "QPushButton:hover { background: %2; border-color: %1; }")
+        .arg(UiTheme::Color::Danger, UiTheme::Color::ButtonHover);
+}
+
 QString txDurationStyle(bool active)
 {
     return active ? QStringLiteral("QPushButton { background: %1; border: 1px solid %2; border-radius: 3px;"
@@ -237,14 +249,13 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     root->addWidget(btnSep);
     root->addSpacing(kTitleControlSpacing);
 
-    m_speakerMuteBtn = new QPushButton(QStringLiteral("🔊"), this);
+    m_speakerMuteBtn = new QPushButton(this);
     m_speakerMuteBtn->setObjectName(QStringLiteral("titleSpeakerMuteButton"));
     m_speakerMuteBtn->setFixedSize(24, 22);
+    m_speakerMuteBtn->setIcon(QIcon(QStringLiteral(":/images/icons/control_audio_unmuted.svg")));
+    m_speakerMuteBtn->setIconSize(QSize(18, 18));
     m_speakerMuteBtn->setCheckable(false);
-    m_speakerMuteBtn->setStyleSheet(
-        QStringLiteral("QPushButton { background: transparent; border: none; font-size: 14px; padding: 0 0 2px 0; }"
-                       "QPushButton:hover { background: %1; border-radius: 3px; }")
-            .arg(UiTheme::Color::ButtonHover));
+    m_speakerMuteBtn->setStyleSheet(audioMuteButtonStyle(false));
     m_speakerMuteBtn->setToolTip(QStringLiteral("Mute audio"));
     m_speakerMuteBtn->setAccessibleName(QStringLiteral("Audio mute"));
     m_speakerMuteBtn->setAccessibleDescription(QStringLiteral("Mute or unmute received audio"));
@@ -400,7 +411,9 @@ void MainTitleBar::setMuted(bool muted)
 {
     if (m_speakerMuteBtn)
     {
-        m_speakerMuteBtn->setText(muted ? QStringLiteral("🔇") : QStringLiteral("🔊"));
+        m_speakerMuteBtn->setIcon(QIcon(muted ? QStringLiteral(":/images/icons/control_audio_muted.svg")
+                                              : QStringLiteral(":/images/icons/control_audio_unmuted.svg")));
+        m_speakerMuteBtn->setStyleSheet(audioMuteButtonStyle(muted));
         m_speakerMuteBtn->setToolTip(muted ? QStringLiteral("Unmute audio") : QStringLiteral("Mute audio"));
     }
 }

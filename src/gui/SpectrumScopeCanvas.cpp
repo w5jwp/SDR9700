@@ -27,7 +27,8 @@ constexpr int kGridDensityMore = 2;
 constexpr float kSpectrumSmoothingAlpha = 0.35f;
 constexpr float kMaximumSpatialSmoothBlend = 0.75f;
 constexpr int kTraceSamplesPerPixel = 2;
-constexpr int kTraceBottomClipInsetPx = 2;
+constexpr int kToolbarShadowHeightPx = 8;
+constexpr int kScaleShadowHeightPx = 8;
 constexpr double kScopeDisplayExponent = 0.58;
 constexpr double kScopeDisplayCeilingFraction = 0.98;
 constexpr double kWheelStepAngleDelta = 120.0;
@@ -708,11 +709,8 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
     const int w = width();
     const int specTop = 0;
     const int specDrawH = specH;
-    // Keep the rounded trace feather away from the scale boundary. A zero-level
-    // trace lies on that boundary; without this separate inset its blue outer
-    // stroke blends with the red separator and makes the line look purple.
     const QRect spectrumPlotRect(plotLeftX(), specTop, qMax(0, w - plotLeftX()),
-                                 qMax(0, specDrawH - kTraceBottomClipInsetPx));
+                                 qMax(0, specDrawH));
     p.drawPixmap(0, 0, m_staticLayer);
 
     if (!m_displaySpectrumBins.isEmpty())
@@ -823,13 +821,23 @@ void SpectrumScopeCanvas::paintEvent(QPaintEvent* event)
         p.drawLine(vx, 0, vx, scaleY - 1);
     }
 
-    // Draw the scale boundary independently and last. Raw scope level zero is
-    // deliberately clipped at this edge, but must not obscure the red border.
-    const int scaleY = specH - 1;
-    // Use an opaque rectangle rather than a one-pixel pen. A pen is centered
-    // on its coordinate and can straddle the adjacent blue trace-floor row at
-    // high device-pixel ratios, making the nominally red boundary look purple.
-    p.fillRect(plotLeftX(), scaleY, qMax(0, w - plotLeftX()), 1, UiTheme::Color::SpectrumBoundary);
+    // A soft shadow and restrained neutral highlight give the frequency scale
+    // the appearance of sitting above the spectrum without a colored border.
+    const int shadowTop = qMax(0, specH - kScaleShadowHeightPx);
+    QLinearGradient scaleShadow(0, shadowTop, 0, specH);
+    scaleShadow.setColorAt(0.0, QColor(0x00, 0x08, 0x0f, 0));
+    scaleShadow.setColorAt(1.0, QColor(0x00, 0x04, 0x08, 220));
+    p.fillRect(0, shadowTop, w, specH - shadowTop, scaleShadow);
+    p.fillRect(0, specH - 1, w, 1, QColor(0x2a, 0x40, 0x4f));
+
+    // Echo the shelf treatment beneath the panadapter toolbar, using a softer
+    // shadow so the toolbar is separated without crowding the spectrum plot.
+    const int toolbarShadowHeight = qMin(specH, kToolbarShadowHeightPx);
+    QLinearGradient toolbarShadow(0, 0, 0, toolbarShadowHeight);
+    toolbarShadow.setColorAt(0.0, QColor(0x00, 0x04, 0x08, 180));
+    toolbarShadow.setColorAt(1.0, QColor(0x00, 0x08, 0x0f, 0));
+    p.fillRect(0, 0, w, toolbarShadowHeight, toolbarShadow);
+    p.fillRect(0, 0, w, 1, QColor(0x2a, 0x40, 0x4f));
 }
 
 void SpectrumScopeCanvas::mousePressEvent(QMouseEvent* ev)

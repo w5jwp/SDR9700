@@ -322,9 +322,9 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
     QVERIFY(mainPosition.y() < exchangeButton->y());
     QVERIFY(exchangeButton->y() < dualWatchButton->y());
     QCOMPARE(subPosition.x() - mainPosition.x() - mainButton->width(), 4);
-    QCOMPARE(exchangeButton->y() - mainPosition.y() - mainButton->height(), 10);
-    QCOMPARE(exchangeDivider->y() - exchangeButton->geometry().bottom() - 1, 10);
-    QCOMPARE(dualWatchButton->y() - exchangeDivider->geometry().bottom() - 1, 10);
+    QCOMPARE(exchangeButton->y() - mainPosition.y() - mainButton->height(), 15);
+    QCOMPARE(exchangeDivider->y() - exchangeButton->geometry().bottom() - 1, 15);
+    QCOMPARE(dualWatchButton->y() - exchangeDivider->geometry().bottom() - 1, 15);
     QCOMPARE(mainButton->height(), subButton->height());
     QCOMPARE(subButton->height(), dualWatchButton->height());
     QCOMPARE(exchangeButton->height(), dualWatchButton->height());

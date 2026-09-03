@@ -61,11 +61,6 @@ inline constexpr QColor MeterGreen{0x4d, 0xd8, 0x7a};
 inline constexpr QColor MeterAmber{0xff, 0xb8, 0x4d};
 inline constexpr QColor MeterRed{0xff, 0x4d, 0x4d};
 inline constexpr QColor MeterScaleText{0x7f, 0xa4, 0xc8};
-// Both horizontal boundaries surrounding the spectrum scale and pan control
-// use one authoritative color. Keeping this as a QColor also lets custom-
-// painted widgets apply the final opaque pixel row without style-engine
-// blending against the blue waterfall or spectrum trace.
-inline constexpr QColor SpectrumBoundary{0xff, 0x00, 0x00};
 } // namespace Color
 
 inline QColor spectrumSignalColor(double strength)
