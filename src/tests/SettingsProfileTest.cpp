@@ -198,6 +198,21 @@ void SettingsProfileTest::profilePasswordIsEncryptedAndRoundTrips()
     QCOMPARE(loaded->port, profile.port);
     QCOMPARE(loaded->username, profile.username);
     QCOMPARE(loaded->password, profile.password);
+
+    // Saving an unrelated profile field must reuse the existing ciphertext;
+    // deriving a fresh PBKDF2 key for every profile made routine saves scale
+    // poorly with the number of remembered radios.
+    QVERIFY(store.setLastProfileId(profile.id));
+    const QJsonObject resavedProfile = settingsDocument()
+                                                 .value(QStringLiteral("radioChooser"))
+                                                 .toObject()
+                                                 .value(QStringLiteral("radioProfiles"))
+                                                 .toObject()
+                                                 .value(QStringLiteral("profiles"))
+                                                 .toArray()
+                                                 .at(0)
+                                                 .toObject();
+    QCOMPARE(resavedProfile.value(QStringLiteral("password")).toString(), storedPassword);
 }
 
 void SettingsProfileTest::corruptedProfilePasswordIsPreserved()

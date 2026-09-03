@@ -6,6 +6,8 @@ class QComboBox;
 class QPlainTextEdit;
 class QPushButton;
 class QTimer;
+class QHideEvent;
+class QShowEvent;
 
 class ApplicationLogDialog : public sdr9700::ui::UtilityWindow
 {
@@ -13,6 +15,10 @@ class ApplicationLogDialog : public sdr9700::ui::UtilityWindow
 
   public:
     explicit ApplicationLogDialog(QWidget* parent = nullptr);
+
+  protected:
+    void hideEvent(QHideEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
   private:
     void refreshLog();

@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QPlainTextEdit>
+#include <QTimer>
 #include <QSignalSpy>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -60,15 +61,23 @@ void ApplicationLogDialogTest::providesLiveLogControls()
     QCOMPARE(categoryCombo->currentText(), QStringLiteral("All categories"));
     QVERIFY(categoryCombo->minimumWidth() >= 190);
     QVERIFY(logView != nullptr);
+    QVERIFY(logView->document()->maximumBlockCount() > 0);
+    auto* refreshTimer = dialog.findChild<QTimer*>(QStringLiteral("applicationLogRefreshTimer"));
+    QVERIFY(refreshTimer != nullptr);
+    QVERIFY(!refreshTimer->isActive());
+    dialog.showCentered();
+    QTRY_VERIFY(refreshTimer->isActive());
     QCOMPARE(pauseButton->text(), QStringLiteral("Pause"));
     pauseButton->click();
     QCOMPARE(pauseButton->text(), QStringLiteral("Resume"));
+    QVERIFY(!refreshTimer->isActive());
     const QMessageLogContext context("test.cpp", 1, "test", "radio");
     ApplicationLog::instance().append(QtInfoMsg, context, QStringLiteral("message received while paused"));
     QTest::qWait(1100);
     QVERIFY(!logView->toPlainText().contains(QStringLiteral("message received while paused")));
     pauseButton->click();
     QCOMPARE(pauseButton->text(), QStringLiteral("Pause"));
+    QVERIFY(refreshTimer->isActive());
     QVERIFY(logView->toPlainText().contains(QStringLiteral("message received while paused")));
     clearButton->click();
     QVERIFY(ApplicationLog::instance().entries().isEmpty());

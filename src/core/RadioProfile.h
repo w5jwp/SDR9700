@@ -53,10 +53,13 @@ class RadioProfileStore : public QObject
     RadioProfileStore() = default;
 
     static QByteArray passwordKeyMaterial();
+    static QByteArray passwordFingerprint(const QString& plain);
     static QString encryptPassword(const QString& plain);
     static QString decryptPassword(const QString& stored);
 
     QList<RadioProfile> m_profiles;
     QHash<QUuid, QString> m_unreadablePasswords;
+    mutable QHash<QUuid, QString> m_encryptedPasswords;
+    mutable QHash<QUuid, QByteArray> m_passwordFingerprints;
     QUuid m_lastProfileId;
 };
