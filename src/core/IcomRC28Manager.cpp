@@ -28,6 +28,19 @@ QString readIcomRC28SettingsJson()
     const auto& settings = AppSettings::instance();
     return settings.value(QString::fromLatin1(kICOMRC28ButtonMappingKey), QStringLiteral("{}")).toString();
 }
+
+QJsonObject readIcomRC28SettingsObject()
+{
+    static QString cachedJson;
+    static QJsonObject cachedObject;
+    const QString json = readIcomRC28SettingsJson();
+    if (json != cachedJson)
+    {
+        cachedJson = json;
+        cachedObject = QJsonDocument::fromJson(json.toUtf8()).object();
+    }
+    return cachedObject;
+}
 } // namespace
 
 IcomRC28Manager::IcomRC28Manager(QObject* parent) : QObject(parent)
@@ -54,8 +67,7 @@ IcomRC28Manager::~IcomRC28Manager()
 
 QString IcomRC28Manager::settingsField(const QString& field, const QString& defaultValue)
 {
-    const QByteArray raw = readIcomRC28SettingsJson().toUtf8();
-    const QJsonObject obj = QJsonDocument::fromJson(raw).object();
+    const QJsonObject obj = readIcomRC28SettingsObject();
     const QJsonValue value = obj.value(field);
     return value.isString() ? value.toString() : defaultValue;
 }
@@ -63,7 +75,7 @@ QString IcomRC28Manager::settingsField(const QString& field, const QString& defa
 void IcomRC28Manager::setSettingsField(const QString& field, const QString& value)
 {
     auto& settings = AppSettings::instance();
-    QJsonObject obj = QJsonDocument::fromJson(readIcomRC28SettingsJson().toUtf8()).object();
+    QJsonObject obj = readIcomRC28SettingsObject();
     obj.insert(field, value);
     settings.setValue(QString::fromLatin1(kICOMRC28ButtonMappingKey),
                       QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)));

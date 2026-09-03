@@ -225,7 +225,8 @@ void WaterfallController::renderPendingRow()
     Q_ASSERT(m_waterfall.format() == QImage::Format_RGB32);
     if (h > 1)
     {
-        memmove(m_waterfall.bits() + w * 4, m_waterfall.bits(), size_t(w * (h - 1) * 4));
+        const qsizetype stride = m_waterfall.bytesPerLine();
+        memmove(m_waterfall.bits() + stride, m_waterfall.constBits(), size_t(stride * (h - 1)));
     }
 
     QRgb* row = reinterpret_cast<QRgb*>(m_waterfall.bits());

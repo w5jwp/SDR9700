@@ -3582,15 +3582,15 @@ bool Commander::parseMemory(QVector<MemParserFormat>* memParser, MemoryType* mem
 {
     initializeMemoryForParsing(*mem);
     // Memory parser positions are one-based and include the command prefix.
-    payloadIn.insert(0, "**");
+    const QByteArray memoryPayload = QByteArrayLiteral("**") + payloadIn;
     for (auto& parse : *memParser)
     {
         // Empty radio memory records are short; return the fields parsed so far.
-        if (payloadIn.size() < (parse.pos + 1 + parse.len) && parse.spec != 'Z')
+        if (memoryPayload.size() < (parse.pos + 1 + parse.len) && parse.spec != 'Z')
         {
             return true;
         }
-        QByteArray data = payloadIn.mid(parse.pos + 1, parse.len);
+        const QByteArray data = memoryPayload.mid(parse.pos + 1, parse.len);
         parseMemoryField(parse, data, *mem);
     }
 
@@ -3725,7 +3725,8 @@ void Commander::setPttActive(bool active)
         return;
     }
 
-    QMetaObject::invokeMethod(udp, "setPttActive", Qt::QueuedConnection, Q_ARG(bool, active));
+    QMetaObject::invokeMethod(udp, [udpSession = udp, active]() { udpSession->setPttActive(active); },
+                              Qt::QueuedConnection);
 }
 
 void Commander::sendDtmfPcm(const QByteArray& pcm)
@@ -3734,7 +3735,8 @@ void Commander::sendDtmfPcm(const QByteArray& pcm)
     {
         return;
     }
-    QMetaObject::invokeMethod(udp, "queueDtmfPcm", Qt::QueuedConnection, Q_ARG(QByteArray, pcm));
+    QMetaObject::invokeMethod(udp, [udpSession = udp, pcm]() { udpSession->queueDtmfPcm(pcm); },
+                              Qt::QueuedConnection);
 }
 
 void Commander::readCurrentFrequencyAndMode()

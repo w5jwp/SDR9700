@@ -7,13 +7,13 @@ name: SDR9700 CodeQL configuration
 
 paths-ignore:
   # ExternalProject extracts upstream sources here at build time
-  - 'build/**'
+  - 'src/build/**'
 
   # Vendored dependencies — treat as binary-equivalent black boxes
   - 'third_party/**'
 
   # Test harnesses — not shipped, run locally + in CI.
-  - 'tests/**'
+  - 'src/tests/**'
 
   # Auto-generated source from CHANGELOG.md by scripts/gen_whatsnew.py.
   - 'src/generated/**'

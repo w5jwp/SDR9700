@@ -298,7 +298,7 @@ void SettingsProfileTest::managesProfileLifecycleAndLastSelection()
     QVERIFY(store.lastProfileId().isNull());
     QVERIFY(memoryDatabase.memories(second.id, &databaseError).isEmpty());
     QVERIFY(!memoryDatabase.syncState(second.id, &databaseError).completedAt.isValid());
-    QVERIFY(store.removeProfile(QUuid::createUuid()));
+    QVERIFY(!store.removeProfile(QUuid::createUuid()));
 
     store.load();
     QCOMPARE(store.profiles().size(), 1);

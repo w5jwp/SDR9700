@@ -30,8 +30,10 @@ QString logLevelName(QtMsgType type)
 
 ApplicationLog& ApplicationLog::instance()
 {
-    static ApplicationLog log;
-    return log;
+    // The installed Qt message handler can run during static destruction.
+    // Retain this small bounded store for process lifetime so it remains valid.
+    static ApplicationLog* log = new ApplicationLog;
+    return *log;
 }
 
 QString ApplicationLog::append(QtMsgType type, const QMessageLogContext& context, const QString& message)

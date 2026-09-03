@@ -70,7 +70,10 @@ class AutomationServerTest final : public QObject
         }
 
         client.disconnectFromServer();
-        QVERIFY(client.waitForDisconnected(2000) || client.state() == QLocalSocket::UnconnectedState);
+        if (client.state() != QLocalSocket::UnconnectedState)
+        {
+            QVERIFY(client.waitForDisconnected(2000));
+        }
         QTRY_COMPARE(server.clientCount(), 0);
         QVERIFY(clientCountSpy.count() >= 2);
         const QString discoveryPath = server.discoveryFilePath();

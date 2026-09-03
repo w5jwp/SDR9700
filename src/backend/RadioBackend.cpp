@@ -961,7 +961,8 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     // Load the saved audio device if no device was explicitly set via setRxAudioDevice().
     if (m_rxDevice.isNull())
     {
-        const QByteArray savedId = AppSettings::instance().value("audioOutputDeviceID").toString().toUtf8();
+        const QByteArray savedId =
+            QByteArray::fromBase64(AppSettings::instance().value("audioOutputDeviceID").toString().toLatin1());
         if (!savedId.isEmpty())
         {
             const QList<QAudioDevice> outputs = QMediaDevices::audioOutputs();
@@ -975,7 +976,8 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
     }
     if (m_txDevice.isNull())
     {
-        const QByteArray savedId = AppSettings::instance().value("audioInputDeviceID").toString().toUtf8();
+        const QByteArray savedId =
+            QByteArray::fromBase64(AppSettings::instance().value("audioInputDeviceID").toString().toLatin1());
         if (!savedId.isEmpty())
         {
             const QList<QAudioDevice> inputs = QMediaDevices::audioInputs();

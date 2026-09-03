@@ -148,8 +148,10 @@ QByteArray readOrCreateProfileKey()
 
 RadioProfileStore& RadioProfileStore::instance()
 {
-    static RadioProfileStore s;
-    return s;
+    // Process-lifetime ownership avoids static-destruction ordering between
+    // this QObject, AppSettings, and Qt's logging infrastructure at shutdown.
+    static RadioProfileStore* store = new RadioProfileStore;
+    return *store;
 }
 
 QByteArray RadioProfileStore::passwordKeyMaterial()
@@ -505,6 +507,10 @@ bool RadioProfileStore::updateProfile(const RadioProfile& p)
 
 bool RadioProfileStore::removeProfile(const QUuid& id)
 {
+    if (id.isNull() || profileById(id) == nullptr)
+    {
+        return false;
+    }
     const QList<RadioProfile> previousProfiles = m_profiles;
     const QHash<QUuid, QString> previousUnreadablePasswords = m_unreadablePasswords;
     const QUuid previousLastProfileId = m_lastProfileId;
