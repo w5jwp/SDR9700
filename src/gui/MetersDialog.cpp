@@ -1,11 +1,11 @@
 #include "MetersDialog.h"
-#include "DialogFooter.h"
 #include "SMeterScale.h"
 #include "UiTheme.h"
 
-#include <QGridLayout>
 #include <QFontDatabase>
-#include <QHBoxLayout>
+#include <QGraphicsOpacityEffect>
+#include <QGridLayout>
+#include <QGroupBox>
 #include <QLabel>
 #include <QProgressBar>
 #include <QPushButton>
@@ -40,9 +40,37 @@ QString meterStyle(const QString& fill)
 QString standardMeterFill()
 {
     return QStringLiteral("qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-                          " stop:0 %1, stop:0.72 %2, stop:1 %3)")
-        .arg(QLatin1String(UiTheme::Color::Accent), QLatin1String(UiTheme::Color::Success),
-             QLatin1String(UiTheme::Color::Warning));
+                          " stop:0 %1, stop:1 %2)")
+        .arg(QLatin1String(UiTheme::Color::ControlActive), QLatin1String(UiTheme::Color::ScrollHandleHover));
+}
+
+QString meterSectionStyle()
+{
+    return QStringLiteral("QGroupBox { background: %1; border: 1px solid %2; border-radius: 4px;"
+                          " margin-top: 12px; padding-top: 8px; }"
+                          "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px;"
+                          " color: %3; font-size: 10px; font-weight: bold; }")
+        .arg(QLatin1String(UiTheme::Color::PanelDark), QLatin1String(UiTheme::Color::Border),
+             QLatin1String(UiTheme::Color::TextStatusSecondary));
+}
+
+QGridLayout* createMeterSection(QVBoxLayout* parentLayout, const QString& title, const QString& objectName,
+                                QGroupBox** section = nullptr)
+{
+    auto* group = new QGroupBox(title);
+    group->setObjectName(objectName);
+    group->setStyleSheet(meterSectionStyle());
+    auto* grid = new QGridLayout(group);
+    grid->setContentsMargins(10, 8, 10, 10);
+    grid->setHorizontalSpacing(8);
+    grid->setVerticalSpacing(7);
+    grid->setColumnStretch(1, 1);
+    parentLayout->addWidget(group);
+    if (section)
+    {
+        *section = group;
+    }
+    return grid;
 }
 
 int scaledValue(double value, double maximum)
@@ -84,37 +112,35 @@ MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QString
 
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
-    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 6, UiTheme::Size::DialogContentMargin,
+                                      UiTheme::Size::DialogContentMargin);
+    contentLayout->setSpacing(6);
     root->addWidget(content);
 
-    auto* grid = new QGridLayout;
-    grid->setHorizontalSpacing(8);
-    grid->setVerticalSpacing(7);
-    grid->setColumnStretch(1, 1);
+    auto* receiveGrid = createMeterSection(contentLayout, QStringLiteral("RECEIVE"), QStringLiteral("receiveMeters"));
+    m_sMeter = addMeterRow(receiveGrid, 0, QStringLiteral("S-Meter"), QStringLiteral("Receive signal strength"));
 
-    m_alcMeter = addMeterRow(grid, 0, QStringLiteral("ALC"), QStringLiteral("Automatic level control"));
-    m_txAudioAverageMeter = addMeterRow(grid, 1, QStringLiteral("Audio Average"),
+    auto* transmitGrid = createMeterSection(contentLayout, QStringLiteral("TRANSMIT"), QStringLiteral("transmitMeters"),
+                                            &m_transmitSection);
+    m_transmitSection->setGraphicsEffect(new QGraphicsOpacityEffect(m_transmitSection));
+    m_powerMeter = addMeterRow(transmitGrid, 0, QStringLiteral("RF Power"), QStringLiteral("Transmit output power"));
+    m_swrMeter = addMeterRow(transmitGrid, 1, QStringLiteral("SWR"), QStringLiteral("Standing wave ratio"));
+    m_alcMeter = addMeterRow(transmitGrid, 2, QStringLiteral("ALC"), QStringLiteral("Automatic level control"));
+    m_compressionMeter =
+        addMeterRow(transmitGrid, 3, QStringLiteral("Compression"), QStringLiteral("Transmit compression"));
+    m_txAudioAverageMeter = addMeterRow(transmitGrid, 4, QStringLiteral("Audio Average"),
                                         QStringLiteral("Local microphone input average level; high at 60% or above"));
-    m_txAudioPeakMeter = addMeterRow(grid, 2, QStringLiteral("Audio Peak"),
+    m_txAudioPeakMeter = addMeterRow(transmitGrid, 5, QStringLiteral("Audio Peak"),
                                      QStringLiteral("Local microphone input peak level; high at 85%, clipping at 95%"));
-    m_compressionMeter = addMeterRow(grid, 3, QStringLiteral("Compression"), QStringLiteral("Transmit compression"));
-    m_currentMeter = addMeterRow(grid, 4, QStringLiteral("Drain Current (I<sub>d</sub>)"),
-                                 QStringLiteral("Final amplifier drain current"));
-    m_voltageMeter = addMeterRow(grid, 5, QStringLiteral("Drain Voltage (V<sub>d</sub>)"),
-                                 QStringLiteral("Final amplifier drain voltage"));
-    m_powerMeter = addMeterRow(grid, 6, QStringLiteral("RF Power"), QStringLiteral("Transmit output power"));
-    m_sMeter = addMeterRow(grid, 7, QStringLiteral("S-Meter"), QStringLiteral("Receive signal strength"));
-    m_swrMeter = addMeterRow(grid, 8, QStringLiteral("SWR"), QStringLiteral("Standing wave ratio"));
 
-    contentLayout->addLayout(grid);
-    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
-    auto* closeButton = footer.buttonBox->addButton(QDialogButtonBox::Close);
-    closeButton->setObjectName(QStringLiteral("metersCloseButton"));
-    contentLayout->addWidget(footer.widget);
-    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
+    auto* radioGrid = createMeterSection(contentLayout, QStringLiteral("RADIO"), QStringLiteral("radioMeters"));
+    m_voltageMeter =
+        addMeterRow(radioGrid, 0, QStringLiteral("Voltage"), QStringLiteral("Final amplifier drain voltage (Vd)"));
+    m_currentMeter =
+        addMeterRow(radioGrid, 1, QStringLiteral("Current"), QStringLiteral("Final amplifier drain current (Id)"));
 
     resetMeters();
+    setTransmitActive(false);
     setFixedSize(500, sizeHint().height());
 }
 
@@ -122,7 +148,7 @@ MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, c
                                                  const QString& description)
 {
     auto* labelWidget = new QLabel(label, this);
-    labelWidget->setFixedWidth(190);
+    labelWidget->setFixedWidth(108);
     labelWidget->setTextFormat(Qt::RichText);
     labelWidget->setToolTip(description);
     labelWidget->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 12px; }").arg(UiTheme::Color::TextMuted));
@@ -130,13 +156,13 @@ MetersDialog::MeterRow MetersDialog::addMeterRow(QGridLayout* layout, int row, c
     auto* bar = new QProgressBar(this);
     bar->setRange(0, kMeterScale);
     bar->setTextVisible(false);
-    bar->setFixedHeight(12);
+    bar->setFixedHeight(14);
     bar->setToolTip(description);
     const QString initialFill = standardMeterFill();
     bar->setStyleSheet(meterStyle(initialFill));
 
     auto* valueLabel = new QLabel(QStringLiteral("--"), this);
-    valueLabel->setFixedWidth(76);
+    valueLabel->setFixedWidth(68);
     valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     valueLabel->setToolTip(description);
     valueLabel->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
@@ -280,4 +306,16 @@ void MetersDialog::setTransmitAudioLevel(int peak, int rms)
 
     setMeterFillColor(m_txAudioAverageMeter, averageColor);
     setMeterFillColor(m_txAudioPeakMeter, peakColor);
+}
+
+void MetersDialog::setTransmitActive(bool active)
+{
+    if (m_transmitSection)
+    {
+        m_transmitSection->setEnabled(active);
+        if (auto* effect = qobject_cast<QGraphicsOpacityEffect*>(m_transmitSection->graphicsEffect()))
+        {
+            effect->setOpacity(active ? 1.0 : 0.48);
+        }
+    }
 }

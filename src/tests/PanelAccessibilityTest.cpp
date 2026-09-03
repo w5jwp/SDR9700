@@ -1,7 +1,7 @@
 #include "DtmfDialog.h"
-#include "DialogFooter.h"
 #include "MetersDialog.h"
 
+#include <QGroupBox>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QTest>
@@ -41,17 +41,15 @@ void PanelAccessibilityTest::utilityDialogsAreFixedAndFrameless()
         QVERIFY(closeButton != nullptr);
     }
 
-    auto* metersFooterSeparator = meters.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator"));
-    auto* metersFooterRow = meters.findChild<QWidget*>(QStringLiteral("dialogFooterRow"));
-    auto* metersCloseButton = meters.findChild<QPushButton*>(QStringLiteral("metersCloseButton"));
-    QVERIFY(metersFooterSeparator != nullptr);
-    QCOMPARE(metersFooterSeparator->height(), 1);
-    QVERIFY(metersFooterRow != nullptr);
-    QVERIFY(metersFooterRow->layout() != nullptr);
-    QCOMPARE(metersFooterRow->layout()->contentsMargins(),
-             QMargins(0, sdr9700::ui::kDialogFooterSpacing, 0, sdr9700::ui::kDialogFooterSpacing));
-    QVERIFY(metersCloseButton != nullptr);
-    QCOMPARE(metersCloseButton->text(), QStringLiteral("Close"));
+    QVERIFY(meters.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")) == nullptr);
+    QVERIFY(meters.findChild<QPushButton*>(QStringLiteral("metersCloseButton")) == nullptr);
+    QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("receiveMeters")) != nullptr);
+    auto* transmitMeters = meters.findChild<QGroupBox*>(QStringLiteral("transmitMeters"));
+    QVERIFY(transmitMeters != nullptr);
+    QVERIFY(!transmitMeters->isEnabled());
+    QVERIFY(meters.findChild<QGroupBox*>(QStringLiteral("radioMeters")) != nullptr);
+    meters.setTransmitActive(true);
+    QVERIFY(transmitMeters->isEnabled());
 }
 
 void PanelAccessibilityTest::metersSurviveRepeatedUpdatesAndDestruction()
