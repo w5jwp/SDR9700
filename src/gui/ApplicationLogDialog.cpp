@@ -37,7 +37,8 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
 {
     setObjectName(QStringLiteral("applicationLogWindow"));
     setModal(false);
-    setFixedSize(kApplicationLogWindowSize);
+    setMinimumSize(720, 480);
+    resize(kApplicationLogWindowSize);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);

@@ -28,7 +28,6 @@ using namespace sdr9700::memory;
 namespace
 {
 constexpr int kMemorySectionSpacing = 8;
-constexpr int kMemoryFooterHeight = 24;
 } // namespace
 
 MemoryViewController::MemoryViewController(MemoryController* owner) : QObject(owner), m_owner(owner)
@@ -110,7 +109,7 @@ void MemoryViewController::buildMemoryWindow()
     m_owner->m_window->m_memoryWindow->setObjectName("memoryWindow");
     m_owner->m_window->m_memoryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
     m_owner->m_window->m_memoryWindow->resize(kMemoryWindowSize);
-    m_owner->m_window->m_memoryWindow->setFixedSize(kMemoryWindowSize);
+    m_owner->m_window->m_memoryWindow->setMinimumSize(900, 600);
 
     auto* panel = new QWidget(m_owner->m_window->m_memoryWindow);
     auto* root = new QHBoxLayout(panel);
@@ -252,15 +251,15 @@ void MemoryViewController::buildMemoryWindow()
 
     auto* footer = new QWidget(panel);
     footer->setObjectName(QStringLiteral("memoryManagerFooter"));
-    footer->setFixedHeight(kMemoryFooterHeight);
     auto* footerLayout = new QHBoxLayout(footer);
-    footerLayout->setContentsMargins(0, 0, 0, 0);
+    footerLayout->setContentsMargins(0, 2, 0, 2);
     footerLayout->setSpacing(12);
     m_owner->m_window->m_memoryCountLabel = new QLabel(footer);
     m_owner->m_window->m_memoryCountLabel->setObjectName(QStringLiteral("memoryManagerStatusLabel"));
     m_owner->m_window->m_memoryCountLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_owner->m_window->m_memoryCountLabel->setContentsMargins(kMemoryFooterTextLeftPadding, 0, 0, 0);
     m_owner->m_window->m_memoryCountLabel->setStyleSheet("QLabel { color: palette(mid); }");
+    footer->setMinimumHeight(m_owner->m_window->m_memoryCountLabel->sizeHint().height() + 4);
     m_owner->m_window->m_memoryProgressBar = new QProgressBar(footer);
     m_owner->m_window->m_memoryProgressBar->setObjectName(QStringLiteral("memoryManagerProgressBar"));
     m_owner->m_window->m_memoryProgressBar->setFixedWidth(220);

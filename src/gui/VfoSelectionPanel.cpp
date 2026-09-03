@@ -241,6 +241,14 @@ void VfoSelectionPanel::updateButtonStyles()
     m_mainButton->setProperty("active", m_radioReady && m_selectedVfo == Vfo::Main);
     m_subButton->setProperty("active", m_radioReady && m_selectedVfo == Vfo::Sub);
     m_dualWatchButton->setProperty("active", m_radioReady && m_dualWatchEnabled);
+    m_mainButton->setAccessibleDescription(
+        m_radioReady && m_selectedVfo == Vfo::Main ? QStringLiteral("Selected receiver.")
+                                                   : QStringLiteral("Not selected."));
+    m_subButton->setAccessibleDescription(
+        m_radioReady && m_selectedVfo == Vfo::Sub ? QStringLiteral("Selected receiver.")
+                                                  : QStringLiteral("Not selected."));
+    m_dualWatchButton->setAccessibleDescription(
+        m_radioReady && m_dualWatchEnabled ? QStringLiteral("Dual watch is on.") : QStringLiteral("Dual watch is off."));
     refreshStyle(m_mainButton);
     refreshStyle(m_subButton);
     refreshStyle(m_exchangeButton);

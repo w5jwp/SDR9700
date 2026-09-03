@@ -186,7 +186,8 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
 #endif
 {
     const QString title = QStringLiteral("Settings");
-    setFixedSize(780, 520);
+    setMinimumSize(700, 480);
+    resize(780, 520);
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);

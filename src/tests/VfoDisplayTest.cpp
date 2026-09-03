@@ -330,6 +330,16 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
     panel.setDualWatchEnabled(true);
     QCOMPARE(panel.selectedVfo(), Vfo::Sub);
     QVERIFY(panel.dualWatchEnabled());
+    QPushButton* selectedSubButton = nullptr;
+    for (QPushButton* button : buttons)
+    {
+        if (button->text() == QStringLiteral("SUB"))
+        {
+            selectedSubButton = button;
+        }
+    }
+    QVERIFY(selectedSubButton != nullptr);
+    QCOMPARE(selectedSubButton->accessibleDescription(), QStringLiteral("Selected receiver."));
     QVERIFY(exchangeButton->isEnabled());
     for (QPushButton* button : buttons)
     {

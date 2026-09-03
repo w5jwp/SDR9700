@@ -24,7 +24,8 @@ RadioChooserDialog::RadioChooserDialog(QWidget* parent)
     : sdr9700::ui::UtilityWindow(QStringLiteral("Radio Chooser"), parent)
 {
     const QString titleText = QStringLiteral("Radio Chooser");
-    setFixedSize(720, 430);
+    setMinimumSize(640, 400);
+    resize(720, 430);
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
