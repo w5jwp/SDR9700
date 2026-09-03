@@ -13,6 +13,7 @@ namespace
 constexpr int kPanelWidth = 148;
 constexpr int kPanelHeight = 218;
 constexpr int kPanelMargin = 6;
+constexpr int kStackOpticalOffset = 2;
 constexpr int kSelectorButtonHeight = 30;
 constexpr int kExchangeButtonHeight = 30;
 constexpr int kDualWatchButtonHeight = 34;
@@ -26,26 +27,23 @@ constexpr const char* kSilverPressed = "#252c33";
 
 enum class SegmentPosition
 {
-    TopLeft,
-    TopRight,
-    Middle,
+    Top,
+    MiddleLeft,
+    MiddleRight,
     Bottom
 };
 
 QString selectionButtonStyle(SegmentPosition position, int fontPixelSize = 10)
 {
-    const QString innerBorder = position == SegmentPosition::TopRight ? QStringLiteral("border-left: none; ")
-                                : position == SegmentPosition::Middle || position == SegmentPosition::Bottom
+    const QString innerBorder = position == SegmentPosition::MiddleRight
+                                    ? QStringLiteral("border-top: none; border-left: none; ")
+                                : position == SegmentPosition::MiddleLeft || position == SegmentPosition::Bottom
                                     ? QStringLiteral("border-top: none; ")
                                     : QString();
     QString corners;
-    if (position == SegmentPosition::TopLeft)
+    if (position == SegmentPosition::Top)
     {
-        corners = QStringLiteral("border-top-left-radius: %1px; ").arg(kButtonRadius);
-    }
-    else if (position == SegmentPosition::TopRight)
-    {
-        corners = QStringLiteral("border-top-right-radius: %1px; ").arg(kButtonRadius);
+        corners = QStringLiteral("border-top-left-radius: %1px; border-top-right-radius: %1px; ").arg(kButtonRadius);
     }
     else if (position == SegmentPosition::Bottom)
     {
@@ -101,10 +99,10 @@ VfoSelectionPanel::VfoSelectionPanel(QWidget* parent) : QWidget(parent)
     m_subButton->setFixedHeight(kSelectorButtonHeight);
     m_exchangeButton->setFixedHeight(kExchangeButtonHeight);
     m_dualWatchButton->setFixedHeight(kDualWatchButtonHeight);
-    m_mainButton->setStyleSheet(selectionButtonStyle(SegmentPosition::TopLeft));
-    m_subButton->setStyleSheet(selectionButtonStyle(SegmentPosition::TopRight));
-    m_exchangeButton->setStyleSheet(selectionButtonStyle(SegmentPosition::Middle));
-    m_dualWatchButton->setStyleSheet(selectionButtonStyle(SegmentPosition::Bottom, 12));
+    m_dualWatchButton->setStyleSheet(selectionButtonStyle(SegmentPosition::Top, 12));
+    m_mainButton->setStyleSheet(selectionButtonStyle(SegmentPosition::MiddleLeft));
+    m_subButton->setStyleSheet(selectionButtonStyle(SegmentPosition::MiddleRight));
+    m_exchangeButton->setStyleSheet(selectionButtonStyle(SegmentPosition::Bottom));
     m_mainButton->setFixedWidth(kVfoButtonWidth);
     m_subButton->setFixedWidth(kVfoButtonWidth);
     m_exchangeButton->setFixedWidth(kButtonWidth);
@@ -126,11 +124,14 @@ VfoSelectionPanel::VfoSelectionPanel(QWidget* parent) : QWidget(parent)
     selectorLayout->setSpacing(0);
     selectorLayout->addWidget(m_mainButton);
     selectorLayout->addWidget(m_subButton);
+    vfoButtonLayout->addWidget(m_dualWatchButton);
     vfoButtonLayout->addWidget(selectorRow);
     vfoButtonLayout->addWidget(m_exchangeButton);
-    vfoButtonLayout->addWidget(m_dualWatchButton);
 
     layout->addStretch();
+    // The heavier PTT control makes equal geometric margins read as
+    // bottom-heavy. Bias the stack down slightly for optical centering.
+    layout->addSpacing(kStackOpticalOffset);
     layout->addWidget(vfoButtonRow, 0, Qt::AlignHCenter);
     layout->addStretch();
 

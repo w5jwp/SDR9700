@@ -1,10 +1,10 @@
 #include "DataDecoderDialog.h"
-#include "DialogFooter.h"
 #include "UiTheme.h"
 
 #include <QDateTime>
 #include <QApplication>
 #include <QDesktopServices>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -30,6 +30,7 @@ namespace
 {
 constexpr QSize kWindowSize{1180, 620};
 constexpr int kMaximumRows = 1000;
+constexpr int kContentSpacing = 12;
 
 QLabel* metricValue(QWidget* parent)
 {
@@ -159,8 +160,6 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
     qRegisterMetaType<QVector<Ax25Frame>>();
     qRegisterMetaType<Ax25DecoderStats>();
     setObjectName(QStringLiteral("dataDecoderWindow"));
-    setStyleSheet(QStringLiteral("DataDecoderDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
     setFixedSize(kWindowSize);
 
     auto* root = new QVBoxLayout(this);
@@ -172,8 +171,9 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
 
     auto* content = new QWidget(this);
     auto* layout = new QVBoxLayout(content);
-    layout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
-    layout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
+    layout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin,
+                               UiTheme::Size::DialogContentMargin);
+    layout->setSpacing(kContentSpacing);
     root->addWidget(content, 1);
 
     const QString summaryStyle =
@@ -246,10 +246,11 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
     m_packetTable->setItemDelegateForColumn(2, new CallsignDelegate(m_packetTable));
     layout->addWidget(m_packetTable, 1);
 
-    auto* detailsLabel = new QLabel(QStringLiteral("Packet Details"), content);
-    detailsLabel->setStyleSheet(QStringLiteral("color: %1;").arg(QLatin1String(UiTheme::Color::TextMuted)));
-    layout->addWidget(detailsLabel);
-    m_packetDetails = new QPlainTextEdit(content);
+    auto* detailsGroup = new QGroupBox(QStringLiteral("Packet Details"), content);
+    detailsGroup->setStyleSheet(summaryStyle);
+    auto* detailsLayout = new QVBoxLayout(detailsGroup);
+    detailsLayout->setContentsMargins(10, 5, 10, 10);
+    m_packetDetails = new QPlainTextEdit(detailsGroup);
     m_packetDetails->setObjectName(QStringLiteral("dataDecoderPacketDetails"));
     m_packetDetails->setReadOnly(true);
     m_packetDetails->setLineWrapMode(QPlainTextEdit::WidgetWidth);
@@ -262,14 +263,15 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
                        "color: %3; padding: 5px; }")
             .arg(QLatin1String(UiTheme::Color::Field), QLatin1String(UiTheme::Color::Border),
                  QLatin1String(UiTheme::Color::TextField)));
-    layout->addWidget(m_packetDetails);
+    detailsLayout->addWidget(m_packetDetails);
+    layout->addWidget(detailsGroup);
 
-    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
-    m_pauseButton = footer.buttonBox->addButton(QStringLiteral("Pause"), QDialogButtonBox::ActionRole);
-    auto* clearButton = footer.buttonBox->addButton(QStringLiteral("Clear"), QDialogButtonBox::ResetRole);
-    auto* exportButton = footer.buttonBox->addButton(QStringLiteral("Export…"), QDialogButtonBox::ActionRole);
-    footer.buttonBox->addButton(QDialogButtonBox::Close);
-    layout->addWidget(footer.widget);
+    auto* actionBox = new QDialogButtonBox(content);
+    actionBox->setObjectName(QStringLiteral("dataDecoderActionBox"));
+    m_pauseButton = actionBox->addButton(QStringLiteral("Pause"), QDialogButtonBox::ActionRole);
+    auto* clearButton = actionBox->addButton(QStringLiteral("Clear"), QDialogButtonBox::ResetRole);
+    auto* exportButton = actionBox->addButton(QStringLiteral("Export…"), QDialogButtonBox::ActionRole);
+    layout->addWidget(actionBox);
 
     m_worker = new Ax25DecoderWorker;
     m_worker->moveToThread(&m_decoderThread);
@@ -300,7 +302,6 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
                 emit resetDecoder();
             });
     connect(exportButton, &QPushButton::clicked, this, &DataDecoderDialog::exportPackets);
-    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
     connect(m_packetTable, &QTableWidget::currentCellChanged, this,
             [this](int currentRow)
             {

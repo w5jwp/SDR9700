@@ -4,6 +4,7 @@
 #include "LogCategories.h"
 #include "MainWindow.h"
 #include "MainWindowHelpers.h"
+#include "VfoSelectionController.h"
 #include "models/SpectrumScopeModel.h"
 #include "models/RadioModel.h"
 #include "models/VfoModel.h"
@@ -116,8 +117,17 @@ void IcomRC28Controller::dispatchIcomRC28Action(const QString& action)
         return;
     }
 
-    if (action == QLatin1String("CycleStep") || action == QLatin1String("StepUp") ||
-        action == QLatin1String("StepDown"))
+    if (action == QLatin1String("ToggleMainSub"))
+    {
+        const Vfo target = m_window->m_vfoSelectionController->selectedVfo() == Vfo::Main ? Vfo::Sub : Vfo::Main;
+        m_window->m_vfoSelectionController->selectVfo(target);
+    }
+    else if (action == QLatin1String("ExchangeMainSub"))
+    {
+        m_window->m_vfoSelectionController->requestMainSubExchange();
+    }
+    else if (action == QLatin1String("CycleStep") || action == QLatin1String("StepUp") ||
+             action == QLatin1String("StepDown"))
     {
         const int current = m_window->tuningStepHz();
         const int direction = action == QLatin1String("StepDown") ? -1 : 1;

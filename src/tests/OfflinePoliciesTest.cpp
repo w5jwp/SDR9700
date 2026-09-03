@@ -224,6 +224,7 @@ void OfflinePoliciesTest::serializesRepeatedMainSubExchanges()
 
 void OfflinePoliciesTest::clampsMemoryPollingInterval()
 {
+    QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(0), 0);
     QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(-1), 30);
     QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(600), 600);
     QCOMPARE(sdr9700::clampMemoryPollIntervalSeconds(9999), 3600);

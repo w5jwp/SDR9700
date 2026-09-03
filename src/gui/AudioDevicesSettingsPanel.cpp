@@ -35,7 +35,8 @@ AudioDevicesSettingsPanel::AudioDevicesSettingsPanel(QWidget* parent) : QWidget(
     auto* outputGroup = new QGroupBox("Output (Radio to Computer)", this);
     outputGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* outputForm = new QFormLayout(outputGroup);
-    outputForm->setSpacing(8);
+    outputForm->setHorizontalSpacing(8);
+    outputForm->setVerticalSpacing(13);
 
     m_outputCombo = new QComboBox(outputGroup);
     m_outputCombo->setObjectName(QStringLiteral("audioOutputDevice"));

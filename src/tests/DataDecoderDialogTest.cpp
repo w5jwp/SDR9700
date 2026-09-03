@@ -1,6 +1,8 @@
 // QtTest invokes private slots through the generated meta-object.
 #include "DataDecoderDialog.h"
 
+#include <QDialogButtonBox>
+#include <QGroupBox>
 #include <QPlainTextEdit>
 #include <QTableWidget>
 #include <QtTest>
@@ -20,6 +22,13 @@ void DataDecoderDialogTest::usesPortableTableLayout()
     auto* rawPacket = dialog.findChild<QPlainTextEdit*>(QStringLiteral("dataDecoderPacketDetails"));
     QVERIFY(table != nullptr);
     QVERIFY(rawPacket != nullptr);
+    QVERIFY(dialog.findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")) == nullptr);
+    auto* actionBox = dialog.findChild<QDialogButtonBox*>(QStringLiteral("dataDecoderActionBox"));
+    QVERIFY(actionBox != nullptr);
+    QCOMPARE(actionBox->buttons().size(), 3);
+    auto* detailsGroup = qobject_cast<QGroupBox*>(rawPacket->parentWidget());
+    QVERIFY(detailsGroup != nullptr);
+    QCOMPARE(detailsGroup->title(), QStringLiteral("Packet Details"));
     QCOMPARE(table->columnCount(), 4);
     QCOMPARE(table->horizontalHeaderItem(3)->text(), QStringLiteral("Payload"));
     QCOMPARE(table->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOn);

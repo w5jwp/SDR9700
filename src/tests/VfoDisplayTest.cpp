@@ -241,9 +241,9 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QCOMPARE(toneButton->width(), 80);
     QCOMPARE(xfcButton->geometry().left() - offsetButton->geometry().right() - 1, 6);
     QCOMPARE(compressorButton->geometry().left() - toneButton->geometry().right() - 1, 6);
-    const auto* rightReceiverButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoRFGButton"));
+    const auto* rightReceiverButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton"));
     const QStringList bottomControls = {QStringLiteral("AGC"), QStringLiteral("ATT"), QStringLiteral("FILTERS"),
-                                        QStringLiteral("PRE"), QStringLiteral("RFG")};
+                                        QStringLiteral("PRE"), QStringLiteral("RFG"), QStringLiteral("SQL")};
     for (qsizetype index = 1; index < bottomControls.size(); ++index)
     {
         const auto* previous = mainController.display()->findChild<QPushButton*>(
@@ -253,7 +253,6 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
         QCOMPARE(current->geometry().left() - previous->geometry().right() - 1, 6);
     }
     const auto* modeButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoModeButton"));
-    const auto* squelchButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoSQLButton"));
     const auto* identityButton = mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoIdentityButton"));
     const int renderedInset = identityButton->y();
     QCOMPARE(mainController.display()->height() - receiverButton->geometry().bottom() - 1, renderedInset);
@@ -261,13 +260,15 @@ void VfoDisplayTest::controllersKeepIndependentIdentityAndFrequency()
     QCOMPARE(receiverButton->y() - toneBottom - 1, 40);
     QCOMPARE(identityButton->x(), renderedInset);
     QCOMPARE(mainController.display()->width() - rightReceiverButton->geometry().right() - 1, renderedInset);
-    QCOMPARE(txBadge->geometry().left() - identityButton->geometry().right() - 1, 18);
-    QCOMPARE(lanModButton->geometry().left() - txBadge->geometry().right() - 1, 18);
+    const int identityToTxGap = txBadge->geometry().left() - identityButton->geometry().right() - 1;
+    const int txToModGap = lanModButton->geometry().left() - txBadge->geometry().right() - 1;
+    const int powerToBandGap =
+        mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoBandButton"))->geometry().left() -
+        txPowerButton->geometry().right() - 1;
+    QVERIFY(identityToTxGap > 6);
+    QVERIFY(qAbs(txToModGap - identityToTxGap) <= 1);
     QCOMPARE(txPowerButton->geometry().left() - lanModButton->geometry().right() - 1, 6);
-    QCOMPARE(squelchButton->geometry().left() - txPowerButton->geometry().right() - 1, 18);
-    QCOMPARE(mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoBandButton"))->geometry().left() -
-                 squelchButton->geometry().right() - 1,
-             18);
+    QVERIFY(qAbs(powerToBandGap - identityToTxGap) <= 1);
     QCOMPARE(
         modeButton->geometry().left() -
             mainController.display()->findChild<QPushButton*>(QStringLiteral("vfoBandButton"))->geometry().right() - 1,
@@ -414,8 +415,8 @@ void VfoDisplayTest::selectionPanelPublishesRequestsAndAppliesConfirmedState()
     QVERIFY(mainPosition.x() < subPosition.x());
     QCOMPARE(subPosition.x() - mainPosition.x() - mainButton->width(), 0);
     QCOMPARE(exchangePosition.x(), mainPosition.x());
+    QCOMPARE(mainPosition.y() - dualWatchPosition.y() - dualWatchButton->height(), 0);
     QCOMPARE(exchangePosition.y() - mainPosition.y() - mainButton->height(), 0);
-    QCOMPARE(dualWatchPosition.y() - exchangePosition.y() - exchangeButton->height(), 0);
     QCOMPARE(dualWatchPosition.x(), exchangePosition.x());
     QCOMPARE(mainButton->height(), 30);
     QCOMPARE(subButton->height(), 30);

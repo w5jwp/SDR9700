@@ -1,8 +1,8 @@
 #include "DtmfDialog.h"
-#include "DialogFooter.h"
 #include "UiTheme.h"
 
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -12,6 +12,7 @@
 namespace
 {
 constexpr int kMaxDtmfDigits = 16;
+constexpr int kContentSpacing = 12;
 
 struct DtmfKey
 {
@@ -30,9 +31,6 @@ constexpr DtmfKey kKeys[4][4] = {
 DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLiteral("DTMF"), parent)
 {
     setFixedWidth(260);
-    setStyleSheet(QStringLiteral("DtmfDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-
     auto* root = new QVBoxLayout(this);
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
@@ -43,8 +41,8 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
     // Content
     auto* content = new QWidget(this);
     auto* contentLayout = new QVBoxLayout(content);
-    contentLayout->setSpacing(sdr9700::ui::kDialogFooterSpacing);
-    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 0);
+    contentLayout->setSpacing(kContentSpacing);
+    contentLayout->setContentsMargins(UiTheme::Size::DialogContentMargin, 10, UiTheme::Size::DialogContentMargin, 10);
     root->addWidget(content);
 
     m_display = new QLineEdit(content);
@@ -85,9 +83,9 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
                        "}"
                        "QPushButton:hover { background: %4; border-color: %5; }"
                        "QPushButton:pressed { background: %6; }")
-            .arg(QLatin1String(UiTheme::Color::AccentDark), QLatin1String(UiTheme::Color::Accent),
-                 QLatin1String(UiTheme::Color::Accent), QLatin1String(UiTheme::Color::AccentHover),
-                 QLatin1String(UiTheme::Color::AccentBright), QLatin1String(UiTheme::Color::Accent));
+            .arg(QLatin1String(UiTheme::Color::ControlActive), QLatin1String(UiTheme::Color::ControlActiveBorder),
+                 QLatin1String(UiTheme::Color::TextBright), QLatin1String(UiTheme::Color::ControlActiveHover),
+                 QLatin1String(UiTheme::Color::ControlActiveBorder), QLatin1String(UiTheme::Color::ControlActive));
 
     auto* grid = new QGridLayout;
     grid->setSpacing(4);
@@ -143,12 +141,14 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
     m_sendButton->setFixedSize(52, 32);
     m_sendButton->setStyleSheet(sendStyle);
 
-    auto* controlGrid = new QGridLayout;
-    controlGrid->setSpacing(4);
-    controlGrid->addWidget(clearBtn, 0, 0);
-    controlGrid->addWidget(bsBtn, 0, 1);
-    controlGrid->addWidget(m_sendButton, 0, 3);
-    contentLayout->addLayout(controlGrid);
+    auto* controlRow = new QHBoxLayout;
+    controlRow->setContentsMargins(3, 0, 3, 0);
+    controlRow->addWidget(clearBtn);
+    controlRow->addStretch(1);
+    controlRow->addWidget(bsBtn);
+    controlRow->addStretch(1);
+    controlRow->addWidget(m_sendButton);
+    contentLayout->addLayout(controlRow);
 
     connect(clearBtn, &QPushButton::clicked, this,
             [this]()
@@ -178,11 +178,6 @@ DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLite
                     emit sendRequested(digits);
                 }
             });
-
-    const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
-    footer.buttonBox->addButton(QDialogButtonBox::Close);
-    contentLayout->addWidget(footer.widget);
-    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
 
     setFixedSize(260, sizeHint().height());
 }

@@ -44,7 +44,7 @@ ApplicationConfigurationSettingsPanel::ApplicationConfigurationSettingsPanel(QWi
     applicationGroup->setStyleSheet(sdr9700::ui::settingsGroupBoxStyle());
     auto* applicationLayout = new QVBoxLayout(applicationGroup);
     applicationLayout->setContentsMargins(10, 12, 10, 10);
-    applicationLayout->setSpacing(8);
+    applicationLayout->setSpacing(13);
 
     auto* pathRow = new QFormLayout;
     pathRow->setSpacing(8);

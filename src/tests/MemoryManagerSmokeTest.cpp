@@ -175,7 +175,7 @@ void MemoryManagerSmokeTest::memoryManagerShowsCachedVerificationAndLiveSyncProg
     recoveredReply.del = true;
     model.radioMemoryReceived(recoveredReply);
     QCoreApplication::sendPostedEvents(controller, QEvent::MetaCall);
-    QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 memory total"), 1000);
+    QTRY_COMPARE_WITH_TIMEOUT(statusLabel->text(), QStringLiteral("1 memory"), 1000);
     QVERIFY(progressBar->isHidden());
     QCOMPARE(memoryTable->rowCount(), 1);
     QVERIFY(memoryTable->item(0, 0)->data(sdr9700::memory::kMemoryVerifiedThisSessionRole).toBool());
@@ -447,6 +447,8 @@ void MemoryManagerSmokeTest::constructsMemoryManagerUi()
     QVERIFY(table != nullptr);
     QVERIFY(windowMenu != nullptr);
     QVERIFY(memoryWindow->findChild<QWidget*>(QStringLiteral("memoryEditorPane")) == nullptr);
+    QVERIFY(memoryWindow->findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")) == nullptr);
+    QVERIFY(memoryWindow->findChild<QWidget*>(QStringLiteral("dialogButtonBox")) == nullptr);
     QCOMPARE(table->columnCount(), 7);
     QCOMPARE(table->horizontalHeaderItem(0)->text(), QStringLiteral("Band"));
     QCOMPARE(table->horizontalHeaderItem(1)->text(), QStringLiteral("Channel"));
