@@ -28,6 +28,9 @@ class UtilityWindow : public QDialog
         setWindowModality(Qt::NonModal);
         setAttribute(Qt::WA_DeleteOnClose, false);
         setAttribute(Qt::WA_QuitOnClose, false);
+        setStyleSheet(
+            QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
+                .arg(QLatin1String(UiTheme::Color::ContentBackground), QLatin1String(UiTheme::Color::Border)));
     }
 
     void showCentered()
@@ -194,8 +197,11 @@ class UtilityTitleBar : public QWidget
   public:
     explicit UtilityTitleBar(const QString& title, QWidget* parent = nullptr) : QWidget(parent)
     {
-        setFixedHeight(28);
-        setStyleSheet(QStringLiteral("background: %1;").arg(UiTheme::Color::MenuBar));
+        setProperty("utilityTitleBar", true);
+        setFixedHeight(32);
+        setStyleSheet(
+            QStringLiteral("QWidget[utilityTitleBar=\"true\"] { background: %1; border-bottom: 1px solid %2; }")
+                .arg(QLatin1String(UiTheme::Color::WindowChrome), QLatin1String(UiTheme::Color::StatusBorder)));
 
         auto* layout = new QHBoxLayout(this);
         layout->setContentsMargins(10, 0, 0, 0);
@@ -209,7 +215,7 @@ class UtilityTitleBar : public QWidget
         layout->addStretch();
 
         m_closeButton = new QPushButton(QStringLiteral("✕"), this);
-        m_closeButton->setFixedSize(28, 28);
+        m_closeButton->setFixedSize(32, 32);
         m_closeButton->setStyleSheet(
             QStringLiteral("QPushButton { background: transparent; border: none; color: %1; font-size: 13px; }"
                            "QPushButton:hover { background: %2; color: %3; }")

@@ -159,8 +159,6 @@ DataDecoderDialog::DataDecoderDialog(QWidget* parent)
     qRegisterMetaType<QVector<Ax25Frame>>();
     qRegisterMetaType<Ax25DecoderStats>();
     setObjectName(QStringLiteral("dataDecoderWindow"));
-    setStyleSheet(QStringLiteral("DataDecoderDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
     setFixedSize(kWindowSize);
 
     auto* root = new QVBoxLayout(this);

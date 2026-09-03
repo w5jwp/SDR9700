@@ -187,9 +187,6 @@ SettingsDialog::SettingsDialog(Page page, QWidget* parent)
 {
     const QString title = QStringLiteral("Settings");
     setFixedSize(780, 520);
-    setStyleSheet(QStringLiteral("SettingsDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);

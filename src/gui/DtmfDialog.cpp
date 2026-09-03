@@ -30,9 +30,6 @@ constexpr DtmfKey kKeys[4][4] = {
 DtmfDialog::DtmfDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLiteral("DTMF"), parent)
 {
     setFixedWidth(260);
-    setStyleSheet(QStringLiteral("DtmfDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-
     auto* root = new QVBoxLayout(this);
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);

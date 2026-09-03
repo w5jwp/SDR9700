@@ -101,9 +101,6 @@ void MemoryViewController::buildMemoryWindow()
 {
     m_owner->m_window->m_memoryWindow =
         new sdr9700::ui::UtilityWindow(QStringLiteral("Memory Manager"), m_owner->m_window);
-    m_owner->m_window->m_memoryWindow->setStyleSheet(
-        QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
-            .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
     m_owner->m_window->m_memoryWindow->setObjectName("memoryWindow");
     m_owner->m_window->m_memoryWindow->setAttribute(Qt::WA_DeleteOnClose, false);
     m_owner->m_window->m_memoryWindow->resize(kMemoryWindowSize);

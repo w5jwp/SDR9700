@@ -65,8 +65,6 @@ void MemoryEditorForm::show(const QString& memoryId)
     dialog.resize(dialogSize);
     dialog.setMinimumSize(qMin(440, dialogSize.width()), qMin(400, dialogSize.height()));
     dialog.setMaximumSize(dialogSize);
-    dialog.setStyleSheet(QStringLiteral("QDialog { background: %1; border: 1px solid %2; }")
-                             .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
     QWidget* parent = &dialog;
 
     auto* windowRoot = new QVBoxLayout(&dialog);

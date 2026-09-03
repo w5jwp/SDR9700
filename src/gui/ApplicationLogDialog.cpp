@@ -34,8 +34,6 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
 {
     setObjectName(QStringLiteral("applicationLogWindow"));
     setModal(false);
-    setStyleSheet(QStringLiteral("ApplicationLogDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
     setFixedSize(kApplicationLogWindowSize);
 
     auto* root = new QVBoxLayout(this);

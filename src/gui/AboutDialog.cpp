@@ -28,9 +28,6 @@ AboutDialog::AboutDialog(QWidget* parent)
 {
     const QString title = QStringLiteral("About %1").arg(QLatin1String(APP_NAME));
     setFixedSize(380, 340);
-    setStyleSheet(QStringLiteral("AboutDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);

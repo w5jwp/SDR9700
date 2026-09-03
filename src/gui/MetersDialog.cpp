@@ -75,9 +75,6 @@ QString sMeterText(int value)
 MetersDialog::MetersDialog(QWidget* parent) : sdr9700::ui::UtilityWindow(QStringLiteral("Meters"), parent)
 {
     setFixedWidth(500);
-    setStyleSheet(QStringLiteral("MetersDialog { background: %1; border: 1px solid %2; }")
-                      .arg(QLatin1String(UiTheme::Color::Panel), QLatin1String(UiTheme::Color::Border)));
-
     auto* root = new QVBoxLayout(this);
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
