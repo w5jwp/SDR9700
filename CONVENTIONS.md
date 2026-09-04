@@ -178,6 +178,9 @@ Run it before submitting source changes.
   on its parent layout. Arrange dialog buttons with `QDialogButtonBox` and
   appropriate button roles so Qt supplies the native button order on Linux
   and macOS. Do not manually encode platform-specific button ordering.
+- The Application Log uses the compact footer variant requested for that
+  utility window: no separator and no extra space above its action buttons.
+  It must retain `kDialogFooterSpacing` below the buttons.
 
 ## Third-Party Code
 

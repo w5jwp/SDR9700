@@ -44,6 +44,10 @@ Run the double inventory before hardware stress:
 python3 resources/tools/automation_bridge/validate_automation_coverage.py
 ```
 
+The audit exits `0` when everything is covered, `1` when only explicitly
+tracked coverage gaps remain, and `2` for an inventory error such as an
+unclassified, stale, or duplicate backend operation or UI control.
+
 The static half fails when an `IRadioBackend` operation is added or removed
 without a disposition. The runtime half fails when a visible interactive
 control is unclassified. Reported `coverage-gap` entries remain incomplete
@@ -124,6 +128,9 @@ python3 resources/tools/automation_bridge/ic9700_shared_control_sweep.py
 The power setting changes, but the automation bridge cannot key the radio and
 the tool continuously verifies `transmitAllowed: false` and
 `transmitting: false`. Every slider is returned to its observed starting value.
+The LAN modulation assertions use the IC-9700's confirmed CI-V value report
+after each change. This behavior was verified against a physical IC-9700 over
+LAN; the sweep deliberately fails if that confirmation is absent.
 
 ## Direct RS-BA1 tools
 

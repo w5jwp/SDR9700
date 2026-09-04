@@ -3,7 +3,6 @@
 
 import argparse
 import json
-import time
 
 from automation_common import load_endpoint, request as send_request
 
@@ -20,9 +19,7 @@ def main() -> int:
     if not isinstance(request, dict):
         raise ValueError("request must be a JSON object")
 
-    decoded = send_request(load_endpoint(), request)
-    if args.hold > 0:
-        time.sleep(args.hold)
+    decoded = send_request(load_endpoint(), request, hold=args.hold)
     if args.match and isinstance(decoded.get("controls"), list):
         needle = args.match.casefold()
         decoded["controls"] = [control for control in decoded["controls"]

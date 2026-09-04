@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import socket
+import time
 
 
 def _config_roots():
@@ -51,7 +52,7 @@ def load_endpoint():
     )
 
 
-def request(endpoint, payload, timeout=5):
+def request(endpoint, payload, timeout=5, hold=0.0):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(timeout)
         client.connect(endpoint["socket"])
@@ -62,4 +63,6 @@ def request(endpoint, payload, timeout=5):
             if not chunk:
                 raise RuntimeError("automation bridge closed before returning a response")
             data.extend(chunk)
+        if hold > 0:
+            time.sleep(hold)
     return json.loads(data)

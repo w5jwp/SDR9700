@@ -328,6 +328,16 @@ void Commander::scheduleSMeterRead(uchar receiver, bool restoreScopeSub)
     enqueueScheduledAction(ScheduledCommandClass::Meter, funcSMeter, receiver,
                            [this, receiver, restoreScopeSub]()
                            {
+                               discardExpiredPendingReplies();
+                               if (replyFamilyBlocked(funcSMeter))
+                               {
+                                   // Do not enter a receiver-scoped transaction until the
+                                   // S-meter family can actually reach the wire. Otherwise a
+                                   // deferred read has no transmission timeout to release the
+                                   // physical MAIN/SUB context and scheduler gate.
+                                   scheduleSMeterRead(receiver, restoreScopeSub);
+                                   return;
+                               }
                                if (receiver == 0)
                                {
                                    receiveCommand(funcSMeter, QVariant(), receiver);
@@ -580,6 +590,7 @@ void Commander::resetScheduledCommands()
     m_consecutiveInteractiveDispatches = 0;
     m_dispatchingScheduledCommand = false;
     m_mainSubExchangeConfirmationPending = false;
+    m_receiverScopedReadActive = false;
     m_smeterScopedReadActive = false;
     m_smeterRestoreScopeSub = false;
 }
@@ -1785,7 +1796,7 @@ Commander::ReplyParseResult Commander::parseFeatureReply(Funcs func, QVariant& v
         quint16 calc;
         quint8 pass = bcdHexToUChar((quint8)payloadIn.at(0));
         VfoCommandType t = queue->getVfoCommand(vfoA, receiver, false);
-        ModeInfo m = queue->getCache(t.modeFunc, t.receiver).value.value<ModeInfo>();
+        ModeInfo m = queue->peekCache(t.modeFunc, t.receiver).value.value<ModeInfo>();
 
         if (m.mk == modeAM)
         {
@@ -3314,7 +3325,7 @@ ModeInfo Commander::parseMode(uchar mode, uchar data, uchar filter, uchar receiv
     // Use cached filter width when the current IC-9700 mode exposes one.
     if (vfo == 0 && mi.bwMin > 0 && mi.bwMax > 0)
     {
-        item = queue->getCache(funcFilterWidth, receiver);
+        item = queue->peekCache(funcFilterWidth, receiver);
     }
 
     if (item.value.isValid())
