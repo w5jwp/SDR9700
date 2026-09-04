@@ -44,7 +44,8 @@ BACKEND_COVERAGE = {
 RADIO_UI_NAMES = {
     *(f"{vfo} VFO {name}" for vfo in ("MAIN", "SUB") for name in (
         "AGC control", "ATT control", "FILTERS control", "PRE control", "RFG control", "SQL control", "band",
-        "frequency", "mode", "receive filter", "NB level", "NOTCH level", "NR level")),
+        "frequency", "mode", "receive filter", "NB level", "NOTCH level", "NR level", "RFG level",
+        "SQL level")),
     "MAIN VFO TX PWR control", "MAIN VFO TX PWR level", "MAIN VFO MOD control", "MAIN VFO MOD level",
     "Select MAIN VFO", "Select SUB VFO", "Exchange MAIN and SUB VFOs", "Toggle dual watch",
 }
@@ -52,7 +53,7 @@ RADIO_UI_NAMES = {
 
 def backend_methods():
     header = (ROOT / "src/backend/IRadioBackend.h").read_text(encoding="utf-8")
-    return set(re.findall(r"virtual\s+(?:bool|void)\s+(\w+)\s*\(", header))
+    return set(re.findall(r"virtual\s+(?!~)[^;()\n]+?\s+(\w+)\s*\(", header))
 
 
 def static_inventory():
@@ -84,8 +85,8 @@ def classify_control(control):
         return "local-or-lifecycle"
     if name in RADIO_UI_NAMES or name in ("Dial locked", "Dial unlocked"):
         return "hardware-script"
-    if control.get("type") == "QSlider" and not name and not object_name:
-        return "hardware-script"
+    if name == "Application audio volume":
+        return "local-or-lifecycle"
     if object_name in {"spectrumStepSelector", "spectrumPeakHoldSelector", "spectrumRecenterButton"}:
         return "coverage-gap"
     if name in {"MAIN VFO COMP control", "MAIN VFO OFFSET control", "SUB VFO OFFSET control",
@@ -102,6 +103,8 @@ def classify_control(control):
         return "local-or-lifecycle"
     if text in {"Data Decoder", "Memory Manager", "Meters", "Application Log", "About", "Settings…"}:
         return "dialog-inventory-entry"
+    if control.get("type") == "QWidgetAction":
+        return "menu-plumbing"
     if control.get("type") == "QAction" and text in {
             "", "File", "Help", "Settings", "View", "Window", "Main Window"}:
         return "menu-plumbing"
@@ -163,11 +166,53 @@ def open_inventory_windows(endpoint):
     return inventory
 
 
+def open_inventory_popups(endpoint):
+    inventory = []
+    popup_controls = [
+        *(f"{vfo} VFO {name} control" for vfo in ("MAIN", "SUB") for name in ("FILTERS", "RFG", "SQL")),
+        "MAIN VFO TX PWR control", "MAIN VFO MOD control",
+    ]
+    for name in popup_controls:
+        response = request(endpoint, {"action": "ui_list"})
+        baseline = {control_key(item) for item in visible_controls(response)}
+        matches = [item for item in response.get("controls", [])
+                   if item.get("accessibleName") == name and item.get("visible")]
+        if len(matches) != 1:
+            raise RuntimeError(f"expected one popup control {name}: {matches}")
+        activated = request(endpoint, {"action": "ui_activate", "controlId": matches[0]["id"]})
+        if not activated.get("ok"):
+            raise RuntimeError(f"could not open {name}: {activated}")
+        deadline = time.monotonic() + 2
+        opened = []
+        while time.monotonic() < deadline:
+            response = request(endpoint, {"action": "ui_list"})
+            opened = [item for item in visible_controls(response) if control_key(item) not in baseline]
+            if opened:
+                break
+            time.sleep(0.02)
+        if not opened:
+            raise RuntimeError(f"{name} popup did not become visible")
+        inventory.extend(opened)
+        dismissed = request(endpoint, {"action": "ui_dismiss_popup"})
+        if not dismissed.get("ok"):
+            raise RuntimeError(f"could not dismiss {name}: {dismissed}")
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            response = request(endpoint, {"action": "ui_list"})
+            visible = {control_key(item) for item in visible_controls(response)}
+            if not any(control_key(item) in visible for item in opened):
+                break
+            time.sleep(0.02)
+        else:
+            raise RuntimeError(f"{name} popup did not close")
+    return inventory
+
+
 def runtime_inventory(open_windows):
     endpoint = load_endpoint()
     opened_controls = []
     if open_windows:
-        opened_controls = open_inventory_windows(endpoint)
+        opened_controls = [*open_inventory_windows(endpoint), *open_inventory_popups(endpoint)]
     response = request(endpoint, {"action": "ui_list"})
     if not response.get("ok"):
         raise RuntimeError(response)

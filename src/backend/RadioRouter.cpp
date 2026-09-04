@@ -327,7 +327,7 @@ void RadioRouter::route(const CacheItem& item)
     {
         const int rawValue = qBound(0, item.value.toInt(), 255);
         qDebug(logRadioTraffic()).noquote().nospace()
-            << "CivData::Decoded command=S Meter receiver=" << item.receiver << " raw=" << rawValue;
+            << "CivData::Decoded command=SMeter receiver=" << item.receiver << " raw=" << rawValue;
         emit radioValueUpdated(item.command, QVariant(rawValue), item.receiver);
         if (item.receiver == kMainReceiver)
         {

@@ -671,16 +671,7 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
     if (func != funcNone)
     {
         std::lock_guard locker(mutex);
-        auto it = cache.find(func);
-        while (it != cache.end() && it->command == func)
-        {
-            if (it->receiver == receiver)
-            {
-                ret = CacheItem(*it);
-                break;
-            }
-            ++it;
-        }
+        ret = findCacheLocked(func, receiver);
 
         const bool stale =
             func != funcPowerControl && func != funcSelectVFO &&
@@ -733,6 +724,11 @@ CacheItem CachingQueue::peekCache(Funcs func, uchar receiver)
     }
 
     std::lock_guard locker(mutex);
+    return findCacheLocked(func, receiver);
+}
+
+CacheItem CachingQueue::findCacheLocked(Funcs func, uchar receiver) const
+{
     auto it = cache.find(func);
     while (it != cache.end() && it->command == func)
     {
@@ -742,7 +738,7 @@ CacheItem CachingQueue::peekCache(Funcs func, uchar receiver)
         }
         ++it;
     }
-    return result;
+    return {};
 }
 
 bool CachingQueue::cacheValuesDiffer(const QVariant& a, const QVariant& b)

@@ -33,10 +33,11 @@ application explicitly with automation enabled:
 ./src/build/bin/SDR9700 --enable-automation --log=radio,udp,ci-v
 ```
 
-These tools discover the newest live `sdr9700-automation-*.json` record beneath
-SDR9700's platform configuration directory. They skip stale records and require both the discovery record
-and application state to say transmit is unavailable. They never request PTT
-or DTMF Send, but they do retune the radio and change controls.
+These tools discover the newest `sdr9700-automation-*.json` record beneath
+SDR9700's platform configuration directory. They skip missing socket endpoints
+and require both the discovery record and application state to say transmit is
+unavailable. They never request PTT or DTMF Send, but they do retune the radio
+and change controls.
 
 Run the double inventory before hardware stress:
 
@@ -62,7 +63,9 @@ python3 resources/tools/automation_bridge/automation_client.py '{"action":"get_s
 ```
 
 Pass `--hold` to keep the connection open briefly after the response or
-`--match` to filter `ui_list` results by their control descriptions.
+`--match` to filter `ui_list` results by their control descriptions. Use
+`--discovery PATH` to select a particular running instance. All automation
+tools also honor `SDR9700_AUTOMATION_DISCOVERY=PATH`.
 
 ### `automation_bridge/ic9700_vfo_hardware_stress.py`
 
@@ -100,7 +103,9 @@ into the other VFO. It:
 
 - tunes MAIN and SUB upward and downward through eight frequencies on each
   supported band;
-- toggles ATT, NB, NOTCH, NR, and preamp independently on both receivers;
+- toggles ATT and preamp independently on both receivers;
+- selects FIL1, FIL2, and FIL3 and sweeps NB, notch, and NR through the
+  consolidated FILTERS panel on both receivers;
 - sweeps MAIN and SUB squelch and RF gain;
 - exercises FAST, MID, and SLOW AGC in USB before returning to FM; and
 - confirms every requested change from SDR9700's radio-derived state.
@@ -116,10 +121,13 @@ check. Initial bands, frequencies, modes, selected VFO, and Dual Watch state are
 not restored. The final state is printed in the `CONTROL MATRIX COMPLETE` JSON
 record.
 
+Pass `--skip-frequency` to omit the frequency-transition phase. The transcript
+and final JSON record explicitly identify a skipped phase.
+
 ### `automation_bridge/ic9700_shared_control_sweep.py`
 
 This tool sweeps LAN modulation, application AF gain, and MAIN VFO transmit
-power through representative values:
+power through representative values, then toggles the radio dial lock twice:
 
 ```bash
 python3 resources/tools/automation_bridge/ic9700_shared_control_sweep.py

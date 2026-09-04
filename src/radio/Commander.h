@@ -22,6 +22,7 @@ struct CommanderCorrelationDiagnostics
     quint64 coalescedReplyReads{0};
     quint64 droppedReplyReads{0};
     quint64 drainedReplyFrames{0};
+    quint64 correlationLostDuringParse{0};
     quint64 mainSMeterRequests{0};
     quint64 mainSMeterReplies{0};
     quint64 mainSMeterTimeouts{0};
@@ -237,6 +238,7 @@ class Commander : public RadioCommander
     QVector<DeferredReplyRead> m_deferredReplyReads;
     bool m_receiverScopedReadActive{false};
     bool m_smeterScopedReadActive{false};
+    uchar m_smeterScopedReceiver{0xff};
     bool m_smeterRestoreScopeSub{false};
     bool m_mainSubExchangeQueued{false};
     bool m_mainSubExchangeConfirmationPending{false};

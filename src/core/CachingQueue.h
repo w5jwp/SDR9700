@@ -230,6 +230,7 @@ class CachingQueue : public QObject
     Funcs checkCommandAvailable(Funcs cmd) const;
     void enforceQueueLimit();
     static quint64 cacheRefreshKey(Funcs func, uchar receiver);
+    CacheItem findCacheLocked(Funcs func, uchar receiver) const;
     std::optional<CacheItem> updateCache(bool reply, QueueItem item);
     std::optional<CacheItem> updateCache(bool reply, Funcs func, QVariant value = QVariant(), uchar receiver = 0);
     RadioStateType radioState;

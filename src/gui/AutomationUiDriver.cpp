@@ -22,6 +22,34 @@
 
 namespace
 {
+template <typename Widget> Widget* owningWindow(Widget* widget)
+{
+    for (auto* candidate = widget; candidate; candidate = candidate->parentWidget())
+    {
+        if (candidate->isWindow())
+        {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
+void closeOwningMenu(QWidget* widget)
+{
+    if (auto* menu = qobject_cast<QMenu*>(owningWindow(widget)))
+    {
+        QPointer<QMenu> guarded(menu);
+        QTimer::singleShot(0, menu,
+                           [guarded]()
+                           {
+                               if (guarded)
+                               {
+                                   guarded->close();
+                               }
+                           });
+    }
+}
+
 QJsonArray modelItems(const QAbstractItemModel* model, const QModelIndex& parent = {},
                       const QJsonArray& parentPath = {})
 {
@@ -165,7 +193,10 @@ QJsonObject AutomationUiDriver::describe(QObject* object, const QString& id) con
     {
         description.insert(QStringLiteral("visible"), widget->isVisible());
         description.insert(QStringLiteral("enabled"), widget->isEnabled());
-        description.insert(QStringLiteral("window"), widget->window()->windowTitle());
+        if (const QWidget* window = owningWindow(widget))
+        {
+            description.insert(QStringLiteral("window"), window->windowTitle());
+        }
         description.insert(QStringLiteral("accessibleName"), widget->accessibleName());
     }
     if (const auto* button = qobject_cast<QAbstractButton*>(object))
@@ -355,18 +386,7 @@ QJsonObject AutomationUiDriver::setValue(const QJsonObject& request)
         if (index < 0 || index >= combo->count())
             return reject(QStringLiteral("invalid_value"), QStringLiteral("Unknown combo-box option"));
         combo->setCurrentIndex(index);
-        if (auto* menu = qobject_cast<QMenu*>(combo->window()))
-        {
-            QPointer<QMenu> guarded(menu);
-            QTimer::singleShot(0, this,
-                               [guarded]()
-                               {
-                                   if (guarded)
-                                   {
-                                       guarded->close();
-                                   }
-                               });
-        }
+        closeOwningMenu(combo);
     }
     else if (auto* slider = qobject_cast<QAbstractSlider*>(object))
     {
@@ -375,18 +395,7 @@ QJsonObject AutomationUiDriver::setValue(const QJsonObject& request)
             return reject(QStringLiteral("invalid_value"), QStringLiteral("Value is outside the slider range"));
         slider->setValue(integer);
         QMetaObject::invokeMethod(slider, "sliderReleased", Qt::QueuedConnection);
-        if (auto* menu = qobject_cast<QMenu*>(slider->window()))
-        {
-            QPointer<QMenu> guarded(menu);
-            QTimer::singleShot(0, this,
-                               [guarded]()
-                               {
-                                   if (guarded)
-                                   {
-                                       guarded->close();
-                                   }
-                               });
-        }
+        closeOwningMenu(slider);
     }
     else if (auto* spin = qobject_cast<QSpinBox*>(object))
     {

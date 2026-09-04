@@ -242,6 +242,8 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     m_volumeSlider->setFixedWidth(kVolumeSliderWidth);
     m_volumeSlider->setFixedHeight(20);
     m_volumeSlider->setToolTip(QStringLiteral("Volume"));
+    m_volumeSlider->setAccessibleName(QStringLiteral("Application audio volume"));
+    m_volumeSlider->setAccessibleDescription(QStringLiteral("Adjust received-audio playback volume"));
     root->addWidget(m_volumeSlider);
     root->addSpacing(kVolumeValueSpacing);
 
