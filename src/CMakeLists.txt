@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Multimedia Sql)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Multimedia Sql Svg)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 find_package(PkgConfig REQUIRED)
 
@@ -296,6 +296,7 @@ target_include_directories(SDR9700 PRIVATE
 
 target_link_libraries(SDR9700 PRIVATE
     SDR9700_app_support
+    Qt6::Svg
 )
 
 if(APPLE AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5)

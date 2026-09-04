@@ -210,6 +210,7 @@ MainTitleBar::MainTitleBar(QWidget* parent) : QWidget(parent)
     root->addSpacing(kTitleSeparatorSpacing);
 
     m_lockBtn = new QPushButton(this);
+    m_lockBtn->setObjectName(QStringLiteral("titleLockButton"));
     m_lockBtn->setFixedSize(24, 22);
     m_lockBtn->setIconSize(QSize(18, 18));
     m_lockBtn->setCheckable(false);
