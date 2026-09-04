@@ -3,7 +3,6 @@
 
 import argparse
 import json
-import time
 
 from automation_common import load_endpoint, request as send_request
 
@@ -14,15 +13,14 @@ def main() -> int:
     parser.add_argument("--hold", type=float, default=0.0,
                         help="Keep the client connected for this many seconds after receiving the response")
     parser.add_argument("--match", help="For ui_list, print only controls whose description contains this text")
+    parser.add_argument("--discovery", help="Use a specific automation discovery JSON file")
     args = parser.parse_args()
 
     request = json.loads(args.request)
     if not isinstance(request, dict):
         raise ValueError("request must be a JSON object")
 
-    decoded = send_request(load_endpoint(), request)
-    if args.hold > 0:
-        time.sleep(args.hold)
+    decoded = send_request(load_endpoint(args.discovery), request, hold=args.hold)
     if args.match and isinstance(decoded.get("controls"), list):
         needle = args.match.casefold()
         decoded["controls"] = [control for control in decoded["controls"]

@@ -6,6 +6,8 @@ import json
 import os
 import platform
 import socket
+import stat
+import time
 
 
 def _config_roots():
@@ -17,17 +19,26 @@ def _config_roots():
     yield os.path.expanduser("~/.config")
 
 
-def discovery_files():
+def discovery_files(override=None):
+    override = override or os.environ.get("SDR9700_AUTOMATION_DISCOVERY")
+    if override:
+        return [os.path.expanduser(override)]
     candidates = []
     for root in _config_roots():
         candidates.extend(glob.glob(os.path.join(root, "SDR9700", "automation",
                                                  "sdr9700-automation-*.json")))
-    return sorted(set(candidates), key=os.path.getmtime, reverse=True)
+    dated = []
+    for path in set(candidates):
+        try:
+            dated.append((os.path.getmtime(path), path))
+        except OSError:
+            continue
+    return [path for _, path in sorted(dated, reverse=True)]
 
 
-def load_endpoint():
+def load_endpoint(discovery_path=None):
     failures = []
-    for path in discovery_files():
+    for path in discovery_files(discovery_path):
         try:
             with open(path, encoding="utf-8") as stream:
                 endpoint = json.load(stream)
@@ -37,9 +48,9 @@ def load_endpoint():
                 raise RuntimeError(f"unsupported protocol {endpoint.get('protocol')!r}")
             if endpoint.get("transmitAllowed") is not False:
                 raise RuntimeError("endpoint does not explicitly prohibit transmit")
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                client.settimeout(1)
-                client.connect(endpoint["socket"])
+            socket_info = os.stat(endpoint["socket"])
+            if not stat.S_ISSOCK(socket_info.st_mode):
+                raise RuntimeError("endpoint is not a Unix-domain socket")
             endpoint["discoveryFile"] = path
             return endpoint
         except (OSError, ValueError, KeyError, RuntimeError) as error:
@@ -51,7 +62,7 @@ def load_endpoint():
     )
 
 
-def request(endpoint, payload, timeout=5):
+def request(endpoint, payload, timeout=5, hold=0.0):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(timeout)
         client.connect(endpoint["socket"])
@@ -62,4 +73,6 @@ def request(endpoint, payload, timeout=5):
             if not chunk:
                 raise RuntimeError("automation bridge closed before returning a response")
             data.extend(chunk)
+        if hold > 0:
+            time.sleep(hold)
     return json.loads(data)

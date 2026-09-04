@@ -209,6 +209,7 @@ class RadioBackend : public IRadioBackend
     uchar m_smeterPollPendingReceiver{0};
     qint64 m_smeterPollDeadlineMs{0};
     quint64 m_smeterPollTimeoutCount{0};
+    QElapsedTimer m_smeterPollQueuedClock;
     QElapsedTimer m_smeterPollPendingClock;
     int m_smeterPollTick{0};
     QElapsedTimer m_meterPollTuneHoldoff;

@@ -21,8 +21,8 @@ Multimedia.
 
 ## Status
 
-SDR9700 is beta software. It provides a usable, IC-9700-focused LAN control
-surface on Linux and Apple Silicon macOS, backed by automated protocol,
+SDR9700 is under active development. It provides a usable, IC-9700-focused LAN
+control surface on Linux and Apple Silicon macOS, backed by automated protocol,
 scheduler, routing, model, and GUI tests. Broader hardware coverage—especially
 across different LAN conditions, Linux audio systems, and optional USB
 controllers—is still needed before a stable release.

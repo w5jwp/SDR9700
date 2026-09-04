@@ -23,6 +23,7 @@ class AutomationControllerTest final : public QObject
             controller.execute(QJsonObject{{QStringLiteral("action"), QStringLiteral("list_actions")}});
         QVERIFY(listed.value(QStringLiteral("ok")).toBool());
         const QJsonArray actions = listed.value(QStringLiteral("actions")).toArray();
+        QVERIFY(actions.contains(QStringLiteral("ui_dismiss_popup")));
         const QStringList prohibited{QStringLiteral("set_ptt"),      QStringLiteral("ptt"),
                                      QStringLiteral("send_dtmf"),    QStringLiteral("set_tx_power"),
                                      QStringLiteral("set_tx_audio"), QStringLiteral("set_compressor")};
@@ -55,6 +56,9 @@ class AutomationControllerTest final : public QObject
         const QJsonObject state = response.value(QStringLiteral("state")).toObject();
         QCOMPARE(state.value(QStringLiteral("transmitAllowed")).toBool(true), false);
         QCOMPARE(state.value(QStringLiteral("connected")).toBool(true), false);
+        QVERIFY(state.contains(QStringLiteral("radioAfGain")));
+        QVERIFY(state.value(QStringLiteral("radioAfGain")).isNull());
+        QVERIFY(!state.contains(QStringLiteral("afGain")));
     }
 
     void uiInventoryExposesControlsButRejectsPtt()

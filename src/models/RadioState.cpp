@@ -64,6 +64,9 @@ RadioState::BandRecall* RadioState::mutableBandRecall(Vfo vfo, availableBands ba
 
 void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiverId)
 {
+    // These values describe radio-global controls rather than either receiver.
+    // Apply them before receiver validation because some reports, notably AF
+    // gain, deliberately use the receiver-less 0xff identity.
     switch (func)
     {
     case funcAfGain:

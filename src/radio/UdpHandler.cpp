@@ -690,8 +690,9 @@ void UdpHandler::receiveDataFromUserToRadio(QByteArray data)
     }
     else
     {
-        qDebug(logUdp()).noquote().nospace()
-            << "CI-V TX dropped: stream unavailable data=" << QString::fromLatin1(data.toHex(' '));
+        qDebug(logRadioTraffic()).noquote().nospace()
+            << "UdpHandler::CivHandoffDropped reason=stream-unavailable len=" << data.size()
+            << " hex=" << QString::fromLatin1(data.toHex(' '));
     }
 }
 
@@ -925,9 +926,8 @@ void UdpHandler::dataReceived()
                 if (in->response == 0x0000 || initialAuthentication)
                 {
                     qDebug(logUdp()).noquote().nospace()
-                        << this->metaObject()->className() << "::"
-                        << (in->response == 0x0000 ? "Token renewal successful"
-                                                   : "Radio reissued authentication token");
+                        << this->metaObject()->className()
+                        << "::TokenRenewed result=" << (in->response == 0x0000 ? "accepted" : "reissued");
                     tokenTimer->start(TOKEN_RENEWAL);
                     gotAuthOK = true;
                     // Token renewal changes authentication fields but not the

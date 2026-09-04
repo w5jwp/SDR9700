@@ -240,23 +240,24 @@ def sweep_filters(vfo):
     # Start through OFF and the maximum so every numbered selection is an
     # actual UI transition even when the radio's quantized raw value already
     # displays as level 1.
-    for label, enabled_field, level_field, values in (
-            ("NB level", "nbEnabled", "nbLevel", ("OFF", "10", "1", "5")),
-            ("NR level", "nrEnabled", "nrLevel", ("OFF", "15", "1", "8"))):
+    for label, enabled_field, level_field, maximum, values in (
+            ("NB level", "nbEnabled", "nbLevel", 10, ("OFF", "10", "1", "5")),
+            ("NR level", "nrEnabled", "nrLevel", 15, ("OFF", "15", "1", "8"))):
         for value in values:
             display_level = 0 if value == "OFF" else int(value)
-            maximum = 10 if label == "NB level" else 15
             set_filters_combo(vfo, label, value)
             wait_for(f"{vfo} {label}={value}",
-                     lambda s, display_level=display_level, maximum=maximum, enabled_field=enabled_field,
-                     level_field=level_field: s["receivers"][vfo].get(enabled_field) is (display_level > 0) and
+                     lambda s, vfo=vfo, display_level=display_level, maximum=maximum,
+                     enabled_field=enabled_field, level_field=level_field:
+                     s["receivers"][vfo].get(enabled_field) is (display_level > 0) and
                      (display_level == 0 or
                       int(s["receivers"][vfo].get(level_field) * (maximum - 1) / 255 + 0.5) + 1 == display_level))
         restored_display = max(1, min(maximum, int(own_before[level_field] * (maximum - 1) / 255 + 0.5) + 1))
         restored_value = str(restored_display) if own_before[enabled_field] else "OFF"
         set_filters_combo(vfo, label, restored_value)
         wait_for(f"{vfo} {label} restored",
-                 lambda s, enabled_field=enabled_field, level_field=level_field:
+                 lambda s, vfo=vfo, enabled_field=enabled_field, level_field=level_field,
+                 own_before=own_before, maximum=maximum, restored_display=restored_display:
                  s["receivers"][vfo].get(enabled_field) == own_before[enabled_field] and
                  (not own_before[enabled_field] or
                   int(s["receivers"][vfo].get(level_field) * (maximum - 1) / 255 + 0.5) + 1 ==
@@ -268,11 +269,15 @@ def sweep_filters(vfo):
         for value, expected in (("ON", True), ("OFF", False)):
             set_filters_combo(vfo, "NOTCH level", value)
             wait_for(f"{vfo} auto notch={expected}",
-                     lambda s, expected=expected: s["receivers"][vfo].get("autoNotchEnabled") is expected)
+                     lambda s, vfo=vfo, expected=expected:
+                     s["receivers"][vfo].get("autoNotchEnabled") is expected)
         if own_before["autoNotchEnabled"]:
             set_filters_combo(vfo, "NOTCH level", "ON")
             wait_for(f"{vfo} auto notch restored",
-                     lambda s: s["receivers"][vfo].get("autoNotchEnabled") is True)
+                     lambda s, vfo=vfo: s["receivers"][vfo].get("autoNotchEnabled") is True)
+    else:
+        print(f"SKIP {vfo} NOTCH phase: manual notch was enabled and cannot be restored through this selector",
+              flush=True)
 
 
 started = time.monotonic()
@@ -287,7 +292,8 @@ band_frequencies = {
 }
 companion = {"2m": "70cm", "70cm": "23cm", "23cm": "2m"}
 frequency_transitions = 0
-if "--skip-frequency" not in sys.argv:
+frequency_skipped = "--skip-frequency" in sys.argv
+if not frequency_skipped:
     for vfo in ("MAIN", "SUB"):
         for band, values in band_frequencies.items():
             if vfo == "MAIN":
@@ -298,6 +304,8 @@ if "--skip-frequency" not in sys.argv:
                 tune(vfo, hz)
                 frequency_transitions += 1
             print(f"FREQUENCY {vfo} {band} complete total={frequency_transitions}", flush=True)
+else:
+    print("SKIP frequency phase (--skip-frequency)", flush=True)
 
 normalize_pair("2m", "70cm")
 for vfo in ("MAIN", "SUB"):
@@ -328,7 +336,8 @@ for vfo in ("MAIN", "SUB"):
     print(f"MODE/AGC {vfo} complete", flush=True)
 
 final = state()
-print("CONTROL MATRIX COMPLETE", json.dumps({"frequencyTransitions": frequency_transitions,
+print("CONTROL MATRIX COMPLETE", json.dumps({"frequencyPhaseSkipped": frequency_skipped,
+                                              "frequencyTransitions": frequency_transitions,
                                               "requests": requests,
                                               "elapsedSeconds": round(time.monotonic() - started, 2),
                                               "final": final}, sort_keys=True), flush=True)

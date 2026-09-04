@@ -10,7 +10,8 @@ from automation_common import load_endpoint, request as send_request
 
 ENDPOINT = load_endpoint()
 
-COUNTS = {"requests": 0, "confirmed_transitions": 0, "expected_rejections": 0}
+COUNTS = {"requests": 0, "confirmed_transitions": 0, "expected_rejections": 0,
+          "selection_gate_retries": 0}
 DIAGNOSTIC = "--diagnostic" in sys.argv
 DUAL_ONLY = "--dual-only" in sys.argv
 LIST_UI = "--list-ui" in sys.argv
@@ -84,7 +85,7 @@ def select_vfo(vfo):
             break
         if response.get("error") != "request_rejected" or time.monotonic() >= deadline:
             raise RuntimeError(f"VFO selection gate did not become available: {response}")
-        COUNTS["expected_rejections"] += 1
+        COUNTS["selection_gate_retries"] += 1
         time.sleep(0.05)
     return wait_for(f"selected {vfo}", lambda s: s.get("selectedVfo") == vfo)
 

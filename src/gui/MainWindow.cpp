@@ -213,10 +213,6 @@ MainWindow::MainWindow(RadioModel* model, QWidget* parent, bool quitApplicationO
                         }
                         break;
                     }
-                    case funcModeGet:
-                    case funcModeSet:
-                    case funcSelectedMode:
-                        break;
                     case funcUnselectedFreq:
                     case funcUnselectedMode:
                         // Command 25/26 unselected data is the inactive VFO inside the MAIN band,

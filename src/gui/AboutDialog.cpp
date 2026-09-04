@@ -68,6 +68,9 @@ AboutDialog::AboutDialog(QWidget* parent)
         QStringLiteral("<a href=\"https://github.com/w5jwp/SDR9700\">github.com/w5jwp/SDR9700</a>"), content);
     projectLink->setAlignment(Qt::AlignCenter);
     projectLink->setOpenExternalLinks(true);
+    projectLink->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::LinksAccessibleByKeyboard);
+    projectLink->setAccessibleName(QStringLiteral("SDR9700 project page"));
+    projectLink->setAccessibleDescription(QStringLiteral("Open the SDR9700 project page on GitHub."));
     contentLayout->addWidget(projectLink);
 
     contentLayout->addStretch(1);

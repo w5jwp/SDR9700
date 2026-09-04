@@ -276,6 +276,7 @@ RadioBackend::RadioBackend(QObject* parent)
                     m_smeterPollPending = false;
                     m_smeterPollQueued = false;
                     m_smeterPollDeadlineMs = 0;
+                    m_smeterPollQueuedClock.invalidate();
                     m_smeterPollPendingClock.invalidate();
                 }
                 emit radioValueUpdated(func, value, receiver);
@@ -899,7 +900,11 @@ void RadioBackend::connectToRadio(const QString& host, quint16 port, const QStri
                 }
                 m_smeterPollQueued = false;
                 m_smeterPollPending = true;
-                m_smeterPollDeadlineMs = replyTimeoutMs;
+                // Receiver-less SUB reads temporarily select the radio's SUB
+                // context. Keep that physical-context hold short even when the
+                // general adaptive reply timeout grows under transport jitter.
+                m_smeterPollDeadlineMs = std::min<qint64>(replyTimeoutMs, 300);
+                m_smeterPollQueuedClock.invalidate();
                 m_smeterPollPendingClock.start();
             });
     connect(m_commander, &RadioCommander::haveAudioData, this,
@@ -1156,6 +1161,7 @@ void RadioBackend::shutdownConnection(bool emitDisconnectedSignal, bool emitDisc
     m_smeterPollQueued = false;
     m_smeterPollDeadlineMs = 0;
     m_smeterPollTimeoutCount = 0;
+    m_smeterPollQueuedClock.invalidate();
     m_smeterPollPendingClock.invalidate();
     m_smeterPollTick = 0;
     m_mainSubExchangePending = false;
@@ -3157,8 +3163,9 @@ void RadioBackend::onLanReady()
             m_txMeterPollTick = 0;
             if (m_smeterPollPending)
             {
-                const qint64 elapsedMs = m_smeterPollPendingClock.isValid() ? m_smeterPollPendingClock.elapsed() : 0;
-                if (elapsedMs < m_smeterPollDeadlineMs)
+                const qint64 elapsedMs =
+                    m_smeterPollPendingClock.isValid() ? m_smeterPollPendingClock.elapsed() : m_smeterPollDeadlineMs;
+                if (m_smeterPollPendingClock.isValid() && elapsedMs < m_smeterPollDeadlineMs)
                 {
                     return;
                 }
@@ -3177,6 +3184,19 @@ void RadioBackend::onLanReady()
             }
             if (m_smeterPollQueued)
             {
+                static constexpr qint64 kQueuedSMeterDeadlineMs = 3000;
+                if (!m_smeterPollQueuedClock.isValid() || m_smeterPollQueuedClock.elapsed() >= kQueuedSMeterDeadlineMs)
+                {
+                    const qint64 elapsedMs =
+                        m_smeterPollQueuedClock.isValid() ? m_smeterPollQueuedClock.elapsed() : kQueuedSMeterDeadlineMs;
+                    m_smeterPollQueued = false;
+                    m_smeterPollQueuedClock.invalidate();
+                    ++m_smeterPollTimeoutCount;
+                    qWarning(logRadio()).noquote().nospace()
+                        << "S-meter poll dispatch timed out receiver=" << m_smeterPollPendingReceiver
+                        << " elapsedMs=" << elapsedMs << " deadlineMs=" << kQueuedSMeterDeadlineMs
+                        << " timeoutCount=" << m_smeterPollTimeoutCount;
+                }
                 return;
             }
             if (m_dualWatchTransition.pending())
@@ -3197,6 +3217,7 @@ void RadioBackend::onLanReady()
             const Vfo targetVfo = sdr9700::backend::meterPollTarget(activeVfo, m_dualWatchEnabled, m_smeterPollTick++);
             const uchar receiver = sdr9700::backend::receiverForVfo(targetVfo);
             m_smeterPollQueued = true;
+            m_smeterPollQueuedClock.start();
             m_smeterPollPendingReceiver = receiver;
             m_smeterPollDeadlineMs = 0;
             // CI-V 15 02 has no receiver byte. Sample the inactive side in

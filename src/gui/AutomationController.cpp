@@ -10,6 +10,7 @@
 #include "models/RadioState.h"
 #include "radio/RadioCapabilities.h"
 
+#include <QApplication>
 #include <QJsonArray>
 #include <QJsonValue>
 
@@ -132,15 +133,13 @@ QJsonObject AutomationController::stateSnapshot() const
                        {QStringLiteral("transmitting"), model->isTransmitting()},
                        {QStringLiteral("controlsLocked"), m_window->m_controlsLocked},
                        {QStringLiteral("selectedVfo"), vfoName(m_window->m_vfoSelectionController->selectedVfo())},
-                       {QStringLiteral("dialLock"),
-                        shared.dialLockEnabled ? QJsonValue(*shared.dialLockEnabled) : QJsonValue(QJsonValue::Null)},
-                       {QStringLiteral("afGain"), optionalJsonValue(shared.afGain)},
+                       {QStringLiteral("dialLock"), optionalJsonValue(shared.dialLockEnabled)},
+                       {QStringLiteral("radioAfGain"), optionalJsonValue(shared.afGain)},
                        {QStringLiteral("txPower"), optionalJsonValue(shared.txPower)},
                        {QStringLiteral("lanModLevel"), optionalJsonValue(shared.lanModLevel)},
                        {QStringLiteral("compressorEnabled"), optionalJsonValue(shared.compressorEnabled)},
                        {QStringLiteral("compressorLevel"), optionalJsonValue(shared.compressorLevel)},
-                       {QStringLiteral("dualWatch"),
-                        shared.dualWatchEnabled ? QJsonValue(*shared.dualWatchEnabled) : QJsonValue(QJsonValue::Null)},
+                       {QStringLiteral("dualWatch"), optionalJsonValue(shared.dualWatchEnabled)},
                        {QStringLiteral("receivers"),
                         QJsonObject{{QStringLiteral("MAIN"), receiverSnapshot(state->receiver(Vfo::Main))},
                                     {QStringLiteral("SUB"), receiverSnapshot(state->receiver(Vfo::Sub))}}}};
@@ -163,7 +162,8 @@ QJsonObject AutomationController::execute(const QJsonObject& request)
              QJsonArray{QStringLiteral("ping"), QStringLiteral("list_actions"), QStringLiteral("get_state"),
                         QStringLiteral("select_vfo"), QStringLiteral("set_frequency"), QStringLiteral("select_band"),
                         QStringLiteral("set_dual_watch"), QStringLiteral("exchange_main_sub"),
-                        QStringLiteral("ui_list"), QStringLiteral("ui_activate"), QStringLiteral("ui_set")}}};
+                        QStringLiteral("ui_list"), QStringLiteral("ui_activate"), QStringLiteral("ui_set"),
+                        QStringLiteral("ui_dismiss_popup")}}};
     }
     if (action == QLatin1String("get_state"))
     {
@@ -180,6 +180,17 @@ QJsonObject AutomationController::execute(const QJsonObject& request)
     if (action == QLatin1String("ui_set"))
     {
         return m_uiDriver->setValue(request);
+    }
+    if (action == QLatin1String("ui_dismiss_popup"))
+    {
+        if (QWidget* popup = QApplication::activePopupWidget())
+        {
+            // Popup menus are reusable widgets. Hiding mirrors clicking away
+            // and avoids asking Qt to close the platform's internal popup
+            // window as though it were an application top-level window.
+            popup->hide();
+        }
+        return QJsonObject{{QStringLiteral("ok"), true}};
     }
 
     const bool allowlistedMutation =

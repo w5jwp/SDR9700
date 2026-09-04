@@ -81,19 +81,10 @@ def sweep_popup(state_field, button_name, slider_name):
 
 sweep_popup("lanModLevel", "MAIN VFO MOD control", "MAIN VFO MOD level")
 
-# The AF slider predates accessible-name coverage. It is the only visible,
-# unnamed persistent slider in the main window.
-unnamed = [item for item in controls() if item.get("type") == "QSlider" and item.get("visible") and
-           not item.get("accessibleName") and not item.get("objectName")]
-if len(unnamed) != 1:
-    raise RuntimeError(f"expected one unnamed AF slider: {unnamed}")
-original_af = unnamed[0]["value"]
+af_slider_name = "Application audio volume"
+original_af = find(type="QSlider", accessibleName=af_slider_name)["value"]
 for value in (0, 64, 128, 192, 255, original_af):
-    slider = [item for item in controls() if item.get("type") == "QSlider" and item.get("visible") and
-              not item.get("accessibleName") and not item.get("objectName")]
-    if len(slider) != 1:
-        raise RuntimeError(f"AF slider became ambiguous: {slider}")
-    set_and_verify(slider[0], value)
+    set_and_verify(find(type="QSlider", accessibleName=af_slider_name), value)
 # LAN AF is deliberately local Qt playback volume, not the radio's physical
 # AF register, so UI settlement is the authoritative assertion for this one control.
 print("SWEEP AF gain complete (local audio control)", flush=True)
