@@ -21,11 +21,16 @@ trap 'rm -f "${errors_file}"' EXIT HUP INT TERM
 
 for required_plugin in \
     "${contents_path}/PlugIns/platforms/libqcocoa.dylib" \
-    "${contents_path}/PlugIns/multimedia/libdarwinmediaplugin.dylib"; do
+    "${contents_path}/PlugIns/multimedia/libdarwinmediaplugin.dylib" \
+    "${contents_path}/PlugIns/iconengines/libqsvgicon.dylib"; do
     if [ ! -f "${required_plugin}" ]; then
         echo "Missing required Qt plugin: ${required_plugin}" >>"${errors_file}"
     fi
 done
+
+if [ ! -d "${frameworks_path}/QtSvg.framework" ]; then
+    echo "Missing required Qt framework: ${frameworks_path}/QtSvg.framework" >>"${errors_file}"
+fi
 
 while IFS= read -r binary_path; do
     if ! file "${binary_path}" | grep -q "Mach-O"; then

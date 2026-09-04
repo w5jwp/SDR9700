@@ -849,9 +849,13 @@ void MemoryManagerSmokeTest::automationIndicatorReflectsClientCount()
 void MemoryManagerSmokeTest::titleBarSpeakerTogglesMute()
 {
     MainTitleBar titleBar;
+    auto* lockButton = titleBar.findChild<QPushButton*>(QStringLiteral("titleLockButton"));
+    QVERIFY(lockButton != nullptr);
+    QVERIFY(!lockButton->icon().pixmap(QSize(18, 18)).isNull());
+
     auto* speakerButton = titleBar.findChild<QPushButton*>(QStringLiteral("titleSpeakerMuteButton"));
     QVERIFY(speakerButton != nullptr);
-    QVERIFY(!speakerButton->icon().isNull());
+    QVERIFY(!speakerButton->icon().pixmap(QSize(18, 18)).isNull());
     QVERIFY(speakerButton->text().isEmpty());
     QCOMPARE(speakerButton->toolTip(), QStringLiteral("Mute audio"));
 
@@ -864,6 +868,7 @@ void MemoryManagerSmokeTest::titleBarSpeakerTogglesMute()
     QCOMPARE(muteSpy.count(), 1);
 
     titleBar.setMuted(true);
+    QVERIFY(!speakerButton->icon().pixmap(QSize(18, 18)).isNull());
     QVERIFY(speakerButton->text().isEmpty());
     QVERIFY(speakerButton->styleSheet().contains(QStringLiteral("border: 1px solid %1").arg(UiTheme::Color::Danger)));
     QCOMPARE(speakerButton->toolTip(), QStringLiteral("Unmute audio"));
@@ -872,7 +877,7 @@ void MemoryManagerSmokeTest::titleBarSpeakerTogglesMute()
     QCOMPARE(muteSpy.count(), 2);
     titleBar.setMuted(false);
     QVERIFY(speakerButton->text().isEmpty());
-    QVERIFY(!speakerButton->icon().isNull());
+    QVERIFY(!speakerButton->icon().pixmap(QSize(18, 18)).isNull());
     QCOMPARE(speakerButton->toolTip(), QStringLiteral("Mute audio"));
 }
 
