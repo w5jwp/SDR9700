@@ -27,7 +27,7 @@ jobs:
           sudo apt-get install --no-install-recommends \
             build-essential cmake ninja-build pkg-config \
             clang-format-23 \
-            qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite libssl-dev libopus-dev \
+            qt6-base-dev qt6-multimedia-dev qt6-svg-dev libqt6sql6-sqlite libssl-dev libopus-dev \
             libspeexdsp-dev libxkbcommon-dev libeigen3-dev libhidapi-dev
       - name: Build cppcheck 2.21.0
         run: |
