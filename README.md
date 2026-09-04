@@ -21,18 +21,19 @@ Multimedia.
 
 ## Status
 
-SDR9700 is under active development. It provides a usable, IC-9700-focused LAN
-control surface on Linux and Apple Silicon macOS, backed by automated protocol,
-scheduler, routing, model, and GUI tests. Broader hardware coverage—especially
-across different LAN conditions, Linux audio systems, and optional USB
-controllers—is still needed before a stable release.
+[SDR9700 26.9.1](https://github.com/w5jwp/SDR9700/releases/tag/v26.9.1) is the
+current stable release. The project remains under active development and
+provides an IC-9700-focused LAN control surface on Linux and Apple Silicon
+macOS, backed by automated protocol, scheduler, routing, model, and GUI tests.
+Continued operator testing across different LAN conditions, Linux audio
+systems, and optional USB controllers is welcome.
 
 ## Implemented Functionality
 
 - Saved IC-9700 LAN radio profiles with username/password storage encrypted at
   rest.
 - Radio chooser and preferences dialogs, including auto-connect and audio
-  device selection.
+  device selection, plus configuration backup, restore, and reset.
 - IC-9700 LAN connection over the radio UDP ports, with connection status,
   network quality reporting, and user-facing connection error messages.
 - Independent MAIN and SUB VFO displays with receiver-specific frequency, mode,
@@ -42,7 +43,8 @@ controllers—is still needed before a stable release.
   with startup gating, transition lockout, recovery, and repeated-exchange
   stress coverage.
 - Radio-backed controls for RF power, mic gain, duplex/offset, tone mode, CTCSS
-  tone, and DCS/DTCS code in addition to the receiver-specific controls above.
+  tone, DCS/DTCS code, and speech-compressor level in addition to the
+  receiver-specific controls above.
 - Local AF gain and mute controls.
 - PTT control and LAN transmit audio support, including LAN MOD level control
   and transmit audio ramping.
@@ -52,7 +54,10 @@ controllers—is still needed before a stable release.
 - Receiver-aware scope and meter routing so MAIN/SUB activity follows the
   selected radio context without conflating the two receiver states.
 - Network and status indicators for radio connectivity, LAN quality, CPU use,
-  memory use, and transmit state.
+  memory use, transmit state, radio-command activity, and enabled automation
+  sessions.
+- A meters window for signal strength, RF power, SWR, ALC, compression, radio
+  voltage/current, and microphone average/peak levels.
 - DTMF send panel with PTT gating.
 - Receive-only AX.25 packet decoding from 1200-baud Bell 202 radio audio, with
   live decode-health indicators and text export in the Data Decoder window.
@@ -71,6 +76,10 @@ controllers—is still needed before a stable release.
 - Icom RC-28 rotary controller support for step tuning and button mapping,
   including active-low button handling, disconnect-safe PTT release, and LED
   feedback (requires `libhidapi` when building from source).
+- An opt-in local automation bridge plus non-transmitting IC-9700 control and
+  VFO stress tools. The accompanying coverage audit compares application
+  controls and backend commands with the exercised automation inventory; see
+  the [hardware-integration tool guide](resources/tools/README.md) for usage.
 
 ### Reliability and Diagnostics
 
@@ -89,15 +98,15 @@ controllers—is still needed before a stable release.
   keeps required control traffic alive through shutdown, and preserves an
   unconditional PTT release path.
 - Runtime logging can be enabled selectively with `--log=radio,udp,ci-v`, or in
-  full with `--log=all`; `--log-file=<path>` writes the same diagnostics to a
-  file.
+  full with `--log=all`; `--log-file=<path>` writes diagnostics to a file.
 
 ## Installation
 
 ### macOS (Apple Silicon)
 
-Download the `SDR9700-<version>-macOS-apple-silicon.dmg` release, open it, and
-drag SDR9700 into Applications.
+Download the `SDR9700-<version>-macOS-apple-silicon.dmg` from the
+[latest SDR9700 release](https://github.com/w5jwp/SDR9700/releases/latest), open
+it, and drag SDR9700 into Applications.
 
 The release application includes Qt and its other runtime libraries. Users do
 not need Homebrew, a separate Qt installation, or any other developer package
@@ -183,8 +192,8 @@ On macOS:
 - `src/core/`: settings, profile storage, queues, and shared types.
 - `docs/`: architecture, development, protocol, and implementation research
   documentation.
-- `resources/`: shared images, Qt resources, and platform-specific packaging
-  assets under `resources/packaging/`.
+- `resources/`: shared images and Qt resources, hardware-integration tools,
+  local research manuals, and platform-specific packaging assets.
 
 ## Documentation
 
