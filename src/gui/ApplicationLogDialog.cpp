@@ -1,8 +1,6 @@
 #include "ApplicationLogDialog.h"
 #include "ApplicationLog.h"
 #include "DialogFooter.h"
-#include "LogCategories.h"
-#include "LoggingConfiguration.h"
 #include "UiTheme.h"
 
 #include <QComboBox>
@@ -73,11 +71,10 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     m_categoryCombo->addItem(QStringLiteral("All categories"), QString());
     filterRow->addWidget(m_categoryCombo);
     filterRow->addSpacing(32);
-    auto* includeCivCheckBox = new QCheckBox(QStringLiteral("Include CI-V data"), content);
-    includeCivCheckBox->setObjectName(QStringLiteral("includeCivLogCheckBox"));
-    includeCivCheckBox->setAccessibleDescription(
-        QStringLiteral("Include high-volume raw CI-V transmit and receive messages in the application log."));
-    includeCivCheckBox->setStyleSheet(
+    m_civTrafficCheckBox = new QCheckBox(QStringLiteral("Report CI-V Traffic"), content);
+    m_civTrafficCheckBox->setObjectName(QStringLiteral("includeCivLogCheckBox"));
+    m_civTrafficCheckBox->setAccessibleDescription(QStringLiteral("Include raw CI-V traffic in the application log."));
+    m_civTrafficCheckBox->setStyleSheet(
         QStringLiteral("QCheckBox { color: %1; spacing: 8px; }"
                        "QCheckBox:focus { color: %2; }"
                        "QCheckBox::indicator { width: 16px; height: 16px; background: %3;"
@@ -87,8 +84,8 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
             .arg(QLatin1String(UiTheme::Color::TextPrimary), QLatin1String(UiTheme::Color::AccentBright),
                  QLatin1String(UiTheme::Color::Field), QLatin1String(UiTheme::Color::BorderFocus),
                  QLatin1String(UiTheme::Color::Accent)));
-    includeCivCheckBox->setChecked(logRadioTraffic().isDebugEnabled() || logRadioTraffic().isInfoEnabled());
-    filterRow->addWidget(includeCivCheckBox);
+    m_civTrafficCheckBox->setChecked(false);
+    filterRow->addWidget(m_civTrafficCheckBox);
     filterRow->addStretch();
     contentLayout->addLayout(filterRow);
 
@@ -105,6 +102,12 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     contentLayout->addWidget(m_logView, 1);
 
     const sdr9700::ui::DialogFooter footer = sdr9700::ui::createDialogFooter(content);
+    if (auto* separator = footer.widget->findChild<QWidget*>(QStringLiteral("dialogFooterSeparator")))
+    {
+        separator->hide();
+    }
+    footer.widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    footer.rowLayout->setContentsMargins(0, 0, 0, sdr9700::ui::kDialogFooterSpacing);
     m_pauseButton = footer.buttonBox->addButton(QStringLiteral("Pause"), QDialogButtonBox::ActionRole);
     m_pauseButton->setObjectName(QStringLiteral("applicationLogPauseButton"));
     m_pauseButton->setAccessibleDescription(
@@ -114,10 +117,8 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
     clearButton->setAccessibleDescription(QStringLiteral("Clear all retained application log messages."));
     auto* exportButton = footer.buttonBox->addButton(QStringLiteral("Export…"), QDialogButtonBox::ActionRole);
     exportButton->setAccessibleName(QStringLiteral("Export application log"));
-    footer.buttonBox->addButton(QDialogButtonBox::Close);
     contentLayout->addWidget(footer.widget);
     connect(exportButton, &QPushButton::clicked, this, &ApplicationLogDialog::exportLog);
-    connect(footer.buttonBox, &QDialogButtonBox::rejected, this, &QWidget::hide);
     connect(clearButton, &QPushButton::clicked, this,
             [this]()
             {
@@ -145,8 +146,8 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
                     m_refreshTimer->stop();
                 }
             });
-    connect(includeCivCheckBox, &QCheckBox::toggled, this,
-            [](bool enabled) { LoggingConfiguration::setCivDataEnabled(enabled); });
+    connect(m_civTrafficCheckBox, &QCheckBox::toggled, this,
+            [](bool enabled) { ApplicationLog::instance().setCivTrafficRetentionEnabled(enabled); });
 
     connect(m_categoryCombo, &QComboBox::currentIndexChanged, this, &ApplicationLogDialog::resetLogView);
     m_refreshTimer = new QTimer(this);
@@ -158,6 +159,7 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
 
 void ApplicationLogDialog::hideEvent(QHideEvent* event)
 {
+    clearCivTrafficReporting();
     m_refreshTimer->stop();
     sdr9700::ui::UtilityWindow::hideEvent(event);
 }
@@ -165,11 +167,19 @@ void ApplicationLogDialog::hideEvent(QHideEvent* event)
 void ApplicationLogDialog::showEvent(QShowEvent* event)
 {
     sdr9700::ui::UtilityWindow::showEvent(event);
+    clearCivTrafficReporting();
     if (!m_paused)
     {
         refreshLog();
         m_refreshTimer->start();
     }
+}
+
+void ApplicationLogDialog::clearCivTrafficReporting()
+{
+    const QSignalBlocker blocker(m_civTrafficCheckBox);
+    m_civTrafficCheckBox->setChecked(false);
+    ApplicationLog::instance().setCivTrafficRetentionEnabled(false);
 }
 
 void ApplicationLogDialog::resetLogView()
@@ -204,7 +214,13 @@ void ApplicationLogDialog::refreshLog()
     {
         if (m_categoryCombo->findData(category) < 0)
         {
-            m_categoryCombo->addItem(category, category);
+            int insertionIndex = 1;
+            while (insertionIndex < m_categoryCombo->count() &&
+                   QString::compare(m_categoryCombo->itemText(insertionIndex), category, Qt::CaseInsensitive) < 0)
+            {
+                ++insertionIndex;
+            }
+            m_categoryCombo->insertItem(insertionIndex, category, category);
         }
     }
 

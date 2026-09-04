@@ -76,6 +76,11 @@ class RadioState final : public QObject
         std::optional<Vfo> selectedVfo;
         std::optional<bool> dualWatchEnabled;
         std::optional<bool> dialLockEnabled;
+        std::optional<int> afGain;
+        std::optional<int> txPower;
+        std::optional<int> lanModLevel;
+        std::optional<bool> compressorEnabled;
+        std::optional<int> compressorLevel;
     };
 
     explicit RadioState(IRadioBackend* backend, QObject* parent = nullptr);

@@ -138,7 +138,7 @@ void UdpBase::dataReceived(const QByteArray& r)
         }
         if (in.type == 0x04)
         {
-            qInfo(logUdp()).noquote() << this->metaObject()->className() << ": Received I am here ";
+            qInfo(logUdp()).noquote().nospace() << this->metaObject()->className() << "::PresenceReply";
             areYouThereCounter = 0;
             // IC-9700 sends "I am here" during discovery in response to this
             // client's "Are you there" probe.
@@ -345,10 +345,10 @@ void UdpBase::dataReceived(const QByteArray& r)
             {
                 if (in.seq > rxSeqBuf.lastKey() + 1)
                 {
-                    qDebug(logUdp()).noquote()
-                        << this->metaObject()->className() << "1 or more missing packets detected, previous: "
-                        << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
-                        << " current: " << QString("0x%1").arg(in.seq, 0, 16);
+                    qDebug(logUdp()).noquote().nospace()
+                        << this->metaObject()->className()
+                        << "::MissingPacketsDetected previous=" << QString("0x%1").arg(rxSeqBuf.lastKey(), 0, 16)
+                        << " current=" << QString("0x%1").arg(in.seq, 0, 16);
                     missingMutex.lock();
                     // Iterate in a wider type. A quint16 loop variable wraps to
                     // zero after sequence 65535 and would otherwise never leave
@@ -390,8 +390,9 @@ void UdpBase::dataReceived(const QByteArray& r)
                 auto s = rxMissing.find(in.seq);
                 if (s != rxMissing.end())
                 {
-                    qDebug(logUdp()).noquote() << this->metaObject()->className() << ": Missing SEQ has been received! "
-                                               << QString("0x%1").arg(in.seq, 0, 16);
+                    qDebug(logUdp()).noquote().nospace()
+                        << this->metaObject()->className()
+                        << "::MissingSequenceRecovered sequence=" << QString("0x%1").arg(in.seq, 0, 16);
 
                     s = rxMissing.erase(s);
                 }

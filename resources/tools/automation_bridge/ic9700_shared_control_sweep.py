@@ -1,30 +1,17 @@
 #!/usr/bin/env python3
 """Sweep shared main-window controls without invoking PTT."""
 
-import glob
 import json
-import os
-import socket
-import tempfile
 import time
 
+from automation_common import load_endpoint, request as send_request
 
-discovery = max(glob.glob(os.path.join(tempfile.gettempdir(), "sdr9700-automation-*.json")),
-                key=os.path.getmtime)
-with open(discovery, encoding="utf-8") as stream:
-    endpoint = json.load(stream)
-if endpoint.get("transmitAllowed") is not False:
-    raise RuntimeError("automation endpoint permits transmit")
+
+endpoint = load_endpoint()
 
 
 def request(payload):
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.connect(endpoint["socket"])
-        client.sendall(json.dumps(payload, separators=(",", ":")).encode() + b"\n")
-        data = bytearray()
-        while not data.endswith(b"\n"):
-            data.extend(client.recv(65536))
-    response = json.loads(data)
+    response = send_request(endpoint, payload)
     if not response.get("ok"):
         raise RuntimeError(f"request failed: {payload}: {response}")
     return response
@@ -32,6 +19,26 @@ def request(payload):
 
 def controls():
     return request({"action": "ui_list"})["controls"]
+
+
+def state():
+    value = request({"action": "get_state"})["state"]
+    if value.get("transmitAllowed") is not False or value.get("transmitting") is not False:
+        raise RuntimeError(f"unsafe transmit state: {value}")
+    if not value.get("connected") or not value.get("ready"):
+        raise RuntimeError(f"radio unavailable: {value}")
+    return value
+
+
+def wait_for(label, predicate, timeout=12):
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        last = state()
+        if predicate(last):
+            return last
+        time.sleep(0.05)
+    raise RuntimeError(f"timeout waiting for {label}: {json.dumps(last, sort_keys=True)}")
 
 
 def find(**criteria):
@@ -52,19 +59,7 @@ def set_and_verify(control, value):
         raise RuntimeError(f"value did not settle at {value}: {current}")
 
 
-def sweep_persistent(accessible_name=None, object_name=None):
-    criteria = {"type": "QSlider"}
-    if accessible_name is not None:
-        criteria["accessibleName"] = accessible_name
-    if object_name is not None:
-        criteria["objectName"] = object_name
-    original = find(**criteria)["value"]
-    for value in (0, 64, 128, 192, 255, original):
-        set_and_verify(find(**criteria), value)
-    print(f"SWEEP {accessible_name or object_name or 'unnamed slider'} complete", flush=True)
-
-
-def sweep_popup(button_name, slider_name):
+def sweep_popup(state_field, button_name, slider_name):
     original = None
     for value in (0, 64, 128, 192, 255):
         button = find(accessibleName=button_name)
@@ -74,17 +69,17 @@ def sweep_popup(button_name, slider_name):
         if original is None:
             original = slider["value"]
         request({"action": "ui_set", "controlId": slider["id"], "value": value})
-        time.sleep(0.12)
+        wait_for(f"{state_field}={value}", lambda s, value=value: s.get(state_field) == value)
     button = find(accessibleName=button_name)
     request({"action": "ui_activate", "controlId": button["id"]})
     time.sleep(0.08)
     slider = find(type="QSlider", accessibleName=slider_name)
     request({"action": "ui_set", "controlId": slider["id"], "value": original})
-    time.sleep(0.12)
+    wait_for(f"{state_field} restored", lambda s: s.get(state_field) == original)
     print(f"SWEEP {slider_name} complete", flush=True)
 
 
-sweep_persistent(accessible_name="LAN modulation level")
+sweep_popup("lanModLevel", "MAIN VFO MOD control", "MAIN VFO MOD level")
 
 # The AF slider predates accessible-name coverage. It is the only visible,
 # unnamed persistent slider in the main window.
@@ -99,9 +94,33 @@ for value in (0, 64, 128, 192, 255, original_af):
     if len(slider) != 1:
         raise RuntimeError(f"AF slider became ambiguous: {slider}")
     set_and_verify(slider[0], value)
-print("SWEEP AF gain complete", flush=True)
+# LAN AF is deliberately local Qt playback volume, not the radio's physical
+# AF register, so UI settlement is the authoritative assertion for this one control.
+print("SWEEP AF gain complete (local audio control)", flush=True)
 
-sweep_popup("MAIN VFO TX PWR control", "MAIN VFO TX PWR level")
+original_tx_power = state().get("txPower")
+if original_tx_power is None:
+    raise RuntimeError("radio did not report initial TX power")
+for value in (0, 64, 128, 192, 255, original_tx_power):
+    button = find(accessibleName="MAIN VFO TX PWR control")
+    request({"action": "ui_activate", "controlId": button["id"]})
+    time.sleep(0.08)
+    slider = find(type="QSlider", accessibleName="MAIN VFO TX PWR level")
+    request({"action": "ui_set", "controlId": slider["id"], "value": value})
+    wait_for(f"txPower={value}", lambda s, value=value: s.get("txPower") == value)
+print("SWEEP MAIN VFO TX PWR level complete", flush=True)
+
+initial_lock = state().get("dialLock")
+if initial_lock is None:
+    raise RuntimeError("radio did not report initial dial-lock state")
+for expected in (not initial_lock, initial_lock):
+    lock = [item for item in controls() if item.get("visible") and item.get("enabled") and
+            item.get("accessibleName") in ("Dial locked", "Dial unlocked")]
+    if len(lock) != 1:
+        raise RuntimeError(f"expected one dial-lock control: {lock}")
+    request({"action": "ui_activate", "controlId": lock[0]["id"]})
+    wait_for(f"dialLock={expected}", lambda s, expected=expected: s.get("dialLock") is expected)
+print("TOGGLE dial lock complete", flush=True)
 
 final_state = request({"action": "get_state"})["state"]
 if final_state.get("transmitAllowed") is not False or final_state.get("transmitting") is not False:

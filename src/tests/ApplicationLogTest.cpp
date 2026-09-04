@@ -10,6 +10,7 @@ class ApplicationLogTest : public QObject
     void storesFormattedEntriesByCategory();
     void providesIncrementalSnapshots();
     void removesCategoriesWhenTheirEntriesExpire();
+    void conditionallyRetainsCivTraffic();
 };
 
 void ApplicationLogTest::storesFormattedEntriesByCategory()
@@ -66,6 +67,33 @@ void ApplicationLogTest::removesCategoriesWhenTheirEntriesExpire()
 
     QCOMPARE(log.entries().size(), 1);
     QCOMPARE(log.categories(), QStringList({QStringLiteral("current")}));
+}
+
+void ApplicationLogTest::conditionallyRetainsCivTraffic()
+{
+    ApplicationLog& log = ApplicationLog::instance();
+    log.clear();
+    log.setCivTrafficRetentionEnabled(false);
+    const QMessageLogContext civContext("test.cpp", 12, "test", "ci-v");
+    const QMessageLogContext radioContext("test.cpp", 14, "test", "radio");
+
+    const QString formatted =
+        log.append(QtInfoMsg, civContext, QStringLiteral("CivData::RX len=6 hex=fe fe e1 a2 fb fd"));
+    QVERIFY(formatted.contains(QStringLiteral("INFO [ci-v] CivData::RX len=6 hex=fe fe e1 a2 fb fd")));
+    log.append(QtDebugMsg, civContext, QStringLiteral("UdpCivData::RX len=27 hex=1b 00"));
+    log.append(QtDebugMsg, civContext, QStringLiteral("UdpHandler::CivHandoff port=50002 len=7"));
+    log.append(QtDebugMsg, civContext, QStringLiteral("UdpCivData::TX port=50002 radioIP=192.0.2.1 len=7 data=fe fe"));
+    log.append(QtDebugMsg, radioContext, QStringLiteral("Radio accepted a CI-V command (FB)"));
+    QVERIFY(log.entries().isEmpty());
+
+    log.setCivTrafficRetentionEnabled(true);
+    log.append(QtInfoMsg, civContext, QStringLiteral("CivData::TX len=6 hex=fe fe a2 e1 03 fd"));
+    log.append(QtDebugMsg, civContext, QStringLiteral("UdpCivData::RX len=27 hex=1b 00"));
+    QCOMPARE(log.entries().size(), 2);
+    QCOMPARE(log.entries().constFirst().category, QStringLiteral("ci-v"));
+
+    log.setCivTrafficRetentionEnabled(false);
+    log.clear();
 }
 
 QTEST_GUILESS_MAIN(ApplicationLogTest)

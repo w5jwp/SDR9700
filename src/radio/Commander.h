@@ -14,7 +14,7 @@ struct CommanderCorrelationDiagnostics
     qsizetype pendingReplyHighWaterMark{0};
     quint64 pendingReplyOverflows{0};
     quint64 pendingReplyExpirations{0};
-    quint64 unmatchedReplyFrames{0};
+    quint64 unattributedDirectedValues{0};
     quint64 ambiguousUnsolicitedFrames{0};
     quint64 acceptedAcknowledgements{0};
     quint64 rejectedAcknowledgements{0};
@@ -22,6 +22,12 @@ struct CommanderCorrelationDiagnostics
     quint64 coalescedReplyReads{0};
     quint64 droppedReplyReads{0};
     quint64 drainedReplyFrames{0};
+    quint64 mainSMeterRequests{0};
+    quint64 mainSMeterReplies{0};
+    quint64 mainSMeterTimeouts{0};
+    quint64 subSMeterRequests{0};
+    quint64 subSMeterReplies{0};
+    quint64 subSMeterTimeouts{0};
     qint64 resolvedReplyDrainMs{0};
     qint64 abandonedReplyDrainMs{0};
     qint64 replyTimeoutMs{0};
@@ -69,7 +75,8 @@ class Commander : public RadioCommander
     void receiveCommand(Funcs func, QVariant value, uchar receiver) override;
     void receiveCommandNoReadback(Funcs func, QVariant value, uchar receiver);
     void scheduleMeterRead(Funcs func, uchar receiver);
-    void scheduleMeterAction(Funcs func, uchar receiver, std::function<void()> action);
+    void scheduleSMeterRead(uchar receiver, bool restoreScopeSub);
+    void abortSMeterRead(uchar receiver);
     void scheduleStartupRead(Funcs func, uchar receiver);
     void requestMainSubExchange();
     void requestReceiverScopedRead(Funcs func, uchar receiver);
@@ -85,7 +92,7 @@ class Commander : public RadioCommander
 
   signals:
     void mainSubExchangeDispatched();
-    void commandTransmitted(Funcs func, uchar receiver);
+    void commandTransmitted(Funcs func, uchar receiver, qint64 replyTimeoutMs);
     void standbyWakeHoldStarted();
 
   private:
@@ -181,6 +188,7 @@ class Commander : public RadioCommander
     void dispatchDeferredReplyReads();
     void dispatchReceiverScopedRead(Funcs func, uchar receiver);
     void finishReceiverScopedAction();
+    void finishSMeterRead();
     void dispatchMainSubExchange();
     bool replyFamilyBlocked(Funcs func) const;
     bool replyFamilyDraining(Funcs func) const;
@@ -228,6 +236,8 @@ class Commander : public RadioCommander
     };
     QVector<DeferredReplyRead> m_deferredReplyReads;
     bool m_receiverScopedReadActive{false};
+    bool m_smeterScopedReadActive{false};
+    bool m_smeterRestoreScopeSub{false};
     bool m_mainSubExchangeQueued{false};
     bool m_mainSubExchangeConfirmationPending{false};
     QVector<ReplyFamilyDrain> m_replyFamilyDrains;

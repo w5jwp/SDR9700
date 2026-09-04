@@ -24,6 +24,7 @@ class ApplicationLog
     QStringList categories() const;
     QVector<Entry> entriesAfter(quint64 sequence, const QString& category, bool* resetRequired, quint64* latestSequence,
                                 QStringList* categoryNames) const;
+    void setCivTrafficRetentionEnabled(bool enabled);
     void clear();
 
   private:
@@ -34,4 +35,5 @@ class ApplicationLog
     QHash<QString, qsizetype> m_categoryCounts;
     qsizetype m_textSize{0};
     quint64 m_nextSequence{1};
+    bool m_civTrafficRetentionEnabled{false};
 };

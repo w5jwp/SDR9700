@@ -355,6 +355,18 @@ QJsonObject AutomationUiDriver::setValue(const QJsonObject& request)
         if (index < 0 || index >= combo->count())
             return reject(QStringLiteral("invalid_value"), QStringLiteral("Unknown combo-box option"));
         combo->setCurrentIndex(index);
+        if (auto* menu = qobject_cast<QMenu*>(combo->window()))
+        {
+            QPointer<QMenu> guarded(menu);
+            QTimer::singleShot(0, this,
+                               [guarded]()
+                               {
+                                   if (guarded)
+                                   {
+                                       guarded->close();
+                                   }
+                               });
+        }
     }
     else if (auto* slider = qobject_cast<QAbstractSlider*>(object))
     {

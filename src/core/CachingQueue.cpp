@@ -667,6 +667,7 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
 {
     CacheItem ret;
     bool requestRefresh = false;
+    qint64 lastReplyAgeMs = -1;
     if (func != funcNone)
     {
         std::lock_guard locker(mutex);
@@ -694,6 +695,10 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
             {
                 m_cacheRefreshRequests.insert(key, nowMs);
                 requestRefresh = true;
+                if (ret.reply.isValid())
+                {
+                    lastReplyAgeMs = ret.reply.msecsTo(QDateTime::currentDateTime());
+                }
             }
         }
     }
@@ -703,11 +708,41 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
     // intensive workflows are active.
     if (requestRefresh)
     {
-        qDebug(logRadio()).noquote() << "No (or expired) cache found for" << funcString[func] << "requesting"
-                                     << ret.reply;
+        if (lastReplyAgeMs >= 0)
+        {
+            qDebug(logRadio()).noquote().nospace()
+                << "Refreshing stale cache: " << funcString[func] << " lastReplyAgeMs=" << lastReplyAgeMs
+                << " receiver=" << int(receiver);
+        }
+        else
+        {
+            qDebug(logRadio()).noquote().nospace()
+                << "Refreshing missing cache: " << funcString[func] << " receiver=" << int(receiver);
+        }
         addUnique(kPriorityImmediate, func, false, receiver);
     }
     return ret;
+}
+
+CacheItem CachingQueue::peekCache(Funcs func, uchar receiver)
+{
+    CacheItem result;
+    if (func == funcNone)
+    {
+        return result;
+    }
+
+    std::lock_guard locker(mutex);
+    auto it = cache.find(func);
+    while (it != cache.end() && it->command == func)
+    {
+        if (it->receiver == receiver)
+        {
+            return *it;
+        }
+        ++it;
+    }
+    return result;
 }
 
 bool CachingQueue::cacheValuesDiffer(const QVariant& a, const QVariant& b)

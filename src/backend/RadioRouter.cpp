@@ -170,7 +170,7 @@ void RadioRouter::drainPendingBatch(quint64 session)
     {
         const RadioRouterQueueDiagnostics diagnostics = queueDiagnostics();
         qInfo(logRadio()).noquote().nospace()
-            << "Radio router metrics pending=" << diagnostics.pendingItems << " highWater=" << diagnostics.highWaterMark
+            << "RadioRouter::Metrics pending=" << diagnostics.pendingItems << " highWater=" << diagnostics.highWaterMark
             << " coalesced=" << diagnostics.coalescedItems << " drains=" << diagnostics.drainEvents
             << " backpressureWaits=" << diagnostics.backpressureWaits;
     }
@@ -326,7 +326,8 @@ void RadioRouter::route(const CacheItem& item)
     case funcSMeter:
     {
         const int rawValue = qBound(0, item.value.toInt(), 255);
-        qDebug(logRadioTraffic()).noquote().nospace() << "S meter receiver=" << item.receiver << " raw=" << rawValue;
+        qDebug(logRadioTraffic()).noquote().nospace()
+            << "CivData::Decoded command=S Meter receiver=" << item.receiver << " raw=" << rawValue;
         emit radioValueUpdated(item.command, QVariant(rawValue), item.receiver);
         if (item.receiver == kMainReceiver)
         {

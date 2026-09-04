@@ -1,34 +1,22 @@
 #!/usr/bin/env python3
 """Test every receive-side VFO control through SDR9700 automation."""
 
-import glob
 import json
-import os
-import socket
-import tempfile
+import sys
 import time
 
+from automation_common import load_endpoint, request as send_request
 
-DISCOVERY = max(glob.glob(os.path.join(tempfile.gettempdir(), "sdr9700-automation-*.json")), key=os.path.getmtime)
-with open(DISCOVERY, encoding="utf-8") as stream:
-    ENDPOINT = json.load(stream)
-if ENDPOINT.get("transmitAllowed") is not False:
-    raise RuntimeError("automation endpoint permits transmit")
+
+ENDPOINT = load_endpoint()
 
 requests = 0
 
 
 def request(payload):
     global requests
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-        client.settimeout(5)
-        client.connect(ENDPOINT["socket"])
-        client.sendall(json.dumps(payload, separators=(",", ":")).encode() + b"\n")
-        data = bytearray()
-        while not data.endswith(b"\n"):
-            data.extend(client.recv(65536))
     requests += 1
-    return json.loads(data)
+    return send_request(ENDPOINT, payload)
 
 
 def state():
@@ -68,23 +56,27 @@ def controls():
     return response["controls"]
 
 
-def find_control(accessible_name=None, text=None, type_name=None, object_name=None):
+def find_control(accessible_name=None, text=None, type_name=None, object_name=None, timeout=12):
+    deadline = time.monotonic() + timeout
     matches = []
-    for item in controls():
-        if not item.get("visible") or not item.get("enabled"):
-            continue
-        if accessible_name is not None and item.get("accessibleName") != accessible_name:
-            continue
-        if text is not None and item.get("text", "").replace("&", "") != text:
-            continue
-        if type_name is not None and item.get("type") != type_name:
-            continue
-        if object_name is not None and item.get("objectName") != object_name:
-            continue
-        matches.append(item)
-    if len(matches) != 1:
-        raise RuntimeError(f"expected one control name={accessible_name} text={text} type={type_name}: {matches}")
-    return matches[0]
+    while time.monotonic() < deadline:
+        matches = []
+        for item in controls():
+            if not item.get("visible") or not item.get("enabled"):
+                continue
+            if accessible_name is not None and item.get("accessibleName") != accessible_name:
+                continue
+            if text is not None and item.get("text", "").replace("&", "") != text:
+                continue
+            if type_name is not None and item.get("type") != type_name:
+                continue
+            if object_name is not None and item.get("objectName") != object_name:
+                continue
+            matches.append(item)
+        if len(matches) == 1:
+            return matches[0]
+        time.sleep(0.05)
+    raise RuntimeError(f"expected one control name={accessible_name} text={text} type={type_name}: {matches}")
 
 
 def activate_name(name):
@@ -121,6 +113,14 @@ def set_popup_slider(button_name, slider_name, value):
     activate_name(button_name)
     slider = find_control(accessible_name=slider_name, type_name="QSlider")
     accepted({"action": "ui_set", "controlId": slider["id"], "value": value})
+    time.sleep(0.08)
+
+
+def set_filters_combo(vfo, accessible_name, value, open_panel=True):
+    if open_panel:
+        activate_name(f"{vfo} VFO FILTERS control")
+    combo = find_control(accessible_name=f"{vfo} VFO {accessible_name}", type_name="QComboBox")
+    accepted({"action": "ui_set", "controlId": combo["id"], "value": value})
     time.sleep(0.08)
 
 
@@ -213,6 +213,68 @@ def sweep_slider(vfo, label, field):
             raise RuntimeError(f"{vfo} {field} bled into {other}: {changed}")
 
 
+def sweep_filters(vfo):
+    other = "SUB" if vfo == "MAIN" else "MAIN"
+    required = ("filter", "nbEnabled", "nbLevel", "autoNotchEnabled",
+                "manualNotchEnabled", "nrEnabled", "nrLevel")
+    # Opening the consolidated panel requests its radio-backed values for the
+    # selected receiver. The first selection reuses this panel; ui_set closes it.
+    activate_name(f"{vfo} VFO FILTERS control")
+    before = wait_for(
+        f"complete initial FILTERS state on {vfo}",
+        lambda s: all(s["receivers"][vfo].get(field) is not None for field in required),
+        timeout=25,
+    )
+    own_before = before["receivers"][vfo]
+    other_before = before["receivers"][other]
+
+    for index, (value, expected) in enumerate((("FIL1", 1), ("FIL2", 2), ("FIL3", 3))):
+        set_filters_combo(vfo, "receive filter", value, open_panel=index != 0)
+        changed = wait_for(f"{vfo} filter={expected}",
+                           lambda s, expected=expected: s["receivers"][vfo].get("filter") == expected)
+        if changed["receivers"][other].get("filter") != other_before.get("filter"):
+            raise RuntimeError(f"{vfo} filter bled into {other}: {changed}")
+    set_filters_combo(vfo, "receive filter", f"FIL{own_before['filter']}")
+    wait_for(f"{vfo} filter restored", lambda s: s["receivers"][vfo].get("filter") == own_before["filter"])
+
+    # Start through OFF and the maximum so every numbered selection is an
+    # actual UI transition even when the radio's quantized raw value already
+    # displays as level 1.
+    for label, enabled_field, level_field, values in (
+            ("NB level", "nbEnabled", "nbLevel", ("OFF", "10", "1", "5")),
+            ("NR level", "nrEnabled", "nrLevel", ("OFF", "15", "1", "8"))):
+        for value in values:
+            display_level = 0 if value == "OFF" else int(value)
+            maximum = 10 if label == "NB level" else 15
+            set_filters_combo(vfo, label, value)
+            wait_for(f"{vfo} {label}={value}",
+                     lambda s, display_level=display_level, maximum=maximum, enabled_field=enabled_field,
+                     level_field=level_field: s["receivers"][vfo].get(enabled_field) is (display_level > 0) and
+                     (display_level == 0 or
+                      int(s["receivers"][vfo].get(level_field) * (maximum - 1) / 255 + 0.5) + 1 == display_level))
+        restored_display = max(1, min(maximum, int(own_before[level_field] * (maximum - 1) / 255 + 0.5) + 1))
+        restored_value = str(restored_display) if own_before[enabled_field] else "OFF"
+        set_filters_combo(vfo, label, restored_value)
+        wait_for(f"{vfo} {label} restored",
+                 lambda s, enabled_field=enabled_field, level_field=level_field:
+                 s["receivers"][vfo].get(enabled_field) == own_before[enabled_field] and
+                 (not own_before[enabled_field] or
+                  int(s["receivers"][vfo].get(level_field) * (maximum - 1) / 255 + 0.5) + 1 ==
+                  restored_display))
+
+    # The consolidated NOTCH selector intentionally offers OFF/AUTO. Preserve
+    # a pre-existing manual-notch state because the UI cannot recreate it.
+    if not own_before["manualNotchEnabled"]:
+        for value, expected in (("ON", True), ("OFF", False)):
+            set_filters_combo(vfo, "NOTCH level", value)
+            wait_for(f"{vfo} auto notch={expected}",
+                     lambda s, expected=expected: s["receivers"][vfo].get("autoNotchEnabled") is expected)
+        if own_before["autoNotchEnabled"]:
+            set_filters_combo(vfo, "NOTCH level", "ON")
+            wait_for(f"{vfo} auto notch restored",
+                     lambda s: s["receivers"][vfo].get("autoNotchEnabled") is True)
+
+
 started = time.monotonic()
 set_dual(True)
 
@@ -225,29 +287,29 @@ band_frequencies = {
 }
 companion = {"2m": "70cm", "70cm": "23cm", "23cm": "2m"}
 frequency_transitions = 0
-for vfo in ("MAIN", "SUB"):
-    other = "SUB" if vfo == "MAIN" else "MAIN"
-    for band, values in band_frequencies.items():
-        if vfo == "MAIN":
-            normalize_pair(band, companion[band])
-        else:
-            normalize_pair(companion[band], band)
-        for hz in values + list(reversed(values)):
-            tune(vfo, hz)
-            frequency_transitions += 1
-        print(f"FREQUENCY {vfo} {band} complete total={frequency_transitions}", flush=True)
+if "--skip-frequency" not in sys.argv:
+    for vfo in ("MAIN", "SUB"):
+        for band, values in band_frequencies.items():
+            if vfo == "MAIN":
+                normalize_pair(band, companion[band])
+            else:
+                normalize_pair(companion[band], band)
+            for hz in values + list(reversed(values)):
+                tune(vfo, hz)
+                frequency_transitions += 1
+            print(f"FREQUENCY {vfo} {band} complete total={frequency_transitions}", flush=True)
 
 normalize_pair("2m", "70cm")
 for vfo in ("MAIN", "SUB"):
-    selector = find_control(accessible_name=f"Select {vfo} VFO", object_name="vfoIdentityButton")
+    selector = find_control(accessible_name=f"Select {vfo} VFO")
     accepted({"action": "ui_activate", "controlId": selector["id"]})
     time.sleep(0.08)
     wait_for(f"select {vfo}", lambda s, vfo=vfo: s.get("selectedVfo") == vfo)
-    for label, field in (("ATT", "attenuatorEnabled"), ("NB", "nbEnabled"),
-                         ("NOTCH", "autoNotchEnabled"), ("NR", "nrEnabled"),
-                         ("PRE", "preampLevel")):
+    for label, field in (("ATT", "attenuatorEnabled"), ("PRE", "preampLevel")):
         toggle(vfo, label, field)
         print(f"TOGGLE {vfo} {label} complete", flush=True)
+    sweep_filters(vfo)
+    print(f"FILTERS {vfo} complete", flush=True)
     sweep_slider(vfo, "SQL", "squelch")
     print(f"SWEEP {vfo} SQL complete", flush=True)
     sweep_slider(vfo, "RFG", "rfGain")

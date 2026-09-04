@@ -64,6 +64,31 @@ RadioState::BandRecall* RadioState::mutableBandRecall(Vfo vfo, availableBands ba
 
 void RadioState::applyRadioValue(Funcs func, const QVariant& value, uchar receiverId)
 {
+    switch (func)
+    {
+    case funcAfGain:
+        m_shared.afGain = qBound(0, value.toInt(), 255);
+        emit sharedStateChanged();
+        return;
+    case funcRFPower:
+        m_shared.txPower = qBound(0, value.toInt(), 255);
+        emit sharedStateChanged();
+        return;
+    case funcLANModLevel:
+        m_shared.lanModLevel = qBound(0, value.toInt(), 255);
+        emit sharedStateChanged();
+        return;
+    case funcCompressor:
+        m_shared.compressorEnabled = value.toBool();
+        emit sharedStateChanged();
+        return;
+    case funcCompressorLevel:
+        m_shared.compressorLevel = qBound(0, value.toInt(), 255);
+        emit sharedStateChanged();
+        return;
+    default:
+        break;
+    }
     if (receiverId > 1)
     {
         return;
