@@ -36,6 +36,8 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
   recording out-of-order arrivals. It does not delay payloads to reorder them.
 - `RadioRouter`: converts parsed cache batches into receiver-specific model and
   UI signals while preserving MAIN/SUB routing.
+- `RadioState`: holds the latest radio-derived shared and receiver-specific
+  values and invalidates them at session and receiver-context boundaries.
 - `ScopeController`: coalesces complete scope frames before forwarding them to
   the GUI thread.
 - `RadioSessionWatchdog`: evaluates CI-V command/reply liveness independently
@@ -47,6 +49,8 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
   levels in the range 0–160.
 - `RadioModel`: app-level connection and radio state.
 - `VfoModel`: active VFO state exposed to the UI.
+- `MeterController`: tracks validity and values for receive, transmit, radio,
+  and local microphone meters.
 - `SpectrumScopeModel`: spectrum range and waterfall/scope data exposed to the UI.
 - `SpectrumScopeDisplay`, `SpectrumScopeCanvas`, and `WaterfallCanvas`: display
   IC-9700 scope and waterfall data.
@@ -58,6 +62,12 @@ src/gui/          MainWindow, dialogs, VFO display, spectrum, and waterfall
 - `MemoryController`, `MemorySyncController`, and `MemoryEditorController`:
   synchronize, display, and edit the IC-9700's radio-backed memories.
 - `MemoryStore`: validates and serializes memory records for CSV import/export.
+- `ApplicationLog` and `LoggingConfiguration`: retain filtered in-application
+  diagnostics and configure the independent console, file, and window logging
+  destinations.
+- `AutomationServer`, `AutomationController`, and `AutomationUiDriver`: expose
+  the explicitly enabled local automation socket, enforce its non-transmitting
+  command policy, and exercise visible controls through the GUI thread.
 - `IcomRC28Manager` (optional, HAVE_HIDAPI): HID driver for the Icom RC-28 rotary
   controller; emits tuning step and button events, and accepts LED state.
 - `AppSettings`: JSON-backed client settings at

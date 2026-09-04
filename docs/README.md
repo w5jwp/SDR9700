@@ -30,3 +30,10 @@ repository root remain there; implementation details and research live here.
 
 The locally retained Icom reference manual is research material under
 `resources/manuals/`; it is not SDR9700 source code or runtime configuration.
+
+## Resource Guides
+
+- [Hardware-integration tools](../resources/tools/README.md) documents the
+  local automation bridge stress tools and direct IC-9700 lifecycle utilities.
+- [macOS release packaging](../resources/packaging/macos/README.md) documents
+  signed, notarized Apple Silicon release packaging and required credentials.

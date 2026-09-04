@@ -1,7 +1,8 @@
 #SDR9700 — Project Context for AI Agents
 
-SDR9700 is a Linux-native Qt/C++ GUI client for controlling an Icom IC-9700
-amateur radio transceiver over the radio's LAN interface.
+SDR9700 is a Qt/C++ desktop GUI client for controlling an Icom IC-9700 amateur
+radio transceiver over the radio's LAN interface on Linux and Apple Silicon
+macOS.
 
 ## Project Goal
 

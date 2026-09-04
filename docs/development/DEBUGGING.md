@@ -51,6 +51,7 @@ Supported logging categories:
 - `udp`
 - `waterfall`
 
-`--log-file=<path>` appends the same formatted console output to a file.
+`--log-file=<path>` appends the CLI-selected formatted diagnostics to a file
+in addition to writing them to the console.
 Each line includes a conventional severity name: `DEBUG`, `INFO`, `WARN`,
 `ERROR`, or `FATAL`.
