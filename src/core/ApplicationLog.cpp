@@ -27,14 +27,9 @@ QString logLevelName(QtMsgType type)
     return QStringLiteral("LOG");
 }
 
-bool isCivTraffic(const QString& category, const QString& message)
+bool isCivTraffic(const QString& category)
 {
-    if (category == QStringLiteral("ci-v"))
-    {
-        return true;
-    }
-    return category == QStringLiteral("radio") &&
-           message.startsWith(QStringLiteral("Radio accepted a CI-V command (FB)"));
+    return category == QStringLiteral("ci-v");
 }
 } // namespace
 
@@ -54,7 +49,7 @@ QString ApplicationLog::append(QtMsgType type, const QMessageLogContext& context
                                   logLevelName(type), category, message);
 
     QMutexLocker lock(&m_mutex);
-    if (isCivTraffic(category, message) && !m_civTrafficRetentionEnabled)
+    if (isCivTraffic(category) && !m_civTrafficRetentionEnabled)
     {
         return line;
     }

@@ -26,6 +26,11 @@ class Commander;
 class ScopeController;
 class RadioRouter;
 
+struct RadioBackendMeterDiagnostics
+{
+    quint64 pollTimeouts{0};
+};
+
 class RadioBackend : public IRadioBackend
 {
     Q_OBJECT
@@ -33,6 +38,7 @@ class RadioBackend : public IRadioBackend
   public:
     explicit RadioBackend(QObject* parent = nullptr);
     ~RadioBackend() override;
+    RadioBackendMeterDiagnostics meterDiagnostics() const { return m_meterDiagnostics; }
 
   public slots:
     void connectToRadio(const QString& host, quint16 port, const QString& user, const QString& pass) override;
@@ -208,7 +214,7 @@ class RadioBackend : public IRadioBackend
     bool m_smeterPollQueued{false};
     uchar m_smeterPollPendingReceiver{0};
     qint64 m_smeterPollDeadlineMs{0};
-    quint64 m_smeterPollTimeoutCount{0};
+    RadioBackendMeterDiagnostics m_meterDiagnostics;
     QElapsedTimer m_smeterPollQueuedClock;
     QElapsedTimer m_smeterPollPendingClock;
     int m_smeterPollTick{0};

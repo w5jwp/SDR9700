@@ -27,6 +27,11 @@ constexpr bool receiverMeterPollAllowed(bool radioReady, bool pttTransitionActiv
     return radioReady && !pttTransitionActive && !mainSubExchangePending && !tuningHoldoffActive;
 }
 
+constexpr bool meterPollDeadlineExpired(bool clockValid, qint64 elapsedMs, qint64 deadlineMs)
+{
+    return !clockValid || elapsedMs >= deadlineMs;
+}
+
 template <typename SelectReceiver, typename SendCommand>
 void routeVfoReceiverCommand(Vfo targetVfo, Vfo restoreVfo, SelectReceiver&& selectReceiver, SendCommand&& sendCommand)
 {

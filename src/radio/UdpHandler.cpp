@@ -1494,7 +1494,7 @@ void UdpHandler::dataReceived()
                 radios.append(rad);
                 qInfo(logUdp()).noquote().nospace()
                     << this->metaObject()->className()
-                    << QString("::RadioCapabilities name=%1 audio=%2 civ=%3 mac=%4:%5:%6:%7:%8:%9 capf=%10")
+                    << QString("::RadioCapabilities name=\"%1\" audio=\"%2\" civ=%3 mac=%4:%5:%6:%7:%8:%9 capf=%10")
                            .arg(boundedLatin1(rad.name, sizeof(rad.name)))
                            .arg(boundedLatin1(rad.audio, sizeof(rad.audio)))
                            .arg((quint8)rad.civ, 2, 16, QChar('0'))

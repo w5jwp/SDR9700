@@ -952,8 +952,11 @@ void Commander::finishSMeterRead()
 
     m_smeterScopedReadActive = false;
     m_smeterScopedReceiver = 0xff;
+    const bool wasDispatchingScheduledCommand = m_dispatchingScheduledCommand;
+    m_dispatchingScheduledCommand = true;
     receiveCommand(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoMain), 0);
     receiveCommandNoReadback(funcScopeMainSub, QVariant::fromValue<bool>(m_smeterRestoreScopeSub), 0);
+    m_dispatchingScheduledCommand = wasDispatchingScheduledCommand;
     QTimer::singleShot(25, this, &Commander::finishReceiverScopedAction);
 }
 
@@ -2577,7 +2580,6 @@ void Commander::parseCommand(FrameOrigin origin)
     case funcFB:
     {
         ++m_correlationDiagnostics.acceptedAcknowledgements;
-        qDebug(logRadio()).noquote() << "Radio accepted a CI-V command (FB)";
         break;
     }
     case funcFA:

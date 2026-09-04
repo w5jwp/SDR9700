@@ -1,12 +1,16 @@
 #include "AutomationController.h"
+#include "backend/IRadioBackend.h"
 #include "MainWindow.h"
 #include "models/RadioModel.h"
 
 #include <QCoreApplication>
 #include <QEvent>
 #include <QJsonArray>
+#include <QComboBox>
+#include <QMenu>
 #include <QPointer>
 #include <QTest>
+#include <QWidgetAction>
 
 class AutomationControllerTest final : public QObject
 {
@@ -58,7 +62,29 @@ class AutomationControllerTest final : public QObject
         QCOMPARE(state.value(QStringLiteral("connected")).toBool(true), false);
         QVERIFY(state.contains(QStringLiteral("radioAfGain")));
         QVERIFY(state.value(QStringLiteral("radioAfGain")).isNull());
+        QVERIFY(state.value(QStringLiteral("dialLock")).isNull());
+        QVERIFY(state.value(QStringLiteral("txPower")).isNull());
+        QVERIFY(state.value(QStringLiteral("lanModLevel")).isNull());
+        QVERIFY(state.value(QStringLiteral("compressorEnabled")).isNull());
+        QVERIFY(state.value(QStringLiteral("compressorLevel")).isNull());
         QVERIFY(!state.contains(QStringLiteral("afGain")));
+
+        emit model.backend()->radioValueConfirmed(funcDialLock, true, 0);
+        emit model.backend()->radioValueConfirmed(funcAfGain, 12, 0xff);
+        emit model.backend()->radioValueConfirmed(funcRFPower, 34, 0xff);
+        emit model.backend()->radioValueConfirmed(funcLANModLevel, 56, 0xff);
+        emit model.backend()->radioValueConfirmed(funcCompressor, true, 0xff);
+        emit model.backend()->radioValueConfirmed(funcCompressorLevel, 78, 0xff);
+        const QJsonObject populated =
+            controller.execute(QJsonObject{{QStringLiteral("action"), QStringLiteral("get_state")}})
+                .value(QStringLiteral("state"))
+                .toObject();
+        QCOMPARE(populated.value(QStringLiteral("dialLock")).toBool(), true);
+        QCOMPARE(populated.value(QStringLiteral("radioAfGain")).toInt(), 12);
+        QCOMPARE(populated.value(QStringLiteral("txPower")).toInt(), 34);
+        QCOMPARE(populated.value(QStringLiteral("lanModLevel")).toInt(), 56);
+        QCOMPARE(populated.value(QStringLiteral("compressorEnabled")).toBool(), true);
+        QCOMPARE(populated.value(QStringLiteral("compressorLevel")).toInt(), 78);
     }
 
     void uiInventoryExposesControlsButRejectsPtt()
@@ -165,6 +191,51 @@ class AutomationControllerTest final : public QObject
         settingsWindow->close();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QVERIFY(settingsWindow.isNull());
+    }
+
+
+    void settingComboInsideMenuClosesMenu()
+    {
+        RadioModel model;
+        MainWindow window(&model, nullptr, false);
+        QCoreApplication::removePostedEvents(&window, QEvent::MetaCall);
+        window.show();
+        QCoreApplication::processEvents();
+        AutomationController controller(&window);
+
+        QMenu menu(&window);
+        auto* action = new QWidgetAction(&menu);
+        auto* combo = new QComboBox(&menu);
+        combo->setObjectName(QStringLiteral("automationMenuCombo"));
+        combo->addItems({QStringLiteral("First"), QStringLiteral("Second")});
+        action->setDefaultWidget(combo);
+        menu.addAction(action);
+        menu.popup(window.mapToGlobal(QPoint(20, 20)));
+        QTRY_VERIFY(menu.isVisible());
+
+        const QJsonArray controls =
+            controller.execute(QJsonObject{{QStringLiteral("action"), QStringLiteral("ui_list")}})
+                .value(QStringLiteral("controls"))
+                .toArray();
+        QString comboId;
+        for (const QJsonValue& value : controls)
+        {
+            const QJsonObject control = value.toObject();
+            if (control.value(QStringLiteral("objectName")).toString() == QStringLiteral("automationMenuCombo"))
+            {
+                comboId = control.value(QStringLiteral("id")).toString();
+                break;
+            }
+        }
+        QVERIFY(!comboId.isEmpty());
+        QVERIFY(controller
+                    .execute(QJsonObject{{QStringLiteral("action"), QStringLiteral("ui_set")},
+                                         {QStringLiteral("controlId"), comboId},
+                                         {QStringLiteral("value"), 1}})
+                    .value(QStringLiteral("ok"))
+                    .toBool());
+        QCOMPARE(combo->currentIndex(), 1);
+        QTRY_VERIFY(!menu.isVisible());
     }
 };
 

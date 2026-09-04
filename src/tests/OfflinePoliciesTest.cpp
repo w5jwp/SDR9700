@@ -12,6 +12,7 @@
 #include "TransmitSafetyPolicy.h"
 #include "TransmitFrequencyPolicy.h"
 #include "TransmitConfigurationPolicy.h"
+#include "VfoReceiverCommandRoute.h"
 
 #include <QCoreApplication>
 #include <QTest>
@@ -44,7 +45,17 @@ class OfflinePoliciesTest : public QObject
     void requiresCompleteTransportRecoveryIdentity();
     void waitsForRetainedTokenRemovalBeforeReplacementLogin();
     void refusesRecoveryWhileJournalOwnerIsAlive();
+    void expiresMeterPollDeadlinesConservatively();
 };
+
+void OfflinePoliciesTest::expiresMeterPollDeadlinesConservatively()
+{
+    using sdr9700::backend::meterPollDeadlineExpired;
+    QVERIFY(meterPollDeadlineExpired(false, -1, 300));
+    QVERIFY(!meterPollDeadlineExpired(true, 299, 300));
+    QVERIFY(meterPollDeadlineExpired(true, 300, 300));
+    QVERIFY(meterPollDeadlineExpired(true, 301, 300));
+}
 
 void OfflinePoliciesTest::refusesRecoveryWhileJournalOwnerIsAlive()
 {

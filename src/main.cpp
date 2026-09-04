@@ -172,6 +172,9 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext& context, co
         context.category ? QString::fromLatin1(context.category).toLower() : QStringLiteral("default");
     const bool consoleCategoryEnabled = type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg ||
                                         allConsoleCategoriesEnabled || consoleLogCategories.contains(category);
+    const bool fileCategoryEnabled = category != QStringLiteral("ci-v") || type == QtWarningMsg ||
+                                     type == QtCriticalMsg || type == QtFatalMsg || allConsoleCategoriesEnabled ||
+                                     consoleLogCategories.contains(category);
     if (consoleLogEnabled && consoleCategoryEnabled)
     {
         std::fprintf(stderr, "%s\n", encoded.constData());
@@ -180,7 +183,7 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext& context, co
             std::fflush(stderr);
         }
     }
-    if (logFile && logFile->isOpen())
+    if (logFile && logFile->isOpen() && fileCategoryEnabled)
     {
         // Radio traffic can produce thousands of lines per second. Buffer
         // routine records so logging does not serialize the radio/audio threads

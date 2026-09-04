@@ -32,6 +32,7 @@ class CachingQueueTest : public QObject
     void reportsQueueDiagnostics();
     void deduplicatesRepeatedCacheRefreshes();
     void cachePeekDoesNotRequestRefresh();
+    void cachePeekReturnsReceiverSpecificValueWithoutRequestingRefresh();
     void boundsCommandQueue();
     void recurringWorkSurvivesImmediatePressure();
 };
@@ -243,6 +244,18 @@ void CachingQueueTest::cachePeekDoesNotRequestRefresh()
 
     const CacheItem cached = queue->peekCache(funcModeGet, 0);
     QVERIFY(!cached.value.isValid());
+    QTest::qWait(100);
+    QCOMPARE(queue->diagnostics().dispatched, dispatchedBefore);
+}
+
+void CachingQueueTest::cachePeekReturnsReceiverSpecificValueWithoutRequestingRefresh()
+{
+    CachingQueue* queue = CachingQueue::getInstance();
+    queue->receiveValue(funcModeGet, QStringLiteral("FM"), 1);
+    const quint64 dispatchedBefore = queue->diagnostics().dispatched;
+
+    QCOMPARE(queue->peekCache(funcModeGet, 1).value.toString(), QStringLiteral("FM"));
+    QVERIFY(!queue->peekCache(funcModeGet, 0).value.isValid());
     QTest::qWait(100);
     QCOMPARE(queue->diagnostics().dispatched, dispatchedBefore);
 }
