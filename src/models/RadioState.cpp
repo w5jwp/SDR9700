@@ -306,6 +306,11 @@ void RadioState::setReady(bool ready)
         m_shared.selectedVfo.reset();
         m_shared.dualWatchEnabled.reset();
         m_shared.dialLockEnabled.reset();
+        m_shared.afGain.reset();
+        m_shared.txPower.reset();
+        m_shared.lanModLevel.reset();
+        m_shared.compressorEnabled.reset();
+        m_shared.compressorLevel.reset();
     }
     emit sharedStateChanged();
 }

@@ -323,6 +323,12 @@ if(APPLE)
 endif()
 
 if(BUILD_TESTING)
+    add_executable(AboutDialogTest tests/AboutDialogTest.cpp)
+    target_include_directories(AboutDialogTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gui)
+    target_link_libraries(AboutDialogTest PRIVATE SDR9700_app_support Qt6::Test)
+    add_test(NAME AboutDialogTest COMMAND AboutDialogTest)
+    set_tests_properties(AboutDialogTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     add_executable(Ax25DecoderTest tests/Ax25DecoderTest.cpp)
     target_link_libraries(Ax25DecoderTest PRIVATE SDR9700_core Qt6::Test)
     add_test(NAME Ax25DecoderTest COMMAND Ax25DecoderTest)

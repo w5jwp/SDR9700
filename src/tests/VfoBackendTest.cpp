@@ -692,11 +692,26 @@ void VfoBackendTest::radioStateInvalidatesLiveStateButKeepsSessionRecallSeparate
 
     emit backend.radioValueConfirmed(funcDialLock, QVariant::fromValue(true), 0);
     QCOMPARE(state.shared().dialLockEnabled, std::optional<bool>(true));
+    emit backend.radioValueConfirmed(funcAfGain, 12, 0xff);
+    emit backend.radioValueConfirmed(funcRFPower, 34, 0xff);
+    emit backend.radioValueConfirmed(funcLANModLevel, 56, 0xff);
+    emit backend.radioValueConfirmed(funcCompressor, true, 0xff);
+    emit backend.radioValueConfirmed(funcCompressorLevel, 78, 0xff);
+    QCOMPARE(state.shared().afGain, std::optional<int>(12));
+    QCOMPARE(state.shared().txPower, std::optional<int>(34));
+    QCOMPARE(state.shared().lanModLevel, std::optional<int>(56));
+    QCOMPARE(state.shared().compressorEnabled, std::optional<bool>(true));
+    QCOMPARE(state.shared().compressorLevel, std::optional<int>(78));
 
     emit backend.readyChanged(true);
     emit backend.readyChanged(false);
     QVERIFY(!state.receiver(Vfo::Main).frequencyHz.has_value());
     QVERIFY(!state.shared().dialLockEnabled.has_value());
+    QVERIFY(!state.shared().afGain.has_value());
+    QVERIFY(!state.shared().txPower.has_value());
+    QVERIFY(!state.shared().lanModLevel.has_value());
+    QVERIFY(!state.shared().compressorEnabled.has_value());
+    QVERIFY(!state.shared().compressorLevel.has_value());
     // A temporary loss of readiness invalidates the live snapshot, but the
     // confirmed recall remains useful if this same radio session recovers.
     QCOMPARE(state.bandRecall(Vfo::Main, band2m)->duplexMode, std::optional<duplexMode_t>(dmDupMinus));

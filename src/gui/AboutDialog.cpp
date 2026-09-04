@@ -59,7 +59,9 @@ AboutDialog::AboutDialog(QWidget* parent)
 
     contentLayout->addSpacing(8);
 
-    auto* desc = new QLabel("Native amateur-radio client for the Icom IC-9700 — Linux, macOS, Qt6, C++", content);
+    auto* desc = new QLabel(
+        QStringLiteral("Native amateur-radio client for the Icom IC-9700 — Linux, Apple Silicon macOS, Qt6, C++"),
+        content);
     desc->setAlignment(Qt::AlignCenter);
     desc->setWordWrap(true);
     contentLayout->addWidget(desc);

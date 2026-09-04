@@ -1491,7 +1491,7 @@ void MainWindow::onFrequencyChanged(quint64 hz)
 
     m_vfoFrequencyHz = hz;
     updateSpectrumScopeBandLimits(hz);
-    qInfo(logGui()).noquote() << "VFO route: frequency" << hz << "to selected MAIN VFO";
+    qInfo(logGui()).noquote().nospace() << "VfoRoute::Frequency frequencyHz=" << hz << " destination=MAIN";
     if (m_mainVfoController)
     {
         m_mainVfoController->setFrequencyHz(hz);
@@ -1501,18 +1501,24 @@ void MainWindow::onFrequencyChanged(quint64 hz)
 
 void MainWindow::onModeChanged(const QString& mode)
 {
-    qInfo(logGui()).noquote() << "VFO route: mode" << mode.toUpper() << "to MAIN VFO";
+    bool stateChanged = false;
     if (!m_activeMemoryId.isEmpty())
     {
         if (mode.compare(m_activeMemoryMode, Qt::CaseInsensitive) == 0)
         {
+            stateChanged = !m_activeMemoryModeSettled;
             m_activeMemoryModeSettled = true;
             checkIfMemorySelectionComplete();
         }
         else if (m_activeMemoryModeSettled && !m_applyingMemorySelection)
         {
+            stateChanged = true;
             clearActiveMemory();
         }
+    }
+    if (stateChanged)
+    {
+        qInfo(logGui()).noquote().nospace() << "VfoRoute::Mode mode=" << mode.toUpper() << " destination=MAIN";
     }
 }
 

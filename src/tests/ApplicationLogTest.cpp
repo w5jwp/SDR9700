@@ -83,9 +83,13 @@ void ApplicationLogTest::conditionallyRetainsCivTraffic()
     log.append(QtDebugMsg, civContext, QStringLiteral("UdpCivData::RX len=27 hex=1b 00"));
     log.append(QtDebugMsg, civContext, QStringLiteral("UdpHandler::CivHandoff port=50002 len=7"));
     log.append(QtDebugMsg, civContext, QStringLiteral("UdpCivData::TX port=50002 radioIP=192.0.2.1 len=7 data=fe fe"));
-    log.append(QtDebugMsg, radioContext, QStringLiteral("Radio accepted a CI-V command (FB)"));
-    QVERIFY(log.entries().isEmpty());
+    log.append(QtDebugMsg, radioContext, QStringLiteral("ordinary radio diagnostic"));
+    log.append(QtWarningMsg, radioContext, QStringLiteral("Radio rejected a CI-V command (FA)"));
+    QCOMPARE(log.entries().size(), 2);
+    QVERIFY(log.entries().constFirst().text.contains(QStringLiteral("ordinary radio diagnostic")));
+    QVERIFY(log.entries().constLast().text.contains(QStringLiteral("(FA)")));
 
+    log.clear();
     log.setCivTrafficRetentionEnabled(true);
     log.append(QtInfoMsg, civContext, QStringLiteral("CivData::TX len=6 hex=fe fe a2 e1 03 fd"));
     log.append(QtDebugMsg, civContext, QStringLiteral("UdpCivData::RX len=27 hex=1b 00"));

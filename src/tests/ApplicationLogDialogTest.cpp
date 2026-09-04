@@ -120,12 +120,24 @@ void ApplicationLogDialogTest::providesLiveLogControls()
 
     clearButton->click();
     pauseButton->click();
+    ApplicationLog::instance().append(QtInfoMsg, radioContext, QStringLiteral("second message while paused"));
+    QTest::qWait(1100);
+    QVERIFY(!logView->toPlainText().contains(QStringLiteral("second message while paused")));
     pauseButton->click();
-    QVERIFY(!logView->toPlainText().contains(QStringLiteral("message received while paused")));
+    QVERIFY(logView->toPlainText().contains(QStringLiteral("second message while paused")));
 
     civCheckBox->setChecked(true);
+    QVERIFY(logRadioTraffic().isDebugEnabled());
+    QVERIFY(logRadioTraffic().isInfoEnabled());
+    const QMessageLogContext civContext("test.cpp", 1, "test", "ci-v");
+    ApplicationLog::instance().append(QtInfoMsg, civContext, QStringLiteral("retained CI-V message"));
+    QTRY_VERIFY(logView->toPlainText().contains(QStringLiteral("retained CI-V message")));
+    civCheckBox->setChecked(false);
     QCOMPARE(logRadioTraffic().isDebugEnabled(), debugWasEnabled);
     QCOMPARE(logRadioTraffic().isInfoEnabled(), infoWasEnabled);
+    ApplicationLog::instance().append(QtInfoMsg, civContext, QStringLiteral("suppressed CI-V message"));
+    QTest::qWait(1100);
+    QVERIFY(!logView->toPlainText().contains(QStringLiteral("suppressed CI-V message")));
     dialog.hide();
     QVERIFY(!civCheckBox->isChecked());
     QCOMPARE(logRadioTraffic().isDebugEnabled(), debugWasEnabled);

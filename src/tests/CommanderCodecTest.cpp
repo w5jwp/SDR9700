@@ -416,6 +416,12 @@ void CommanderCodecTest::sMeterSubReadWaitsForReplyFamilyDrainBeforeSelectingCon
     QVERIFY(m_commander.m_receiverScopedReadActive);
     m_commander.abortSMeterRead(1);
     QTRY_VERIFY_WITH_TIMEOUT(!m_commander.m_receiverScopedReadActive, 250);
+    QCOMPARE(wireSpy.count(), 3);
+    QCOMPARE(wireSpy.at(1).at(0).toByteArray(), QByteArray::fromHex("fefea2e107d0"));
+    QCOMPARE(wireSpy.at(2).at(0).toByteArray(), QByteArray::fromHex("fefea2e1271201"));
+    QCOMPARE(m_commander.correlationDiagnostics().subSMeterTimeouts, quint64(1));
+    QCOMPARE(m_commander.schedulerDiagnostics().scheduledFrames, quint64(3));
+    QCOMPARE(m_commander.schedulerDiagnostics().directFrames, quint64(0));
 }
 
 void CommanderCodecTest::sMeterSubReadRestoresContextAfterReply()
@@ -440,6 +446,8 @@ void CommanderCodecTest::sMeterSubReadRestoresContextAfterReply()
     QCOMPARE(m_commander.correlationDiagnostics().subSMeterRequests, quint64(1));
     QCOMPARE(m_commander.correlationDiagnostics().subSMeterReplies, quint64(1));
     QCOMPARE(m_commander.correlationDiagnostics().subSMeterTimeouts, quint64(0));
+    QCOMPARE(m_commander.schedulerDiagnostics().scheduledFrames, quint64(3));
+    QCOMPARE(m_commander.schedulerDiagnostics().directFrames, quint64(1));
 }
 
 void CommanderCodecTest::survivesCombinedTransportAndSchedulerFaultSoak()

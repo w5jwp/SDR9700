@@ -668,15 +668,15 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
     CacheItem ret;
     bool requestRefresh = false;
     qint64 lastReplyAgeMs = -1;
+    const QDateTime now = QDateTime::currentDateTime();
     if (func != funcNone)
     {
         std::lock_guard locker(mutex);
         ret = findCacheLocked(func, receiver);
 
-        const bool stale =
-            func != funcPowerControl && func != funcSelectVFO &&
-            (!ret.value.isValid() || ret.command == funcSWRMeter || ret.command == funcALCMeter ||
-             ret.reply.addSecs(QRandomGenerator::global()->bounded(5, 20)) <= QDateTime::currentDateTime());
+        const bool stale = func != funcPowerControl && func != funcSelectVFO &&
+                           (!ret.value.isValid() || ret.command == funcSWRMeter || ret.command == funcALCMeter ||
+                            ret.reply.addSecs(QRandomGenerator::global()->bounded(5, 20)) <= now);
         if (stale)
         {
             const quint64 key = cacheRefreshKey(func, receiver);
@@ -688,7 +688,7 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
                 requestRefresh = true;
                 if (ret.reply.isValid())
                 {
-                    lastReplyAgeMs = ret.reply.msecsTo(QDateTime::currentDateTime());
+                    lastReplyAgeMs = ret.reply.msecsTo(now);
                 }
             }
         }
@@ -702,13 +702,13 @@ CacheItem CachingQueue::getCache(Funcs func, uchar receiver)
         if (lastReplyAgeMs >= 0)
         {
             qDebug(logRadio()).noquote().nospace()
-                << "Refreshing stale cache: " << funcString[func] << " lastReplyAgeMs=" << lastReplyAgeMs
+                << "CacheRefresh::Stale func=" << funcString[func] << " lastReplyAgeMs=" << lastReplyAgeMs
                 << " receiver=" << int(receiver);
         }
         else
         {
             qDebug(logRadio()).noquote().nospace()
-                << "Refreshing missing cache: " << funcString[func] << " receiver=" << int(receiver);
+                << "CacheRefresh::Missing func=" << funcString[func] << " receiver=" << int(receiver);
         }
         addUnique(kPriorityImmediate, func, false, receiver);
     }

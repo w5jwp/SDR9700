@@ -1,7 +1,11 @@
 unusedFunction:src/models/RadioModel.h
+// Public diagnostics are intentionally exposed for monitoring clients even
+// when no production caller consumes the snapshot in this translation unit.
+unusedFunction:src/backend/RadioBackend.h
 unusedFunction:src/models/VfoModel.h
 // QtTest invokes private test slots through generated meta-object code.
 unusedFunction:src/tests/AudioConverterTest.cpp
+unusedFunction:src/tests/AboutDialogTest.cpp
 unusedFunction:src/tests/AutomationControllerTest.cpp
 unusedFunction:src/tests/AutomationServerTest.cpp
 unusedFunction:src/tests/CachingQueueTest.cpp

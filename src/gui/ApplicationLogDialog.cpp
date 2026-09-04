@@ -1,5 +1,6 @@
 #include "ApplicationLogDialog.h"
 #include "ApplicationLog.h"
+#include "LoggingConfiguration.h"
 #include "DialogFooter.h"
 #include "UiTheme.h"
 
@@ -147,7 +148,11 @@ ApplicationLogDialog::ApplicationLogDialog(QWidget* parent)
                 }
             });
     connect(m_civTrafficCheckBox, &QCheckBox::toggled, this,
-            [](bool enabled) { ApplicationLog::instance().setCivTrafficRetentionEnabled(enabled); });
+            [](bool enabled)
+            {
+                ApplicationLog::instance().setCivTrafficRetentionEnabled(enabled);
+                LoggingConfiguration::setApplicationCivTrafficEnabled(enabled);
+            });
 
     connect(m_categoryCombo, &QComboBox::currentIndexChanged, this, &ApplicationLogDialog::resetLogView);
     m_refreshTimer = new QTimer(this);
@@ -180,6 +185,7 @@ void ApplicationLogDialog::clearCivTrafficReporting()
     const QSignalBlocker blocker(m_civTrafficCheckBox);
     m_civTrafficCheckBox->setChecked(false);
     ApplicationLog::instance().setCivTrafficRetentionEnabled(false);
+    LoggingConfiguration::setApplicationCivTrafficEnabled(false);
 }
 
 void ApplicationLogDialog::resetLogView()
